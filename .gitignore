@@ -1,0 +1,10 @@
+__pycache__/
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
+.pip-cache/
+.cache/
+output/
+junit.xml
+build/

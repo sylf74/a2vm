@@ -1,0 +1,58 @@
+# Example client profile — copy to clients/<client-id>.yaml and adapt.
+# Schema: src/cve_triage/schemas/client_profile.schema.json (checked in CI).
+#
+# Field guide (CISA SSVC wording):
+#   exposure                 internet = reachable by unauthenticated or untrusted entities via public
+#                            networks; internal = corporate network; isolated = segmented / offline
+#   mission_prevalence       minimal | support | essential   (role of the asset in the client's mission)
+#   public_wellbeing_impact  minimal | material | irreversible (physical, psychological, financial harm)
+#   versions                 deployed versions; leave empty if unknown (rows are then flagged for review)
+
+schema_version: 1
+client:
+  id: example-client
+  name: Example Client
+  updated: 2026-10-10
+  # delivery_file: https://gitlab/voc/delivery-files/-/blob/main/clients/example-client.md
+
+assets:
+  - id: edge-firewalls
+    description: Internet-facing firewalls with GlobalProtect VPN portal
+    vendor: Palo Alto Networks
+    product: PAN-OS
+    cpe: "cpe:2.3:o:paloaltonetworks:pan-os"
+    versions: ["11.1.2-h1"]
+    exposure: internet
+    mission_prevalence: essential
+    public_wellbeing_impact: minimal
+    owner: network-team
+
+  - id: hr-portal
+    description: HR self-service portal (internal)
+    vendor: Example Soft
+    product: Example HR Portal
+    product_aliases: ["HR Portal"]
+    versions: ["4.2.1"]
+    exposure: internal
+    mission_prevalence: support
+    public_wellbeing_impact: minimal
+    owner: apps-team
+
+  - id: vpn-gateways
+    description: Remote-access gateways for field staff
+    vendor: Acme Networks
+    product: SecureGate OS
+    versions: ["7.2.1", "7.0.9"]
+    exposure: internet
+    mission_prevalence: essential
+    public_wellbeing_impact: material
+    owner: network-team
+
+  - id: build-servers
+    description: CI build servers (isolated network)
+    vendor: Example Soft
+    product: BuildBox
+    exposure: isolated
+    mission_prevalence: minimal
+    public_wellbeing_impact: minimal
+    owner: devops-team

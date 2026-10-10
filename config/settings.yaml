@@ -1,0 +1,50 @@
+# cve-triage runtime settings. No secrets here: the LLM API key is read from the
+# environment variable named in llm.api_key_env.
+#
+# Environment overrides (handy in GitLab CI):
+#   CVE_TRIAGE_LLM_ENABLED, CVE_TRIAGE_LLM_BASE_URL, CVE_TRIAGE_LLM_MODEL,
+#   CVE_TRIAGE_CACHE_DIR, CVE_TRIAGE_CVE_RECORD_URL
+# Outbound HTTP honours HTTPS_PROXY / NO_PROXY and SSL_CERT_FILE.
+
+sources:
+  # CVE JSON 5 records (CNA + CISA ADP "Vulnrichment" containers).
+  # Alternative: https://cveawg.mitre.org/api/cve/{cve_id}  or an internal mirror of cvelistV5.
+  cve_record_url: "https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/{year}/{bucket}/{cve_id}.json"
+  delta_log_url: "https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/deltaLog.json"
+  kev_url: "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
+  epss_url: "https://api.first.org/data/v1/epss"
+  timeout_seconds: 30
+  cache_dir: ".cache"
+  cve_cache_hours: 12
+  feed_cache_hours: 6
+
+llm:
+  enabled: false                      # true once the inference server is reachable
+  base_url: "http://llm.lan:8000/v1"  # OpenAI-compatible endpoint (vLLM / SGLang)
+  model: "openai/gpt-oss-120b"
+  api_key_env: "LLM_API_KEY"
+  timeout_seconds: 180
+  max_retries: 2
+  tasks:
+    ssvc_inputs: true          # Automatable / Technical Impact when no CISA ADP data and no CVSS
+    match_adjudication: true   # confirm or reject fuzzy product matches
+    rationale: true            # French rationale (guarded, template fallback)
+
+# Product-name similarity (0-1) above which a non-exact match becomes a candidate.
+fuzzy_threshold: 0.75
+
+policy:
+  # CISA Coordinator outcome -> delivery decision used in client reports.
+  decision_mapping:
+    act: ACT
+    attend: ATTEND
+    "track*": ATTEND
+    track: TRACK
+  escalations:
+    bod_3_days_to_act: true        # BOD 26-04 "3 days" (exposed + automatable + total, or KEV...) -> ACT
+    bod_14_days_min_attend: true   # BOD 26-04 "14 days" -> at least ATTEND
+    epss_attend_threshold: 0.1     # EPSS >= threshold -> at least ATTEND (null to disable)
+  # Missing Automatable / Technical Impact: conservative = yes/total, optimistic = no/partial.
+  unknown_inputs: conservative
+  # Fuzzy product match when the LLM is disabled: review (keep, flagged) or drop.
+  fuzzy_match_without_llm: review

@@ -1,0 +1,80 @@
+# cve-triage pipeline
+#
+# - lint / test / validate run on every push and merge request.
+# - triage runs on a schedule (CI/CD > Schedules, variable TRIAGE_MODE=daily) or by hand
+#   (Run pipeline, TRIAGE_MODE=manual, optional TRIAGE_CVES="CVE-... CVE-...").
+#   It needs a runner that can reach the Internet sources (via proxy) and the LLM endpoint:
+#   tag it `llm-lan` (adjust below) and set, as masked CI/CD variables if needed:
+#     CVE_TRIAGE_LLM_ENABLED=true, CVE_TRIAGE_LLM_BASE_URL, CVE_TRIAGE_LLM_MODEL, LLM_API_KEY,
+#     HTTPS_PROXY / NO_PROXY, SSL_CERT_FILE (internal CA bundle).
+
+stages: [lint, test, validate, triage]
+
+default:
+  image: python:3.12-slim
+  interruptible: true
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
+  CVE_TRIAGE_CACHE_DIR: "$CI_PROJECT_DIR/.cache"
+
+.install: &install
+  - pip install --quiet -e ".[dev]"
+
+.code_rules: &code_rules
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
+    - if: $TRIAGE_MODE
+      when: never
+    - when: on_success
+
+lint:
+  stage: lint
+  <<: *code_rules
+  cache: {key: pip, paths: [.pip-cache/]}
+  script:
+    - *install
+    - ruff check .
+    - ruff format --check .
+
+test:
+  stage: test
+  <<: *code_rules
+  cache: {key: pip, paths: [.pip-cache/]}
+  script:
+    - *install
+    - pytest -q --junitxml=junit.xml
+  artifacts:
+    when: always
+    reports:
+      junit: junit.xml
+
+validate-profiles:
+  stage: validate
+  cache: {key: pip, paths: [.pip-cache/]}
+  script:
+    - *install
+    - cve-triage validate clients/*.yaml
+
+triage:
+  stage: triage
+  tags: [llm-lan]
+  interruptible: false
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule" && $TRIAGE_MODE == "daily"
+    - if: $CI_PIPELINE_SOURCE == "web" && $TRIAGE_MODE == "manual"
+  cache:
+    - {key: pip, paths: [.pip-cache/]}
+    - {key: sources, paths: [.cache/]}
+  script:
+    - *install
+    - |
+      ARGS=""
+      for c in $TRIAGE_CVES; do ARGS="$ARGS --cve $c"; done
+      if [ -z "$ARGS" ]; then ARGS="--since ${TRIAGE_SINCE:-26h}"; fi
+      cve-triage run clients/*.yaml --settings config/settings.yaml --out output $ARGS
+  artifacts:
+    name: "triage-$CI_PIPELINE_ID"
+    paths: [output/]
+    expire_in: 30 days

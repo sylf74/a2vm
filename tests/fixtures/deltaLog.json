@@ -1,0 +1,31 @@
+[
+ {
+  "fetchTime": "2099-10-10T04:00:00.000Z",
+  "numberOfChanges": 2,
+  "new": [
+   {
+    "cveId": "CVE-2099-10001"
+   },
+   {
+    "cveId": "CVE-2099-10002"
+   }
+  ],
+  "updated": [
+   {
+    "cveId": "CVE-2099-10003"
+   }
+  ],
+  "error": []
+ },
+ {
+  "fetchTime": "2099-10-01T04:00:00.000Z",
+  "numberOfChanges": 1,
+  "new": [
+   {
+    "cveId": "CVE-2099-10005"
+   }
+  ],
+  "updated": [],
+  "error": []
+ }
+]
