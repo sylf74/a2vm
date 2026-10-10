@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vulnops-intel"
+version = "0.2.0"
+description = "vulnops intelligence stage: collects and normalises vulnerability records."
+requires-python = ">=3.11"
+dependencies = ["vulnops-core"]
+
+[project.scripts]
+vulnops-intel = "vulnops.intel.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+namespaces = true
+

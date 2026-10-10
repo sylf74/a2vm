@@ -7,9 +7,9 @@ from pathlib import Path
 import httpx
 import pytest
 
-from verdict.config import Settings
-from verdict.profile import load_profile
-from verdict.sources import Sources
+from vulnops.core.config import Settings
+from vulnops.core.profile import load_profile
+from vulnops.intel.sources import Sources
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests" / "fixtures"

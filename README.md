@@ -1,130 +1,95 @@
-# verdict
+# vulnops
 
-Triage of newly published CVEs against each client's asset profile, using the CISA SSVC decision
-model. The decision is computed deterministically; a local LLM (optional) only fills gaps that are
-then flagged for review, adjudicates uncertain product matches, and writes the French rationale.
-
-Output per client and per run: `report.md` (French, ready for the client delivery), `triage.csv`
-(one row per CVE × asset, `;`-separated) and `triage.json` (full detail and provenance).
-
-## How a decision is made
+Vulnerability data pipeline in four stages linked by a common data model:
 
 ```
-CVE ids (--cve / --cve-file / --since)
-  │
-  ├─ CVE record (cvelistV5: CNA + CISA ADP "Vulnrichment")   KEV (CISA)   EPSS (FIRST)
-  │
-  ▼
-match products against clients/<client>.yaml ── fuzzy name match? ── LLM confirms / human review
-  │
-  ▼
-deployed versions affected?  ── all unaffected ──► "not affected" section
-  │ affected / unknown
-  ▼
-SSVC inputs                                     source precedence
-  Exploitation        none | poc | active       KEV → CISA ADP → "exploit" reference → none (review)
-  Automatable         yes | no                  CISA ADP → CVSS heuristic → LLM → policy default (review)
-  Technical Impact    partial | total           CISA ADP → CVSS heuristic → LLM → policy default (review)
-  Mission/Well-being  low | medium | high       client profile (mission_prevalence, public_wellbeing_impact)
-  Publicly exposed    yes | no                  client profile (exposure == internet)
-  │
-  ├─ CISA Coordinator v2.0.3 table ─► track | track* | attend | act
-  ├─ CISA BOD 26-04 table          ─► remediation timeline (fix on upgrade … 3 days + forensics)
-  ▼
-policy (config/settings.yaml): mapping to ACT / ATTEND / TRACK + escalations (BOD timeline, EPSS)
-  ▼
-rationale: French template, or LLM text checked by a guard (template fallback)
+intel/      vulnerability records    cvelistV5 (CNA + CISA ADP), CISA KEV, FIRST EPSS  -> work/records.json
+detect/     findings per client      declared inventory today, scanners next           -> work/findings/<client>.json
+verdict/    decisions per finding    CISA SSVC + policy, French rationale by a local LLM -> output/<client>/<date>/
+remediate/  (not started)            actions, plans, deadlines
+core/       common model             data classes, JSON Schemas of the exchange files, settings, profiles, LLM client
 ```
 
-The SSVC tables are the official CERT/CC data files (`src/verdict/data/`, MIT (SEI)-style
-license, see `LICENSE-SSVC`), not a re-typed copy.
-
-Default mapping: `act → ACT`, `attend → ATTEND`, `track* → ATTEND`, `track → TRACK`, then:
-BOD timeline "3 days…" → ACT, "14 days" → at least ATTEND, EPSS ≥ 0.1 → at least ATTEND.
-Every escalation is written in the row's `reasons`. All of it is configurable.
+Each stage reads and writes only the common model, and every exchange file is validated
+against its JSON Schema on write and on read. A new source, scanner or LLM engine plugs into
+one stage without touching the others. The design is described in the architecture document
+("vulnops architecture — vulnerability data pipeline").
 
 ## Quick start
 
 ```bash
 python -m venv .venv && . .venv/bin/activate        # PowerShell: .venv\Scripts\Activate.ps1
-pip install -e ".[dev]"
+pip install -r requirements-dev.txt                 # every stage, editable, + pytest and ruff
 
-verdict validate clients/*.yaml
-# offline demo on the test fixtures
-verdict run clients/example-client.yaml --fixtures tests/fixtures --since 2099-10-01 --cve CVE-2024-3400
-# real run: CVEs published in the last 26 hours, plus KEV additions
-verdict run clients/*.yaml --since 26h
-# CVEs from the daily watch (one id per line, # comments allowed)
-verdict run clients/acme.yaml --cve-file watch-2026-10-10.txt
+vulnops-profiles validate clients/*.yaml
+scripts/run-pipeline.sh --fixtures tests/fixtures --since 2099-10-01 --include-updated   # offline demo
+scripts/run-pipeline.sh --since 26h                 # real CVEs of the last 26 hours + KEV additions
+scripts/run-pipeline.sh --cve CVE-2024-3400
 ```
 
-Reports land in `output/<client-id>/<date>/`.
+Or stage by stage:
+
+```bash
+vulnops-intel collect --since 26h --out work/records.json
+vulnops-detect inventory clients/*.yaml --records work/records.json --out work/findings
+verdict run clients/*.yaml --records work/records.json --findings work/findings --out output
+```
+
+## Stages
+
+**intel** (`vulnops-intel collect`) — selects CVEs (`--cve`, `--cve-file`, `--since` = cvelistV5
+delta log + KEV additions), fetches each CVE JSON 5 record and merges its KEV entry and EPSS
+score into one vulnerability record. Rejected and missing CVEs are reported as errors.
+
+**detect** (`vulnops-detect inventory`) — the inventory scanner: matches records against the
+assets declared in each client profile (CPE, names, aliases, vendor version ranges) and writes
+one findings file per client. Fuzzy product-name matches are confirmed or rejected by the LLM
+when enabled, flagged for review otherwise. Scanner connectors (Trivy first) will write the
+same findings format.
+
+**verdict** (`verdict run`) — one decision per finding:
+
+```
+Exploitation       KEV -> CISA ADP (Vulnrichment) -> exploit reference -> none (review)
+Automatable        CISA ADP -> CVSS heuristic -> LLM -> policy default (review)
+Technical Impact   CISA ADP -> CVSS heuristic -> LLM -> policy default (review)
+Mission/Well-being client profile          Publicly exposed   client profile
+        -> CISA Coordinator v2.0.3 table -> track | track* | attend | act
+        -> CISA BOD 26-04 table          -> remediation timeline
+        -> policy (config/settings.yaml)  -> ACT / ATTEND / TRACK + traced escalations
+        -> rationale: LLM text behind a guard, template fallback
+```
+
+The SSVC tables are the official CERT/CC data files (`verdict/src/vulnops/verdict/data/`,
+MIT (SEI)-style license, see `LICENSE-SSVC`). The LLM never decides.
 
 ## Client profiles
 
-One YAML file per client in `clients/`, validated in CI against
-`src/verdict/schemas/client_profile.schema.json`. See `clients/example-client.yaml`.
-
-An asset is a product family deployed in one context: same exposure, same criticality, same
-owner. If the same product is both Internet-facing and internal, declare two assets.
-
-- `vendor` / `product` / aliases / `cpe`: used to match the CVE record. A CPE prefix is the most
-  reliable key (`cpe:2.3:o:paloaltonetworks:pan-os`).
-- `versions`: deployed versions. Without them every matching CVE is kept with version status
-  `unknown` and flagged for review.
-- `exposure`, `mission_prevalence`, `public_wellbeing_impact`: SSVC inputs, in CISA wording.
-
-These files describe client infrastructure: keep the repository access restricted accordingly.
+One YAML file per client in `clients/`, validated against
+`core/src/vulnops/core/schemas/client_profile.schema.json`. See `clients/example-client.yaml`.
+These files describe client infrastructure: keep access to them restricted.
 
 ## Local LLM
 
-Any OpenAI-compatible server works. The pipeline requests `response_format: json_schema` and
-re-validates every answer, so use a server with guided decoding (vLLM or SGLang). For example,
-on the RTX PRO 6000:
-
-```bash
-vllm serve openai/gpt-oss-120b --port 8000 --max-model-len 32768
-```
-
-Then set `llm.enabled: true` and `llm.base_url` in `config/settings.yaml` (or the
-`VERDICT_LLM_*` environment variables). Check that your server version supports JSON-schema
-structured output for the chosen model before enabling it.
-
-What the LLM is allowed to do:
-
-| Task | When | Effect |
-|---|---|---|
-| `ssvc_inputs` | no CISA ADP data and no CVSS vector | proposes Automatable / Technical Impact, row flagged for review |
-| `match_adjudication` | fuzzy product-name match only | keeps (flagged) or drops the candidate |
-| `rationale` | every row | French text; rejected if it cites a version, score, CVE id or decision absent from the facts |
-
-If the server is down or answers outside the schema, the run continues with deterministic
-behaviour. Advisory text is passed to the model as untrusted data; the model has no tools.
+Any OpenAI-compatible server with JSON-schema structured output (vLLM, SGLang). Enable it in
+`config/settings.yaml` or with `VULNOPS_LLM_ENABLED`, `VULNOPS_LLM_BASE_URL`,
+`VULNOPS_LLM_MODEL` (the former `VERDICT_*` names still work). Each stage prints the LLM
+configuration it received at start-up, and the cause of any LLM fallback.
 
 ## GitLab CI
 
-`.gitlab-ci.yml` runs lint, tests and profile validation on every push. The `triage` job runs on
-a schedule (`TRIAGE_MODE=daily`) or manually (`TRIAGE_MODE=manual`, optional `TRIAGE_CVES`), on a
-runner tagged `llm-lan` that reaches the Internet sources (proxy variables) and the LLM endpoint.
-Reports are kept as job artifacts for 30 days.
+Lint, tests and profile validation on every push. The data pipeline runs as three jobs —
+`intel` → `detect` → `triage`, each passing its output to the next as an artifact — on a
+schedule (`TRIAGE_MODE=daily`) or by hand (`TRIAGE_MODE=manual`, optional `TRIAGE_CVES`), on
+a runner tagged `llm-lan`. Reports are kept 30 days, intermediate files 7 days.
 
-## Sources
+## Repository layout
 
-| Source | Default URL | Notes |
-|---|---|---|
-| CVE records | raw.githubusercontent.com/CVEProject/cvelistV5 | includes CISA ADP (SSVC, KEV) containers; can point to an internal mirror or `cveawg.mitre.org/api/cve/{cve_id}` |
-| New CVEs | cvelistV5 `deltaLog.json` | used by `--since` |
-| KEV | cisa.gov JSON feed | KEV additions since `--since` are always triaged |
-| EPSS | api.first.org | batched by 50 |
-
-Responses are cached in `.cache/` (12 h for CVE records, 6 h for feeds).
-
-## Limits and next steps
-
-- Vendor version strings are compared best-effort (`11.1.2-h3`, `2.4.58p1`, `1.0.0rc1` are
-  handled); anything undecidable becomes `unknown` and is flagged rather than dropped.
-- The CVSS heuristic for Automatable / Technical Impact is coarse; such rows are always flagged.
-- No state between runs yet: a CVE that later enters KEV is re-triaged only through the KEV
-  addition rule of `--since`. Next: store decisions per client and report changes.
-- Next: scanner findings (Tenable, Qualys, Cyberwatch, Trivy) as a second input, sharing the
-  same asset model.
+```
+core/ intel/ detect/ verdict/ remediate/   one Python package per stage (namespace vulnops.*)
+clients/                                   client profiles
+config/settings.yaml                       settings shared by all stages
+tests/                                     tests and offline fixtures
+scripts/run-pipeline.sh                    the CI pipeline, locally
+.gitlab/CODEOWNERS                         one owner per stage
+```

@@ -1,7 +1,7 @@
 import pytest
 
-from verdict import ssvc
-from verdict.policy import Policy, delivery_decision
+from vulnops.verdict import ssvc
+from vulnops.verdict.policy import Policy, delivery_decision
 
 
 def test_tables_are_complete():

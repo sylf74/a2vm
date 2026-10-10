@@ -1,14 +1,14 @@
-# verdict pipeline
+# vulnops pipeline
 #
 # - lint / test / validate run on every push and merge request.
-# - triage runs on a schedule (CI/CD > Schedules, variable TRIAGE_MODE=daily) or by hand
-#   (Run pipeline, TRIAGE_MODE=manual, optional TRIAGE_CVES="CVE-... CVE-...").
-#   It needs a runner that can reach the Internet sources (via proxy) and the LLM endpoint:
-#   tag it `llm-lan` (adjust below) and set, as masked CI/CD variables if needed:
-#     VERDICT_LLM_ENABLED=true, VERDICT_LLM_BASE_URL, VERDICT_LLM_MODEL, LLM_API_KEY,
-#     HTTPS_PROXY / NO_PROXY, SSL_CERT_FILE (internal CA bundle).
+# - The data pipeline (intel -> detect -> triage) runs on a schedule (Build > Pipeline schedules,
+#   variable TRIAGE_MODE=daily) or by hand (New pipeline, TRIAGE_MODE=manual, optional
+#   TRIAGE_CVES="CVE-... CVE-..."). Each stage hands its output to the next as an artifact.
+#   Runner tag `llm-lan`: Internet access to the sources (directly or via HTTPS_PROXY) and access
+#   to the LLM endpoint. CI/CD variables: VULNOPS_LLM_ENABLED, VULNOPS_LLM_BASE_URL,
+#   VULNOPS_LLM_MODEL (the former VERDICT_* names still work), LLM_API_KEY if the server needs one.
 
-stages: [lint, test, validate, triage]
+stages: [lint, test, validate, intel, detect, triage]
 
 default:
   image: python:3.12-slim
@@ -16,10 +16,10 @@ default:
 
 variables:
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
-  VERDICT_CACHE_DIR: "$CI_PROJECT_DIR/.cache"
+  VULNOPS_CACHE_DIR: "$CI_PROJECT_DIR/.cache"
 
 .install: &install
-  - pip install --quiet -e ".[dev]"
+  - pip install --quiet -r requirements-dev.txt
 
 .code_rules: &code_rules
   rules:
@@ -28,6 +28,11 @@ variables:
     - if: $TRIAGE_MODE
       when: never
     - when: on_success
+
+.pipeline_rules: &pipeline_rules
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule" && $TRIAGE_MODE == "daily"
+    - if: $CI_PIPELINE_SOURCE == "web" && $TRIAGE_MODE == "manual"
 
 lint:
   stage: lint
@@ -55,15 +60,13 @@ validate-profiles:
   cache: {key: pip, paths: [.pip-cache/]}
   script:
     - *install
-    - verdict validate clients/*.yaml
+    - vulnops-profiles validate clients/*.yaml
 
-triage:
-  stage: triage
+intel:
+  stage: intel
   tags: [llm-lan]
   interruptible: false
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $TRIAGE_MODE == "daily"
-    - if: $CI_PIPELINE_SOURCE == "web" && $TRIAGE_MODE == "manual"
+  <<: *pipeline_rules
   cache:
     - {key: pip, paths: [.pip-cache/]}
     - {key: sources, paths: [.cache/]}
@@ -73,7 +76,35 @@ triage:
       ARGS=""
       for c in $TRIAGE_CVES; do ARGS="$ARGS --cve $c"; done
       if [ -z "$ARGS" ]; then ARGS="--since ${TRIAGE_SINCE:-26h}"; fi
-      verdict run clients/*.yaml --settings config/settings.yaml --out output $ARGS
+      vulnops-intel collect --settings config/settings.yaml --out work/records.json $ARGS
+  artifacts:
+    paths: [work/records.json]
+    expire_in: 7 days
+
+detect:
+  stage: detect
+  tags: [llm-lan]
+  interruptible: false
+  <<: *pipeline_rules
+  needs: [intel]
+  cache: {key: pip, paths: [.pip-cache/]}
+  script:
+    - *install
+    - vulnops-detect inventory clients/*.yaml --settings config/settings.yaml --records work/records.json --out work/findings
+  artifacts:
+    paths: [work/findings/]
+    expire_in: 7 days
+
+triage:
+  stage: triage
+  tags: [llm-lan]
+  interruptible: false
+  <<: *pipeline_rules
+  needs: [intel, detect]
+  cache: {key: pip, paths: [.pip-cache/]}
+  script:
+    - *install
+    - verdict run clients/*.yaml --settings config/settings.yaml --records work/records.json --findings work/findings --out output
   artifacts:
     name: "triage-$CI_PIPELINE_ID"
     paths: [output/]

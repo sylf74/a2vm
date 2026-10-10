@@ -1,9 +1,9 @@
 import json
 
-from verdict.matching import match_assets
-from verdict.models import AffectedEntry, Asset
-from verdict.record import parse_record
-from verdict.versions import evaluate, version_key
+from vulnops.core.models import AffectedEntry, Asset
+from vulnops.detect.matching import match_assets
+from vulnops.detect.versions import evaluate, version_key
+from vulnops.intel.record import parse_record
 
 from .conftest import FIXTURES
 

@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "vulnops/findings.schema.json",
+  "title": "vulnops findings for one client (detect stage output)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "generated_at", "client_id", "findings", "not_affected"],
+  "properties": {
+    "schema": {"const": "vulnops.findings/1"},
+    "generated_at": {"type": "string"},
+    "client_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id", "client_id", "asset_id", "cve_id", "source", "match",
+          "version_status", "affected_versions", "review_reasons"
+        ],
+        "properties": {
+          "id": {"type": "string", "description": "Stable id: <client>:<asset>:<cve>."},
+          "client_id": {"type": "string"},
+          "asset_id": {"type": "string"},
+          "cve_id": {"type": "string", "pattern": "^CVE-\\d{4}-\\d{4,}$"},
+          "source": {"type": "string", "description": "inventory, or the scanner that observed it."},
+          "match": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["method", "vendor", "product", "score", "note"],
+            "properties": {
+              "method": {"enum": ["exact", "cpe", "alias", "fuzzy", "llm", "scanner"]},
+              "vendor": {"type": "string"},
+              "product": {"type": "string"},
+              "score": {"type": "number"},
+              "note": {"type": "string"}
+            }
+          },
+          "version_status": {"enum": ["affected", "unknown"]},
+          "affected_versions": {"type": "array", "items": {"type": "string"}},
+          "review_reasons": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "not_affected": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["client_id", "cve_id", "asset_id", "deployed_versions"],
+        "properties": {
+          "client_id": {"type": "string"},
+          "cve_id": {"type": "string"},
+          "asset_id": {"type": "string"},
+          "deployed_versions": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    }
+  }
+}

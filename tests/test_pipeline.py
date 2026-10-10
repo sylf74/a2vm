@@ -1,18 +1,33 @@
 import datetime as dt
 import json
 
-from verdict.llm import LlmClient
-from verdict.pipeline import Triage, collect_cve_ids
-from verdict.report import render_markdown, write_all
+from vulnops.core.io import read_findings, read_records, write_findings, write_records
+from vulnops.core.llm import LlmClient
+from vulnops.detect.inventory import InventoryScanner
+from vulnops.intel.collect import collect, select_cve_ids
+from vulnops.verdict.report import render_markdown, write_all
+from vulnops.verdict.triage import Triage
 
 from .conftest import fake_llm_transport
 
 ALL = [f"CVE-2099-1000{i}" for i in range(1, 8)] + ["CVE-2024-3400"]
 
 
-def _run(settings, sources, profile, llm=None):
-    epss = sources.epss(ALL)
-    return Triage(settings, sources, llm).run(profile, ALL, epss)
+def _run(settings, sources, profile, llm=None, tmp=None):
+    """intel -> detect -> verdict, through the exchange files when `tmp` is given."""
+    collected = collect(sources, ALL)
+    records = {r.cve_id: r for r in collected.records}
+    requested, errors = collected.requested, collected.errors
+    if tmp:
+        write_records(tmp / "records.json", collected.records, requested, errors)
+        requested, records, errors = read_records(tmp / "records.json")
+    ordered = [records[c] for c in requested if c in records]
+    found = InventoryScanner(settings, llm).scan(profile, ordered)
+    findings, not_affected = found.findings, found.not_affected
+    if tmp:
+        write_findings(tmp / "findings.json", profile.id, findings, not_affected)
+        _, findings, not_affected = read_findings(tmp / "findings.json")
+    return Triage(settings, llm).run(profile, records, findings, not_affected, len(requested), errors)
 
 
 def _by_cve(run):
@@ -20,7 +35,7 @@ def _by_cve(run):
 
 
 def test_deterministic_run(settings, sources, profile, tmp_path):
-    run = _run(settings, sources, profile)
+    run = _run(settings, sources, profile, tmp=tmp_path)
     rows = _by_cve(run)
 
     pan = rows["CVE-2024-3400"]
@@ -59,7 +74,7 @@ def test_deterministic_run(settings, sources, profile, tmp_path):
 
 
 def test_fuzzy_drop_policy(settings, sources, profile):
-    settings.policy.fuzzy_match_without_llm = "drop"
+    settings.policy["fuzzy_match_without_llm"] = "drop"
     assert "CVE-2099-10004" not in _by_cve(_run(settings, sources, profile))
 
 
@@ -102,13 +117,39 @@ def test_llm_failure_falls_back(settings, sources, profile):
     llm = LlmClient(settings.llm, transport=httpx.MockTransport(lambda r: httpx.Response(503)))
     run = _run(settings, sources, profile, llm)
     rows = _by_cve(run)
-    assert rows["CVE-2024-3400"].rationale_source == "template (LLM error)"
+    assert rows["CVE-2024-3400"].rationale_source.startswith("template (LLM error: rationale:")
+    assert "503" in rows["CVE-2024-3400"].rationale_source
     assert rows["CVE-2099-10005"].automatable.source == "default"
     assert "CVE-2099-10004" in rows and rows["CVE-2099-10004"].needs_review
     assert "ACT" in render_markdown(run)
 
 
-def test_collect_cve_ids(sources):
+def test_select_cve_ids(sources):
     since = dt.datetime(2099, 10, 5, tzinfo=dt.UTC)
-    assert collect_cve_ids(sources, ["cve-2024-3400"], since) == ["CVE-2024-3400", "CVE-2099-10001", "CVE-2099-10002"]
-    assert "CVE-2099-10003" in collect_cve_ids(sources, [], since, include_updated=True)
+    assert select_cve_ids(sources, ["cve-2024-3400"], since) == ["CVE-2024-3400", "CVE-2099-10001", "CVE-2099-10002"]
+    assert "CVE-2099-10003" in select_cve_ids(sources, [], since, include_updated=True)
+
+
+def test_records_merge_kev_and_epss(sources):
+    collected = collect(sources, ["CVE-2024-3400", "CVE-2099-10001"])
+    pan, hr = collected.records
+    assert pan.in_kev and pan.kev["dateAdded"] == "2024-04-12" and pan.epss == 0.943
+    assert not hr.in_kev and hr.epss == 0.2 and hr.epss_percentile == 0.95
+
+
+def test_exchange_files_are_validated(tmp_path):
+    import pytest
+
+    from vulnops.core.io import ExchangeError
+
+    bad = tmp_path / "records.json"
+    bad.write_text(json.dumps({"schema": "vulnops.findings/1"}))
+    with pytest.raises(ExchangeError, match="expected a vulnops.records/1 file"):
+        read_records(bad)
+    bad.write_text(
+        json.dumps(
+            {"schema": "vulnops.records/1", "generated_at": "x", "requested": ["nope"], "records": [], "errors": []}
+        )
+    )
+    with pytest.raises(ExchangeError, match="requested/0"):
+        read_records(bad)

@@ -1,0 +1,23 @@
+# One owner per stage (the product owner of each pillar). Replace @product-owner with each owner's
+# GitLab username as they join. On GitLab CE (Free) the owners are shown on merge requests;
+# making their approval mandatory requires GitLab Premium.
+
+*               @product-owner
+
+# Common model: schemas, exchange files, settings, LLM client
+/core/          @product-owner
+
+# Intelligence
+/intel/         @product-owner
+
+# Detection
+/detect/        @product-owner
+
+# Triage
+/verdict/       @product-owner
+
+# Remediation
+/remediate/     @product-owner
+
+# Client profiles (describe client infrastructure: restrict who can change them)
+/clients/       @product-owner

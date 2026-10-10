@@ -8,3 +8,4 @@ __pycache__/
 output/
 junit.xml
 build/
+work/

@@ -1,9 +1,9 @@
-# verdict runtime settings. No secrets here: the LLM API key is read from the
+# vulnops runtime settings, shared by all stages. No secrets here: the LLM API key is read from the
 # environment variable named in llm.api_key_env.
 #
 # Environment overrides (handy in GitLab CI):
-#   VERDICT_LLM_ENABLED, VERDICT_LLM_BASE_URL, VERDICT_LLM_MODEL,
-#   VERDICT_CACHE_DIR, VERDICT_CVE_RECORD_URL
+#   VULNOPS_LLM_ENABLED, VULNOPS_LLM_BASE_URL, VULNOPS_LLM_MODEL,
+#   VULNOPS_CACHE_DIR, VULNOPS_CVE_RECORD_URL (the former VERDICT_* names still work)
 # Outbound HTTP honours HTTPS_PROXY / NO_PROXY and SSL_CERT_FILE.
 
 sources:

@@ -1,0 +1,7 @@
+# Editable install of every stage + test tooling (local development and CI).
+-e ./core
+-e ./intel
+-e ./detect
+-e ./verdict
+pytest>=8
+ruff>=0.6
