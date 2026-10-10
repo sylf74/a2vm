@@ -1,9 +1,9 @@
 import json
 
-from cve_triage.matching import match_assets
-from cve_triage.models import AffectedEntry, Asset
-from cve_triage.record import parse_record
-from cve_triage.versions import evaluate, version_key
+from verdict.matching import match_assets
+from verdict.models import AffectedEntry, Asset
+from verdict.record import parse_record
+from verdict.versions import evaluate, version_key
 
 from .conftest import FIXTURES
 

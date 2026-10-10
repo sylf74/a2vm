@@ -29,7 +29,7 @@ BOD_TIMELINES = (
 
 
 def _rows(name: str) -> list[list[str]]:
-    text = resources.files("cve_triage").joinpath("data", name).read_text(encoding="utf-8")
+    text = resources.files("verdict").joinpath("data", name).read_text(encoding="utf-8")
     rows = list(csv.reader(text.splitlines()))
     return [[c.strip().lower() for c in r[1:]] for r in rows[1:] if r]
 

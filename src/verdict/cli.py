@@ -1,4 +1,4 @@
-"""Command line: `cve-triage validate` and `cve-triage run`."""
+"""Command line: `verdict validate` and `verdict run`."""
 
 from __future__ import annotations
 
@@ -77,7 +77,7 @@ def cmd_run(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="cve-triage", description=__doc__)
+    parser = argparse.ArgumentParser(prog="verdict", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
 
     v = sub.add_parser("validate", help="validate client profiles against the schema")

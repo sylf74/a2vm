@@ -47,7 +47,7 @@ class Sources:
             timeout=settings.timeout_seconds,
             follow_redirects=True,
             transport=transport,
-            headers={"User-Agent": "cve-triage/0.1"},
+            headers={"User-Agent": "verdict/0.1"},
         )
         self._kev: dict[str, dict[str, Any]] | None = None
 

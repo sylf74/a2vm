@@ -1,9 +1,9 @@
 import datetime as dt
 import json
 
-from cve_triage.llm import LlmClient
-from cve_triage.pipeline import Triage, collect_cve_ids
-from cve_triage.report import render_markdown, write_all
+from verdict.llm import LlmClient
+from verdict.pipeline import Triage, collect_cve_ids
+from verdict.report import render_markdown, write_all
 
 from .conftest import fake_llm_transport
 

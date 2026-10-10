@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "cve-triage"
+name = "verdict"
 version = "0.1.0"
 description = "Deterministic SSVC triage of published CVEs against client asset profiles, assisted by a local LLM."
 readme = "README.md"
@@ -18,13 +18,13 @@ dependencies = [
 dev = ["pytest>=8", "ruff>=0.6"]
 
 [project.scripts]
-cve-triage = "cve_triage.cli:main"
+verdict = "verdict.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-cve_triage = ["data/*", "schemas/*.json"]
+verdict = ["data/*", "schemas/*.json"]
 
 [tool.ruff]
 line-length = 120

@@ -1,4 +1,4 @@
-# cve-triage
+# verdict
 
 Triage of newly published CVEs against each client's asset profile, using the CISA SSVC decision
 model. The decision is computed deterministically; a local LLM (optional) only fills gaps that are
@@ -36,7 +36,7 @@ policy (config/settings.yaml): mapping to ACT / ATTEND / TRACK + escalations (BO
 rationale: French template, or LLM text checked by a guard (template fallback)
 ```
 
-The SSVC tables are the official CERT/CC data files (`src/cve_triage/data/`, MIT (SEI)-style
+The SSVC tables are the official CERT/CC data files (`src/verdict/data/`, MIT (SEI)-style
 license, see `LICENSE-SSVC`), not a re-typed copy.
 
 Default mapping: `act → ACT`, `attend → ATTEND`, `track* → ATTEND`, `track → TRACK`, then:
@@ -49,13 +49,13 @@ Every escalation is written in the row's `reasons`. All of it is configurable.
 python -m venv .venv && . .venv/bin/activate        # PowerShell: .venv\Scripts\Activate.ps1
 pip install -e ".[dev]"
 
-cve-triage validate clients/*.yaml
+verdict validate clients/*.yaml
 # offline demo on the test fixtures
-cve-triage run clients/example-client.yaml --fixtures tests/fixtures --since 2099-10-01 --cve CVE-2024-3400
+verdict run clients/example-client.yaml --fixtures tests/fixtures --since 2099-10-01 --cve CVE-2024-3400
 # real run: CVEs published in the last 26 hours, plus KEV additions
-cve-triage run clients/*.yaml --since 26h
+verdict run clients/*.yaml --since 26h
 # CVEs from the daily watch (one id per line, # comments allowed)
-cve-triage run clients/acme.yaml --cve-file watch-2026-10-10.txt
+verdict run clients/acme.yaml --cve-file watch-2026-10-10.txt
 ```
 
 Reports land in `output/<client-id>/<date>/`.
@@ -63,7 +63,7 @@ Reports land in `output/<client-id>/<date>/`.
 ## Client profiles
 
 One YAML file per client in `clients/`, validated in CI against
-`src/cve_triage/schemas/client_profile.schema.json`. See `clients/example-client.yaml`.
+`src/verdict/schemas/client_profile.schema.json`. See `clients/example-client.yaml`.
 
 An asset is a product family deployed in one context: same exposure, same criticality, same
 owner. If the same product is both Internet-facing and internal, declare two assets.
@@ -87,7 +87,7 @@ vllm serve openai/gpt-oss-120b --port 8000 --max-model-len 32768
 ```
 
 Then set `llm.enabled: true` and `llm.base_url` in `config/settings.yaml` (or the
-`CVE_TRIAGE_LLM_*` environment variables). Check that your server version supports JSON-schema
+`VERDICT_LLM_*` environment variables). Check that your server version supports JSON-schema
 structured output for the chosen model before enabling it.
 
 What the LLM is allowed to do:

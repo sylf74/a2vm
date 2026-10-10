@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://gitlab/voc/cve-triage/client_profile.schema.json",
+  "$id": "https://gitlab/voc/verdict/client_profile.schema.json",
   "title": "Client profile for CVE triage",
   "type": "object",
   "additionalProperties": false,

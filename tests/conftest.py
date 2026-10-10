@@ -7,9 +7,9 @@ from pathlib import Path
 import httpx
 import pytest
 
-from cve_triage.config import Settings
-from cve_triage.profile import load_profile
-from cve_triage.sources import Sources
+from verdict.config import Settings
+from verdict.profile import load_profile
+from verdict.sources import Sources
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests" / "fixtures"

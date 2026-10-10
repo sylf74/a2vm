@@ -1,7 +1,7 @@
 import pytest
 
-from cve_triage import ssvc
-from cve_triage.policy import Policy, delivery_decision
+from verdict import ssvc
+from verdict.policy import Policy, delivery_decision
 
 
 def test_tables_are_complete():

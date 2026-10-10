@@ -55,11 +55,11 @@ class Settings:
 
 
 _ENV_OVERRIDES = {
-    "CVE_TRIAGE_LLM_ENABLED": ("llm", "enabled"),
-    "CVE_TRIAGE_LLM_BASE_URL": ("llm", "base_url"),
-    "CVE_TRIAGE_LLM_MODEL": ("llm", "model"),
-    "CVE_TRIAGE_CACHE_DIR": ("sources", "cache_dir"),
-    "CVE_TRIAGE_CVE_RECORD_URL": ("sources", "cve_record_url"),
+    "VERDICT_LLM_ENABLED": ("llm", "enabled"),
+    "VERDICT_LLM_BASE_URL": ("llm", "base_url"),
+    "VERDICT_LLM_MODEL": ("llm", "model"),
+    "VERDICT_CACHE_DIR": ("sources", "cache_dir"),
+    "VERDICT_CVE_RECORD_URL": ("sources", "cve_record_url"),
 }
 
 

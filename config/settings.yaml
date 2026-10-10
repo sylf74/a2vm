@@ -1,9 +1,9 @@
-# cve-triage runtime settings. No secrets here: the LLM API key is read from the
+# verdict runtime settings. No secrets here: the LLM API key is read from the
 # environment variable named in llm.api_key_env.
 #
 # Environment overrides (handy in GitLab CI):
-#   CVE_TRIAGE_LLM_ENABLED, CVE_TRIAGE_LLM_BASE_URL, CVE_TRIAGE_LLM_MODEL,
-#   CVE_TRIAGE_CACHE_DIR, CVE_TRIAGE_CVE_RECORD_URL
+#   VERDICT_LLM_ENABLED, VERDICT_LLM_BASE_URL, VERDICT_LLM_MODEL,
+#   VERDICT_CACHE_DIR, VERDICT_CVE_RECORD_URL
 # Outbound HTTP honours HTTPS_PROXY / NO_PROXY and SSL_CERT_FILE.
 
 sources:

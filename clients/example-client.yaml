@@ -1,5 +1,5 @@
 # Example client profile — copy to clients/<client-id>.yaml and adapt.
-# Schema: src/cve_triage/schemas/client_profile.schema.json (checked in CI).
+# Schema: src/verdict/schemas/client_profile.schema.json (checked in CI).
 #
 # Field guide (CISA SSVC wording):
 #   exposure                 internet = reachable by unauthenticated or untrusted entities via public

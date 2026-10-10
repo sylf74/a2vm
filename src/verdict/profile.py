@@ -19,7 +19,7 @@ class ProfileError(ValueError):
 
 
 def _schema() -> dict[str, Any]:
-    text = resources.files("cve_triage").joinpath("schemas", "client_profile.schema.json").read_text()
+    text = resources.files("verdict").joinpath("schemas", "client_profile.schema.json").read_text()
     return json.loads(text)
 
 

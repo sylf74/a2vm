@@ -1,7 +1,7 @@
 import yaml
 
-from cve_triage.llm.guard import unsupported_tokens
-from cve_triage.profile import validate_profile_data
+from verdict.llm.guard import unsupported_tokens
+from verdict.profile import validate_profile_data
 
 from .conftest import ROOT
 
