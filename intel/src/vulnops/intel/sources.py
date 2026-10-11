@@ -1,4 +1,4 @@
-"""Data sources: CVE JSON 5 records, CISA KEV, FIRST EPSS, cvelistV5 delta log.
+"""Data sources: CVE JSON 5 records, CISA KEV, FIRST EPSS, cvelistV5 delta log, CERT-FR feeds.
 
 All network access goes through one httpx client (it honours HTTPS_PROXY / SSL_CERT_FILE) and a
 small file cache, so a daily run does not refetch what it already has. With `fixtures_dir`, the
@@ -73,6 +73,20 @@ class Sources:
         path.write_text(json.dumps(data), encoding="utf-8")
         return data
 
+    def get_text(self, url: str, max_age_hours: float) -> str:
+        path = self._cache_path(url).with_suffix(".txt")
+        if path.exists() and time.time() - path.stat().st_mtime < max_age_hours * 3600:
+            return path.read_text(encoding="utf-8")
+        try:
+            resp = self._client.get(url)
+        except httpx.HTTPError as exc:
+            raise SourceError(f"GET {url}: {exc}") from exc
+        if resp.status_code >= 400:
+            raise SourceError(f"GET {url}: HTTP {resp.status_code}")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(resp.text, encoding="utf-8")
+        return resp.text
+
     def _fixture(self, name: str) -> Any:
         path = self.fixtures / name
         return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
@@ -85,12 +99,12 @@ class Sources:
         url = self.settings.cve_record_url.format(year=year, bucket=bucket, cve_id=cve_id)
         return self._get_json(url, self.settings.cve_cache_hours)
 
-    def new_cve_ids(self, since: dt.datetime, include_updated: bool = False) -> list[str]:
+    def new_cve_ids(self, since: dt.datetime, include_updated: bool = False, max_age_hours: float = 1) -> list[str]:
         """CVE ids published (and optionally updated) since `since`, from cvelistV5's deltaLog."""
         if self.fixtures:
             log = self._fixture("deltaLog.json") or []
         else:
-            log = self._get_json(self.settings.delta_log_url, 1) or []
+            log = self._get_json(self.settings.delta_log_url, max_age_hours) or []
         ids: list[str] = []
         for fetch in log:
             when = dt.datetime.fromisoformat(fetch["fetchTime"].replace("Z", "+00:00"))
@@ -135,6 +149,21 @@ class Sources:
         for r in rows:
             out[r["cve"]] = (float(r["epss"]), float(r["percentile"]))
         return out
+
+    # -- CERT-FR -----------------------------------------------------------------------------
+    def certfr_feed(self, kind: str, max_age_hours: float = 0.1) -> str:
+        """RSS feed of CERT-FR publications: kind = "alerte" or "avis"."""
+        if self.fixtures:
+            path = self.fixtures / "certfr" / f"{kind}.xml"
+            return path.read_text(encoding="utf-8") if path.exists() else ""
+        return self.get_text(f"{self.settings.certfr_url}/{kind}/feed/", max_age_hours)
+
+    def certfr_item(self, link: str) -> dict[str, Any] | None:
+        """Structured view (JSON) of one CERT-FR publication, from its page link."""
+        ref = link.rstrip("/").rsplit("/", 1)[-1]
+        if self.fixtures:
+            return self._fixture(f"certfr/{ref}.json")
+        return self._get_json(link.rstrip("/") + "/json/", 24)
 
     def close(self) -> None:
         self._client.close()

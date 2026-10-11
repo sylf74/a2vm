@@ -1,0 +1,11 @@
+{
+  "reference": "CERTFR-2024-ALE-006",
+  "title": "Vulnérabilité dans Palo Alto Networks PAN-OS",
+  "summary": "Une vulnérabilité permet à un attaquant non authentifié d'exécuter du code arbitraire avec les privilèges root sur le pare-feu, via la fonctionnalité GlobalProtect.",
+  "risks": [{"description": "Exécution de code arbitraire à distance"}],
+  "affected_systems": [
+    {"description": "PAN-OS versions 11.1.x antérieures à 11.1.2-h3", "product": {"name": "PAN-OS", "vendor": {"name": "Palo Alto Networks"}}}
+  ],
+  "cves": [{"name": "CVE-2024-3400", "url": "https://www.cve.org/CVERecord?id=CVE-2024-3400"}],
+  "vendor_advisories": [{"title": "Bulletin de sécurité Palo Alto Networks CVE-2024-3400", "url": "https://security.paloaltonetworks.com/CVE-2024-3400"}]
+}

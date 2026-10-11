@@ -124,6 +124,7 @@ class ClientProfile:
     rules: list[AttributeRule] = field(default_factory=list)
     defaults: dict[str, str] = field(default_factory=dict)  # default assumptions per attribute
     source_path: str = ""
+    alerts: dict[str, Any] = field(default_factory=dict)  # recipients, level, watchlist (watch mode)
 
     def declared(self, asset_id: str) -> DeclaredAsset:
         for a in self.assets:

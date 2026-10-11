@@ -4,5 +4,6 @@
 -e ./detect
 -e ./assets
 -e ./verdict
+-e ./alert
 pytest>=8
 ruff>=0.6

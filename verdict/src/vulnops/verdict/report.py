@@ -9,6 +9,7 @@ from pathlib import Path
 
 from vulnops.core.models import TriageRow, TriageRun
 
+from .dashboard import render_dashboard
 from .rationale import BOD_FR, EXPLOITATION_FR
 
 CSV_FIELDS = [
@@ -222,4 +223,5 @@ def write_all(run: TriageRun, out_dir: Path) -> Path:
     write_json(run, target / "triage.json")
     write_csv(run, target / "triage.csv")
     (target / "report.md").write_text(render_markdown(run), encoding="utf-8")
+    (target / "dashboard.html").write_text(render_dashboard(run), encoding="utf-8")
     return target

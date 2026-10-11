@@ -131,6 +131,15 @@ Any OpenAI-compatible server with JSON-schema structured output (vLLM, SGLang). 
 `VULNOPS_LLM_MODEL` (the former `VERDICT_*` names still work). Each stage prints the LLM
 configuration it received at start-up, and the cause of any LLM fallback.
 
+## Watch mode: alerts
+
+Every 10 minutes, each client project checks CERT-FR, CISA KEV and new critical CVEs, matches them
+to the client's declared assets and watchlist, drafts an alert sheet in French and mails it to the
+analysts; one click on the pipeline's manual job sends it to the client (`docs/alerts.md`).
+
+The daily triage also writes `dashboard.html`: decision counts, findings per asset, remediation
+deadlines and the ACT list, in one self-contained page.
+
 ## Multi-tenant deployment (GitLab)
 
 ```

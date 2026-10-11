@@ -18,6 +18,7 @@ CVELIST_URL = "https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/
 DELTA_LOG_URL = "https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/deltaLog.json"
 KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
 EPSS_URL = "https://api.first.org/data/v1/epss"
+CERTFR_URL = "https://www.cert.ssi.gouv.fr"
 
 
 @dataclass
@@ -26,6 +27,7 @@ class SourceSettings:
     delta_log_url: str = DELTA_LOG_URL
     kev_url: str = KEV_URL
     epss_url: str = EPSS_URL
+    certfr_url: str = CERTFR_URL
     timeout_seconds: float = 30
     cache_dir: str = ".cache"
     cve_cache_hours: float = 12

@@ -58,7 +58,7 @@ release:
   script:
     - |
       want="${CI_COMMIT_TAG#v}"
-      for p in core intel detect assets verdict; do
+      for p in core intel detect assets verdict alert; do
         got=$(sed -n 's/^version = "\(.*\)"/\1/p' $p/pyproject.toml)
         [ "$got" = "$want" ] || { echo "$p/pyproject.toml has version $got, tag says $want"; exit 1; }
       done

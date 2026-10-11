@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel><title>CERT-FR - Avis</title>
+<item>
+  <title>Multiples vulnérabilités dans Example HR Portal (1 octobre 2099)</title>
+  <link>https://www.cert.ssi.gouv.fr/avis/CERTFR-2099-AVI-0101/</link>
+  <pubDate>Thu, 01 Oct 2099 08:00:00 +0000</pubDate>
+</item>
+<item>
+  <title>Vulnérabilité dans Unrelated Product (1 octobre 2099)</title>
+  <link>https://www.cert.ssi.gouv.fr/avis/CERTFR-2099-AVI-0102/</link>
+  <pubDate>Thu, 01 Oct 2099 09:00:00 +0000</pubDate>
+</item>
+</channel></rss>

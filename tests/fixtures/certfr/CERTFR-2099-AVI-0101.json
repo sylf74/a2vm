@@ -1,0 +1,9 @@
+{
+  "reference": "CERTFR-2099-AVI-0101",
+  "title": "Multiples vulnérabilités dans Example HR Portal",
+  "summary": "De multiples vulnérabilités ont été découvertes dans Example HR Portal.",
+  "risks": [{"description": "Atteinte à la confidentialité des données"}],
+  "affected_systems": [{"description": "HR Portal versions antérieures à 4.2", "product": {"name": "HR Portal", "vendor": {"name": "Example Soft"}}}],
+  "cves": [],
+  "vendor_advisories": []
+}

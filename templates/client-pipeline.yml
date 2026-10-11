@@ -8,19 +8,23 @@
 #
 #     include:
 #       - project: vulnops/vulnops
-#         ref: v0.5.0
+#         ref: v0.6.0
 #         file: templates/client-pipeline.yml
 #     variables:
-#       VULNOPS_REF: v0.5.0        # same version as the include
+#       VULNOPS_REF: v0.6.0        # same version as the include
 #
 # Jobs:
 #   push to the default branch     validate (profile and targets)
 #   schedule or "Run pipeline"     collect -> intel -> detect -> assets -> triage
 #                                  optional TRIAGE_CVES="CVE-... CVE-...", TRIAGE_SINCE (default 26h)
+#   same, with VULNOPS_JOB=watch   watch (CERT-FR, KEV, critical CVEs matched to the client; alerts
+#                                  mailed to the analysts) -> send-alerts (manual: the validation)
 #
 # CI/CD variables (client project, or inherited from the groups):
 #   VULNOPS_SSH_KEY          File, protected: private key of this client's read-only scan account
 #   VULNOPS_LLM_ENABLED, VULNOPS_LLM_BASE_URL, VULNOPS_LLM_MODEL, LLM_API_KEY   (usually set on the group)
+#   VULNOPS_SMTP_HOST, VULNOPS_SMTP_PORT, VULNOPS_SMTP_TLS, VULNOPS_SMTP_USER, VULNOPS_SMTP_PASSWORD,
+#   VULNOPS_MAIL_FROM, VULNOPS_ANALYST_TO   (watch mode, usually set on the group)
 #
 # The code is fetched with the job token: in the vulnops code project, Settings > CI/CD >
 # Job token permissions must allow the client projects (e.g. the group vulnops/clients).
@@ -36,7 +40,7 @@ variables:
   PIP_ROOT_USER_ACTION: ignore
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
 
-stages: [validate, collect, intel, detect, assets, triage]
+stages: [validate, collect, intel, detect, assets, triage, watch, send]
 
 .vulnops:
   image: python:3.12-slim
@@ -49,13 +53,15 @@ stages: [validate, collect, intel, detect, assets, triage]
     - apt-get update -qq && apt-get install -y -qq git openssh-client >/dev/null
     - git -c advice.detachedHead=false clone -q --depth 1 --branch "$VULNOPS_REF"
         "${CI_SERVER_PROTOCOL}://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}:${CI_SERVER_PORT}/${VULNOPS_PROJECT}.git" .vulnops
-    - pip install --quiet .vulnops/core .vulnops/intel .vulnops/detect .vulnops/assets .vulnops/verdict
+    - pip install --quiet .vulnops/core .vulnops/intel .vulnops/detect .vulnops/assets .vulnops/verdict .vulnops/alert
     - if [ -f settings.yaml ]; then export SETTINGS=settings.yaml; else export SETTINGS=.vulnops/config/settings.yaml; fi
     - echo "vulnops $VULNOPS_REF ($(git -C .vulnops rev-parse --short HEAD)), client $CI_PROJECT_PATH, settings $SETTINGS"
 
 .data:
   extends: .vulnops
   rules:
+    - if: $VULNOPS_JOB == "watch"
+      when: never
     - if: $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"
   artifacts:
     paths: [work/]
@@ -65,6 +71,8 @@ validate:
   extends: .vulnops
   stage: validate
   rules:
+    - if: $VULNOPS_JOB == "watch"
+      when: never
     - if: $CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"
   script:
@@ -139,3 +147,37 @@ triage:
     name: "triage-$CI_PROJECT_NAME-$CI_PIPELINE_ID"
     paths: [output/, work/assets/]
     expire_in: 30 days
+
+# -- Watch mode: schedule every 10 minutes with the variable VULNOPS_JOB=watch -------------------
+# The state (what was already seen) lives in the GitLab cache; without it, a run only records the
+# current state and alerts on nothing. Exit code 3: a source or the mail failed (warning).
+watch:
+  extends: .vulnops
+  stage: watch
+  rules:
+    - if: $VULNOPS_JOB == "watch" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
+  resource_group: watch
+  cache:
+    - {key: pip, paths: [.pip-cache/]}
+    - {key: watch-state, paths: [.watch/], when: always}
+  allow_failure:
+    exit_codes: [3]
+  script:
+    - vulnops-alert watch "$VULNOPS_PROFILE" --settings "$SETTINGS" --state .watch/state.json --out alerts
+  artifacts:
+    when: always
+    paths: [alerts/]
+    expire_in: 14 days
+
+# The analyst's validation: running this job mails the alerts of this pipeline to the client.
+send-alerts:
+  extends: .vulnops
+  stage: send
+  needs: [watch]
+  rules:
+    - if: $VULNOPS_JOB == "watch" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
+      when: manual
+      allow_failure: true
+  cache: []
+  script:
+    - vulnops-alert send "$VULNOPS_PROFILE" --alerts alerts

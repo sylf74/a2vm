@@ -67,4 +67,5 @@ def load_profile(path: str | Path) -> ClientProfile:
         rules=rules,
         defaults=dict(data.get("defaults", {})),
         source_path=str(path),
+        alerts=dict(data.get("alerts", {})),
     )

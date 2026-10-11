@@ -10,6 +10,11 @@ client:
   name: Lab
   updated: 2026-10-11
 
+alerts:
+  recipients: [admin@lab.example]
+  level: urgent
+  watchlist: ["Microsoft Exchange Server"]
+
 rules:
   - description: reverse proxy published on the Internet (443)
     hostname: edge01
