@@ -33,6 +33,7 @@ SOURCE_FR = {
     "llm": "estimé par LLM",
     "default": "valeur par défaut",
     "asset-profile": "profil client",
+    "asset-inventory": "inventaire des actifs",
 }
 
 
@@ -48,6 +49,11 @@ def template_rationale(row: TriageRow) -> str:
     ]
     if len(row.reasons) > 1:
         parts.append("Politique : " + " ; ".join(row.reasons[1:]) + ".")
+    if row.fixes:
+        more = f" (+{len(row.fixes) - 4} autres)" if len(row.fixes) > 4 else ""
+        parts.append("Correctif disponible : " + ", ".join(row.fixes[:4]) + more + ".")
+    if row.assumptions:
+        parts.append("Hypothèses : " + " ; ".join(row.assumptions) + ".")
     if row.version_status == "unknown":
         parts.append("Version déployée non confirmée comme vulnérable : à vérifier.")
     return " ".join(parts)
@@ -73,6 +79,8 @@ def rationale_facts(row: TriageRow) -> str:
         "cvss": None if not row.cvss else {"score": row.cvss.score, "vector": row.cvss.vector},
         "cwe": row.cwes,
         "policy_reasons": row.reasons,
+        "fixed_packages": row.fixes[:10],
+        "assumptions": row.assumptions,
     }
     return json.dumps(facts, ensure_ascii=False, indent=1)
 

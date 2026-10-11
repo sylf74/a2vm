@@ -1,15 +1,26 @@
 """The inventory scanner: findings computed by matching vulnerability records against the assets a
 client declared in its profile (products, versions). Used for clients without a scanner, and for
-products scanners do not see.
+products scanners do not see (appliances, network devices, SaaS).
+
+Each declared asset becomes an asset observation (kind "declared"), carrying the attributes the
+profile declares; the assets stage completes the missing ones from rules and default assumptions.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-
 from vulnops.core.config import Settings
+from vulnops.core.io import Detection, now
 from vulnops.core.llm import LlmClient, LlmError
-from vulnops.core.models import ClientProfile, Finding, Match, NotAffected, VulnRecord
+from vulnops.core.models import (
+    ATTRIBUTES,
+    AssetObservation,
+    ClientProfile,
+    Finding,
+    FindingObservation,
+    Match,
+    NotAffected,
+    VulnRecord,
+)
 
 from .llm_tasks import adjudicate_match
 from .matching import AssetMatch, match_assets
@@ -18,11 +29,24 @@ from .versions import evaluate
 SOURCE = "inventory"
 
 
-@dataclass
-class InventoryResult:
-    client_id: str
-    findings: list[Finding] = field(default_factory=list)
-    not_affected: list[NotAffected] = field(default_factory=list)
+def declared_observations(profile: ClientProfile, observed_at: str) -> list[AssetObservation]:
+    out = []
+    for a in profile.assets:
+        attributes = {k: getattr(a, k) for k in ATTRIBUTES if getattr(a, k)}
+        out.append(
+            AssetObservation(
+                ref=a.id,
+                kind="declared",
+                source=SOURCE,
+                observed_at=observed_at,
+                name=a.id,
+                description=a.description,
+                identifiers={},
+                attributes=attributes,
+                os=None,
+            )
+        )
+    return out
 
 
 class InventoryScanner:
@@ -49,8 +73,9 @@ class InventoryScanner:
             return None, []
         return am.match, ["correspondance produit approximative (similarité de noms)"]
 
-    def scan(self, profile: ClientProfile, records: list[VulnRecord]) -> InventoryResult:
-        result = InventoryResult(profile.id)
+    def scan(self, profile: ClientProfile, records: list[VulnRecord]) -> Detection:
+        observed_at = now()
+        result = Detection(profile.id, SOURCE, declared_observations(profile, observed_at), [])
         for record in records:
             for am in match_assets(record, profile.assets, self.settings.fuzzy_threshold):
                 review: list[str] = []
@@ -66,25 +91,34 @@ class InventoryScanner:
                     statuses = {v: evaluate(v, am.entries) for v in asset.versions}
                     affected = [v for v, s in statuses.items() if s == "affected"]
                     if not affected and all(s == "unaffected" for s in statuses.values()):
-                        result.not_affected.append(NotAffected(profile.id, record.cve_id, asset.id, asset.versions))
+                        result.not_affected.append(
+                            NotAffected(profile.id, record.cve_id, asset.id, asset.versions, SOURCE)
+                        )
                         continue
-                    version_status = "affected" if affected else "unknown"
+                    status = "affected" if affected else "under_investigation"
                     if not affected:
                         review.append("statut de la version déployée indéterminé")
                 else:
-                    affected, version_status = [], "unknown"
+                    affected, status = [], "under_investigation"
                     review.append("versions déployées non renseignées dans le profil client")
 
                 result.findings.append(
                     Finding(
                         id=Finding.make_id(profile.id, asset.id, record.cve_id),
                         client_id=profile.id,
-                        asset_id=asset.id,
+                        asset_ref=asset.id,
                         cve_id=record.cve_id,
-                        source=SOURCE,
-                        match=match,
-                        version_status=version_status,
+                        status=status,
                         affected_versions=affected,
+                        observations=[
+                            FindingObservation(
+                                source=SOURCE,
+                                observed_at=observed_at,
+                                match=match,
+                                package=asset.product,
+                                installed_version=", ".join(asset.versions),
+                            )
+                        ],
                         review_reasons=review,
                     )
                 )

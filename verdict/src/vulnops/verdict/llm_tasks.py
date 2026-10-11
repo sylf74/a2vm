@@ -73,7 +73,10 @@ Règles :
 - "summary" : 2 à 3 phrases expliquant pourquoi la décision est celle-ci (exploitation, exposition,
   impact, criticité de l'actif). Cite la décision telle quelle (ACT, ATTEND ou TRACK).
 - "action" : 1 à 2 phrases sur ce que le propriétaire de l'actif doit faire, dans le délai indiqué
-  par le champ bod_timeline. Ne cite pas de version corrective si elle n'est pas dans les faits.
+  par le champ bod_timeline. Si le champ fixed_packages n'est pas vide, cite le ou les paquets
+  correctifs tels quels ; sinon ne cite aucune version corrective.
+- Si le champ assumptions n'est pas vide, signale en une courte phrase que la décision repose sur
+  une hypothèse (par exemple une exposition supposée), sans en inventer d'autre.
 - Ton factuel, sans emphase.
 {_UNTRUSTED}"""
 

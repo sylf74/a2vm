@@ -1,13 +1,15 @@
-"""Triage: findings + vulnerability records + client profile -> one decision per finding.
+"""Triage: findings + vulnerability records + consolidated assets -> one decision per finding.
 
-verdict collects nothing itself: records come from the intel stage, findings from the detect
-stage. Decision inputs and their precedence:
+verdict collects nothing itself: records come from the intel stage, assets and findings from the
+assets stage. Decision inputs and their precedence:
 
   Exploitation       KEV -> CISA ADP (Vulnrichment) -> exploit reference tag -> "none" (review)
   Automatable        CISA ADP -> CVSS heuristic -> LLM -> policy default (review)
   Technical Impact   CISA ADP -> CVSS heuristic -> LLM -> policy default (review)
-  Mission/Well-being client profile (asset)
-  Publicly exposed   client profile (asset.exposure == internet)
+  Mission/Well-being asset attributes (declared, rule, source, or the client's default assumption)
+  Publicly exposed   asset attribute exposure == internet
+
+An attribute that comes from a default assumption is named in the row and flags it for review.
 
 The SSVC tables and the policy make the decision; the LLM never does.
 """
@@ -21,6 +23,7 @@ from vulnops.core.io import now
 from vulnops.core.llm import LlmClient, LlmError
 from vulnops.core.models import (
     Assessed,
+    Asset,
     ClientProfile,
     CvssMetric,
     Finding,
@@ -127,6 +130,7 @@ class Triage:
         self,
         profile: ClientProfile,
         records: dict[str, VulnRecord],
+        assets: dict[str, Asset],
         findings: list[Finding],
         not_affected: list[NotAffected] | None = None,
         cve_count: int | None = None,
@@ -140,43 +144,64 @@ class Triage:
             errors=list(errors or []),
             llm_model=self.llm.model if self.llm else None,
         )
+        missing: dict[str, int] = {}
         for finding in findings:
             record = records.get(finding.cve_id)
             if record is None:
-                run.errors.append({"cve": finding.cve_id, "error": "finding without a vulnerability record"})
+                missing[finding.cve_id] = missing.get(finding.cve_id, 0) + 1
                 continue
-            run.rows.append(self._row(profile, self.cve_inputs(record), finding))
+            asset = assets.get(finding.asset_ref)
+            if asset is None:
+                raise ValueError(f"finding {finding.id} refers to an unknown asset {finding.asset_ref!r}")
+            run.rows.append(self._row(profile, self.cve_inputs(record), asset, finding))
+        known = {e["cve"] for e in run.errors}
+        for cve, n in sorted(missing.items()):
+            if cve not in known:
+                run.errors.append({"cve": cve, "error": f"no vulnerability record for {n} finding(s)"})
 
         order = {"ACT": 0, "ATTEND": 1, "TRACK": 2}
         run.rows.sort(key=lambda r: (order[r.delivery_decision], -(r.epss or 0), r.cve_id, r.asset_id))
         return run
 
-    def _row(self, profile: ClientProfile, inputs: CveInputs, finding: Finding) -> TriageRow:
-        asset = profile.asset(finding.asset_id)
+    def _row(self, profile: ClientProfile, inputs: CveInputs, asset: Asset, finding: Finding) -> TriageRow:
         record = inputs.record
-        mwi = ssvc.mission_wellbeing(asset.mission_prevalence, asset.public_wellbeing_impact)
-        exposed = asset.exposure == "internet"
+        exposure = asset.attr("exposure")
+        mission = asset.attr("mission_prevalence")
+        wellbeing = asset.attr("public_wellbeing_impact")
+        owner = asset.attr("owner")
+        mwi = ssvc.mission_wellbeing(mission.value, wellbeing.value)
+        exposed = exposure.value == "internet"
         decision = ssvc.coordinator_decision(
             inputs.exploitation.value, inputs.automatable.value, inputs.technical_impact.value, mwi
         )
         bod = ssvc.bod_timeline(record.in_kev, exposed, inputs.automatable.value, inputs.technical_impact.value)
         delivery, reasons = delivery_decision(decision, bod, record.epss, self.policy)
-        review = list(inputs.review_reasons) + list(finding.review_reasons)
+        origin = {"worst case": "pire cas", "client default": "hypothèse par défaut du client"}
+        assumptions = [
+            f"{label} : {attr.value} ({origin.get(attr.note, attr.note)})"
+            for label, attr in (
+                ("exposition supposée", exposure),
+                ("criticité mission supposée", mission),
+                ("impact bien-être supposé", wellbeing),
+                ("propriétaire supposé", owner),
+            )
+            if attr.assumed
+        ]
+        review = list(inputs.review_reasons) + list(finding.review_reasons) + assumptions[:3]
+        mission_source = "asset-profile" if {mission.source, wellbeing.source} <= {"declared"} else "asset-inventory"
         row = TriageRow(
             client_id=profile.id,
             cve_id=record.cve_id,
-            asset_id=asset.id,
+            asset_id=asset.name,
             asset_description=asset.description,
-            owner=asset.owner,
+            owner=owner.value,
             match=finding.match,
-            version_status=finding.version_status,
+            version_status="affected" if finding.status == "affected" else "unknown",
             affected_versions=finding.affected_versions,
             exploitation=inputs.exploitation,
             automatable=inputs.automatable,
             technical_impact=inputs.technical_impact,
-            mission_wellbeing=Assessed(
-                mwi, "asset-profile", f"{asset.mission_prevalence}/{asset.public_wellbeing_impact}"
-            ),
+            mission_wellbeing=Assessed(mwi, mission_source, f"{mission.value}/{wellbeing.value}"),
             publicly_exposed=exposed,
             in_kev=record.in_kev,
             epss=record.epss,
@@ -191,9 +216,13 @@ class Triage:
             review_reasons=review,
             description=record.description,
             finding_id=finding.id,
-            finding_source=finding.source,
+            finding_source=", ".join(finding.sources),
+            asset_id_full=asset.id,
+            assumptions=assumptions,
+            fixes=sorted({f"{o.package} {o.fixed_version}" for o in finding.observations if o.fixed_version}),
         )
-        if self.llm and self.settings.llm.rationale:
+        wants_llm = self.llm and self.settings.llm.rationale and delivery in self.settings.llm.rationale_for
+        if wants_llm:
             row.rationale, row.rationale_source = llm_rationale(self.llm, row)
         else:
             row.rationale = template_rationale(row)

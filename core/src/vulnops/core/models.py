@@ -1,11 +1,12 @@
 """The common data model shared by every vulnops stage.
 
-  VulnRecord   everything known about one vulnerability (produced by intel)
-  Asset        one element of a client's estate (declared in the client profile, later also scanners)
-  Finding      one asset affected by one vulnerability (produced by detect)
-  TriageRow    the decision on one finding (produced by verdict)
+  VulnRecord        everything known about one vulnerability (intel)
+  AssetObservation  one sighting of an asset by one source (detect connectors)
+  Asset             one consolidated asset of a client's inventory (assets)
+  Finding           one asset affected by one vulnerability (detect, then re-keyed by assets)
+  TriageRow         the decision on one finding (verdict)
 
-Records and findings travel between stages as JSON files (see vulnops.core.io); the
+Records, observations, assets and findings travel between stages as JSON files (vulnops.core.io); the
 `to_dict` / `from_dict` helpers are the only (de)serialisation code, so a field added here
 is added everywhere.
 """
@@ -82,15 +83,21 @@ CveFacts = VulnRecord
 
 
 @dataclass
-class Asset:
+class DeclaredAsset:
+    """An asset (or a product family) declared in a client profile.
+
+    Exposure, criticality and owner are optional: what is not declared comes from the client's
+    rules and default assumptions when the assets stage consolidates the inventory.
+    """
+
     id: str
     description: str
     vendor: str
     product: str
-    exposure: str  # internet | internal | isolated
-    mission_prevalence: str  # minimal | support | essential
-    public_wellbeing_impact: str  # minimal | material | irreversible
-    owner: str
+    exposure: str | None = None  # internet | internal | isolated
+    mission_prevalence: str | None = None  # minimal | support | essential
+    public_wellbeing_impact: str | None = None  # minimal | material | irreversible
+    owner: str | None = None
     vendor_aliases: list[str] = field(default_factory=list)
     product_aliases: list[str] = field(default_factory=list)
     cpe: str | None = None
@@ -98,18 +105,90 @@ class Asset:
 
 
 @dataclass
+class AttributeRule:
+    """Set asset attributes for hosts matching a hostname/FQDN glob or an address range."""
+
+    set: dict[str, str]
+    hostname: str | None = None
+    fqdn: str | None = None
+    ip: str | None = None  # CIDR
+    description: str = ""
+
+
+@dataclass
 class ClientProfile:
     id: str
     name: str
     updated: str
-    assets: list[Asset]
+    assets: list[DeclaredAsset]
+    rules: list[AttributeRule] = field(default_factory=list)
+    defaults: dict[str, str] = field(default_factory=dict)  # default assumptions per attribute
     source_path: str = ""
 
-    def asset(self, asset_id: str) -> Asset:
+    def declared(self, asset_id: str) -> DeclaredAsset:
         for a in self.assets:
             if a.id == asset_id:
                 return a
-        raise KeyError(f"{self.id}: unknown asset {asset_id!r}")
+        raise KeyError(f"{self.id}: unknown declared asset {asset_id!r}")
+
+
+# -- asset inventory ---------------------------------------------------------------------------
+ATTRIBUTES = ("exposure", "mission_prevalence", "public_wellbeing_impact", "owner")
+
+
+@dataclass
+class AssetObservation:
+    """One sighting of an asset by one source (detection connectors -> assets stage)."""
+
+    ref: str  # source-local reference: declared asset id, hostname, image name
+    kind: str  # declared | host | image
+    source: str  # inventory | trivy | dnf-updateinfo | ...
+    observed_at: str
+    name: str
+    description: str = ""
+    identifiers: dict[str, Any] = field(default_factory=dict)  # fqdn, hostname, ips[], image
+    attributes: dict[str, str] = field(default_factory=dict)  # attributes seen by this source
+    os: str | None = None
+
+
+@dataclass
+class Attribute:
+    value: str
+    source: str  # declared | rule | <scanner> | default
+    note: str = ""
+
+    @property
+    def assumed(self) -> bool:
+        return self.source == "default"
+
+
+@dataclass
+class Asset:
+    """A consolidated asset of the client's inventory (produced by the assets stage)."""
+
+    id: str  # stable: declared:<id> | host:<fqdn or hostname> | image:<ref>
+    client_id: str
+    kind: str
+    name: str
+    description: str
+    identifiers: dict[str, Any]
+    attributes: dict[str, Attribute]
+    sources: list[str]
+    first_seen: str
+    last_seen: str
+    os: str | None = None
+
+    def attr(self, name: str) -> Attribute:
+        return self.attributes[name]
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> Asset:
+        d = dict(d)
+        d["attributes"] = {k: Attribute(**v) for k, v in d["attributes"].items()}
+        return cls(**d)
 
 
 @dataclass
@@ -131,22 +210,47 @@ class Match:
 
 
 @dataclass
-class Finding:
-    """One asset affected (or possibly affected) by one vulnerability."""
+class FindingObservation:
+    """What one source said about one asset x vulnerability."""
 
-    id: str  # stable: <client>:<asset>:<cve>
-    client_id: str
-    asset_id: str
-    cve_id: str
-    source: str  # inventory | trivy | tenable | ...
+    source: str
+    observed_at: str
     match: Match
-    version_status: str  # affected | unknown
+    package: str = ""
+    installed_version: str = ""
+    fixed_version: str = ""
+    source_status: str = ""  # e.g. Trivy: fixed | affected | will_not_fix | end_of_life
+    source_severity: str = ""
+
+
+@dataclass
+class Finding:
+    """One asset affected (or possibly affected) by one vulnerability.
+
+    In a detection file `asset_ref` is the source-local reference of an observation; after the
+    assets stage it is the id of a consolidated asset. `status` uses VEX wording.
+    """
+
+    id: str
+    client_id: str
+    asset_ref: str
+    cve_id: str
+    status: str  # affected | under_investigation
     affected_versions: list[str]
+    observations: list[FindingObservation]
     review_reasons: list[str] = field(default_factory=list)
 
     @staticmethod
-    def make_id(client_id: str, asset_id: str, cve_id: str) -> str:
-        return f"{client_id}:{asset_id}:{cve_id}"
+    def make_id(client_id: str, asset_ref: str, cve_id: str) -> str:
+        return f"{client_id}:{asset_ref}:{cve_id}"
+
+    @property
+    def sources(self) -> list[str]:
+        return sorted({o.source for o in self.observations})
+
+    @property
+    def match(self) -> Match:
+        return self.observations[0].match
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -154,7 +258,7 @@ class Finding:
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> Finding:
         d = dict(d)
-        d["match"] = Match(**d["match"])
+        d["observations"] = [FindingObservation(**{**o, "match": Match(**o["match"])}) for o in d["observations"]]
         return cls(**d)
 
 
@@ -164,6 +268,7 @@ class NotAffected:
     cve_id: str
     asset_id: str
     deployed_versions: list[str]
+    source: str = "inventory"
 
 
 @dataclass
@@ -195,6 +300,9 @@ class TriageRow:
     description: str
     finding_id: str = ""
     finding_source: str = "inventory"
+    asset_id_full: str = ""
+    assumptions: list[str] = field(default_factory=list)
+    fixes: list[str] = field(default_factory=list)  # "<package> <fixed version>" reported by scanners
     rationale: str = ""
     rationale_source: str = "template"
 

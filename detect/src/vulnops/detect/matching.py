@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 
-from vulnops.core.models import AffectedEntry, Asset, CveFacts, Match
+from vulnops.core.models import AffectedEntry, CveFacts, DeclaredAsset, Match
 
 
 def norm(value: str) -> str:
@@ -22,7 +22,7 @@ def cpe_vendor_product(cpe: str) -> tuple[str, str] | None:
 
 @dataclass
 class AssetMatch:
-    asset: Asset
+    asset: DeclaredAsset
     match: Match
     entries: list[AffectedEntry]  # affected blocks that refer to this asset's product
 
@@ -31,13 +31,13 @@ def _sim(a: str, b: str) -> float:
     return SequenceMatcher(None, a, b).ratio() if a and b else 0.0
 
 
-def _asset_keys(asset: Asset) -> tuple[set[str], set[str], tuple[str, str] | None]:
+def _asset_keys(asset: DeclaredAsset) -> tuple[set[str], set[str], tuple[str, str] | None]:
     vendors = {norm(asset.vendor), *(norm(v) for v in asset.vendor_aliases)}
     products = {norm(asset.product), *(norm(p) for p in asset.product_aliases)}
     return vendors - {""}, products - {""}, cpe_vendor_product(asset.cpe) if asset.cpe else None
 
 
-def _entry_match(asset: Asset, entry: AffectedEntry, fuzzy_threshold: float) -> Match | None:
+def _entry_match(asset: DeclaredAsset, entry: AffectedEntry, fuzzy_threshold: float) -> Match | None:
     vendors, products, asset_cpe = _asset_keys(asset)
     ev, ep = norm(entry.vendor), norm(entry.product)
 
@@ -60,7 +60,7 @@ def _entry_match(asset: Asset, entry: AffectedEntry, fuzzy_threshold: float) -> 
     return None
 
 
-def match_assets(facts: CveFacts, assets: list[Asset], fuzzy_threshold: float = 0.75) -> list[AssetMatch]:
+def match_assets(facts: CveFacts, assets: list[DeclaredAsset], fuzzy_threshold: float = 0.75) -> list[AssetMatch]:
     results: list[AssetMatch] = []
     rank = {"cpe": 0, "exact": 1, "alias": 2, "fuzzy": 3}
     for asset in assets:

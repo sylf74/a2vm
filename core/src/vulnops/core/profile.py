@@ -10,7 +10,7 @@ import jsonschema
 import yaml
 
 from .io import load_schema
-from .models import Asset, ClientProfile
+from .models import AttributeRule, ClientProfile, DeclaredAsset
 
 
 class ProfileError(ValueError):
@@ -40,7 +40,7 @@ def validate_profile_data(data: Any, source: str = "<profile>") -> list[str]:
     ]
     if not errors:
         seen: set[str] = set()
-        for asset in data["assets"]:
+        for asset in data.get("assets", []):
             if asset["id"] in seen:
                 errors.append(f"{source}: duplicate asset id {asset['id']!r}")
             seen.add(asset["id"])
@@ -56,12 +56,15 @@ def load_profile(path: str | Path) -> ClientProfile:
     errors = validate_profile_data(data, str(path))
     if errors:
         raise ProfileError("\n".join(errors))
-    assets = [Asset(**a) for a in data["assets"]]
+    assets = [DeclaredAsset(**a) for a in data.get("assets", [])]
+    rules = [AttributeRule(**r) for r in data.get("rules", [])]
     client = data["client"]
     return ClientProfile(
         id=client["id"],
         name=client["name"],
         updated=client["updated"],
         assets=assets,
+        rules=rules,
+        defaults=dict(data.get("defaults", {})),
         source_path=str(path),
     )

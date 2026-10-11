@@ -1,6 +1,6 @@
 import json
 
-from vulnops.core.models import AffectedEntry, Asset
+from vulnops.core.models import AffectedEntry, DeclaredAsset
 from vulnops.detect.matching import match_assets
 from vulnops.detect.versions import evaluate, version_key
 from vulnops.intel.record import parse_record
@@ -55,7 +55,7 @@ def test_real_record_pan_os():
         "automatable": "yes",
         "technical_impact": "total",
     }
-    asset = Asset(
+    asset = DeclaredAsset(
         "fw",
         "fw",
         "Palo Alto Networks",

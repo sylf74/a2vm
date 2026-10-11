@@ -29,6 +29,7 @@ llm:
     ssvc_inputs: true          # Automatable / Technical Impact when no CISA ADP data and no CVSS
     match_adjudication: true   # confirm or reject fuzzy product matches
     rationale: true            # French rationale (guarded, template fallback)
+    rationale_for: [ACT, ATTEND]  # LLM rationale for these decisions; template for the rest
 
 # Product-name similarity (0-1) above which a non-exact match becomes a candidate.
 fuzzy_threshold: 0.75

@@ -1,14 +1,18 @@
 # vulnops pipeline
 #
 # - lint / test / validate run on every push and merge request.
-# - The data pipeline (intel -> detect -> triage) runs on a schedule (Build > Pipeline schedules,
-#   variable TRIAGE_MODE=daily) or by hand (New pipeline, TRIAGE_MODE=manual, optional
-#   TRIAGE_CVES="CVE-... CVE-..."). Each stage hands its output to the next as an artifact.
-#   Runner tag `llm-lan`: Internet access to the sources (directly or via HTTPS_PROXY) and access
-#   to the LLM endpoint. CI/CD variables: VULNOPS_LLM_ENABLED, VULNOPS_LLM_BASE_URL,
-#   VULNOPS_LLM_MODEL (the former VERDICT_* names still work), LLM_API_KEY if the server needs one.
+# - The data pipeline runs on a schedule (Build > Pipeline schedules, TRIAGE_MODE=daily) or by hand
+#   (New pipeline, TRIAGE_MODE=manual, optional TRIAGE_CVES="CVE-... CVE-..."):
+#       collect -> intel -> detect -> assets -> triage
+#   Each job hands work/ to the next as an artifact. Runner tag `llm-lan`: Internet access to the
+#   sources (directly or via HTTPS_PROXY), SSH access to the scan targets, access to the LLM.
+#
+# CI/CD variables:
+#   VULNOPS_LLM_ENABLED, VULNOPS_LLM_BASE_URL, VULNOPS_LLM_MODEL (VERDICT_* still accepted), LLM_API_KEY
+#   VULNOPS_SSH_KEY  type "File", masked, protected: private key of the read-only scan account.
+#                    Without it, the collect job is skipped and only declared inventories are triaged.
 
-stages: [lint, test, validate, intel, detect, triage]
+stages: [lint, test, validate, collect, intel, detect, assets, triage]
 
 default:
   image: python:3.12-slim
@@ -29,7 +33,10 @@ variables:
       when: never
     - when: on_success
 
-.pipeline_rules: &pipeline_rules
+.pipeline: &pipeline
+  tags: [llm-lan]
+  interruptible: false
+  cache: {key: pip, paths: [.pip-cache/]}
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule" && $TRIAGE_MODE == "daily"
     - if: $CI_PIPELINE_SOURCE == "web" && $TRIAGE_MODE == "manual"
@@ -62,11 +69,27 @@ validate-profiles:
     - *install
     - vulnops-profiles validate clients/*.yaml
 
+collect:
+  stage: collect
+  <<: *pipeline
+  script:
+    - mkdir -p work/detect
+    - |
+      if [ -z "${VULNOPS_SSH_KEY:-}" ] || [ ! -d config/targets ]; then
+        echo "No VULNOPS_SSH_KEY or no config/targets: skipping scanner collection"; exit 0
+      fi
+      apt-get update -qq && apt-get install -y -qq openssh-client >/dev/null
+      mkdir -p ~/.ssh && cp "$VULNOPS_SSH_KEY" ~/.ssh/vulnops_scan && chmod 600 ~/.ssh/vulnops_scan
+    - *install
+    - vulnops-detect collect config/targets/*.yaml --raw work/scans --out work/detect || echo "collection incomplete, continuing"
+  artifacts:
+    paths: [work/]
+    expire_in: 7 days
+
 intel:
   stage: intel
-  tags: [llm-lan]
-  interruptible: false
-  <<: *pipeline_rules
+  <<: *pipeline
+  needs: [collect]
   cache:
     - {key: pip, paths: [.pip-cache/]}
     - {key: sources, paths: [.cache/]}
@@ -76,36 +99,41 @@ intel:
       ARGS=""
       for c in $TRIAGE_CVES; do ARGS="$ARGS --cve $c"; done
       if [ -z "$ARGS" ]; then ARGS="--since ${TRIAGE_SINCE:-26h}"; fi
-      vulnops-intel collect --settings config/settings.yaml --out work/records.json $ARGS
+      vulnops-intel collect --settings config/settings.yaml --detect work/detect --out work/records.json $ARGS
   artifacts:
-    paths: [work/records.json]
+    paths: [work/]
     expire_in: 7 days
 
 detect:
   stage: detect
-  tags: [llm-lan]
-  interruptible: false
-  <<: *pipeline_rules
+  <<: *pipeline
   needs: [intel]
-  cache: {key: pip, paths: [.pip-cache/]}
   script:
     - *install
-    - vulnops-detect inventory clients/*.yaml --settings config/settings.yaml --records work/records.json --out work/findings
+    - vulnops-detect inventory clients/*.yaml --settings config/settings.yaml --records work/records.json --out work/detect
   artifacts:
-    paths: [work/findings/]
+    paths: [work/]
+    expire_in: 7 days
+
+assets:
+  stage: assets
+  <<: *pipeline
+  needs: [detect]
+  script:
+    - *install
+    - vulnops-assets build clients/*.yaml --detect work/detect --out work/assets
+  artifacts:
+    paths: [work/]
     expire_in: 7 days
 
 triage:
   stage: triage
-  tags: [llm-lan]
-  interruptible: false
-  <<: *pipeline_rules
-  needs: [intel, detect]
-  cache: {key: pip, paths: [.pip-cache/]}
+  <<: *pipeline
+  needs: [assets]
   script:
     - *install
-    - verdict run clients/*.yaml --settings config/settings.yaml --records work/records.json --findings work/findings --out output
+    - verdict run clients/*.yaml --settings config/settings.yaml --records work/records.json --assets work/assets --out output
   artifacts:
     name: "triage-$CI_PIPELINE_ID"
-    paths: [output/]
+    paths: [output/, work/assets/]
     expire_in: 30 days

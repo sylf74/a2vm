@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 from vulnops.core.config import load_settings
-from vulnops.core.io import write_records
+from vulnops.core.io import detection_files, read_detection, write_records
 
 from .collect import collect, select_cve_ids
 from .sources import Sources
@@ -37,6 +37,10 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--cve-file", help="file with one CVE id per line (e.g. the daily watch export)")
     c.add_argument("--since", help="CVEs published since: ISO date/time, or 24h / 2d (+ KEV additions)")
     c.add_argument("--include-updated", action="store_true", help="with --since, also updated CVE records")
+    c.add_argument(
+        "--detect",
+        help="detect stage output directory: also collect every CVE found by scanners (work/detect)",
+    )
     c.add_argument("--fixtures", help="read sources from a local fixtures directory (no network)")
     c.add_argument("--out", default="work/records.json")
     args = parser.parse_args(argv)
@@ -45,6 +49,10 @@ def main(argv: list[str] | None = None) -> int:
     sources = Sources(settings.sources, fixtures_dir=args.fixtures)
     try:
         explicit = list(args.cve or []) + (read_cve_file(args.cve_file) if args.cve_file else [])
+        if args.detect:
+            found = sorted({f.cve_id for p in detection_files(args.detect) for f in read_detection(p).findings})
+            print(f"{len(found)} CVE found by scanners in {args.detect}")
+            explicit += found
         since = parse_since(args.since) if args.since else None
         cve_ids = select_cve_ids(sources, explicit, since, args.include_updated)
         if not cve_ids:

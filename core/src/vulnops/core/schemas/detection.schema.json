@@ -1,0 +1,391 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "vulnops/detection.schema.json",
+  "title": "vulnops detection output of one source for one client (detect stage)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "generated_at",
+    "client_id",
+    "source",
+    "observations",
+    "findings",
+    "not_affected",
+    "skipped"
+  ],
+  "properties": {
+    "schema": {
+      "const": "vulnops.detection/1"
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "client_id": {
+      "$ref": "#/$defs/client_id"
+    },
+    "source": {
+      "type": "string"
+    },
+    "observations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/observation"
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/finding"
+      }
+    },
+    "not_affected": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/not_affected"
+      }
+    },
+    "skipped": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "description": "Counts of entries the connector ignored, by reason."
+    }
+  },
+  "$defs": {
+    "client_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "match": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "vendor",
+        "product",
+        "score",
+        "note"
+      ],
+      "properties": {
+        "method": {
+          "enum": [
+            "exact",
+            "cpe",
+            "alias",
+            "fuzzy",
+            "llm",
+            "scanner"
+          ]
+        },
+        "vendor": {
+          "type": "string"
+        },
+        "product": {
+          "type": "string"
+        },
+        "score": {
+          "type": "number"
+        },
+        "note": {
+          "type": "string"
+        }
+      }
+    },
+    "finding_observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "observed_at",
+        "match",
+        "package",
+        "installed_version",
+        "fixed_version",
+        "source_status",
+        "source_severity"
+      ],
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "observed_at": {
+          "type": "string"
+        },
+        "match": {
+          "$ref": "#/$defs/match"
+        },
+        "package": {
+          "type": "string"
+        },
+        "installed_version": {
+          "type": "string"
+        },
+        "fixed_version": {
+          "type": "string"
+        },
+        "source_status": {
+          "type": "string"
+        },
+        "source_severity": {
+          "type": "string"
+        }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "client_id",
+        "asset_ref",
+        "cve_id",
+        "status",
+        "affected_versions",
+        "observations",
+        "review_reasons"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "client_id": {
+          "$ref": "#/$defs/client_id"
+        },
+        "asset_ref": {
+          "type": "string",
+          "description": "Observation ref in a detection file; consolidated asset id in a findings file."
+        },
+        "cve_id": {
+          "type": "string",
+          "pattern": "^CVE-\\d{4}-\\d{4,}$"
+        },
+        "status": {
+          "enum": [
+            "affected",
+            "under_investigation"
+          ],
+          "description": "VEX wording."
+        },
+        "affected_versions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "observations": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/finding_observation"
+          }
+        },
+        "review_reasons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "not_affected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "client_id",
+        "cve_id",
+        "asset_id",
+        "deployed_versions",
+        "source"
+      ],
+      "properties": {
+        "client_id": {
+          "type": "string"
+        },
+        "cve_id": {
+          "type": "string"
+        },
+        "asset_id": {
+          "type": "string"
+        },
+        "deployed_versions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "source": {
+          "type": "string"
+        }
+      }
+    },
+    "observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ref",
+        "kind",
+        "source",
+        "observed_at",
+        "name",
+        "description",
+        "identifiers",
+        "attributes",
+        "os"
+      ],
+      "properties": {
+        "ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "declared",
+            "host",
+            "image"
+          ]
+        },
+        "source": {
+          "type": "string"
+        },
+        "observed_at": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string"
+        },
+        "identifiers": {
+          "type": "object",
+          "properties": {
+            "fqdn": {
+              "type": "string"
+            },
+            "hostname": {
+              "type": "string"
+            },
+            "ips": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "image": {
+              "type": "string"
+            }
+          }
+        },
+        "attributes": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "os": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "attribute": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "source",
+        "note"
+      ],
+      "properties": {
+        "value": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string",
+          "description": "declared | rule | <scanner> | default"
+        },
+        "note": {
+          "type": "string"
+        }
+      }
+    },
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "client_id",
+        "kind",
+        "name",
+        "description",
+        "identifiers",
+        "attributes",
+        "sources",
+        "first_seen",
+        "last_seen",
+        "os"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^(declared|host|image):.+$"
+        },
+        "client_id": {
+          "$ref": "#/$defs/client_id"
+        },
+        "kind": {
+          "enum": [
+            "declared",
+            "host",
+            "image"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "identifiers": {
+          "type": "object"
+        },
+        "attributes": {
+          "type": "object",
+          "required": [
+            "exposure",
+            "mission_prevalence",
+            "public_wellbeing_impact",
+            "owner"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/attribute"
+          }
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "first_seen": {
+          "type": "string"
+        },
+        "last_seen": {
+          "type": "string"
+        },
+        "os": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

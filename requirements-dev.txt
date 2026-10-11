@@ -2,6 +2,7 @@
 -e ./core
 -e ./intel
 -e ./detect
+-e ./assets
 -e ./verdict
 pytest>=8
 ruff>=0.6

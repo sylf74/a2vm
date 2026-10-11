@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+from dataclasses import asdict, dataclass, field
 from functools import cache
 from importlib import resources
 from pathlib import Path
@@ -16,13 +17,17 @@ from typing import Any
 
 import jsonschema
 
-from .models import Finding, NotAffected, VulnRecord
+from .models import Asset, AssetObservation, Finding, NotAffected, VulnRecord
 
 RECORDS = "vulnops.records/1"
-FINDINGS = "vulnops.findings/1"
+DETECTION = "vulnops.detection/1"
+ASSETS = "vulnops.assets/1"
+FINDINGS = "vulnops.findings/2"
 
 _SCHEMA_FILES = {
     RECORDS: "vulnerability_records",
+    DETECTION: "detection",
+    ASSETS: "assets",
     FINDINGS: "findings",
 }
 
@@ -82,7 +87,61 @@ def read_records(path: str | Path) -> tuple[list[str], dict[str, VulnRecord], li
     return data["requested"], records, data["errors"]
 
 
-# -- findings (detect -> verdict) --------------------------------------------------------------
+# -- detection output (detect connectors -> assets, intel) -------------------------------------
+@dataclass
+class Detection:
+    client_id: str
+    source: str
+    observations: list[AssetObservation]
+    findings: list[Finding]
+    not_affected: list[NotAffected] = field(default_factory=list)
+    skipped: dict[str, int] = field(default_factory=dict)
+
+
+def write_detection(path: str | Path, d: Detection) -> Path:
+    return _write(
+        Path(path),
+        DETECTION,
+        {
+            "client_id": d.client_id,
+            "source": d.source,
+            "observations": [asdict(o) for o in d.observations],
+            "findings": [f.to_dict() for f in d.findings],
+            "not_affected": [asdict(n) for n in d.not_affected],
+            "skipped": d.skipped,
+        },
+    )
+
+
+def read_detection(path: str | Path) -> Detection:
+    data = _read(Path(path), DETECTION)
+    return Detection(
+        client_id=data["client_id"],
+        source=data["source"],
+        observations=[AssetObservation(**o) for o in data["observations"]],
+        findings=[Finding.from_dict(f) for f in data["findings"]],
+        not_affected=[NotAffected(**n) for n in data["not_affected"]],
+        skipped=data["skipped"],
+    )
+
+
+def detection_files(directory: str | Path, client_id: str | None = None) -> list[Path]:
+    """work/detect/<client>/<source>.json, for one client or all of them."""
+    base = Path(directory)
+    pattern = f"{client_id}/*.json" if client_id else "*/*.json"
+    return sorted(base.glob(pattern))
+
+
+# -- consolidated assets and findings (assets -> verdict) ----------------------------------------
+def write_assets(path: str | Path, client_id: str, assets: list[Asset]) -> Path:
+    return _write(Path(path), ASSETS, {"client_id": client_id, "assets": [a.to_dict() for a in assets]})
+
+
+def read_assets(path: str | Path) -> tuple[str, dict[str, Asset]]:
+    data = _read(Path(path), ASSETS)
+    return data["client_id"], {a["id"]: Asset.from_dict(a) for a in data["assets"]}
+
+
 def write_findings(path: str | Path, client_id: str, findings: list[Finding], not_affected: list[NotAffected]) -> Path:
     return _write(
         Path(path),
@@ -90,7 +149,7 @@ def write_findings(path: str | Path, client_id: str, findings: list[Finding], no
         {
             "client_id": client_id,
             "findings": [f.to_dict() for f in findings],
-            "not_affected": [n.__dict__ for n in not_affected],
+            "not_affected": [asdict(n) for n in not_affected],
         },
     )
 

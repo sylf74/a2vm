@@ -1,0 +1,71 @@
+# Lab profile (example): fictitious hosts and addresses, real products.
+# Linux hosts are discovered by the scanners (config/targets/lab.yaml); the rules below give
+# them their exposure and criticality. Appliances and Windows servers, which the scanners do not
+# cover, are declared as assets and matched against the CVE records by product and version.
+# Anything not covered falls back to the worst case (internet, essential), flagged in reports.
+
+schema_version: 2
+client:
+  id: lab
+  name: Lab
+  updated: 2026-10-11
+
+rules:
+  - description: reverse proxy published on the Internet (443)
+    hostname: edge01
+    set: {exposure: internet, mission_prevalence: essential, public_wellbeing_impact: minimal, owner: lab-admin}
+  - description: hypervisors
+    hostname: "node*"
+    set: {exposure: internal, mission_prevalence: essential, public_wellbeing_impact: minimal, owner: lab-admin}
+  - description: vulnops proof of concept
+    hostname: "poc-*"
+    set: {exposure: internal, mission_prevalence: support, public_wellbeing_impact: minimal, owner: lab-admin}
+  - description: GitLab
+    hostname: gitlab
+    set: {exposure: internal, mission_prevalence: support, public_wellbeing_impact: minimal, owner: lab-admin}
+
+assets:
+  - id: exchange
+    description: Exchange Server 2019, published on the Internet through edge01
+    vendor: Microsoft
+    product: Exchange Server 2019
+    product_aliases: ["Microsoft Exchange Server 2019", "Exchange Server"]
+    exposure: internet
+    mission_prevalence: essential
+    public_wellbeing_impact: minimal
+    owner: lab-admin
+  - id: active-directory
+    description: Active Directory domain controller (Windows Server)
+    vendor: Microsoft
+    product: Windows Server
+    exposure: internal
+    mission_prevalence: essential
+    public_wellbeing_impact: minimal
+    owner: lab-admin
+  - id: vyos
+    description: VyOS router and firewall (Internet edge)
+    vendor: VyOS
+    product: VyOS
+    exposure: internet
+    mission_prevalence: essential
+    public_wellbeing_impact: minimal
+    owner: lab-admin
+  - id: nas
+    description: NAS (Synology DSM)
+    vendor: Synology
+    product: DiskStation Manager
+    product_aliases: ["DSM"]
+    exposure: internal
+    mission_prevalence: support
+    public_wellbeing_impact: minimal
+    owner: lab-admin
+  - id: home-assistant
+    description: Home Assistant
+    vendor: Home Assistant
+    product: Home Assistant Core
+    vendor_aliases: ["home-assistant"]
+    product_aliases: ["Home Assistant", "core"]
+    exposure: internal
+    mission_prevalence: support
+    public_wellbeing_impact: minimal
+    owner: lab-admin

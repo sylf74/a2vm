@@ -1,4 +1,4 @@
-"""`verdict run`: decide on the findings of each client, from the intel and detect stage outputs."""
+"""`verdict run`: decide on the findings of each client, from the intel and assets stage outputs."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 from vulnops.core.config import describe_llm, load_settings
-from vulnops.core.io import ExchangeError, read_findings, read_records
+from vulnops.core.io import ExchangeError, read_assets, read_findings, read_records
 from vulnops.core.llm import LlmClient
 from vulnops.core.profile import ProfileError, load_profile
 
@@ -22,7 +22,7 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("profiles", nargs="+", help="client profile YAML files")
     r.add_argument("--settings", default="config/settings.yaml")
     r.add_argument("--records", default="work/records.json", help="intel stage output")
-    r.add_argument("--findings", default="work/findings", help="detect stage output directory (<client>.json)")
+    r.add_argument("--assets", default="work/assets", help="assets stage output (<client>/assets.json, findings.json)")
     r.add_argument("--out", default="output")
     r.add_argument("--no-llm", action="store_true", help="deterministic run, template rationales")
     args = parser.parse_args(argv)
@@ -42,16 +42,17 @@ def main(argv: list[str] | None = None) -> int:
     try:
         triage = Triage(settings, llm)
         for profile in profiles:
-            path = Path(args.findings) / f"{profile.id}.json"
+            base = Path(args.assets) / profile.id
             try:
-                client_id, findings, not_affected = read_findings(path)
+                a_client, assets = read_assets(base / "assets.json")
+                f_client, findings, not_affected = read_findings(base / "findings.json")
             except (ExchangeError, OSError) as exc:
                 print(f"{profile.id}: {exc}", file=sys.stderr)
                 return 2
-            if client_id != profile.id:
-                print(f"{path}: findings of {client_id!r}, expected {profile.id!r}", file=sys.stderr)
+            if {a_client, f_client} != {profile.id}:
+                print(f"{base}: files of {a_client!r}/{f_client!r}, expected {profile.id!r}", file=sys.stderr)
                 return 2
-            run = triage.run(profile, records, findings, not_affected, len(requested), errors)
+            run = triage.run(profile, records, assets, findings, not_affected, len(requested), errors)
             target = write_all(run, Path(args.out))
             counts = {d: sum(r.delivery_decision == d for r in run.rows) for d in ("ACT", "ATTEND", "TRACK")}
             llm_failures = sum(r.rationale_source.startswith("template (LLM") for r in run.rows)

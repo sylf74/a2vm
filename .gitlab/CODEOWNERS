@@ -13,6 +13,9 @@
 # Detection
 /detect/        @product-owner
 
+# Asset inventory
+/assets/        @product-owner
+
 # Triage
 /verdict/       @product-owner
 

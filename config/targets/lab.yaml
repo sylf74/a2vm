@@ -1,0 +1,17 @@
+# Read-only SSH collection targets for the lab client (see docs/scanning.md).
+# Adapt host names and addresses; `method` picks the scanner run on the host:
+#   trivy           Ubuntu, Rocky 8/9, Debian... (OS packages; optional container images)
+#   dnf-updateinfo  Rocky / RHEL 10 and any dnf-based host Trivy does not cover
+client: lab
+ssh:
+  user: vulnops                       # dedicated unprivileged account on every target
+  identity_file: ~/.ssh/vulnops_scan  # in CI: written from the VULNOPS_SSH_KEY variable
+  timeout_seconds: 600
+targets:
+  - {host: gitlab.lab.example, ip: 192.0.2.102, method: trivy}
+  - {host: poc-llm01.lab.example, ip: 192.0.2.103, method: trivy, images: ["vllm/vllm-openai:latest"]}
+  - {host: poc-runner01.lab.example, ip: 192.0.2.104, method: trivy}
+  - {host: node00.lab.example, method: trivy}            # Rocky 9
+  - {host: node01.lab.example, method: dnf-updateinfo}   # Rocky 10
+  - {host: node08.lab.example, method: dnf-updateinfo}   # Rocky 10
+  - {host: edge01.lab.example, ip: 198.51.100.4, method: dnf-updateinfo}  # Rocky 10, Internet-facing

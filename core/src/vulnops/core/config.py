@@ -43,6 +43,7 @@ class LlmSettings:
     ssvc_inputs: bool = True
     match_adjudication: bool = True
     rationale: bool = True
+    rationale_for: list[str] = field(default_factory=lambda: ["ACT", "ATTEND"])  # template for the rest
 
     @property
     def api_key(self) -> str | None:

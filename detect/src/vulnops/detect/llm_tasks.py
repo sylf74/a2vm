@@ -11,7 +11,7 @@ from typing import Any
 
 from vulnops.core.llm import UNTRUSTED as _UNTRUSTED
 from vulnops.core.llm import LlmClient
-from vulnops.core.models import AffectedEntry, Asset, VulnRecord
+from vulnops.core.models import AffectedEntry, DeclaredAsset, VulnRecord
 
 MATCH_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -31,7 +31,7 @@ Ignore version numbers: only the product identity matters.
 Answer in English, justification in at most 2 sentences."""
 
 
-def adjudicate_match(llm: LlmClient, facts: VulnRecord, entry: AffectedEntry, asset: Asset) -> dict[str, Any]:
+def adjudicate_match(llm: LlmClient, facts: VulnRecord, entry: AffectedEntry, asset: DeclaredAsset) -> dict[str, Any]:
     inventory = {
         "vendor": asset.vendor,
         "product": asset.product,
