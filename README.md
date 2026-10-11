@@ -7,7 +7,7 @@ confirms uncertain matches and writes rationales — but never decides.
 ```
 intel/      Vulnerability Intelligence   public sources + CTI (Google CTI planned)       -> work/records.json
 detect/     findings per client          declared inventory today, scanners next         -> work/findings/<client>.json
-verdict/    decisions per finding        CISA SSVC + policy, French rationale (local LLM) -> output/<client>/<date>/
+verdict/    Triage & Prioritization      CISA SSVC + policy, French rationale (local LLM) -> output/<client>/<date>/
 remediate/  (not started)                actions, plans, deadlines
 core/       common model                 data classes, exchange-file schemas, settings, profiles, LLM client
 ```
@@ -61,7 +61,7 @@ one findings file per client. Fuzzy product-name matches are confirmed or reject
 when enabled, flagged for review otherwise. Scanner connectors (Trivy first) will write the
 same findings format.
 
-**verdict** (`verdict run`) — one decision per finding:
+**verdict — Triage & Prioritization** (`verdict run`) — one decision per finding:
 
 ```
 Exploitation       KEV -> CISA ADP (Vulnrichment) -> exploit reference -> none (review)
