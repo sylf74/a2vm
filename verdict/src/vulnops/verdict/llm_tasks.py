@@ -77,6 +77,8 @@ Règles :
   correctifs tels quels ; sinon ne cite aucune version corrective.
 - Si le champ assumptions n'est pas vide, signale en une courte phrase que la décision repose sur
   une hypothèse (par exemple une exposition supposée), sans en inventer d'autre.
+- Si le champ affected_assets contient plusieurs actifs, la justification vaut pour tous : cite
+  leur nombre, et nomme l'actif exposé à Internet s'il y en a un.
 - Ton factuel, sans emphase.
 {_UNTRUSTED}"""
 

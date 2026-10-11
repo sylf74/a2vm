@@ -13,10 +13,11 @@ from vulnops.core.io import (
     write_records,
 )
 from vulnops.core.llm import LlmClient
+from vulnops.core.models import Finding
 from vulnops.detect.inventory import InventoryScanner
 from vulnops.intel.collect import collect, select_cve_ids
 from vulnops.verdict.report import render_markdown, write_all
-from vulnops.verdict.triage import Triage
+from vulnops.verdict.triage import Triage, cvss_heuristic
 
 from .conftest import fake_llm_transport
 
@@ -195,3 +196,41 @@ def test_exchange_files_are_validated(tmp_path):
     )
     with pytest.raises(ExchangeError, match="requested/0"):
         read_records(bad)
+
+
+def test_one_rationale_per_cve_most_urgent_first(settings, sources, profile):
+    import copy
+
+    run = _run(settings, sources, profile)  # no LLM: template rationales
+    act = _by_cve(run)["CVE-2024-3400"]
+    others = []
+    for i, exposed in enumerate((False, True, False)):
+        r = copy.deepcopy(act)
+        r.asset_id, r.asset_description, r.publicly_exposed = f"host{i}", f"host{i} (rocky 9)", exposed
+        others.append(r)
+
+    def answer(name, body):
+        facts = body["messages"][1]["content"]
+        assert '"affected_assets_count": 3' in facts and "host1 (rocky 9)" in facts
+        return {"summary": "Décision ACT sur 3 actifs.", "action": "Appliquer le correctif."}
+
+    transport = fake_llm_transport(answer)
+    settings.llm.enabled = True
+    triage = Triage(settings, LlmClient(settings.llm, transport=transport))
+    triage._llm_rationales(others)
+    assert len(transport.calls) == 1
+    assert all(r.rationale == "Décision ACT sur 3 actifs. Appliquer le correctif." for r in others)
+    assert all(r.rationale_source.endswith("3 actifs") for r in others)
+
+
+def test_scanner_cvss_replaces_missing_record_cvss(settings):
+    from vulnops.core.models import FindingObservation, Match
+    from vulnops.verdict.triage import scanner_metrics
+
+    vector = "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H"
+    match = Match("scanner", "", "kernel", 1.0, "")
+    obs = FindingObservation("trivy", "2026-10-11", match, cvss_vector=vector, cvss_source="trivy:nvd")
+    f = Finding("id", "c", "host:a", "CVE-2099-1", "affected", [], [obs])
+    metric = scanner_metrics([f])["CVE-2099-1"]
+    assert (metric.version, metric.source) == ("3.1", "trivy:nvd")
+    assert cvss_heuristic(metric) == ("no", "total")

@@ -31,8 +31,13 @@ from .scanners import Target, load_dnf_file, load_trivy_file, merge
 
 METHODS = ("trivy", "dnf-updateinfo")
 LOW_PRIORITY = "nice -n 19 ionice -c3"
-TRIVY_HOST = f"{LOW_PRIORITY} trivy rootfs --quiet --format json --scanners vuln --pkg-types os /"
-TRIVY_IMAGE = f"{LOW_PRIORITY} trivy image --quiet --format json --scanners vuln --pkg-types os,library"
+TRIVY_HOST = f"{LOW_PRIORITY} trivy rootfs --quiet --timeout 15m --format json --scanners vuln --pkg-types os /"
+# Images: language packages too. CUDA binaries (hundreds of MB, no package metadata) are skipped:
+# their analysis exceeds Trivy's time limit, and the pip packages' metadata stays outside them.
+TRIVY_IMAGE = (
+    f"{LOW_PRIORITY} trivy image --quiet --timeout 30m --format json --scanners vuln --pkg-types os,library"
+    " --skip-dirs '**/dist-packages/nvidia' --skip-dirs '**/site-packages/nvidia'"
+)
 DNF = f"{LOW_PRIORITY} dnf -q updateinfo list --security --with-cve"
 DEFAULT_SSH_OPTIONS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=15", "-o", "StrictHostKeyChecking=accept-new"]
 

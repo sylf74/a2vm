@@ -37,8 +37,8 @@ The runner then serves every project of the group, including future client proje
 
 Artifacts: a client with thousands of findings produces exchange files of tens of MB. GitLab's
 default limit is 100 MB per artifact (**Admin > Settings > CI/CD > Continuous Integration and
-Deployment > Maximum artifacts size**); raw scanner outputs are compressed (`work/scans.tgz`) and
-kept in the `collect` job only.
+Deployment > Maximum artifacts size**); raw scanner outputs are not kept (hundreds of MB): the
+detection files in `work/detect` carry what the later stages use.
 
 ## 3. Shared variables (group `vulnops` > Settings > CI/CD > Variables)
 
@@ -78,10 +78,10 @@ The code project's own pipeline only runs lint, tests and the offline examples.
 ```yaml
 include:
   - project: vulnops/vulnops
-    ref: v0.4.2
+    ref: v0.5.0
     file: templates/client-pipeline.yml
 variables:
-  VULNOPS_REF: v0.4.2
+  VULNOPS_REF: v0.5.0
 ```
 
 3. If `targets.yaml` is used: scan key and target accounts as in `docs/scanning.md`, then the

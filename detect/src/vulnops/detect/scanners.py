@@ -61,7 +61,16 @@ class _Builder:
         self.findings: dict[str, Finding] = {}
         self.skipped: Counter[str] = Counter()
 
-    def add(self, vuln_id: str, package: str, installed: str, fixed: str, status: str, severity: str) -> None:
+    def add(
+        self,
+        vuln_id: str,
+        package: str,
+        installed: str,
+        fixed: str,
+        status: str,
+        severity: str,
+        cvss: tuple[str, str] = ("", ""),
+    ) -> None:
         if not CVE_RE.match(vuln_id or ""):
             self.skipped[f"non-CVE id ({(vuln_id or '?').split('-')[0]})"] += 1
             return
@@ -74,6 +83,8 @@ class _Builder:
             fixed_version=fixed,
             source_status=status,
             source_severity=severity,
+            cvss_vector=cvss[0],
+            cvss_source=cvss[1],
         )
         ref = self.target.ref
         f = self.findings.get(vuln_id)
@@ -111,6 +122,18 @@ class _Builder:
 
 
 # -- Trivy ---------------------------------------------------------------------------------------
+def trivy_cvss(v: dict[str, Any]) -> tuple[str, str]:
+    """(vector, source) of the best CVSS vector Trivy reports: NVD first, then the vendors; v4 before v3."""
+    cvss = v.get("CVSS") or {}
+    sources = (["nvd"] if "nvd" in cvss else []) + sorted(k for k in cvss if k != "nvd")
+    for key in ("V40Vector", "V3Vector"):
+        for src in sources:
+            vector = (cvss.get(src) or {}).get(key)
+            if vector:
+                return vector, f"trivy:{src}"
+    return "", ""
+
+
 def parse_trivy(data: dict[str, Any], client_id: str, target: Target, observed_at: str | None = None) -> Detection:
     if data.get("SchemaVersion") != 2:
         raise ValueError(f"unsupported Trivy JSON schema version {data.get('SchemaVersion')!r} (expected 2)")
@@ -128,6 +151,7 @@ def parse_trivy(data: dict[str, Any], client_id: str, target: Target, observed_a
                 v.get("FixedVersion", "") or "",
                 v.get("Status", "") or "",
                 v.get("Severity", "") or "",
+                trivy_cvss(v),
             )
     return b.detection(os_name)
 

@@ -59,7 +59,7 @@ def template_rationale(row: TriageRow) -> str:
     return " ".join(parts)
 
 
-def rationale_facts(row: TriageRow) -> str:
+def rationale_facts(row: TriageRow, affected_assets: list[str] | None = None) -> str:
     facts = {
         "cve": row.cve_id,
         "decision": row.delivery_decision,
@@ -82,12 +82,18 @@ def rationale_facts(row: TriageRow) -> str:
         "fixed_packages": row.fixes[:10],
         "assumptions": row.assumptions,
     }
+    if affected_assets and len(affected_assets) > 1:
+        facts["affected_assets"] = affected_assets[:20]
+        facts["affected_assets_count"] = len(affected_assets)
     return json.dumps(facts, ensure_ascii=False, indent=1)
 
 
-def llm_rationale(llm: LlmClient, row: TriageRow) -> tuple[str, str]:
-    """(text, source). Falls back to the template when the LLM fails or the guard rejects it."""
-    facts = rationale_facts(row)
+def llm_rationale(llm: LlmClient, row: TriageRow, affected_assets: list[str] | None = None) -> tuple[str, str]:
+    """(text, source). Falls back to the template when the LLM fails or the guard rejects it.
+
+    With `affected_assets`, the text covers every asset of the same CVE and decision (`row` is the
+    most exposed of them)."""
+    facts = rationale_facts(row, affected_assets)
     try:
         out = write_rationale(llm, facts, row.description)
     except LlmError as exc:

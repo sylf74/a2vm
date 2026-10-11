@@ -5,8 +5,8 @@ the `targets.yaml` of the client project, runs one read-only command, and import
 
 | Method | Hosts | Command run on the target | Needs |
 | --- | --- | --- | --- |
-| `trivy` | Ubuntu, Debian, Rocky/Alma/RHEL/CentOS 8–9 | `nice -n 19 ionice -c3 trivy rootfs --quiet --format json --scanners vuln --pkg-types os /` | Trivy installed |
-| `trivy` + `images` | Docker hosts | `... trivy image --quiet --format json --scanners vuln --pkg-types os,library <image>` | Trivy, access to the Docker socket |
+| `trivy` | Ubuntu, Debian, Rocky/Alma/RHEL/CentOS 8–9 | `nice -n 19 ionice -c3 trivy rootfs --quiet --timeout 15m --format json --scanners vuln --pkg-types os /` | Trivy installed |
+| `trivy` + `images` | Docker hosts | `... trivy image --quiet --timeout 30m --format json --scanners vuln --pkg-types os,library --skip-dirs <CUDA dirs> <image>` | Trivy, access to the Docker socket |
 | `dnf-updateinfo` | Rocky/RHEL 10 (not covered by Trivy) | `nice -n 19 ionice -c3 dnf -q updateinfo list --security --with-cve` | nothing |
 
 Why it is not intrusive:
@@ -121,5 +121,5 @@ done
 
 Then delete the private key from the runner (`rm ~/vulnops_scan ~/vulnops_scan.pub`): CI jobs get
 it from the GitLab variable. Run the client pipeline (**Build > Pipelines > Run pipeline**): the
-`collect` job lists each target and any error, and the raw outputs are kept in the `work/scans/`
-artifact for 7 days.
+`collect` job lists each target and any error; the detection files (`work/detect/`) are kept 7 days
+in the job artifacts.

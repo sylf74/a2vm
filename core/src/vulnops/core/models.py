@@ -221,6 +221,8 @@ class FindingObservation:
     fixed_version: str = ""
     source_status: str = ""  # e.g. Trivy: fixed | affected | will_not_fix | end_of_life
     source_severity: str = ""
+    cvss_vector: str = ""  # from the source (Trivy: NVD, then vendor), for CVE records without CVSS
+    cvss_source: str = ""  # e.g. trivy:nvd
 
 
 @dataclass

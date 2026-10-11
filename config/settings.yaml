@@ -30,7 +30,8 @@ llm:
     match_adjudication: true   # confirm or reject fuzzy product matches
     rationale: true            # French rationale (guarded, template fallback)
     rationale_for: [ACT, ATTEND]  # LLM rationale for these decisions; template for the rest
-    max_calls: 300             # per client run (a large scan must not keep the GPU busy for hours)
+    max_calls: 300             # per client run; one rationale per CVE and decision, most urgent first
+    parallel: 4                # concurrent requests (vLLM serves them together)
     max_consecutive_errors: 3  # then the LLM is treated as down for the rest of the run
 
 # Product-name similarity (0-1) above which a non-exact match becomes a candidate.

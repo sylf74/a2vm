@@ -7,7 +7,7 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 
-from vulnops.core.models import TriageRun
+from vulnops.core.models import TriageRow, TriageRun
 
 from .rationale import BOD_FR, EXPLOITATION_FR
 
@@ -73,8 +73,53 @@ def write_csv(run: TriageRun, path: Path) -> None:
             )
 
 
+ATTEND_TABLE_LIMIT = 200  # CVEs listed in the ATTEND table; the rest is in triage.csv
+LIST_LIMIT = 50
+ATTEND_DETAIL_LIMIT = 30  # below this many CVEs, ATTEND rationales are in the report too
+
+
+def _by_cve(rows: list[TriageRow]) -> list[tuple[str, list[TriageRow]]]:
+    """Rows grouped by CVE, in the order of their first row (the run is already sorted by urgency)."""
+    groups: dict[str, list[TriageRow]] = {}
+    for r in rows:
+        groups.setdefault(r.cve_id, []).append(r)
+    return list(groups.items())
+
+
+def _assets_cell(rows: list[TriageRow], limit: int = 6) -> str:
+    names = sorted({r.asset_id + (" (Internet)" if r.publicly_exposed else "") for r in rows})
+    more = f" +{len(names) - limit}" if len(names) > limit else ""
+    return _md_escape(", ".join(names[:limit]) + more)
+
+
+def _worst_bod(rows: list[TriageRow]) -> str:
+    rank = list(BOD_FR)
+    return BOD_FR[max((r.bod_timeline for r in rows), key=rank.index)]
+
+
+def _exploitation_cell(r: TriageRow) -> str:
+    return EXPLOITATION_FR[r.exploitation.value] + (" (KEV)" if r.in_kev else "")
+
+
+def _details(groups: list[tuple[str, list[TriageRow]]]) -> list[str]:
+    """One section per CVE: the rationale of its most exposed asset, the assets, what to review."""
+    lines: list[str] = []
+    for cve, rs in groups:
+        lead = sorted(rs, key=lambda r: (not r.publicly_exposed, r.asset_id))[0]
+        title = f"{cve} — {lead.asset_id}" if len(rs) == 1 else f"{cve} — {len(rs)} actifs"
+        lines += [f"### {title}", "", lead.rationale, ""]
+        if len(rs) > 1:
+            lines += ["Actifs : " + ", ".join(sorted(r.asset_description for r in rs)) + ".", ""]
+        reasons = sorted({reason for r in rs for reason in r.review_reasons})
+        if reasons:
+            lines += ["À revoir : " + " ; ".join(reasons) + ".", ""]
+    return lines
+
+
 def render_markdown(run: TriageRun) -> str:
-    counts = {d: sum(r.delivery_decision == d for r in run.rows) for d in ("ACT", "ATTEND", "TRACK")}
+    decisions = ("ACT", "ATTEND", "TRACK")
+    rows_by = {d: [r for r in run.rows if r.delivery_decision == d] for d in decisions}
+    cves_by = {d: _by_cve(rows_by[d]) for d in decisions}
     review = [r for r in run.rows if r.needs_review]
     lines = [
         f"# Triage des vulnérabilités — {run.client.name}",
@@ -82,45 +127,84 @@ def render_markdown(run: TriageRun) -> str:
         f"Généré le {run.generated_at} · {run.cve_count} CVE analysées · profil client du "
         f"{run.client.updated}" + (f" · justifications rédigées par {run.llm_model}" if run.llm_model else ""),
         "",
-        f"**ACT : {counts['ACT']}** · **ATTEND : {counts['ATTEND']}** · TRACK : {counts['TRACK']} · "
-        f"à revoir : {len(review)} · non concernées (version) : {len(run.not_affected)}",
+        " · ".join(
+            f"**{d} : {len(cves_by[d])} CVE** ({len(rows_by[d])} constats)"
+            if d != "TRACK"
+            else f"{d} : {len(cves_by[d])} CVE ({len(rows_by[d])} constats)"
+            for d in decisions
+        )
+        + f" · à revoir : {len(review)} · non concernées (version) : {len(run.not_affected)}",
+        "",
+        "Un constat est une CVE sur un actif. Le détail de chaque constat est dans `triage.csv`.",
         "",
     ]
-    for decision, title in (("ACT", "ACT — remédier maintenant"), ("ATTEND", "ATTEND — planifier la remédiation")):
-        rows = [r for r in run.rows if r.delivery_decision == decision]
-        lines += [f"## {title}", ""]
-        if not rows:
-            lines += ["Aucune.", ""]
-            continue
-        lines += [
-            "| CVE | Actif | Propriétaire | Exploitation | EPSS | Délai | Revue |",
-            "|---|---|---|---|---|---|---|",
-        ]
-        for r in rows:
-            epss = "—" if r.epss is None else f"{r.epss:.3f}"
+
+    # Per asset: where the work is.
+    assets: dict[str, dict[str, object]] = {}
+    for r in run.rows:
+        a = assets.setdefault(r.asset_id, {"desc": r.asset_description, "exposed": r.publicly_exposed})
+        a[r.delivery_decision] = int(a.get(r.delivery_decision, 0)) + 1
+    if assets:
+        lines += ["## Par actif", "", "| Actif | Internet | ACT | ATTEND | TRACK |", "|---|---|---|---|---|"]
+        for _name, a in sorted(assets.items(), key=lambda kv: tuple(-int(kv[1].get(d, 0)) for d in decisions)):
             lines.append(
-                f"| {r.cve_id} | {_md_escape(r.asset_description)} | {_md_escape(r.owner)} | "
-                f"{EXPLOITATION_FR[r.exploitation.value]}{' (KEV)' if r.in_kev else ''} | {epss} | "
-                f"{BOD_FR[r.bod_timeline]} | {'à revoir' if r.needs_review else ''} |"
+                f"| {_md_escape(str(a['desc']))} | {'oui' if a['exposed'] else ''} | "
+                + " | ".join(str(a.get(d, 0)) for d in decisions)
+                + " |"
             )
         lines.append("")
-        for r in rows:
-            lines += [f"### {r.cve_id} — {r.asset_id}", "", r.rationale, ""]
-            if r.needs_review:
-                lines += ["À revoir : " + " ; ".join(r.review_reasons) + ".", ""]
 
-    track = [r for r in run.rows if r.delivery_decision == "TRACK"]
-    if track:
-        lines += ["## TRACK — surveillance", ""]
-        lines += [f"- {r.cve_id} — {_md_escape(r.asset_description)} (SSVC {r.ssvc_decision})" for r in track]
+    # ACT: every CVE, with its rationale.
+    lines += ["## ACT — remédier maintenant", ""]
+    if not cves_by["ACT"]:
+        lines += ["Aucune.", ""]
+    else:
+        lines += ["| CVE | Actifs | Exploitation | EPSS | Délai |", "|---|---|---|---|---|"]
+        for cve, rs in cves_by["ACT"]:
+            epss = "—" if rs[0].epss is None else f"{rs[0].epss:.3f}"
+            lines.append(f"| {cve} | {_assets_cell(rs)} | {_exploitation_cell(rs[0])} | {epss} | {_worst_bod(rs)} |")
         lines.append("")
+        lines += _details(cves_by["ACT"])
+
+    # ATTEND: one line per CVE, most urgent first.
+    lines += ["## ATTEND — planifier la remédiation", ""]
+    if not cves_by["ATTEND"]:
+        lines += ["Aucune.", ""]
+    else:
+        shown = cves_by["ATTEND"][:ATTEND_TABLE_LIMIT]
+        lines += ["| CVE | Actifs | Exploitation | EPSS | Délai | Correctif |", "|---|---|---|---|---|---|"]
+        for cve, rs in shown:
+            epss = "—" if rs[0].epss is None else f"{rs[0].epss:.3f}"
+            fix = "oui" if any(r.fixes for r in rs) else "non"
+            lines.append(
+                f"| {cve} | {_assets_cell(rs)} | {_exploitation_cell(rs[0])} | {epss} | {_worst_bod(rs)} | {fix} |"
+            )
+        lines.append("")
+        rest = len(cves_by["ATTEND"]) - len(shown)
+        if rest > 0:
+            lines += [f"… et {rest} autres CVE en ATTEND (moins urgentes) : voir `triage.csv`.", ""]
+        if len(cves_by["ATTEND"]) <= ATTEND_DETAIL_LIMIT:
+            lines += _details(cves_by["ATTEND"])
+
+    lines += [
+        "## TRACK — surveillance",
+        "",
+        f"{len(cves_by['TRACK'])} CVE ({len(rows_by['TRACK'])} constats), sans action planifiée : voir `triage.csv`.",
+        "",
+    ]
     if run.not_affected:
         lines += ["## Non concernées (versions déployées hors périmètre)", ""]
-        lines += [f"- {n.cve_id} — {n.asset_id} ({', '.join(n.deployed_versions)})" for n in run.not_affected]
+        lines += [
+            f"- {n.cve_id} — {n.asset_id} ({', '.join(n.deployed_versions)})" for n in run.not_affected[:LIST_LIMIT]
+        ]
+        if len(run.not_affected) > LIST_LIMIT:
+            lines.append(f"- … et {len(run.not_affected) - LIST_LIMIT} autres (voir `triage.json`)")
         lines.append("")
     if run.errors:
         lines += ["## Erreurs", ""]
-        lines += [f"- {e['cve']} : {e['error']}" for e in run.errors]
+        lines += [f"- {e['cve']} : {e['error']}" for e in run.errors[:LIST_LIMIT]]
+        if len(run.errors) > LIST_LIMIT:
+            lines.append(f"- … et {len(run.errors) - LIST_LIMIT} autres (voir `triage.json`)")
         lines.append("")
     lines += [
         "---",

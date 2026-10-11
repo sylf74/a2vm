@@ -130,6 +130,14 @@
         },
         "source_severity": {
           "type": "string"
+        },
+        "cvss_vector": {
+          "type": "string",
+          "description": "CVSS vector reported by the source (e.g. Trivy: NVD, then vendor), used when the CVE record has none."
+        },
+        "cvss_source": {
+          "type": "string",
+          "description": "Origin of cvss_vector, e.g. 'trivy:nvd' or 'trivy:redhat'."
         }
       }
     },

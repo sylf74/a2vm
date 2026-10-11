@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vulnops-verdict"
-version = "0.4.2"
+version = "0.5.0"
 description = "vulnops triage stage: deterministic SSVC decisions on findings, LLM-written rationale."
 requires-python = ">=3.11"
 dependencies = ["vulnops-core"]

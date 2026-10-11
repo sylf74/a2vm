@@ -47,6 +47,7 @@ class LlmSettings:
     rationale_for: list[str] = field(default_factory=lambda: ["ACT", "ATTEND"])  # template for the rest
     max_calls: int = 300  # LLM calls per client run; beyond, templates and defaults (flagged)
     max_consecutive_errors: int = 3  # then the LLM is considered down for the rest of the run
+    parallel: int = 4  # concurrent LLM requests (vLLM batches them)
 
     @property
     def api_key(self) -> str | None:
