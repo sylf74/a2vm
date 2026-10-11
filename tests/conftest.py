@@ -17,7 +17,7 @@ FIXTURES = ROOT / "tests" / "fixtures"
 
 @pytest.fixture
 def profile():
-    return load_profile(ROOT / "clients" / "example-client.yaml")
+    return load_profile(ROOT / "examples" / "example-client" / "client.yaml")
 
 
 @pytest.fixture

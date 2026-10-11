@@ -1,0 +1,118 @@
+# vulnops client pipeline — included by each client project, never run in the code project.
+#
+# A client project holds only its own data:
+#   client.yaml      client profile (schema v2)
+#   targets.yaml     read-only SSH collection targets (optional: without it, declared inventory only)
+#   settings.yaml    optional, overrides the default settings of the vulnops version in use
+#   .gitlab-ci.yml   includes this file at a fixed version:
+#
+#     include:
+#       - project: vulnops/vulnops
+#         ref: v0.4.0
+#         file: templates/client-pipeline.yml
+#     variables:
+#       VULNOPS_REF: v0.4.0        # same version as the include
+#
+# Jobs:
+#   push to the default branch     validate (profile and targets)
+#   schedule or "Run pipeline"     collect -> intel -> detect -> assets -> triage
+#                                  optional TRIAGE_CVES="CVE-... CVE-...", TRIAGE_SINCE (default 26h)
+#
+# CI/CD variables (client project, or inherited from the groups):
+#   VULNOPS_SSH_KEY          File, protected: private key of this client's read-only scan account
+#   VULNOPS_LLM_ENABLED, VULNOPS_LLM_BASE_URL, VULNOPS_LLM_MODEL, LLM_API_KEY   (usually set on the group)
+#
+# The code is fetched with the job token: in the vulnops code project, Settings > CI/CD >
+# Job token permissions must allow the client projects (e.g. the group vulnops/clients).
+
+variables:
+  VULNOPS_PROJECT: vulnops/vulnops
+  VULNOPS_REF: main
+  VULNOPS_PROFILE: client.yaml
+  VULNOPS_TARGETS: targets.yaml
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
+  VULNOPS_CACHE_DIR: "$CI_PROJECT_DIR/.cache"
+
+stages: [validate, collect, intel, detect, assets, triage]
+
+.vulnops:
+  image: python:3.12-slim
+  tags: [llm-lan]
+  interruptible: false
+  cache:
+    - {key: pip, paths: [.pip-cache/]}
+    - {key: sources, paths: [.cache/]}
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq git openssh-client >/dev/null
+    - git -c advice.detachedHead=false clone -q --depth 1 --branch "$VULNOPS_REF"
+        "${CI_SERVER_PROTOCOL}://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}:${CI_SERVER_PORT}/${VULNOPS_PROJECT}.git" .vulnops
+    - pip install --quiet .vulnops/core .vulnops/intel .vulnops/detect .vulnops/assets .vulnops/verdict
+    - if [ -f settings.yaml ]; then export SETTINGS=settings.yaml; else export SETTINGS=.vulnops/config/settings.yaml; fi
+    - echo "vulnops $VULNOPS_REF ($(git -C .vulnops rev-parse --short HEAD)), client $CI_PROJECT_PATH, settings $SETTINGS"
+
+.data:
+  extends: .vulnops
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"
+  artifacts:
+    paths: [work/]
+    expire_in: 7 days
+
+validate:
+  extends: .vulnops
+  stage: validate
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"
+  script:
+    - vulnops-profiles validate "$VULNOPS_PROFILE"
+    - if [ -f "$VULNOPS_TARGETS" ]; then vulnops-detect plan "$VULNOPS_TARGETS" --profile "$VULNOPS_PROFILE"; fi
+
+collect:
+  extends: .data
+  stage: collect
+  needs: [validate]
+  script:
+    - mkdir -p work/detect
+    - |
+      if [ -z "${VULNOPS_SSH_KEY:-}" ] || [ ! -f "$VULNOPS_TARGETS" ]; then
+        echo "No VULNOPS_SSH_KEY or no $VULNOPS_TARGETS: no scanner collection, declared inventory only"; exit 0
+      fi
+      mkdir -p ~/.ssh && cp "$VULNOPS_SSH_KEY" ~/.ssh/vulnops_scan && chmod 600 ~/.ssh/vulnops_scan
+      vulnops-detect collect "$VULNOPS_TARGETS" --raw work/scans --out work/detect || echo "collection incomplete, continuing"
+
+intel:
+  extends: .data
+  stage: intel
+  needs: [collect]
+  script:
+    - |
+      ARGS=""
+      for c in ${TRIAGE_CVES:-}; do ARGS="$ARGS --cve $c"; done
+      if [ -z "$ARGS" ]; then ARGS="--since ${TRIAGE_SINCE:-26h}"; fi
+      vulnops-intel collect --settings "$SETTINGS" --detect work/detect --out work/records.json $ARGS
+
+detect:
+  extends: .data
+  stage: detect
+  needs: [intel]
+  script:
+    - vulnops-detect inventory "$VULNOPS_PROFILE" --settings "$SETTINGS" --records work/records.json --out work/detect
+
+assets:
+  extends: .data
+  stage: assets
+  needs: [detect]
+  script:
+    - vulnops-assets build "$VULNOPS_PROFILE" --detect work/detect --out work/assets
+
+triage:
+  extends: .data
+  stage: triage
+  needs: [assets]
+  script:
+    - verdict run "$VULNOPS_PROFILE" --settings "$SETTINGS" --records work/records.json --assets work/assets --out output
+  artifacts:
+    name: "triage-$CI_PROJECT_NAME-$CI_PIPELINE_ID"
+    paths: [output/, work/assets/]
+    expire_in: 30 days

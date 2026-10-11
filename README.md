@@ -24,26 +24,28 @@ one stage without touching the others. The design is described in the architectu
 python -m venv .venv && . .venv/bin/activate        # PowerShell: .venv\Scripts\Activate.ps1
 pip install -r requirements-dev.txt                 # every stage, editable, + pytest and ruff
 
-vulnops-profiles validate clients/*.yaml
+vulnops-profiles validate examples/*/client.yaml
 scripts/run-pipeline.sh --fixtures tests/fixtures --since 2099-10-01 --include-updated   # offline demo
 scripts/run-pipeline.sh --since 26h                 # real CVEs of the last 26 hours + KEV additions
 scripts/run-pipeline.sh --cve CVE-2024-3400
 ```
 
-With scanner collection over SSH (see `docs/scanning.md`):
+On a client project checked out next to this one (see `docs/deployment.md`), with scanner
+collection over SSH (`docs/scanning.md`):
 
 ```bash
-TARGETS=config/targets/lab.yaml scripts/run-pipeline.sh --since 26h
+PROFILES=../homelab/client.yaml TARGETS=../homelab/targets.yaml scripts/run-pipeline.sh --since 26h
 ```
 
 Or stage by stage:
 
 ```bash
-vulnops-detect collect config/targets/lab.yaml --out work/detect     # read-only scans over SSH
+vulnops-detect plan targets.yaml --profile client.yaml                # what would be scanned
+vulnops-detect collect targets.yaml --out work/detect                 # read-only scans over SSH
 vulnops-intel collect --since 26h --detect work/detect --out work/records.json
-vulnops-detect inventory clients/*.yaml --records work/records.json --out work/detect
-vulnops-assets build clients/*.yaml --detect work/detect --out work/assets
-verdict run clients/*.yaml --records work/records.json --assets work/assets --out output
+vulnops-detect inventory client.yaml --records work/records.json --out work/detect
+vulnops-assets build client.yaml --detect work/detect --out work/assets
+verdict run client.yaml --records work/records.json --assets work/assets --out output
 ```
 
 ## Stages
@@ -110,7 +112,7 @@ fixed packages reported by scanners.
 
 ## Client profiles
 
-One YAML file per client in `clients/`, validated against
+One YAML file per client (`client.yaml` of the client project), validated against
 `core/src/vulnops/core/schemas/client_profile.schema.json` (schema version 2; version 1 profiles
 remain valid):
 
@@ -118,10 +120,9 @@ remain valid):
 - `rules`: exposure, criticality and owner for discovered hosts, by host name / FQDN glob or CIDR;
 - `defaults`: the client's default assumptions; absent, the worst case applies.
 
-See `clients/example-client.yaml` (declared inventory only) and `clients/lab.yaml` (scanners +
-rules + declared appliances): both are fictitious examples. Real profiles and scan targets describe
-client infrastructure and never go in this repository: they live in a private configuration project
-that the pipeline clones (`VULNOPS_CONFIG_PROJECT`, see `docs/scanning.md`).
+See `examples/example-client/` (declared inventory only) and `examples/lab/` (scanners + rules +
+declared appliances, and the client project template): both are fictitious. Real profiles and scan
+targets describe client infrastructure and never go in this repository.
 
 ## Local LLM
 
@@ -130,22 +131,30 @@ Any OpenAI-compatible server with JSON-schema structured output (vLLM, SGLang). 
 `VULNOPS_LLM_MODEL` (the former `VERDICT_*` names still work). Each stage prints the LLM
 configuration it received at start-up, and the cause of any LLM fallback.
 
-## GitLab CI
+## Multi-tenant deployment (GitLab)
 
-Lint, tests and profile validation on every push. The data pipeline runs as five jobs —
-`collect` → `intel` → `detect` → `assets` → `triage`, each passing `work/` to the next as an
-artifact — on a schedule (`TRIAGE_MODE=daily`) or by hand (`TRIAGE_MODE=manual`, optional
-`TRIAGE_CVES`), on a runner tagged `llm-lan`. `collect` runs only when the `VULNOPS_SSH_KEY` file
-variable exists. Reports and the asset inventory are kept 30 days, intermediate files 7 days.
+```
+vulnops/                 group: group runner (tag llm-lan), shared variables (LLM endpoint)
+├── vulnops              this code project: lint, tests, examples; releases are tags vX.Y.Z
+└── clients/             one private project per client: client.yaml, targets.yaml, variables
+    └── <client>         (scan key), schedule, artifacts — nothing shared between clients
+```
+
+Each client project includes `templates/client-pipeline.yml` at a fixed tag: `validate` on every
+push; on a schedule or by hand (optional `TRIAGE_CVES`), `collect` → `intel` → `detect` →
+`assets` → `triage`, each passing `work/` to the next. Reports and the asset inventory are kept 30
+days in the client project, intermediate files 7 days. A client moves to a new vulnops version
+by changing the tag in its `.gitlab-ci.yml`. Set-up: `docs/deployment.md`.
 
 ## Repository layout
 
 ```
 core/ intel/ detect/ assets/ verdict/      one Python package per stage (namespace vulnops.*)
 remediate/                                 not started
-clients/                                   client profiles
-config/settings.yaml                       settings shared by all stages
-config/targets/                            SSH collection targets per client
+config/settings.yaml                       default settings (a client project may override them)
+templates/client-pipeline.yml              pipeline included by every client project
+examples/                                  fictitious client projects (profile, targets, CI)
+docs/deployment.md                         GitLab groups, runner, code and client projects
 docs/scanning.md                           read-only scanner set-up
 tests/                                     tests and offline fixtures
 scripts/run-pipeline.sh                    the CI pipeline, locally

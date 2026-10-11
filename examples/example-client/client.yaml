@@ -1,4 +1,4 @@
-# Example client profile — copy to clients/<client-id>.yaml and adapt.
+# Example client profile — copy to client.yaml in the client's project and adapt.
 # Schema: core/src/vulnops/core/schemas/client_profile.schema.json (checked in CI).
 #
 # Field guide (CISA SSVC wording):

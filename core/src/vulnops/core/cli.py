@@ -1,4 +1,4 @@
-"""`vulnops-profiles validate clients/*.yaml`: check client profiles against their schema."""
+"""`vulnops-profiles validate client.yaml ...`: check client profiles against their schema."""
 
 from __future__ import annotations
 

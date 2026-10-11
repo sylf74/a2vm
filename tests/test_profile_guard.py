@@ -7,7 +7,7 @@ from .conftest import ROOT
 
 
 def _data():
-    return yaml.safe_load((ROOT / "clients" / "example-client.yaml").read_text())
+    return yaml.safe_load((ROOT / "examples" / "example-client" / "client.yaml").read_text())
 
 
 def test_example_profile_is_valid(profile):

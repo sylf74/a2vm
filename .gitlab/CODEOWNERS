@@ -22,5 +22,5 @@
 # Remediation
 /remediate/     @product-owner
 
-# Client profiles (describe client infrastructure: restrict who can change them)
-/clients/       @product-owner
+# Client pipeline template (runs in every client project)
+/templates/     @product-owner

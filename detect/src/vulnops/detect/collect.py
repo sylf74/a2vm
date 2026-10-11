@@ -1,6 +1,6 @@
 """Read-only collection over SSH: run a scanner on each target and keep its raw output.
 
-Targets file (YAML), one per client — see config/targets/lab.yaml:
+Targets file (YAML), one per client — see examples/lab/targets.yaml:
 
   client: lab
   ssh: {user: vulnops, identity_file: ~/.ssh/vulnops_scan}

@@ -1,4 +1,4 @@
-"""Load and validate client profiles (clients/*.yaml)."""
+"""Load and validate client profiles (client.yaml of each client project)."""
 
 from __future__ import annotations
 

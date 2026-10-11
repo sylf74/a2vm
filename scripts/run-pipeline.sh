@@ -6,12 +6,12 @@
 #   scripts/run-pipeline.sh --cve CVE-2024-3400
 #   scripts/run-pipeline.sh --fixtures tests/fixtures --since 2099-10-01 --include-updated   (offline demo)
 #
-# Environment: SETTINGS (config/settings.yaml), PROFILES (clients/*.yaml), TARGETS (SSH collection
+# Environment: SETTINGS (config/settings.yaml), PROFILES (examples/*/client.yaml), TARGETS (SSH collection
 # targets files; empty = no collection), WORK (work), OUT (output).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 SETTINGS=${SETTINGS:-config/settings.yaml}
-PROFILES=${PROFILES:-clients/*.yaml}
+PROFILES=${PROFILES:-examples/*/client.yaml}
 TARGETS=${TARGETS:-}
 WORK=${WORK:-work}
 OUT=${OUT:-output}

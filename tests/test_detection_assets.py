@@ -21,7 +21,7 @@ DNF_EDGE01 = FIXTURES / "dnf" / "edge01.lab.example.txt"
 
 @pytest.fixture
 def lab():
-    return load_profile(ROOT / "clients" / "lab.yaml")
+    return load_profile(ROOT / "examples" / "lab" / "client.yaml")
 
 
 # -- scanners -------------------------------------------------------------------------------------
@@ -85,7 +85,7 @@ def test_dnf_updateinfo_real_output():
 
 # -- SSH collection (no real SSH: the runner is replaced) -----------------------------------------
 def test_collect_plan_and_commands(tmp_path):
-    tf = load_targets(ROOT / "config" / "targets" / "lab.yaml")
+    tf = load_targets(ROOT / "examples" / "lab" / "targets.yaml")
     jobs = plan(tf)
     methods = {(t.host, m) for t, m, _, _ in jobs}
     assert ("edge01.lab.example", "dnf-updateinfo") in methods and ("node00.lab.example", "trivy") in methods
@@ -226,10 +226,20 @@ def test_targets_extra_ips_and_eosl(tmp_path):
     from vulnops.detect.collect import load_targets
     from vulnops.detect.scanners import Target, parse_trivy
 
-    tf = load_targets("config/targets/lab.yaml")
+    tf = load_targets(ROOT / "examples" / "lab" / "targets.yaml")
     node02 = next(t for t in tf.targets if t.host.startswith("node02"))
     assert node02.ip == "192.0.2.75" and "192.0.2.195" in node02.ips
 
     data = {"SchemaVersion": 2, "Metadata": {"OS": {"Family": "centos", "Name": "8.5.2111", "EOSL": True}}}
     d = parse_trivy(data, "lab", Target(name="node03"))
     assert d.observations[0].os == "centos 8.5.2111 (end of support)"
+
+
+def test_plan_checks_client_id(capsys):
+    from vulnops.detect.cli import main
+
+    lab = str(ROOT / "examples" / "lab")
+    assert main(["plan", f"{lab}/targets.yaml", "--profile", f"{lab}/client.yaml"]) == 0
+    assert "lab: 10 targets" in capsys.readouterr().out
+    other = str(ROOT / "examples" / "example-client" / "client.yaml")
+    assert main(["plan", f"{lab}/targets.yaml", "--profile", other]) == 2

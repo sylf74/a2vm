@@ -1,5 +1,5 @@
 # Lab profile (example): fictitious hosts and addresses, real products.
-# Linux hosts are discovered by the scanners (config/targets/lab.yaml); the rules below give
+# Linux hosts are discovered by the scanners (targets.yaml); the rules below give
 # them their exposure and criticality. Appliances and Windows servers, which the scanners do not
 # cover, are declared as assets and matched against the CVE records by product and version.
 # Anything not covered falls back to the worst case (internet, essential), flagged in reports.

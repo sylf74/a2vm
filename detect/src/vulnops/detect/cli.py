@@ -1,5 +1,6 @@
 """vulnops-detect: produce detection files (asset observations + findings), one per client and source.
 
+  plan       check a targets file and list the scans it would run (no connection)
   collect    run read-only scanners over SSH on the targets of a client, then import their output
   import     import scanner output files produced elsewhere (Trivy JSON, dnf updateinfo text)
   inventory  match a records file against the assets declared in client profiles
@@ -18,7 +19,7 @@ from vulnops.core.io import Detection, read_records, write_detection
 from vulnops.core.llm import LlmClient
 from vulnops.core.profile import ProfileError, load_profile
 
-from .collect import collect, load_targets
+from .collect import collect, load_targets, plan
 from .inventory import InventoryScanner
 from .scanners import load_dnf_file, load_trivy_file, merge
 
@@ -70,6 +71,23 @@ def cmd_collect(args: argparse.Namespace) -> int:
     return 1 if failed else 0
 
 
+def cmd_plan(args: argparse.Namespace) -> int:
+    try:
+        tf = load_targets(args.targets)
+        client = load_profile(args.profile).id if args.profile else None
+    except (ValueError, ProfileError, TypeError) as exc:
+        print(f"{args.targets}: {exc}", file=sys.stderr)
+        return 2
+    if client and client != tf.client:
+        print(f"{args.targets}: client {tf.client!r} does not match profile {client!r}", file=sys.stderr)
+        return 2
+    jobs = plan(tf)
+    print(f"{tf.client}: {len(tf.targets)} targets, {len(jobs)} scans, ssh user {tf.user or '(default)'}")
+    for t, method, _remote, target in jobs:
+        print(f"  {t.host:<32} {method:<15} {target.kind}:{target.ref}")
+    return 0
+
+
 def cmd_import(args: argparse.Namespace) -> int:
     loader = load_trivy_file if args.source == "trivy" else load_dnf_file
     _write(args.out, merge([loader(f, args.client) for f in args.files]))
@@ -90,8 +108,13 @@ def main(argv: list[str] | None = None) -> int:
     i.add_argument("--no-llm", action="store_true", help="no LLM adjudication of fuzzy product matches")
     i.set_defaults(func=cmd_inventory)
 
+    pl = sub.add_parser("plan", help="check a targets file and list the scans (no connection)")
+    pl.add_argument("targets", help="targets YAML file")
+    pl.add_argument("--profile", help="client profile: check that both name the same client")
+    pl.set_defaults(func=cmd_plan)
+
     c = sub.add_parser("collect", help="run read-only scans over SSH (targets file per client)")
-    c.add_argument("targets", nargs="+", help="targets YAML files, e.g. config/targets/lab.yaml")
+    c.add_argument("targets", nargs="+", help="targets YAML files, e.g. examples/lab/targets.yaml")
     c.add_argument("--raw", default="work/scans", help="where raw scanner outputs are kept")
     c.add_argument("--out", default="work/detect")
     c.set_defaults(func=cmd_collect)
