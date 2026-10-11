@@ -8,10 +8,10 @@
 #
 #     include:
 #       - project: vulnops/vulnops
-#         ref: v0.4.0
+#         ref: v0.4.1
 #         file: templates/client-pipeline.yml
 #     variables:
-#       VULNOPS_REF: v0.4.0        # same version as the include
+#       VULNOPS_REF: v0.4.1        # same version as the include
 #
 # Jobs:
 #   push to the default branch     validate (profile and targets)
@@ -32,6 +32,9 @@ variables:
   VULNOPS_TARGETS: targets.yaml
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
   VULNOPS_CACHE_DIR: "$CI_PROJECT_DIR/.cache"
+  DEBIAN_FRONTEND: noninteractive
+  PIP_ROOT_USER_ACTION: ignore
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
 
 stages: [validate, collect, intel, detect, assets, triage]
 
@@ -68,18 +71,33 @@ validate:
     - vulnops-profiles validate "$VULNOPS_PROFILE"
     - if [ -f "$VULNOPS_TARGETS" ]; then vulnops-detect plan "$VULNOPS_TARGETS" --profile "$VULNOPS_PROFILE"; fi
 
+# Exit code 3 = collection incomplete: the job shows as a warning and the pipeline goes on with
+# what was collected (plus the declared inventory).
 collect:
   extends: .data
   stage: collect
   needs: [validate]
+  allow_failure:
+    exit_codes: [3]
+  artifacts:
+    when: always
+    paths: [work/]
+    expire_in: 7 days
   script:
     - mkdir -p work/detect
     - |
       if [ -z "${VULNOPS_SSH_KEY:-}" ] || [ ! -f "$VULNOPS_TARGETS" ]; then
         echo "No VULNOPS_SSH_KEY or no $VULNOPS_TARGETS: no scanner collection, declared inventory only"; exit 0
       fi
-      mkdir -p ~/.ssh && cp "$VULNOPS_SSH_KEY" ~/.ssh/vulnops_scan && chmod 600 ~/.ssh/vulnops_scan
-      vulnops-detect collect "$VULNOPS_TARGETS" --raw work/scans --out work/detect || echo "collection incomplete, continuing"
+      # Normalise the key pasted in GitLab: no CR, a final newline (OpenSSH rejects the key otherwise).
+      mkdir -p ~/.ssh && umask 077
+      tr -d '\r' < "$VULNOPS_SSH_KEY" | sed -e '$a\' > ~/.ssh/vulnops_scan
+      if ! ssh-keygen -y -f ~/.ssh/vulnops_scan > /dev/null 2>&1; then
+        echo "VULNOPS_SSH_KEY is not a usable private key: paste the whole file, from the BEGIN line to the END line"
+        exit 3
+      fi
+      echo "scan key: $(ssh-keygen -l -f ~/.ssh/vulnops_scan)"
+      vulnops-detect collect "$VULNOPS_TARGETS" --raw work/scans --out work/detect || exit 3
 
 intel:
   extends: .data

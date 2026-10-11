@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vulnops-assets"
-version = "0.4.0"
+version = "0.4.1"
 description = "vulnops assets stage: multi-tenant asset inventory consolidated from detection observations."
 requires-python = ">=3.11"
 dependencies = ["vulnops-core"]
