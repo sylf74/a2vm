@@ -9,7 +9,8 @@
 #
 # CI/CD variables:
 #   VULNOPS_LLM_ENABLED, VULNOPS_LLM_BASE_URL, VULNOPS_LLM_MODEL (VERDICT_* still accepted), LLM_API_KEY
-#   VULNOPS_SSH_KEY  type "File", masked, protected: private key of the read-only scan account.
+#   VULNOPS_SSH_KEY  type "File", protected, visible (a multi-line key cannot be masked): private key
+#                    of the read-only scan account (see docs/scanning.md).
 #                    Without it, the collect job is skipped and only declared inventories are triaged.
 
 stages: [lint, test, validate, collect, intel, detect, assets, triage]
