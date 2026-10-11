@@ -42,6 +42,7 @@ class HostTarget:
     host: str
     method: str
     ip: str | None = None
+    ips: list[str] = field(default_factory=list)  # extra addresses of the same host (several NICs)
     images: list[str] = field(default_factory=list)
     user: str | None = None
 
@@ -96,7 +97,7 @@ def plan(tf: TargetsFile) -> list[tuple[HostTarget, str, str, Target]]:
     jobs = []
     for t in tf.targets:
         fqdn = t.host.lower() if "." in t.host else None
-        ips = [t.ip] if t.ip else []
+        ips = list(dict.fromkeys(([t.ip] if t.ip else []) + list(t.ips)))
         host_target = Target(name=_short(t.host), kind="host", fqdn=fqdn, ips=ips)
         if t.method == "trivy":
             jobs.append((t, "trivy", TRIVY_HOST, host_target))

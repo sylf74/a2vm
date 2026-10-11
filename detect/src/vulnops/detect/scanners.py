@@ -117,6 +117,8 @@ def parse_trivy(data: dict[str, Any], client_id: str, target: Target, observed_a
     b = _Builder(client_id, "trivy", target, observed_at or data.get("CreatedAt") or now())
     os_info = (data.get("Metadata") or {}).get("OS") or {}
     os_name = " ".join(x for x in (os_info.get("Family"), os_info.get("Name")) if x) or None
+    if os_name and os_info.get("EOSL"):
+        os_name += " (end of support)"
     for result in data.get("Results") or []:
         for v in result.get("Vulnerabilities") or []:
             b.add(

@@ -56,6 +56,10 @@ sudo chown vulnops:vulnops /home/vulnops/.ssh/authorized_keys && sudo chmod 600 
 
 On Rocky hosts with SELinux: `sudo restorecon -R /home/vulnops/.ssh`.
 
+On the runner itself, also accept connections from the host and from the Docker bridge: a CI job
+reaching its own host arrives from 172.17.x.x, and a local test from 127.0.x.x (the host name
+resolves to 127.0.1.1 in `/etc/hosts`): `from="192.0.2.104,127.0.0.0/8,172.17.0.0/16",...`.
+
 ### Hosts scanned with Trivy
 
 Ubuntu / Debian (official Aqua Security repository):
@@ -68,7 +72,7 @@ echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.
 sudo apt-get update && sudo apt-get install -y trivy
 ```
 
-Rocky 9 (Node00):
+Rocky / CentOS 8–9 (node00, node03, node04):
 
 ```bash
 cat << 'EOF' | sudo tee /etc/yum.repos.d/trivy.repo
@@ -81,6 +85,10 @@ gpgkey=https://aquasecurity.github.io/trivy-repo/rpm/public.key
 EOF
 sudo dnf install -y trivy
 ```
+
+On an end-of-life release whose mirrors are gone (CentOS Linux 8), only enable the Trivy repository:
+`sudo dnf --disablerepo='*' --enablerepo=trivy install -y trivy`. Trivy flags such hosts as
+"end of support" in the asset's OS: they no longer get fixes, which matters more than any single CVE.
 
 Trivy downloads its vulnerability database (from GitHub's container registry) into the scan
 account's cache on first run and refreshes it when needed: the targets need outbound HTTPS.
@@ -97,8 +105,8 @@ make sure `dnf-makecache.timer` is active: `systemctl status dnf-makecache.timer
 ## 3. Test by hand from the runner
 
 ```bash
-ssh -i ~/vulnops_scan vulnops@edge01.lab.example 'dnf -q updateinfo list --security --with-cve | head'
-ssh -i ~/vulnops_scan vulnops@gitlab.lab.example 'trivy rootfs --quiet --format json --scanners vuln --pkg-types os / | head -c 300'
+ssh -i ~/vulnops_scan -o StrictHostKeyChecking=accept-new vulnops@edge01.lab.example 'dnf -q updateinfo list --security --with-cve | head'
+ssh -i ~/vulnops_scan -o StrictHostKeyChecking=accept-new vulnops@gitlab.lab.example 'trivy rootfs --quiet --format json --scanners vuln --pkg-types os / | head -c 300'
 ```
 
 Then delete the private key from the runner (`rm ~/vulnops_scan ~/vulnops_scan.pub`): CI jobs get

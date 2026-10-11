@@ -220,3 +220,16 @@ def test_profile_v2_and_v1_compatibility(lab):
 
 def test_settings_rationale_scope():
     assert Settings().llm.rationale_for == ["ACT", "ATTEND"]
+
+
+def test_targets_extra_ips_and_eosl(tmp_path):
+    from vulnops.detect.collect import load_targets
+    from vulnops.detect.scanners import Target, parse_trivy
+
+    tf = load_targets("config/targets/lab.yaml")
+    node02 = next(t for t in tf.targets if t.host.startswith("node02"))
+    assert node02.ip == "192.0.2.75" and "192.0.2.195" in node02.ips
+
+    data = {"SchemaVersion": 2, "Metadata": {"OS": {"Family": "centos", "Name": "8.5.2111", "EOSL": True}}}
+    d = parse_trivy(data, "lab", Target(name="node03"))
+    assert d.observations[0].os == "centos 8.5.2111 (end of support)"
