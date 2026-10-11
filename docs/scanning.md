@@ -24,8 +24,11 @@ CVE records by product and version; a network scanner (OpenVAS) or a Windows col
 
 ## 1. Create the scan key (once, on the runner)
 
+With your usual admin account (no root needed). The key is only kept there long enough to fill the
+GitLab variable and to run the manual test of step 3:
+
 ```bash
-ssh admin@192.0.2.104
+ssh <admin>@192.0.2.104
 ssh-keygen -t ed25519 -N "" -C "vulnops-scan" -f ~/vulnops_scan
 cat ~/vulnops_scan.pub        # public key, for step 2
 ```
@@ -37,7 +40,7 @@ In GitLab, project `vulnops`: **Settings > CI/CD > Variables > Add variable**
 - Visibility: **Visible** — a private key spans several lines and GitLab cannot mask it; the job
   never prints it, and the key only opens an unprivileged account, from the runner's address only
 
-Then delete the private key from the runner VM: `rm ~/vulnops_scan`.
+Keep `~/vulnops_scan` on the runner until the manual test of step 3, then delete it.
 
 ## 2. Prepare each target (once per host)
 
@@ -98,5 +101,6 @@ ssh -i ~/vulnops_scan vulnops@edge01.lab.example 'dnf -q updateinfo list --secur
 ssh -i ~/vulnops_scan vulnops@gitlab.lab.example 'trivy rootfs --quiet --format json --scanners vuln --pkg-types os / | head -c 300'
 ```
 
-Then run a pipeline (`TRIAGE_MODE=manual`): the `collect` job lists each target and any error,
+Then delete the private key from the runner (`rm ~/vulnops_scan ~/vulnops_scan.pub`): CI jobs get
+it from the GitLab variable. Run a pipeline (`TRIAGE_MODE=manual`): the `collect` job lists each target and any error,
 and the raw outputs are kept in the `work/scans/` artifact for 7 days.
