@@ -15,6 +15,16 @@ ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests" / "fixtures"
 
 
+@pytest.fixture(autouse=True)
+def isolated_environment(monkeypatch):
+    """Tests never see the CI/CD variables of the runner (LLM endpoint, API key, cache dir)."""
+    import os
+
+    for name in list(os.environ):
+        if name.startswith(("VULNOPS_", "VERDICT_")) or name == "LLM_API_KEY":
+            monkeypatch.delenv(name)
+
+
 @pytest.fixture
 def profile():
     return load_profile(ROOT / "examples" / "example-client" / "client.yaml")
