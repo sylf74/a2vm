@@ -1,6 +1,8 @@
-# vulnops
+# vulnops — AI-assisted Vulnerability Pipeline
 
-Vulnerability data pipeline in four stages linked by a common data model:
+A vulnerability data pipeline in four stages linked by a common data model. Decisions are
+deterministic (CISA SSVC tables + per-client policy); the LLM assists — it fills flagged gaps,
+confirms uncertain matches and writes rationales — but never decides.
 
 ```
 intel/      vulnerability records    cvelistV5 (CNA + CISA ADP), CISA KEV, FIRST EPSS  -> work/records.json
@@ -13,7 +15,7 @@ core/       common model             data classes, JSON Schemas of the exchange 
 Each stage reads and writes only the common model, and every exchange file is validated
 against its JSON Schema on write and on read. A new source, scanner or LLM engine plugs into
 one stage without touching the others. The design is described in the architecture document
-("vulnops architecture — vulnerability data pipeline").
+("vulnops — AI-assisted Vulnerability Pipeline: architecture").
 
 ## Quick start
 
