@@ -131,6 +131,7 @@ def test_llm_failure_falls_back(settings, sources, profile):
 
     settings.llm.enabled = True
     settings.llm.max_retries = 0
+    settings.llm.max_consecutive_errors = 100
     llm = LlmClient(settings.llm, transport=httpx.MockTransport(lambda r: httpx.Response(503)))
     run = _run(settings, sources, profile, llm)
     rows = _by_cve(run)
@@ -139,6 +140,30 @@ def test_llm_failure_falls_back(settings, sources, profile):
     assert rows["CVE-2099-10005"].automatable.source == "default"
     assert "CVE-2099-10004" in rows and rows["CVE-2099-10004"].needs_review
     assert "ACT" in render_markdown(run)
+
+
+def test_llm_circuit_breaker_and_budget(settings, sources, profile):
+    import httpx
+
+    calls = []
+
+    def down(request):
+        calls.append(request)
+        return httpx.Response(503)
+
+    settings.llm.enabled = True
+    settings.llm.max_retries = 0
+    settings.llm.max_consecutive_errors = 1
+    run = _run(settings, sources, profile, LlmClient(settings.llm, transport=httpx.MockTransport(down)))
+    # one failure, then the triage leaves the LLM alone for the rest of the run
+    assert sum(r.rationale_source.startswith("template (LLM error") for r in run.rows) <= 1
+    assert any("LLM down after 1 errors" in r.rationale_source for r in run.rows if r.delivery_decision != "TRACK")
+
+    settings.llm.max_consecutive_errors = 3
+    settings.llm.max_calls = 0
+    calls.clear()
+    run = _run(settings, sources, profile, LlmClient(settings.llm, transport=httpx.MockTransport(down)))
+    assert any("budget of 0 calls" in r.rationale_source for r in run.rows)
 
 
 def test_select_cve_ids(sources):

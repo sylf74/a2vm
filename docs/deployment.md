@@ -35,6 +35,11 @@ sudo gitlab-runner list
 
 The runner then serves every project of the group, including future client projects.
 
+Artifacts: a client with thousands of findings produces exchange files of tens of MB. GitLab's
+default limit is 100 MB per artifact (**Admin > Settings > CI/CD > Continuous Integration and
+Deployment > Maximum artifacts size**); raw scanner outputs are compressed (`work/scans.tgz`) and
+kept in the `collect` job only.
+
 ## 3. Shared variables (group `vulnops` > Settings > CI/CD > Variables)
 
 | Key | Example | Options |
@@ -73,10 +78,10 @@ The code project's own pipeline only runs lint, tests and the offline examples.
 ```yaml
 include:
   - project: vulnops/vulnops
-    ref: v0.4.1
+    ref: v0.4.2
     file: templates/client-pipeline.yml
 variables:
-  VULNOPS_REF: v0.4.1
+  VULNOPS_REF: v0.4.2
 ```
 
 3. If `targets.yaml` is used: scan key and target accounts as in `docs/scanning.md`, then the

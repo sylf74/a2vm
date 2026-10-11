@@ -8,10 +8,10 @@
 #
 #     include:
 #       - project: vulnops/vulnops
-#         ref: v0.4.1
+#         ref: v0.4.2
 #         file: templates/client-pipeline.yml
 #     variables:
-#       VULNOPS_REF: v0.4.1        # same version as the include
+#       VULNOPS_REF: v0.4.2        # same version as the include
 #
 # Jobs:
 #   push to the default branch     validate (profile and targets)
@@ -59,6 +59,7 @@ stages: [validate, collect, intel, detect, assets, triage]
     - if: $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"
   artifacts:
     paths: [work/]
+    exclude: [work/scans.tgz]   # raw scanner outputs: kept once, in the collect job
     expire_in: 7 days
 
 validate:
@@ -97,7 +98,12 @@ collect:
         exit 3
       fi
       echo "scan key: $(ssh-keygen -l -f ~/.ssh/vulnops_scan)"
-      vulnops-detect collect "$VULNOPS_TARGETS" --raw work/scans --out work/detect || exit 3
+      rc=0
+      vulnops-detect collect "$VULNOPS_TARGETS" --raw work/scans --out work/detect || rc=$?
+      # Raw outputs (Trivy JSON is verbose) are compressed for audit and not passed to later jobs.
+      if [ -d work/scans ]; then tar -czf work/scans.tgz -C work scans && rm -rf work/scans; fi
+      du -sh work/* 2>/dev/null || true
+      if [ "$rc" -ne 0 ]; then exit 3; fi
 
 intel:
   extends: .data

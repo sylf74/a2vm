@@ -57,7 +57,8 @@ def cmd_inventory(args: argparse.Namespace) -> int:
 
 
 def cmd_collect(args: argparse.Namespace) -> int:
-    failed = 0
+    """Exit 0 when every scan succeeded, 3 when some failed (partial collection), 1 when none did."""
+    status = 0
     for path in args.targets:
         tf = load_targets(path)
         print(f"{tf.client}: {len(tf.targets)} targets")
@@ -67,8 +68,10 @@ def cmd_collect(args: argparse.Namespace) -> int:
         for d in detections:
             _write(args.out, d)
         if not detections:
-            failed += 1
-    return 1 if failed else 0
+            status = 1
+        elif errors and status == 0:
+            status = 3
+    return status
 
 
 def cmd_plan(args: argparse.Namespace) -> int:

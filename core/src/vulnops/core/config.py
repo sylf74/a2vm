@@ -30,6 +30,7 @@ class SourceSettings:
     cache_dir: str = ".cache"
     cve_cache_hours: float = 12
     feed_cache_hours: float = 6
+    fetch_workers: int = 8  # parallel CVE record downloads (scanner runs request thousands)
 
 
 @dataclass
@@ -44,6 +45,8 @@ class LlmSettings:
     match_adjudication: bool = True
     rationale: bool = True
     rationale_for: list[str] = field(default_factory=lambda: ["ACT", "ATTEND"])  # template for the rest
+    max_calls: int = 300  # LLM calls per client run; beyond, templates and defaults (flagged)
+    max_consecutive_errors: int = 3  # then the LLM is considered down for the rest of the run
 
     @property
     def api_key(self) -> str | None:
@@ -63,6 +66,7 @@ _ENV_OVERRIDES = {
     "LLM_ENABLED": ("llm", "enabled"),
     "LLM_BASE_URL": ("llm", "base_url"),
     "LLM_MODEL": ("llm", "model"),
+    "LLM_MAX_CALLS": ("llm", "max_calls"),
     "CACHE_DIR": ("sources", "cache_dir"),
     "CVE_RECORD_URL": ("sources", "cve_record_url"),
 }

@@ -109,6 +109,13 @@ def plan(tf: TargetsFile) -> list[tuple[HostTarget, str, str, Target]]:
     return jobs
 
 
+def _tail(text: str, limit: int = 600) -> str:
+    """End of a command's stderr: the cause of an error is usually on the last lines."""
+    lines = [line for line in text.strip().splitlines() if not line.startswith("Warning: Permanently added")]
+    out = " | ".join(lines)
+    return out if len(out) <= limit else "..." + out[-limit:]
+
+
 def raw_name(target: Target) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "_", target.ref)
 
@@ -127,7 +134,7 @@ def collect(tf: TargetsFile, raw_dir: str | Path, runner=subprocess.run) -> tupl
             continue
         # dnf exits 100 when updates are available; anything else non-zero is a failure.
         if proc.returncode not in (0, 100) or (method == "trivy" and not proc.stdout.strip()):
-            errors.append(f"{t.host} [{method} {target.ref}]: exit {proc.returncode}: {proc.stderr.strip()[:300]}")
+            errors.append(f"{t.host} [{method} {target.ref}]: exit {proc.returncode}: {_tail(proc.stderr)}")
             continue
         ext = "json" if method == "trivy" else "txt"
         path = raw_dir / tf.client / method / f"{raw_name(target)}.{ext}"

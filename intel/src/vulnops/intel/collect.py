@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import datetime as dt
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
+from typing import Any
 
 from vulnops.core.models import VulnRecord
 
@@ -37,14 +39,22 @@ def select_cve_ids(
     return ids
 
 
+def _fetch(sources: Sources, cve_id: str) -> tuple[dict[str, Any] | None, Exception | None]:
+    try:
+        return sources.cve_record(cve_id), None
+    except (SourceError, ValueError) as exc:
+        return None, exc
+
+
 def collect(sources: Sources, cve_ids: list[str]) -> Collection:
     out = Collection(requested=list(cve_ids))
     kev = sources.kev()
     epss = sources.epss(cve_ids)
-    for cve_id in cve_ids:
-        try:
-            raw = sources.cve_record(cve_id)
-        except (SourceError, ValueError) as exc:
+    workers = max(1, getattr(sources.settings, "fetch_workers", 1))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        fetched = list(pool.map(lambda c: _fetch(sources, c), cve_ids))
+    for cve_id, (raw, exc) in zip(cve_ids, fetched, strict=True):
+        if exc is not None:
             out.errors.append({"cve": cve_id, "error": str(exc)})
             continue
         if raw is None:

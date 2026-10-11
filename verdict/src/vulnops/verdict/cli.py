@@ -55,15 +55,18 @@ def main(argv: list[str] | None = None) -> int:
             run = triage.run(profile, records, assets, findings, not_affected, len(requested), errors)
             target = write_all(run, Path(args.out))
             counts = {d: sum(r.delivery_decision == d for r in run.rows) for d in ("ACT", "ATTEND", "TRACK")}
-            llm_failures = sum(r.rationale_source.startswith("template (LLM") for r in run.rows)
+            llm_failures = [r for r in run.rows if r.rationale_source.startswith("template (LLM")]
             print(
                 f"{profile.id}: ACT={counts['ACT']} ATTEND={counts['ATTEND']} TRACK={counts['TRACK']} "
                 f"review={sum(r.needs_review for r in run.rows)} errors={len(run.errors)} "
-                f"llm_fallbacks={llm_failures} -> {target}"
+                f"llm_calls={triage.llm_calls} llm_fallbacks={len(llm_failures)} -> {target}"
             )
-            for row in run.rows:
-                if row.rationale_source.startswith("template (LLM"):
-                    print(f"  {row.cve_id} {row.asset_id}: {row.rationale_source}", file=sys.stderr)
+            if triage.llm_stopped:
+                print(f"  LLM not used for the rest of the run: {triage.llm_stopped}", file=sys.stderr)
+            for row in llm_failures[:20]:
+                print(f"  {row.cve_id} {row.asset_id}: {row.rationale_source}", file=sys.stderr)
+            if len(llm_failures) > 20:
+                print(f"  ... and {len(llm_failures) - 20} more (see triage.csv)", file=sys.stderr)
     finally:
         if llm:
             llm.close()

@@ -74,6 +74,9 @@ class Triage:
         self.settings = settings
         self.policy = Policy.from_dict(settings.policy)
         self.llm = llm if (llm and settings.llm.enabled) else None
+        self.llm_calls = 0
+        self.llm_errors_in_row = 0
+        self.llm_stopped: str | None = None  # why the LLM is no longer used in this run
         self._inputs: dict[str, CveInputs] = {}
 
     # -- per-CVE inputs (shared by all clients) ---------------------------------------------
@@ -109,13 +112,16 @@ class Triage:
                 automatable = Assessed(a, "cvss-heuristic", note)
                 technical_impact = Assessed(t, "cvss-heuristic", note)
                 review.append("automatisable / impact technique déduits du vecteur CVSS")
-            elif self.llm and self.settings.llm.ssvc_inputs and record.description:
+            elif self.settings.llm.ssvc_inputs and record.description and self._llm_ready():
                 try:
+                    self.llm_calls += 1
                     out = assess_ssvc_inputs(self.llm, record)
+                    self._llm_ok()
                     automatable = Assessed(out["automatable"], "llm", out["justification"])
                     technical_impact = Assessed(out["technical_impact"], "llm", out["justification"])
                     review.append("automatisable / impact technique estimés par LLM")
                 except LlmError as exc:
+                    self._llm_failed(exc)
                     review.append(f"LLM indisponible pour l'évaluation SSVC : {exc}")
             if automatable is None:
                 worst = self.policy.unknown_inputs == "conservative"
@@ -136,6 +142,7 @@ class Triage:
         cve_count: int | None = None,
         errors: list[dict[str, str]] | None = None,
     ) -> TriageRun:
+        self.llm_calls, self.llm_errors_in_row, self.llm_stopped = 0, 0, None  # budget per client run
         run = TriageRun(
             client=profile,
             generated_at=now(),
@@ -222,8 +229,32 @@ class Triage:
             fixes=sorted({f"{o.package} {o.fixed_version}" for o in finding.observations if o.fixed_version}),
         )
         wants_llm = self.llm and self.settings.llm.rationale and delivery in self.settings.llm.rationale_for
-        if wants_llm:
+        if wants_llm and self._llm_ready():
+            self.llm_calls += 1
             row.rationale, row.rationale_source = llm_rationale(self.llm, row)
+            if row.rationale_source.startswith("template (LLM error"):
+                self._llm_failed(row.rationale_source)
+            else:
+                self._llm_ok()
         else:
             row.rationale = template_rationale(row)
+            if wants_llm:
+                row.rationale_source = f"template ({self.llm_stopped})"
         return row
+
+    # -- LLM budget and circuit breaker ------------------------------------------------------
+    def _llm_ready(self) -> bool:
+        if not self.llm or self.llm_stopped:
+            return False
+        if self.llm_calls >= self.settings.llm.max_calls:
+            self.llm_stopped = f"LLM budget of {self.settings.llm.max_calls} calls reached"
+            return False
+        return True
+
+    def _llm_ok(self) -> None:
+        self.llm_errors_in_row = 0
+
+    def _llm_failed(self, exc: object) -> None:
+        self.llm_errors_in_row += 1
+        if self.llm_errors_in_row >= self.settings.llm.max_consecutive_errors:
+            self.llm_stopped = f"LLM down after {self.llm_errors_in_row} errors: {exc}"
