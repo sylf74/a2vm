@@ -119,7 +119,9 @@ remain valid):
 - `defaults`: the client's default assumptions; absent, the worst case applies.
 
 See `clients/example-client.yaml` (declared inventory only) and `clients/lab.yaml` (scanners +
-rules + declared appliances). These files describe client infrastructure: keep access restricted.
+rules + declared appliances): both are fictitious examples. Real profiles and scan targets describe
+client infrastructure and never go in this repository: they live in a private configuration project
+that the pipeline clones (`VULNOPS_CONFIG_PROJECT`, see `docs/scanning.md`).
 
 ## Local LLM
 

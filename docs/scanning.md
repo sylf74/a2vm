@@ -1,7 +1,7 @@
 # Read-only scanner collection (lab)
 
 The `collect` job connects over SSH from the runner to each target listed in
-`config/targets/<client>.yaml`, runs one read-only command, and imports its output:
+`targets/<client>.yaml` of the private configuration project (section 0), runs one read-only command, and imports its output:
 
 | Method | Hosts | Command run on the target | Needs |
 | --- | --- | --- | --- |
@@ -21,6 +21,29 @@ Why it is not intrusive:
 Coverage limits: Windows (Active Directory, Exchange) and appliances (VyOS, NAS, Home Assistant)
 are not covered by these methods. They are declared in the client profile and matched against
 CVE records by product and version; a network scanner (OpenVAS) or a Windows collector comes next.
+
+## 0. Keep the site configuration out of this repository
+
+Client profiles and scan targets describe real infrastructure (host names, addresses, exposure):
+they never go in the vulnops repository, which only carries fictitious examples
+(`clients/lab.yaml`, `config/targets/lab.yaml`, documentation addresses from RFC 5737).
+The real files live in a separate private project, one per tenant if needed:
+
+```
+vulnops-config/
+  clients/<client>.yaml      # client profile (schema v2)
+  targets/<client>.yaml      # SSH collection targets, same format as config/targets/lab.yaml
+```
+
+1. Create the private project (e.g. `vulnops-config`) and push those files to it.
+2. In that project: **Settings > CI/CD > Job token permissions**, add the `vulnops` project, so
+   that vulnops pipelines may clone it with their job token.
+3. In the `vulnops` project, add the CI/CD variable `VULNOPS_CONFIG_PROJECT` = the path of the
+   configuration project (e.g. `mygroup/vulnops-config`), protected.
+
+The `collect` job clones it into `work/site/` and every later stage reads its profiles from there.
+Without the variable the pipeline runs on the examples and does not scan anything. Locally:
+`PROFILES="../vulnops-config/clients/*.yaml" TARGETS="../vulnops-config/targets/*.yaml" scripts/run-pipeline.sh`.
 
 ## 1. Create the scan key (once, on the runner)
 

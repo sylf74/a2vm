@@ -11,7 +11,10 @@
 #   VULNOPS_LLM_ENABLED, VULNOPS_LLM_BASE_URL, VULNOPS_LLM_MODEL (VERDICT_* still accepted), LLM_API_KEY
 #   VULNOPS_SSH_KEY  type "File", protected, visible (a multi-line key cannot be masked): private key
 #                    of the read-only scan account (see docs/scanning.md).
-#                    Without it, the collect job is skipped and only declared inventories are triaged.
+#   VULNOPS_CONFIG_PROJECT  path of the private configuration project, e.g. "mygroup/vulnops-config"
+#                    (clients/*.yaml, targets/*.yaml). Real client profiles and scan targets live
+#                    there, never in this repository; without it the examples of this repository run.
+#   Without VULNOPS_SSH_KEY or targets, the collection is skipped and only declared inventories are triaged.
 
 stages: [lint, test, validate, collect, intel, detect, assets, triage]
 
@@ -74,15 +77,29 @@ collect:
   stage: collect
   <<: *pipeline
   script:
-    - mkdir -p work/detect
+    - mkdir -p work/detect work/site
+    - apt-get update -qq && apt-get install -y -qq git openssh-client >/dev/null
     - |
-      if [ -z "${VULNOPS_SSH_KEY:-}" ] || [ ! -d config/targets ]; then
-        echo "No VULNOPS_SSH_KEY or no config/targets: skipping scanner collection"; exit 0
+      # Site configuration: the private project if set, otherwise the examples of this repository.
+      if [ -n "${VULNOPS_CONFIG_PROJECT:-}" ]; then
+        git clone -q --depth 1 \
+          "${CI_SERVER_PROTOCOL}://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}:${CI_SERVER_PORT}/${VULNOPS_CONFIG_PROJECT}.git" \
+          work/site-repo
+        cp -r work/site-repo/clients work/site/clients
+        [ -d work/site-repo/targets ] && cp -r work/site-repo/targets work/site/targets
+        rm -rf work/site-repo
+      else
+        echo "No VULNOPS_CONFIG_PROJECT: using the example profiles of this repository, no collection"
+        cp -r clients work/site/clients
       fi
-      apt-get update -qq && apt-get install -y -qq openssh-client >/dev/null
-      mkdir -p ~/.ssh && cp "$VULNOPS_SSH_KEY" ~/.ssh/vulnops_scan && chmod 600 ~/.ssh/vulnops_scan
     - *install
-    - vulnops-detect collect config/targets/*.yaml --raw work/scans --out work/detect || echo "collection incomplete, continuing"
+    - vulnops-profiles validate work/site/clients/*.yaml
+    - |
+      if [ -z "${VULNOPS_SSH_KEY:-}" ] || [ ! -d work/site/targets ]; then
+        echo "No VULNOPS_SSH_KEY or no targets: skipping scanner collection"; exit 0
+      fi
+      mkdir -p ~/.ssh && cp "$VULNOPS_SSH_KEY" ~/.ssh/vulnops_scan && chmod 600 ~/.ssh/vulnops_scan
+      vulnops-detect collect work/site/targets/*.yaml --raw work/scans --out work/detect || echo "collection incomplete, continuing"
   artifacts:
     paths: [work/]
     expire_in: 7 days
@@ -111,7 +128,7 @@ detect:
   needs: [intel]
   script:
     - *install
-    - vulnops-detect inventory clients/*.yaml --settings config/settings.yaml --records work/records.json --out work/detect
+    - vulnops-detect inventory work/site/clients/*.yaml --settings config/settings.yaml --records work/records.json --out work/detect
   artifacts:
     paths: [work/]
     expire_in: 7 days
@@ -122,7 +139,7 @@ assets:
   needs: [detect]
   script:
     - *install
-    - vulnops-assets build clients/*.yaml --detect work/detect --out work/assets
+    - vulnops-assets build work/site/clients/*.yaml --detect work/detect --out work/assets
   artifacts:
     paths: [work/]
     expire_in: 7 days
@@ -133,7 +150,7 @@ triage:
   needs: [assets]
   script:
     - *install
-    - verdict run clients/*.yaml --settings config/settings.yaml --records work/records.json --assets work/assets --out output
+    - verdict run work/site/clients/*.yaml --settings config/settings.yaml --records work/records.json --assets work/assets --out output
   artifacts:
     name: "triage-$CI_PIPELINE_ID"
     paths: [output/, work/assets/]
