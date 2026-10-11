@@ -5,11 +5,11 @@ deterministic (CISA SSVC tables + per-client policy); the LLM assists — it fil
 confirms uncertain matches and writes rationales — but never decides.
 
 ```
-intel/      vulnerability records    cvelistV5 (CNA + CISA ADP), CISA KEV, FIRST EPSS  -> work/records.json
-detect/     findings per client      declared inventory today, scanners next           -> work/findings/<client>.json
-verdict/    decisions per finding    CISA SSVC + policy, French rationale by a local LLM -> output/<client>/<date>/
-remediate/  (not started)            actions, plans, deadlines
-core/       common model             data classes, JSON Schemas of the exchange files, settings, profiles, LLM client
+intel/      Vulnerability Intelligence   public sources + CTI (Google CTI planned)       -> work/records.json
+detect/     findings per client          declared inventory today, scanners next         -> work/findings/<client>.json
+verdict/    decisions per finding        CISA SSVC + policy, French rationale (local LLM) -> output/<client>/<date>/
+remediate/  (not started)                actions, plans, deadlines
+core/       common model                 data classes, exchange-file schemas, settings, profiles, LLM client
 ```
 
 Each stage reads and writes only the common model, and every exchange file is validated
@@ -39,9 +39,21 @@ verdict run clients/*.yaml --records work/records.json --findings work/findings 
 
 ## Stages
 
-**intel** (`vulnops-intel collect`) — selects CVEs (`--cve`, `--cve-file`, `--since` = cvelistV5
-delta log + KEV additions), fetches each CVE JSON 5 record and merges its KEV entry and EPSS
-score into one vulnerability record. Rejected and missing CVEs are reported as errors.
+**intel — Vulnerability Intelligence** (`vulnops-intel collect`) — builds one vulnerability
+record per CVE from two families of sources:
+
+| Family | Source | What it adds | Status |
+| --- | --- | --- | --- |
+| Public | cvelistV5 (CNA + CISA ADP Vulnrichment) | CVE record, affected products, CISA SSVC decision points | in place |
+| Public | CISA KEV | known active exploitation | in place |
+| Public | FIRST EPSS | 30-day exploitation probability | in place |
+| CTI | Google CTI | threat intelligence: exploitation in the wild, threat actors, exploit availability | planned |
+| Public | vendor advisories (CSAF, RSS), CERT-FR | fixed versions, workarounds | planned |
+
+CVE selection: `--cve`, `--cve-file`, `--since` (cvelistV5 delta log + KEV additions). Rejected
+and missing CVEs are reported as errors. CTI sources are paid per request: they will be queried
+only for CVEs that matter (with findings, or above a threshold), with a cache, and their API
+keys come from CI/CD variables, never from the repository.
 
 **detect** (`vulnops-detect inventory`) — the inventory scanner: matches records against the
 assets declared in each client profile (CPE, names, aliases, vendor version ranges) and writes
