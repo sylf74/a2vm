@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """Collect vulnerability records: CVE JSON 5 record + KEV + EPSS, merged into one VulnRecord each."""
 
 from __future__ import annotations

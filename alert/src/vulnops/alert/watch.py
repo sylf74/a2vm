@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """Watch mode: what is new since the last check, and which of it concerns this client.
 
 New items come from the sources of the catalogue (config/watch-sources.yaml), read every few

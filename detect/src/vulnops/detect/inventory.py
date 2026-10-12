@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """The inventory scanner: findings computed by matching vulnerability records against the assets a
 client declared in its profile (products, versions). Used for clients without a scanner, and for
 products scanners do not see (appliances, network devices, SaaS).

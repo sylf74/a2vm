@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """Match the products named in a CVE record against a client's asset profile."""
 
 from __future__ import annotations

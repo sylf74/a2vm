@@ -169,3 +169,9 @@ tests/                                     tests and offline fixtures
 scripts/run-pipeline.sh                    the CI pipeline, locally
 .gitlab/CODEOWNERS                         one owner per stage
 ```
+
+## License
+
+AGPL-3.0-only (see `LICENSE` and `NOTICE`). Running a modified vulnops as a network service for
+others requires offering them its source code. Contributions: `CONTRIBUTING.md` (DCO sign-off).
+Security issues: `SECURITY.md`.

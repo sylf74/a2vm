@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """Read-only collection over SSH: run a scanner on each target and keep its raw output.
 
 Targets file (YAML), one per client — see examples/lab/targets.yaml:

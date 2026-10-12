@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """`verdict run`: decide on the findings of each client, from the intel and assets stage outputs."""
 
 from __future__ import annotations

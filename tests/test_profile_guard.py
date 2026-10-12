@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 import yaml
 
 from vulnops.core.llm.guard import unsupported_tokens

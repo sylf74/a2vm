@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """Triage: findings + vulnerability records + consolidated assets -> one decision per finding.
 
 verdict collects nothing itself: records come from the intel stage, assets and findings from the

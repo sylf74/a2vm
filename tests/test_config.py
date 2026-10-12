@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 from vulnops.core.config import describe_llm, load_settings
 
 from .conftest import ROOT

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """Load and validate client profiles (client.yaml of each client project)."""
 
 from __future__ import annotations

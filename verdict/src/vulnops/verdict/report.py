@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """Write a triage run as JSON (full detail), CSV (one row per CVE x asset) and Markdown (French)."""
 
 from __future__ import annotations

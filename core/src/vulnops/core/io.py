@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """Exchange files between stages: JSON documents with a declared kind and schema version.
 
 Every file a stage writes is validated against its JSON Schema before it is written, and every

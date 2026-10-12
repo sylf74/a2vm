@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """One-page HTML dashboard of a triage run: self-contained (no script, no external resource), so it
 can be opened from the job artifacts, attached to a mail or published with GitLab Pages.
 

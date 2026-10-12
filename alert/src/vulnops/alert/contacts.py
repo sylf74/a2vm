@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """Client contacts (contacts.yaml of the client project): who receives which alerts, and in what role.
 
   schema_version: 1

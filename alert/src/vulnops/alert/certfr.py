@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """CERT-FR publications: RSS feeds for discovery, the JSON view of each publication for details.
 
 Every field is read defensively: an unexpected or missing field degrades the alert (fewer details),

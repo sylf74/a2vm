@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """`vulnops-profiles validate client.yaml ...`: check client profiles against their schema."""
 
 from __future__ import annotations

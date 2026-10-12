@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """Consolidate the asset observations of one client into an inventory, and re-key its findings.
 
 Reconciliation (minimal first scope): two host observations are the same asset when they share an

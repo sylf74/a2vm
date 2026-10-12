@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """verdict's two LLM tasks. Neither takes a triage decision; each one is optional.
 
 1. assess_ssvc_inputs  - Automatable / Technical Impact when neither CISA ADP data nor a CVSS

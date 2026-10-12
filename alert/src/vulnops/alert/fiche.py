@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """The alert sheet sent to a client, in the team's CVE sheet layout (French):
 
   CVE / Produit concerné / Type de vulnérabilité / CVSS / Impact principal / État d'exploitation /

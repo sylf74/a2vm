@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """Runtime settings shared by all stages (config/settings.yaml), with environment overrides for CI.
 
 Each stage reads its own section: `sources` (intel), `fuzzy_threshold` (detect), `policy` (verdict),

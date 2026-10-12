@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """Data sources: CVE JSON 5 records, CISA KEV, FIRST EPSS, cvelistV5 delta log, CERT-FR feeds.
 
 All network access goes through one httpx client (it honours HTTPS_PROXY / SSL_CERT_FILE) and a

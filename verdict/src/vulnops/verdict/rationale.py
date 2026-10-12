@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """French explanation of each triage row: a deterministic template, optionally rephrased by the LLM."""
 
 from __future__ import annotations
