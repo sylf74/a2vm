@@ -1,0 +1,96 @@
+# Watch sources read by vulnops-alert (watch mode), every 10 minutes.
+#
+#   category  institutional | vendor | research
+#   kind      certfr   CERT-FR alerts / advisories (RSS + JSON of each publication)
+#             kev      CISA Known Exploited Vulnerabilities
+#             cvelist  new CVE records (cvelistV5), matched against the client's assets and watchlist
+#             rss      any RSS 2.0 / Atom / RDF feed
+#             csaf     CSAF provider (url = provider-metadata.json): products and fixes, structured
+#             cna      no feed: the vendor publishes its CVEs as a CNA; its records arrive through
+#                      cvelist and are labelled with the vendor's name (vendors = names in the records)
+#   urgent    every publication of the source is urgent (otherwise: urgent when exploited, KEV, or
+#             critical on an Internet-exposed asset; info otherwise)
+#   enabled   false until the source has been checked from the runner:
+#             vulnops-alert check-sources --sources config/watch-sources.yaml
+#
+# A client project may provide its own watch-sources.yaml, which replaces this file for that client.
+
+version: 1
+sources:
+  # -- Institutional ------------------------------------------------------------------------------
+  - {id: certfr-alerte, category: institutional, kind: certfr, feed: alerte, urgent: true,
+     name: "CERT-FR — alertes"}
+  - {id: certfr-avis, category: institutional, kind: certfr, feed: avis,
+     name: "CERT-FR — avis"}
+  - {id: cisa-kev, category: institutional, kind: kev, urgent: true,
+     name: "CISA — KEV"}
+  - {id: cvelist, category: institutional, kind: cvelist,
+     name: "CVE (cvelistV5)"}
+  - {id: cisa-advisories, category: institutional, kind: rss,
+     url: "https://www.cisa.gov/cybersecurity-advisories/all.xml",
+     name: "CISA — avis"}
+  - {id: cert-eu, category: institutional, kind: rss,
+     url: "https://cert.europa.eu/publications/security-advisories-rss",
+     name: "CERT-EU — avis"}
+  - {id: jpcert, category: institutional, kind: rss, enabled: false,
+     url: "https://www.jpcert.or.jp/english/rss/jpcert-en.rdf",
+     name: "JPCERT/CC"}
+  - {id: cert-bund, category: institutional, kind: csaf, enabled: false,
+     url: "https://wid.cert-bund.de/.well-known/csaf/provider-metadata.json",
+     name: "BSI CERT-Bund (WID)", notes: "URL to check"}
+
+  # -- Vendors and manufacturers -----------------------------------------------------------------
+  - {id: microsoft, category: vendor, kind: rss,
+     url: "https://api.msrc.microsoft.com/update-guide/rss",
+     name: "Microsoft — Security Update Guide"}
+  - {id: microsoft-csaf, category: vendor, kind: csaf, enabled: false,
+     url: "https://msrc.microsoft.com/csaf/provider-metadata.json",
+     name: "Microsoft — CSAF", notes: "URL to check; would replace the RSS feed"}
+  - {id: cisco, category: vendor, kind: rss,
+     url: "https://sec.cloudapps.cisco.com/security/center/psirtrss20/CiscoSecurityAdvisory.xml",
+     name: "Cisco PSIRT"}
+  - {id: cisco-csaf, category: vendor, kind: csaf, enabled: false,
+     url: "https://www.cisco.com/.well-known/csaf/provider-metadata.json",
+     name: "Cisco — CSAF", notes: "would replace the RSS feed (fixes and products in the sheet)"}
+  - {id: fortinet, category: vendor, kind: rss,
+     url: "https://www.fortiguard.com/rss/ir.xml",
+     name: "Fortinet PSIRT"}
+  - {id: paloalto, category: vendor, kind: rss,
+     url: "https://security.paloaltonetworks.com/rss.xml",
+     name: "Palo Alto Networks"}
+  - {id: hpe, category: vendor, kind: rss, enabled: false,
+     url: "https://support.hpe.com/hpesc/public/api/document/sec_bull_rss_feed",
+     name: "HPE — bulletins de sécurité", notes: "URL to check"}
+  - {id: siemens, category: vendor, kind: csaf,
+     url: "https://cert-portal.siemens.com/productcert/csaf/provider-metadata.json",
+     name: "Siemens ProductCERT"}
+  - {id: redhat, category: vendor, kind: csaf, enabled: false,
+     url: "https://access.redhat.com/security/data/csaf/v2/provider-metadata.json",
+     name: "Red Hat", notes: "very large index; RHEL hosts are covered by the daily triage"}
+  - {id: ubuntu, category: vendor, kind: rss, enabled: false,
+     url: "https://ubuntu.com/security/notices/rss.xml",
+     name: "Ubuntu (USN)", notes: "URL to check; Ubuntu hosts are covered by the daily triage"}
+  # No public feed: their CVE records (as CNAs) are labelled with their name.
+  - {id: dell, category: vendor, kind: cna, vendors: [Dell], name: "Dell (CNA)"}
+  - {id: lenovo, category: vendor, kind: cna, vendors: [Lenovo], name: "Lenovo (CNA)"}
+  - {id: supermicro, category: vendor, kind: cna, vendors: [Supermicro, "Super Micro Computer, Inc."],
+     name: "Supermicro (CNA)", notes: "BMC / IPMI firmware"}
+  - {id: ami, category: vendor, kind: cna, vendors: [AMI, "American Megatrends"],
+     name: "AMI — MegaRAC (CNA)", notes: "BMC firmware used by many manufacturers"}
+  - {id: hpe-cna, category: vendor, kind: cna, vendors: [HPE, "Hewlett Packard Enterprise", "Hewlett Packard Enterprise (HPE)"],
+     name: "HPE (CNA)"}
+  - {id: vmware, category: vendor, kind: cna, vendors: [VMware, Broadcom], name: "VMware / Broadcom (CNA)"}
+  - {id: juniper, category: vendor, kind: cna, vendors: ["Juniper Networks"], name: "Juniper (CNA)"}
+  - {id: f5, category: vendor, kind: cna, vendors: [F5], name: "F5 (CNA)"}
+  - {id: ivanti, category: vendor, kind: cna, vendors: [Ivanti], name: "Ivanti (CNA)"}
+  - {id: citrix, category: vendor, kind: cna, vendors: [Citrix, "Cloud Software Group"], name: "Citrix (CNA)"}
+  - {id: sonicwall, category: vendor, kind: cna, vendors: [SonicWall], name: "SonicWall (CNA)"}
+  - {id: checkpoint, category: vendor, kind: cna, vendors: ["Check Point", "Check Point Software Technologies Ltd."],
+     name: "Check Point (CNA)"}
+  - {id: oracle, category: vendor, kind: cna, vendors: [Oracle, "Oracle Corporation"], name: "Oracle (CNA)"}
+  - {id: sap, category: vendor, kind: cna, vendors: [SAP, SAP_SE], name: "SAP (CNA)"}
+
+  # -- Research ------------------------------------------------------------------------------------
+  - {id: zdi, category: research, kind: rss,
+     url: "https://www.zerodayinitiative.com/rss/published/",
+     name: "Zero Day Initiative — avis publiés"}

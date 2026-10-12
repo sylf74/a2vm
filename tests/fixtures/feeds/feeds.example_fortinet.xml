@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel><title>Vendor PSIRT (test)</title>
+<item><title>FortiOS - heap overflow in SSL-VPN (CVE-2099-20001)</title>
+<link>https://psirt.example/FG-IR-99-001</link><guid>FG-IR-99-001</guid>
+<pubDate>Mon, 12 Oct 2099 06:00:00 +0000</pubDate>
+<description>&lt;p&gt;A heap-based overflow in &lt;b&gt;Fortinet FortiOS&lt;/b&gt; SSL-VPN may allow remote code execution.&lt;/p&gt;</description></item>
+<item><title>FortiClient - local privilege escalation</title>
+<link>https://psirt.example/FG-IR-99-002</link><guid>FG-IR-99-002</guid>
+<pubDate>Mon, 12 Oct 2099 05:00:00 +0000</pubDate><description>Unrelated product.</description></item>
+</channel></rss>

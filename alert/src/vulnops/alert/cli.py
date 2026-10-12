@@ -6,6 +6,7 @@
   send    mail the validated alerts of a watch run to the client: contacts.yaml (by level), plus
           alerts.recipients of client.yaml
   contacts check a contacts.yaml and list who receives what
+  check-sources  read every source of the watch catalogue once and say which ones work
 
 The analysts validate by running the manual "send-alerts" job of the watch pipeline: the alert mail
 links to it. Nothing reaches a client without that step.
@@ -26,6 +27,7 @@ from vulnops.detect.inventory import InventoryScanner
 from vulnops.intel.sources import Sources
 
 from .contacts import ContactsError, load_contacts, recipients
+from .feeds import load_catalogue
 from .fiche import build
 from .mail import MailError, message, send
 from .watch import State, discover, relevant
@@ -52,13 +54,18 @@ def cmd_watch(args: argparse.Namespace) -> int:
     llm = LlmClient(settings.llm) if settings.llm.enabled else None
     sources = Sources(settings.sources, fixtures_dir=args.fixtures)
     try:
-        items, errors = discover(sources, state)
+        catalogue = load_catalogue(args.sources) if args.sources and Path(args.sources).exists() else None
+        if catalogue:
+            enabled = [c for c in catalogue if c.enabled]
+            by_cat = {k: sum(c.category == k for c in enabled) for k in ("institutional", "vendor", "research")}
+            print(f"sources: {args.sources}, {len(enabled)} enabled ({by_cat})")
+        items, errors = discover(sources, state, catalogue=catalogue)
         if state.new:
             print(f"{profile.id}: first run, baseline recorded ({len(state.certfr)} CERT-FR, {len(state.kev)} KEV)")
             state.save()
             (out / "index.json").write_text("[]", encoding="utf-8")
             return 0
-        alerts = relevant(items, profile, sources, settings, InventoryScanner(settings, llm))
+        alerts = relevant(items, profile, sources, settings, InventoryScanner(settings, llm), state, catalogue)
         index = []
         for alert in alerts:
             fiche = build(alert, settings, llm)
@@ -151,6 +158,43 @@ def cmd_send(args: argparse.Namespace) -> int:
     return 1 if failed else 0
 
 
+def cmd_check_sources(args: argparse.Namespace) -> int:
+    """Read every source of the catalogue once (enabled or not) and report what came back."""
+    from .certfr import parse_feed
+    from .feeds import csaf_entries, csaf_index_url, parse_generic_feed
+
+    settings = load_settings(args.settings)
+    catalogue = load_catalogue(args.sources)
+    sources = Sources(settings.sources, fixtures_dir=args.fixtures)
+    bad = 0
+    try:
+        for src in catalogue:
+            flag = "on " if src.enabled else "off"
+            try:
+                if src.kind == "certfr":
+                    detail = f"{len(parse_feed(sources.certfr_feed(src.feed), src.feed))} publications"
+                elif src.kind == "kev":
+                    detail = f"{len(sources.kev())} entries"
+                elif src.kind == "rss":
+                    pubs = parse_generic_feed(sources.fetch_text(src.url), src)
+                    if not pubs:
+                        raise ValueError("no item")
+                    detail = f"{len(pubs)} items, latest: {pubs[0].title[:60]}"
+                elif src.kind == "csaf":
+                    kind, index = csaf_index_url(sources.fetch_json(src.url) or {})
+                    entries = csaf_entries(kind, index, sources.fetch_text(index))
+                    detail = f"{len(entries)} documents ({kind}), latest {entries[0][1] if entries else '-'}"
+                else:
+                    detail = "via cvelistV5" + (f" ({', '.join(src.vendors)})" if src.vendors else "")
+                print(f"OK  {flag} {src.category:<13} {src.id:<18} {detail}")
+            except Exception as exc:  # noqa: BLE001 - report every failure, whatever it is
+                bad += 1
+                print(f"KO  {flag} {src.category:<13} {src.id:<18} {type(exc).__name__}: {str(exc)[:150]}")
+    finally:
+        sources.close()
+    return 3 if bad else 0
+
+
 def cmd_contacts(args: argparse.Namespace) -> int:
     try:
         profile = load_profile(args.profile)
@@ -180,6 +224,11 @@ def main(argv: list[str] | None = None) -> int:
     w.add_argument("--fixtures", help="read sources from a fixtures directory (tests, demos)")
     w.add_argument("--no-llm", action="store_true")
     w.add_argument("--contacts", default="contacts.yaml", help="client contacts, named in the analysts' mail")
+    w.add_argument(
+        "--sources",
+        default="config/watch-sources.yaml",
+        help="catalogue of watch sources (default without the file: CERT-FR, KEV, cvelistV5)",
+    )
     w.set_defaults(func=cmd_watch)
     s = sub.add_parser("send", help="mail the alerts of a watch run to the client")
     s.add_argument("profile", help="client.yaml")
@@ -187,6 +236,11 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--only", nargs="*", help="alert ids to send (default: all)")
     s.add_argument("--contacts", default="contacts.yaml", help="client contacts (optional file)")
     s.set_defaults(func=cmd_send)
+    k = sub.add_parser("check-sources", help="read every watch source once and report (enabled or not)")
+    k.add_argument("--sources", default="config/watch-sources.yaml")
+    k.add_argument("--settings", default="config/settings.yaml")
+    k.add_argument("--fixtures", help="read sources from a fixtures directory")
+    k.set_defaults(func=cmd_check_sources)
     c = sub.add_parser("contacts", help="check contacts.yaml and list who receives what")
     c.add_argument("profile", help="client.yaml")
     c.add_argument("--contacts", default="contacts.yaml")

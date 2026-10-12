@@ -4,20 +4,43 @@ Every 10 minutes, each client project checks what is new and drafts an alert whe
 client. An analyst validates it with one click; only then is it mailed to the client.
 
 ```
-every 10 min   CERT-FR alerts and advisories (RSS + JSON of each publication)
-               CISA KEV additions
-               new CVE records: critical (CVSS >= 9) or exploited according to CISA ADP
+every 10 min   the sources of config/watch-sources.yaml, in three categories:
+                 institutional  CERT-FR (alerts, advisories), CISA (KEV, advisories), CERT-EU, ...
+                 vendor         Microsoft, Cisco, Fortinet, Palo Alto, HPE (RSS), Siemens (CSAF),
+                                and vendors without a feed (Dell, Lenovo, Supermicro, AMI, VMware,
+                                Ivanti...) through their CVE records as CNAs
+                 research       Zero Day Initiative
       |
       v        does it concern this client?
                - a CVE matches a declared asset (vendor / product / CPE / versions), or
-               - the CERT-FR publication names a declared product or a watchlist entry
+               - the publication (or the CVE record) names a declared product or a watchlist entry
+               - a CVE already alerted in the last 14 days is skipped, unless it becomes KEV
       v
-               alert sheet (French, team layout): why now, assets concerned, CVE, product,
-               type, CVSS, main impact, exploitation status, description, delay, links
+               alert sheet (French, team layout): why now and from which source, assets concerned,
+               CVE, product, type, CVSS, main impact, exploitation status, fixes, description,
+               delay, links
       v
-               mail to the analysts (VULNOPS_ANALYST_TO), with a link to the pipeline
+               mail to the analysts (VULNOPS_ANALYST_TO), naming the recipients, with a link
       v
-               analyst runs the manual job "send-alerts"  ->  mail to the client
+               analyst runs the manual job "send-alerts"  ->  mail to the client's contacts
+```
+
+Sources (`config/watch-sources.yaml`, or `watch-sources.yaml` in a client project to replace it):
+
+| kind | reads | notes |
+| --- | --- | --- |
+| `certfr` | CERT-FR RSS, then the JSON view of each publication | affected systems, risks, vendor advisories |
+| `kev` | CISA KEV | always urgent |
+| `cvelist` | new CVE records (cvelistV5 delta log) | matched against assets and watchlist |
+| `rss` | RSS 2.0, Atom, RDF | CVE ids and product names taken from title and summary |
+| `csaf` | CSAF provider metadata, then `changes.csv` or ROLIE | products, fixes and severity in the sheet |
+| `cna` | nothing by itself | labels the CVE records of a vendor without a feed |
+
+A source is read for the first time only to record its current state (no flood of old news).
+Sources marked `enabled: false` have URLs still to be checked from the runner:
+
+```bash
+vulnops-alert check-sources --sources config/watch-sources.yaml
 ```
 
 Levels:

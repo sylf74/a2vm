@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"><title>Institution (test)</title>
+<entry><title>Advisory on Example HR Portal</title><id>urn:adv:1</id>
+<link href="https://cert.example/adv/1"/><updated>2099-10-12T06:00:00Z</updated>
+<summary>Several vulnerabilities in Example HR Portal (CVE-2099-10001).</summary></entry>
+</feed>

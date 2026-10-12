@@ -37,6 +37,8 @@ class Publication:
     risks: list[str] = field(default_factory=list)
     summary: str = ""
     vendor_advisories: list[dict[str, str]] = field(default_factory=list)  # title, url
+    source: str = "CERT-FR"  # name of the source, as shown in the sheet
+    fixes: list[str] = field(default_factory=list)  # corrective versions or updates, when the source gives them
 
 
 def parse_feed(xml_text: str, kind: str) -> list[FeedItem]:

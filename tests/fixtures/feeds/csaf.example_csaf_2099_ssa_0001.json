@@ -1,0 +1,8 @@
+{"document": {"title": "SSA-0001: Vulnerabilities in SCALANCE X switches",
+  "tracking": {"id": "SSA-0001", "current_release_date": "2099-10-12T06:00:00Z"},
+  "aggregate_severity": {"text": "Critical"},
+  "notes": [{"category": "summary", "text": "SCALANCE X switches are affected by an authentication bypass."}],
+  "references": [{"category": "self", "url": "https://csaf.example/ssa-0001.html"}]},
+ "product_tree": {"branches": [{"category": "vendor", "name": "Siemens", "branches": [
+    {"category": "product_name", "name": "SCALANCE X", "branches": [{"category": "product_version_range", "name": "<V5.5"}]}]}]},
+ "vulnerabilities": [{"cve": "CVE-2099-20002", "remediations": [{"category": "vendor_fix", "details": "Update to V5.5 or later"}]}]}

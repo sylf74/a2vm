@@ -165,5 +165,22 @@ class Sources:
             return self._fixture(f"certfr/{ref}.json")
         return self._get_json(link.rstrip("/") + "/json/", 24)
 
+    # -- any feed (watch mode) -------------------------------------------------------------------
+    @staticmethod
+    def fixture_name(url: str) -> str:
+        return re.sub(r"[^A-Za-z0-9.]+", "_", url.split("://", 1)[-1]).strip("_")
+
+    def fetch_text(self, url: str, max_age_hours: float = 0.1) -> str:
+        if self.fixtures:
+            path = self.fixtures / "feeds" / self.fixture_name(url)
+            return path.read_text(encoding="utf-8") if path.exists() else ""
+        return self.get_text(url, max_age_hours)
+
+    def fetch_json(self, url: str, max_age_hours: float = 0.1) -> Any:
+        if self.fixtures:
+            text = self.fetch_text(url)
+            return json.loads(text) if text else None
+        return self._get_json(url, max_age_hours)
+
     def close(self) -> None:
         self._client.close()

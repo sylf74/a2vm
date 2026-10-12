@@ -1,0 +1,3 @@
+{"canonical_url": "https://csaf.example/.well-known/csaf/provider-metadata.json",
+ "distributions": [{"directory_url": "https://csaf.example/csaf/"}],
+ "publisher": {"name": "Example ProductCERT", "category": "vendor"}}

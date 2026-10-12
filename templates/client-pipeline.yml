@@ -4,15 +4,16 @@
 #   client.yaml      client profile (schema v2)
 #   targets.yaml     read-only SSH collection targets (optional: without it, declared inventory only)
 #   contacts.yaml    who receives the alerts, with their role and levels (optional)
+#   watch-sources.yaml  optional, replaces the code's catalogue of watch sources for this client
 #   settings.yaml    optional, overrides the default settings of the vulnops version in use
 #   .gitlab-ci.yml   includes this file at a fixed version:
 #
 #     include:
 #       - project: vulnops/vulnops
-#         ref: v0.6.2
+#         ref: v0.7.0
 #         file: templates/client-pipeline.yml
 #     variables:
-#       VULNOPS_REF: v0.6.2        # same version as the include
+#       VULNOPS_REF: v0.7.0        # same version as the include
 #
 # Jobs:
 #   push to the default branch     validate (profile and targets)
@@ -165,7 +166,8 @@ watch:
   allow_failure:
     exit_codes: [3]
   script:
-    - vulnops-alert watch "$VULNOPS_PROFILE" --settings "$SETTINGS" --state .watch/state.json --out alerts
+    - if [ -f watch-sources.yaml ]; then export SOURCES=watch-sources.yaml; else export SOURCES=.vulnops/config/watch-sources.yaml; fi
+    - vulnops-alert watch "$VULNOPS_PROFILE" --settings "$SETTINGS" --sources "$SOURCES" --state .watch/state.json --out alerts
   artifacts:
     when: always
     paths: [alerts/]

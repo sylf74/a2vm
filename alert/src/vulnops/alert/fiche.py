@@ -28,6 +28,7 @@ from .watch import Alert, exposure
 
 QUALIFIER = ((9.0, "critique"), (7.0, "élevé"), (4.0, "moyen"), (0.1, "faible"))
 LEVEL_FR = {"urgent": "URGENT", "info": "INFORMATION"}
+CATEGORY_FR = {"institutional": "source institutionnelle", "vendor": "éditeur / constructeur", "research": "recherche"}
 
 PROSE_SCHEMA = {
     "type": "object",
@@ -123,6 +124,8 @@ def build(alert: Alert, settings: Settings, llm: LlmClient | None = None) -> Fic
 
     # Why now, and which assets.
     why = [f"- {r[0].upper() + r[1:]}" for r in alert.reasons] or ["- Publication concernant vos produits."]
+    if item.source:
+        why.append(f"- Source : {item.source} ({CATEGORY_FR.get(item.category, item.category)})")
     fiche.sections.append(("Pourquoi cette alerte", why))
     concerned = []
     worst_exposed = False
@@ -137,7 +140,9 @@ def build(alert: Alert, settings: Settings, llm: LlmClient | None = None) -> Fic
             concerned.append(f"- {m[11:]} (produit de votre liste de surveillance)")
         elif not any(f.asset_ref == m for f in alert.findings):
             a = alert.assets.get(m)
-            concerned.append(f"- **{a.description if a else m}** (produit cité par le CERT-FR)")
+            concerned.append(
+                f"- **{a.description if a else m}** (produit cité par {pub.source if pub else 'la source'})"
+            )
     fiche.sections.append(("Vos actifs concernés", concerned or ["- Aucun actif identifié avec certitude."]))
 
     # CVE / product / type / CVSS.
@@ -213,12 +218,7 @@ def build(alert: Alert, settings: Settings, llm: LlmClient | None = None) -> Fic
             if any(_exploit_reference(r) or (r.adp_ssvc or {}).get("exploitation") == "poc" for r in recs)
             else "aucun identifié dans les sources"
         ),
-        "- Correctif : "
-        + (
-            "disponible — voir les avis éditeur en lien"
-            if (pub and pub.vendor_advisories) or any(_fix_reference(r) for r in recs)
-            else "aucun correctif identifié à ce jour dans les sources"
-        ),
+        "- Correctif : " + _fix_status(alert),
         "- Contournement : non précisé par les sources, voir les avis éditeur",
     ]
     fiche.sections.append(("État d'exploitation", status))
@@ -232,7 +232,7 @@ def build(alert: Alert, settings: Settings, llm: LlmClient | None = None) -> Fic
 
     links = []
     if pub:
-        links.append(f"- [{pub.ref} — CERT-FR]({pub.link})")
+        links.append(f"- [{pub.ref} — {pub.source}]({pub.link})")
         links += [f"- [{a['title'] or a['url']}]({a['url']})" for a in pub.vendor_advisories[:6]]
     for c in item.cves[:6]:
         links.append(f"- [{c} — cve.org](https://www.cve.org/CVERecord?id={c})")
@@ -249,6 +249,18 @@ def build(alert: Alert, settings: Settings, llm: LlmClient | None = None) -> Fic
             unique.append(line)
     fiche.sections.append(("Liens", unique))
     return fiche
+
+
+def _fix_status(alert: Alert) -> str:
+    pub, recs = alert.item.publication, alert.records
+    if pub and pub.fixes:
+        more = f" (+{len(pub.fixes) - 3} autres)" if len(pub.fixes) > 3 else ""
+        return "disponible — " + " ; ".join(pub.fixes[:3]) + more
+    if (pub and pub.kind in ("alerte", "avis") and pub.vendor_advisories) or any(_fix_reference(r) for r in recs):
+        return "disponible — voir les avis éditeur en lien"
+    if alert.item.category == "vendor" and pub:
+        return "voir l'avis de l'éditeur en lien"
+    return "aucun correctif identifié à ce jour dans les sources"
 
 
 def exposure_label(alert: Alert, asset_ref: str) -> str:
