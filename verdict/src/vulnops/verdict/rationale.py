@@ -28,6 +28,7 @@ BOD_FR = {
 }
 SOURCE_FR = {
     "kev": "catalogue KEV de la CISA",
+    "gti": "Google Threat Intelligence",
     "cisa-adp": "évaluation CISA Vulnrichment",
     "references": "lien d'exploit dans les références",
     "cvss-heuristic": "déduit du vecteur CVSS",

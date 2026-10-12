@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Data sources: CVE JSON 5 records, CISA KEV, FIRST EPSS, cvelistV5 delta log, CERT-FR feeds.
+"""Data sources: CVE JSON 5 records, CISA KEV, FIRST EPSS, cvelistV5 delta log, CERT-FR feeds,
+Google Threat Intelligence (optional, licensed).
 
 All network access goes through one httpx client (it honours HTTPS_PROXY / SSL_CERT_FILE) and a
 small file cache, so a daily run does not refetch what it already has. With `fixtures_dir`, the
@@ -27,6 +28,10 @@ class SourceError(RuntimeError):
     pass
 
 
+class SourceAuthError(SourceError):
+    """The source refused the credentials (HTTP 401 / 403): stop asking it for this run."""
+
+
 def cve_bucket(cve_id: str) -> tuple[str, str]:
     m = CVE_ID.match(cve_id)
     if not m:
@@ -51,22 +56,43 @@ class Sources:
             headers={"User-Agent": "verdict/0.1"},
         )
         self._kev: dict[str, dict[str, Any]] | None = None
+        self.gti_calls = 0  # network lookups made to GTI in this run (cache hits excluded)
 
     # -- plumbing ---------------------------------------------------------------------------
     def _cache_path(self, url: str) -> Path:
         return self.cache / (hashlib.sha256(url.encode()).hexdigest()[:32] + ".json")
 
-    def _get_json(self, url: str, max_age_hours: float, params: dict | None = None) -> Any:
-        key = url + ("?" + json.dumps(params, sort_keys=True) if params else "")
+    def _cached(self, key: str, max_age_hours: float) -> Path | None:
         path = self._cache_path(key)
         if path.exists() and time.time() - path.stat().st_mtime < max_age_hours * 3600:
+            return path
+        return None
+
+    def _get_json(
+        self,
+        url: str,
+        max_age_hours: float,
+        params: dict | None = None,
+        headers: dict[str, str] | None = None,
+        retries_429: int = 0,
+    ) -> Any:
+        key = url + ("?" + json.dumps(params, sort_keys=True) if params else "")
+        path = self._cache_path(key)
+        if self._cached(key, max_age_hours):
             return json.loads(path.read_text(encoding="utf-8"))
-        try:
-            resp = self._client.get(url, params=params)
-        except httpx.HTTPError as exc:
-            raise SourceError(f"GET {url}: {exc}") from exc
+        for attempt in range(retries_429 + 1):
+            try:
+                resp = self._client.get(url, params=params, headers=headers)
+            except httpx.HTTPError as exc:
+                raise SourceError(f"GET {url}: {exc}") from exc
+            if resp.status_code != 429 or attempt == retries_429:
+                break
+            wait = resp.headers.get("Retry-After", "")
+            time.sleep(min(float(wait), 60) if wait.isdigit() else 2 * (attempt + 1))
         if resp.status_code == 404:
             return None
+        if resp.status_code in (401, 403) and headers:
+            raise SourceAuthError(f"GET {url}: HTTP {resp.status_code} (credentials refused)")
         if resp.status_code >= 400:
             raise SourceError(f"GET {url}: HTTP {resp.status_code}")
         data = resp.json()
@@ -182,6 +208,28 @@ class Sources:
             text = self.fetch_text(url)
             return json.loads(text) if text else None
         return self._get_json(url, max_age_hours)
+
+    # -- Google Threat Intelligence ---------------------------------------------------------------
+    def gti_url(self, cve_id: str) -> str:
+        cve_bucket(cve_id)  # validates the id before it goes anywhere
+        return f"{self.settings.gti_url.rstrip('/')}/collections/vulnerability--{cve_id.lower()}"
+
+    def gti_cached(self, cve_id: str) -> bool:
+        if self.fixtures is not None:
+            return True
+        return self._cached(self.gti_url(cve_id), self.settings.gti_cache_hours) is not None
+
+    def gti_vulnerability(self, cve_id: str) -> dict[str, Any] | None:
+        """Raw GTI vulnerability object (`data` envelope), None when GTI has none for this CVE."""
+        if self.fixtures:
+            return self._fixture(f"gti/{cve_id}.json")
+        key = self.settings.gti_api_key
+        if not key:
+            raise SourceAuthError(f"GTI API key missing: set the variable {self.settings.gti_api_key_env}")
+        url = self.gti_url(cve_id)
+        if not self.gti_cached(cve_id):
+            self.gti_calls += 1
+        return self._get_json(url, self.settings.gti_cache_hours, headers={"x-apikey": key}, retries_429=3)
 
     def close(self) -> None:
         self._client.close()

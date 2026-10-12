@@ -10,10 +10,10 @@
 #
 #     include:
 #       - project: vulnops/vulnops
-#         ref: v0.7.0
+#         ref: v0.8.0
 #         file: templates/client-pipeline.yml
 #     variables:
-#       VULNOPS_REF: v0.7.0        # same version as the include
+#       VULNOPS_REF: v0.8.0        # same version as the include
 #
 # Jobs:
 #   push to the default branch     validate (profile and targets)
@@ -162,6 +162,7 @@ watch:
   resource_group: watch
   cache:
     - {key: pip, paths: [.pip-cache/]}
+    - {key: sources, paths: [.cache/]}  # CVE records and GTI answers, shared with the daily run
     - {key: watch-state, paths: [.watch/], when: always}
   allow_failure:
     exit_codes: [3]

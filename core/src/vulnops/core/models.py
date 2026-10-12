@@ -56,6 +56,7 @@ class VulnRecord:
     kev: dict[str, Any] | None = None  # entry of the CISA KEV catalogue, when listed
     epss: float | None = None
     epss_percentile: float | None = None
+    gti: dict[str, Any] | None = None  # Google Threat Intelligence vulnerability view (intel.gti)
 
     @property
     def in_kev(self) -> bool:
@@ -198,7 +199,7 @@ class Assessed:
     """A decision-point value together with where it came from."""
 
     value: str
-    source: str  # kev | cisa-adp | references | cvss-heuristic | llm | default | asset-profile
+    source: str  # kev | gti | cisa-adp | references | cvss-heuristic | llm | default | asset-profile
     note: str = ""
 
 

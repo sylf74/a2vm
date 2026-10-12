@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Collect vulnerability records: CVE JSON 5 record + KEV + EPSS, merged into one VulnRecord each."""
+"""Collect vulnerability records: CVE JSON 5 record + KEV + EPSS (+ GTI when enabled), merged into one
+VulnRecord each."""
 
 from __future__ import annotations
 
@@ -10,6 +11,7 @@ from typing import Any
 
 from vulnops.core.models import VulnRecord
 
+from .gti import enrich
 from .record import parse_record
 from .sources import SourceError, Sources
 
@@ -19,6 +21,7 @@ class Collection:
     requested: list[str]
     records: list[VulnRecord] = field(default_factory=list)
     errors: list[dict[str, str]] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)  # enrichment log lines (GTI)
 
 
 def select_cve_ids(
@@ -73,4 +76,6 @@ def collect(sources: Sources, cve_ids: list[str]) -> Collection:
         if cve_id in epss:
             record.epss, record.epss_percentile = epss[cve_id]
         out.records.append(record)
+    if getattr(sources.settings, "gti_enabled", False):
+        out.notes = enrich(sources, out.records)
     return out

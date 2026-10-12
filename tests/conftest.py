@@ -18,11 +18,11 @@ FIXTURES = ROOT / "tests" / "fixtures"
 
 @pytest.fixture(autouse=True)
 def isolated_environment(monkeypatch):
-    """Tests never see the CI/CD variables of the runner (LLM endpoint, API key, cache dir)."""
+    """Tests never see the CI/CD variables of the runner (LLM endpoint, API keys, cache dir)."""
     import os
 
     for name in list(os.environ):
-        if name.startswith(("VULNOPS_", "VERDICT_")) or name == "LLM_API_KEY":
+        if name.startswith(("VULNOPS_", "VERDICT_")) or name in ("LLM_API_KEY", "GTI_API_KEY"):
             monkeypatch.delenv(name)
 
 

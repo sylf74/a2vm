@@ -3,7 +3,8 @@
 #
 # Environment overrides (handy in GitLab CI):
 #   VULNOPS_LLM_ENABLED, VULNOPS_LLM_BASE_URL, VULNOPS_LLM_MODEL,
-#   VULNOPS_CACHE_DIR, VULNOPS_CVE_RECORD_URL (the former VERDICT_* names still work)
+#   VULNOPS_CACHE_DIR, VULNOPS_CVE_RECORD_URL, VULNOPS_GTI_ENABLED, VULNOPS_GTI_MAX_CALLS
+#   (the former VERDICT_* names still work)
 # Outbound HTTP honours HTTPS_PROXY / NO_PROXY and SSL_CERT_FILE.
 
 sources:
@@ -17,6 +18,14 @@ sources:
   cache_dir: ".cache"
   cve_cache_hours: 12
   feed_cache_hours: 6
+  # Google Threat Intelligence (licensed, optional): exploitation state of each CVE. Only CVE ids are
+  # sent. The key is read from the variable named in gti_api_key_env (masked CI/CD variable).
+  gti_enabled: false
+  gti_url: "https://www.virustotal.com/api/v3"
+  gti_api_key_env: "GTI_API_KEY"
+  gti_cache_hours: 24
+  gti_workers: 4
+  gti_max_calls: 2000          # network lookups per run, CVEs not in KEV and most severe first
 
 llm:
   enabled: false                      # true once the inference server is reachable

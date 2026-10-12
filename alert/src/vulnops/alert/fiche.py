@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from vulnops.core.config import Settings
+from vulnops.core.gti import gti_unconfirmed, ssvc_exploitation
 from vulnops.core.llm import LlmClient, LlmError
 from vulnops.core.llm.guard import unsupported_tokens
 from vulnops.core.models import AffectedEntry, VulnRecord
@@ -199,24 +200,16 @@ def build(alert: Alert, settings: Settings, llm: LlmClient | None = None) -> Fic
         )
     fiche.sections.append(("Impact principal", [impact or "Voir la description."]))
 
-    # Exploitation status.
+    # Exploitation status. GTI contributes facts only (states, dates), never its licensed prose.
     kev = [r for r in recs if r.in_kev]
     status = [
-        "- Exploitation connue : "
-        + (
-            "oui — catalogue KEV de la CISA"
-            + (
-                f" (ajout le {kev[0].kev.get('dateAdded')})"
-                if kev and kev[0].kev and kev[0].kev.get("dateAdded")
-                else ""
-            )
-            if kev
-            else "aucune exploitation signalée à ce jour"
-        ),
+        "- Exploitation connue : " + _exploitation_status(recs, kev),
         "- Exploit public : "
         + (
             "oui — preuve de concept référencée"
             if any(_exploit_reference(r) or (r.adp_ssvc or {}).get("exploitation") == "poc" for r in recs)
+            else "oui — exploit public (Google Threat Intelligence)"
+            if any(ssvc_exploitation(r.gti)[0] == "poc" for r in recs)
             else "aucun identifié dans les sources"
         ),
         "- Correctif : " + _fix_status(alert),
@@ -252,6 +245,22 @@ def build(alert: Alert, settings: Settings, llm: LlmClient | None = None) -> Fic
     return fiche
 
 
+def _exploitation_status(recs: list[VulnRecord], kev: list[VulnRecord]) -> str:
+    if kev:
+        added = kev[0].kev.get("dateAdded") if kev[0].kev else None
+        return "oui — catalogue KEV de la CISA" + (f" (ajout le {added})" if added else "")
+    gti = [r.gti for r in recs if ssvc_exploitation(r.gti)[0] == "active"]
+    if gti:
+        state = "généralisée" if gti[0].get("exploitation_state") == "wide" else "confirmée"
+        first = gti[0].get("first_exploitation")
+        return f"oui — exploitation {state} (Google Threat Intelligence)" + (
+            f", première exploitation observée le {first}" if first else ""
+        )
+    if any(gti_unconfirmed(r.gti) for r in recs):
+        return "signalée, non confirmée à ce jour (Google Threat Intelligence)"
+    return "aucune exploitation signalée à ce jour"
+
+
 def _fix_status(alert: Alert) -> str:
     pub, recs = alert.item.publication, alert.records
     if pub and pub.fixes:
@@ -282,6 +291,11 @@ def _facts(alert: Alert) -> str:
         "kev": [r.cve_id for r in recs if r.in_kev],
         "exploitation_cisa": {r.cve_id: (r.adp_ssvc or {}).get("exploitation") for r in recs if r.adp_ssvc},
         "preuve_de_concept": any(_exploit_reference(r) for r in recs),
+        "exploitation_gti": {
+            r.cve_id: {"etat": r.gti.get("exploitation_state"), "exploit": r.gti.get("exploit_availability")}
+            for r in recs
+            if r.gti
+        },
         "cvss": {r.cve_id: r.best_cvss().score for r in recs if r.best_cvss()},
         "cwe": sorted({c for r in recs for c in r.cwes}),
         "produits": sorted({f"{e.vendor} {e.product}" for r in recs for e in r.affected}),

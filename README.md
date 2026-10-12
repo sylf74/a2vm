@@ -131,6 +131,13 @@ Any OpenAI-compatible server with JSON-schema structured output (vLLM, SGLang). 
 `VULNOPS_LLM_MODEL` (the former `VERDICT_*` names still work). Each stage prints the LLM
 configuration it received at start-up, and the cause of any LLM fallback.
 
+## Google Threat Intelligence (optional)
+
+With a GTI licence, `VULNOPS_GTI_ENABLED=true` and a masked `GTI_API_KEY` variable, the intel stage
+adds GTI's exploitation state to each CVE (only CVE ids are sent). Confirmed exploitation counts as
+active in SSVC and makes a watch alert urgent; GTI's licensed prose stays with the analysts
+(`docs/gti.md`).
+
 ## Watch mode: alerts
 
 Every 10 minutes, each client project checks CERT-FR, CISA KEV and new critical CVEs, matches them
@@ -165,6 +172,8 @@ templates/client-pipeline.yml              pipeline included by every client pro
 examples/                                  fictitious client projects (profile, targets, CI)
 docs/deployment.md                         GitLab groups, runner, code and client projects
 docs/scanning.md                           read-only scanner set-up
+docs/alerts.md                             watch mode, sources, alert sheets, mail
+docs/gti.md                                Google Threat Intelligence connector
 tests/                                     tests and offline fixtures
 scripts/run-pipeline.sh                    the CI pipeline, locally
 .gitlab/CODEOWNERS                         one owner per stage

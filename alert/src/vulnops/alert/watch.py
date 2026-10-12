@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any
 
 from vulnops.core.config import Settings
+from vulnops.core.gti import ssvc_exploitation
 from vulnops.core.models import ClientProfile, DeclaredAsset, Finding, VulnRecord
 from vulnops.detect.inventory import InventoryScanner
 from vulnops.intel.collect import collect
@@ -280,6 +281,7 @@ def exposure(profile: ClientProfile, asset: DeclaredAsset | None) -> str:
 def _critical(record: VulnRecord) -> bool:
     metric = record.best_cvss()
     exploited = (record.adp_ssvc or {}).get("exploitation") in {"poc", "active"}
+    exploited = exploited or ssvc_exploitation(record.gti)[0] in {"poc", "active"}
     return record.in_kev or exploited or bool(metric and metric.score and metric.score >= 9.0)
 
 
@@ -293,7 +295,12 @@ def relevant(
     catalogue: list[Source] | None = None,
 ) -> list[Alert]:
     wanted = sorted({c for it in items for c in it.cves})
-    records = {r.cve_id: r for r in collect(sources, wanted).records} if wanted else {}
+    records: dict[str, VulnRecord] = {}
+    if wanted:
+        collection = collect(sources, wanted)
+        records = {r.cve_id: r for r in collection.records}
+        for note in collection.notes:
+            print(note)
     assets = {a.id: a for a in profile.assets}
     level_wanted = profile.alerts.get("level", "urgent")
     alerts = []
@@ -313,6 +320,8 @@ def relevant(
         reasons = []
         if it.origin == "kev" or any(r.in_kev for r in recs):
             reasons.append("exploitation active (catalogue KEV de la CISA)")
+        elif any(ssvc_exploitation(r.gti)[0] == "active" for r in recs):  # often before KEV
+            reasons.append("exploitation confirmée par Google Threat Intelligence")
         if it.urgent_source and it.origin != "kev":
             reasons.append(f"publication {it.source}")
         if any((r.adp_ssvc or {}).get("exploitation") in {"poc", "active"} for r in recs):

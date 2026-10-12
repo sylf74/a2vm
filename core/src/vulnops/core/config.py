@@ -20,6 +20,7 @@ DELTA_LOG_URL = "https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cve
 KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
 EPSS_URL = "https://api.first.org/data/v1/epss"
 CERTFR_URL = "https://www.cert.ssi.gouv.fr"
+GTI_URL = "https://www.virustotal.com/api/v3"
 
 
 @dataclass
@@ -34,6 +35,17 @@ class SourceSettings:
     cve_cache_hours: float = 12
     feed_cache_hours: float = 6
     fetch_workers: int = 8  # parallel CVE record downloads (scanner runs request thousands)
+    # Google Threat Intelligence (VirusTotal API v3): vulnerability objects. Only CVE ids are sent.
+    gti_enabled: bool = False
+    gti_url: str = GTI_URL
+    gti_api_key_env: str = "GTI_API_KEY"
+    gti_cache_hours: float = 24
+    gti_workers: int = 4
+    gti_max_calls: int = 2000  # network lookups per run (cached answers are free); most urgent CVEs first
+
+    @property
+    def gti_api_key(self) -> str | None:
+        return os.environ.get(self.gti_api_key_env) or None
 
 
 @dataclass
@@ -73,6 +85,8 @@ _ENV_OVERRIDES = {
     "LLM_MAX_CALLS": ("llm", "max_calls"),
     "CACHE_DIR": ("sources", "cache_dir"),
     "CVE_RECORD_URL": ("sources", "cve_record_url"),
+    "GTI_ENABLED": ("sources", "gti_enabled"),
+    "GTI_MAX_CALLS": ("sources", "gti_max_calls"),
 }
 ENV_PREFIXES = ("VULNOPS_", "VERDICT_")
 
@@ -124,3 +138,12 @@ def describe_llm(settings: Settings) -> str:
         return "LLM: disabled"
     key = "set" if llm.api_key else "not set"
     return f"LLM: enabled, base_url={llm.base_url}, model={llm.model}, api key {key}"
+
+
+def describe_gti(settings: Settings) -> str:
+    """One log line on the Google Threat Intelligence configuration (never the key)."""
+    src = settings.sources
+    if not src.gti_enabled:
+        return "GTI: disabled"
+    key = "set" if src.gti_api_key else f"NOT SET ({src.gti_api_key_env})"
+    return f"GTI: enabled, url={src.gti_url}, api key {key}, max {src.gti_max_calls} lookups"

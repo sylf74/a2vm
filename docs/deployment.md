@@ -50,6 +50,8 @@ detection files in `work/detect` carry what the later stages use.
 | `LLM_API_KEY` | (only if the server requires one) | Masked, protected |
 
 A client project can override any of them (e.g. another engine for a client that allows cloud).
+Optional Google Threat Intelligence enrichment: `VULNOPS_GTI_ENABLED` and `GTI_API_KEY` (masked,
+protected), see `docs/gti.md`.
 
 ## 4. Code project `vulnops/vulnops`
 
@@ -78,10 +80,10 @@ The code project's own pipeline only runs lint, tests and the offline examples.
 ```yaml
 include:
   - project: vulnops/vulnops
-    ref: v0.7.0
+    ref: v0.8.0
     file: templates/client-pipeline.yml
 variables:
-  VULNOPS_REF: v0.7.0
+  VULNOPS_REF: v0.8.0
 ```
 
 3. If `targets.yaml` is used: scan key and target accounts as in `docs/scanning.md`, then the
@@ -96,7 +98,7 @@ inventory are in the `triage` job artifacts (30 days).
 
 ## 6. Releasing a new version
 
-1. Bump `version` in the five `pyproject.toml`, merge, tag `vX.Y.Z` on `main`, push the tag: the
+1. Bump `version` in the six `pyproject.toml`, merge, tag `vX.Y.Z` on `main`, push the tag: the
    `release` job checks that the tag and the package versions agree.
 2. In each client project, change `ref` and `VULNOPS_REF` in `.gitlab-ci.yml`, one client at a
    time if needed.

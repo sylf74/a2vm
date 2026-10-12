@@ -21,6 +21,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
 from vulnops.core.config import Settings
+from vulnops.core.gti import RANK, gti_unconfirmed, ssvc_exploitation
 from vulnops.core.io import now
 from vulnops.core.llm import LlmClient, LlmError
 from vulnops.core.models import (
@@ -105,16 +106,27 @@ class Triage:
         review: list[str] = []
         adp = record.adp_ssvc or {}
 
+        # Every source that has an opinion; the highest value wins (a source never lowers another),
+        # ties go to the first listed: KEV, GTI, CISA ADP, exploit-tagged references.
+        gti_value, gti_note = ssvc_exploitation(record.gti)
+        candidates: list[Assessed] = []
         if record.in_kev:
-            exploitation = Assessed("active", "kev")
-        elif "exploitation" in adp:
-            exploitation = Assessed(adp["exploitation"], "cisa-adp", adp.get("timestamp", ""))
-        elif any("exploit" in (t or "").lower() for r in record.references for t in r.get("tags", []) or []):
-            exploitation = Assessed("poc", "references")
-            review.append("exploitation déduite d'une référence taguée « exploit »")
+            candidates.append(Assessed("active", "kev"))
+        if gti_value:
+            candidates.append(Assessed(gti_value, "gti", gti_note))
+        if "exploitation" in adp:
+            candidates.append(Assessed(adp["exploitation"], "cisa-adp", adp.get("timestamp", "")))
+        if any("exploit" in (t or "").lower() for r in record.references for t in r.get("tags", []) or []):
+            candidates.append(Assessed("poc", "references"))
+        if candidates:
+            exploitation = max(candidates, key=lambda c: RANK[c.value])  # max() keeps the first of equals
+            if exploitation.source == "references":
+                review.append("exploitation déduite d'une référence taguée « exploit »")
         else:
             exploitation = Assessed("none", "default")
             review.append("pas d'évaluation CISA de l'exploitation")
+        if gti_unconfirmed(record.gti) and exploitation.value != "active":
+            review.append(f"exploitation signalée ou suspectée par GTI, non confirmée ({gti_note})")
 
         automatable = technical_impact = None
         if "automatable" in adp and "technical_impact" in adp:
