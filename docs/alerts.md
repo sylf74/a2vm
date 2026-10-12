@@ -79,6 +79,21 @@ CERT-FR summary or the vendor's description.
      watchlist: ["Fortinet FortiOS", "Microsoft Exchange Server"]   # products not declared as assets
    ```
 
+   Contacts with their role go in `contacts.yaml` of the client project (optional; checked by the
+   `validate` job; `vulnops-alert contacts client.yaml` lists who receives what):
+
+   ```yaml
+   schema_version: 1
+   contacts:
+     - {name: Jeanne Martin, role: RSSI, email: rssi@client.example}
+     - {name: CERT, role: CERT, email: cert@client.example}
+     - {name: Paul Durand, role: DSI, email: dsi@client.example, receive: [urgent]}
+     - {role: chef du SOC, email: soc@client.example, active: false, notes: "absent until 3 Nov"}
+   ```
+
+   `receive` filters by alert level (default: both), `active: false` keeps a contact on file without
+   sending. The analysts' mail names who will receive the alert (name and role) before validation.
+
 3. Client project > Build > Pipeline schedules > New schedule: `*/10 * * * *`, branch `main`,
    variable `VULNOPS_JOB` = `watch`. Keep the daily triage schedule as it is.
 

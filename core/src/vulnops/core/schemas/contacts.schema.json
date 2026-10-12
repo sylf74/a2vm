@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vulnops.example/schemas/contacts.schema.json",
+  "title": "vulnops client contacts",
+  "description": "Who receives the client's alerts (contacts.yaml of the client project), with their role.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "contacts"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "contacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["email"],
+        "properties": {
+          "email": {"type": "string", "pattern": "^[^@\\s]+@[^@\\s]+$"},
+          "name": {"type": "string"},
+          "role": {"type": "string", "description": "Free text: RSSI, chef du SOC, CERT, DSI, responsable d'exploitation..."},
+          "receive": {
+            "type": "array",
+            "items": {"enum": ["urgent", "info"]},
+            "uniqueItems": true,
+            "minItems": 1,
+            "description": "Alert levels this contact receives. Default: both."
+          },
+          "active": {"type": "boolean", "description": "false keeps the contact listed without sending to it. Default: true."},
+          "notes": {"type": "string"}
+        }
+      }
+    }
+  }
+}

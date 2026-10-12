@@ -1,0 +1,8 @@
+# Who receives this client's alerts (fictitious example). Roles are free text; `receive` filters by
+# alert level (default: urgent and info); `active: false` keeps a contact on file without sending.
+schema_version: 1
+contacts:
+  - {name: Jeanne Martin, role: RSSI, email: rssi@lab.example}
+  - {name: CERT, role: CERT, email: cert@lab.example}
+  - {name: Paul Durand, role: DSI, email: dsi@lab.example, receive: [urgent]}
+  - {role: chef du SOC, email: soc@lab.example, active: false, notes: "absent jusqu'au 3 novembre"}

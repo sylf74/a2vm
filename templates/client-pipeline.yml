@@ -3,15 +3,16 @@
 # A client project holds only its own data:
 #   client.yaml      client profile (schema v2)
 #   targets.yaml     read-only SSH collection targets (optional: without it, declared inventory only)
+#   contacts.yaml    who receives the alerts, with their role and levels (optional)
 #   settings.yaml    optional, overrides the default settings of the vulnops version in use
 #   .gitlab-ci.yml   includes this file at a fixed version:
 #
 #     include:
 #       - project: vulnops/vulnops
-#         ref: v0.6.1
+#         ref: v0.6.2
 #         file: templates/client-pipeline.yml
 #     variables:
-#       VULNOPS_REF: v0.6.1        # same version as the include
+#       VULNOPS_REF: v0.6.2        # same version as the include
 #
 # Jobs:
 #   push to the default branch     validate (profile and targets)
@@ -78,6 +79,7 @@ validate:
   script:
     - vulnops-profiles validate "$VULNOPS_PROFILE"
     - if [ -f "$VULNOPS_TARGETS" ]; then vulnops-detect plan "$VULNOPS_TARGETS" --profile "$VULNOPS_PROFILE"; fi
+    - if [ -f contacts.yaml ]; then vulnops-alert contacts "$VULNOPS_PROFILE" --contacts contacts.yaml; fi
 
 # Exit code 3 = collection incomplete: the job shows as a warning and the pipeline goes on with
 # what was collected (plus the declared inventory).

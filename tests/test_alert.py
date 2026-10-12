@@ -133,3 +133,22 @@ def test_graph_transport(monkeypatch):
     out = send(msg, transport=httpx.MockTransport(handler))
     assert "Microsoft Graph" in out and len(calls) == 2
     assert "/users/veille@x.example/sendMail" in str(calls[1].url)
+
+
+def test_contacts_by_level_and_role(tmp_path, capsys):
+    from vulnops.alert.contacts import load_contacts, recipients
+    from vulnops.core.profile import load_profile
+
+    lab = ROOT / "examples" / "lab"
+    contacts = load_contacts(lab / "contacts.yaml")
+    profile = load_profile(lab / "client.yaml")
+    urgent = [c.email for c in recipients("urgent", contacts, profile)]
+    info = [c.email for c in recipients("info", contacts, profile)]
+    assert urgent == ["rssi@lab.example", "cert@lab.example", "dsi@lab.example", "admin@lab.example"]
+    assert "dsi@lab.example" not in info and "soc@lab.example" not in urgent  # level filter, inactive
+    assert main(["contacts", str(lab / "client.yaml"), "--contacts", str(lab / "contacts.yaml")]) == 0
+    assert "Jeanne Martin (RSSI)" in capsys.readouterr().out
+
+    bad = tmp_path / "contacts.yaml"
+    bad.write_text("schema_version: 1\ncontacts:\n  - {name: X, email: not-an-address}\n")
+    assert main(["contacts", str(lab / "client.yaml"), "--contacts", str(bad)]) == 2

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vulnops-intel"
-version = "0.6.1"
+version = "0.6.2"
 description = "vulnops intelligence stage: collects and normalises vulnerability records."
 requires-python = ">=3.11"
 dependencies = ["vulnops-core"]
