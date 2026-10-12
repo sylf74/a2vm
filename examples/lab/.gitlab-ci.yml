@@ -1,8 +1,8 @@
 # Client project pipeline: everything comes from the vulnops code project, at a fixed version.
 include:
   - project: vulnops/vulnops
-    ref: v0.6.0
+    ref: v0.6.1
     file: templates/client-pipeline.yml
 
 variables:
-  VULNOPS_REF: v0.6.0   # keep equal to the include ref
+  VULNOPS_REF: v0.6.1   # keep equal to the include ref

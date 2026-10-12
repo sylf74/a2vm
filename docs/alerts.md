@@ -49,6 +49,27 @@ CERT-FR summary or the vendor's description.
    Without `VULNOPS_SMTP_HOST`, nothing is sent: messages are written to `alerts/outbox/*.eml`
    (job artifacts), which is a convenient dry run.
 
+   **Per client:** a variable set on a client project overrides the group's one. A client whose
+   alerts must leave from its own Microsoft 365 tenant (or another relay) gets its own mail
+   variables in its project; the others use the group's.
+
+   **Microsoft 365 (Exchange Online):** SMTP with a password (Basic auth) is being switched off by
+   Microsoft; use Microsoft Graph instead (`VULNOPS_MAIL_TRANSPORT=graph`):
+
+   | Key | Value |
+   | --- | --- |
+   | `VULNOPS_MAIL_TRANSPORT` | `graph` |
+   | `VULNOPS_GRAPH_TENANT_ID` | directory (tenant) id |
+   | `VULNOPS_GRAPH_CLIENT_ID` | application (client) id |
+   | `VULNOPS_GRAPH_CLIENT_SECRET` | client secret — masked and hidden, protected |
+   | `VULNOPS_GRAPH_SENDER` | mailbox that sends, e.g. `veille@example.com` |
+
+   In Entra ID: App registrations > New registration; Certificates & secrets > New client secret;
+   API permissions > Microsoft Graph > Application permissions > `Mail.Send`, then grant admin
+   consent. Restrict the application to the sending mailbox only (Exchange Online RBAC for
+   Applications, or an application access policy): without it, `Mail.Send` allows sending as any
+   mailbox of the tenant.
+
 2. In `client.yaml` of the client project:
 
    ```yaml

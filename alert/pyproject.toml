@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vulnops-alert"
-version = "0.6.0"
+version = "0.6.1"
 description = "vulnops watch mode: new CERT-FR, KEV and critical CVEs matched to each client, drafted as alerts for an analyst to validate and send."
 requires-python = ">=3.11"
 dependencies = ["vulnops-core", "vulnops-intel", "vulnops-detect", "vulnops-verdict"]

@@ -106,3 +106,30 @@ def test_prose_written_by_llm_and_guarded(settings):
     assert rejected.prose_source.startswith("template (LLM output rejected: 11.1.9")
     accepted = build(alert, settings, llm)
     assert accepted.prose_source.startswith("llm") and "Faille GlobalProtect." in accepted.markdown()
+
+
+def test_graph_transport(monkeypatch):
+    import httpx
+
+    from vulnops.alert.mail import message, send
+
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        if "login.microsoftonline.com" in str(request.url):
+            assert b"client_credentials" in request.content
+            return httpx.Response(200, json={"access_token": "t0k"})
+        assert request.headers["Authorization"] == "Bearer t0k"
+        body = json.loads(request.content)
+        assert body["message"]["toRecipients"] == [{"emailAddress": {"address": "rssi@client.example"}}]
+        assert body["message"]["body"]["contentType"] == "HTML"
+        return httpx.Response(202)
+
+    for k, v in {"TENANT_ID": "tid", "CLIENT_ID": "cid", "CLIENT_SECRET": "sec", "SENDER": "veille@x.example"}.items():
+        monkeypatch.setenv(f"VULNOPS_GRAPH_{k}", v)
+    monkeypatch.setenv("VULNOPS_MAIL_TRANSPORT", "graph")
+    msg = message("Sujet", "<p>fiche</p>", "fiche", ["rssi@client.example"], "veille@x.example")
+    out = send(msg, transport=httpx.MockTransport(handler))
+    assert "Microsoft Graph" in out and len(calls) == 2
+    assert "/users/veille@x.example/sendMail" in str(calls[1].url)
