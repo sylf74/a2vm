@@ -1,7 +1,7 @@
 # Editable install of every stage + test tooling (local development and CI).
 -e ./core
 -e ./intel
--e ./detect
+-e ./detect[openvas]   # python-gvm and lxml: the OpenVAS tests need them
 -e ./assets
 -e ./verdict
 -e ./alert
