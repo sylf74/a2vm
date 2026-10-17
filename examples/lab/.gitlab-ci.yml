@@ -1,8 +1,11 @@
 # Client project pipeline: everything comes from the vulnops code project, at a fixed version.
 include:
   - project: vulnops/vulnops
-    ref: v0.8.0
+    ref: v0.9.0
     file: templates/client-pipeline.yml
 
 variables:
-  VULNOPS_REF: v0.8.0   # keep equal to the include ref
+  VULNOPS_REF: v0.9.0   # keep equal to the include ref
+  # Where this client's jobs run (docs/deployment-modes.md). One runner for everything here.
+  # VULNOPS_RUNNER_DATA: llm-lan     # jobs that read client data and use the local LLM
+  # VULNOPS_RUNNER_PUBLIC: llm-lan   # jobs that only fetch public data

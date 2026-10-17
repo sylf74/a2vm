@@ -3,7 +3,10 @@
 
   watch   new CERT-FR publications, KEV additions and critical CVEs since the last run, matched to
           the client; each match becomes an alert sheet (Markdown + HTML) mailed to the analysts
-          (VULNOPS_ANALYST_TO) for validation
+          (VULNOPS_ANALYST_TO) for validation. With --bundle, the new items come from a bundle
+          written by `discover` and nothing is read from the network.
+  discover  the public half of the watch: read the sources, write what is new to a bundle (no client
+          data involved; for a runner in another zone than the one holding client data)
   send    mail the validated alerts of a watch run to the client: contacts.yaml (by level), plus
           alerts.recipients of client.yaml
   contacts check a contacts.yaml and list who receives what
@@ -27,6 +30,7 @@ from vulnops.core.profile import ProfileError, load_profile
 from vulnops.detect.inventory import InventoryScanner
 from vulnops.intel.sources import Sources
 
+from .bundle import read_bundle, write_bundle
 from .contacts import ContactsError, load_contacts, recipients
 from .feeds import load_catalogue
 from .fiche import build
@@ -52,20 +56,35 @@ def cmd_watch(args: argparse.Namespace) -> int:
     state = State.load(args.state)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
+    if args.bundle:
+        try:
+            bundled, baseline, upstream = read_bundle(args.bundle)
+        except (OSError, ValueError) as exc:
+            print(f"bundle {args.bundle}: {exc}", file=sys.stderr)
+            return 2
+        print(f"bundle: {args.bundle}, {len(bundled)} new items, {len(upstream)} errors on the discovery side")
+        if baseline:
+            print(f"{profile.id}: discovery baseline, nothing to match yet")
+            (out / "index.json").write_text("[]", encoding="utf-8")
+            state.save()
+            return 0
     llm = LlmClient(settings.llm) if settings.llm.enabled else None
-    sources = Sources(settings.sources, fixtures_dir=args.fixtures)
+    sources = Sources(settings.sources, fixtures_dir=args.bundle or args.fixtures)
     try:
         catalogue = load_catalogue(args.sources) if args.sources and Path(args.sources).exists() else None
         if catalogue:
             enabled = [c for c in catalogue if c.enabled]
             by_cat = {k: sum(c.category == k for c in enabled) for k in ("institutional", "vendor", "research")}
             print(f"sources: {args.sources}, {len(enabled)} enabled ({by_cat})")
-        items, errors = discover(sources, state, catalogue=catalogue)
-        if state.new:
-            print(f"{profile.id}: first run, baseline recorded ({len(state.certfr)} CERT-FR, {len(state.kev)} KEV)")
-            state.save()
-            (out / "index.json").write_text("[]", encoding="utf-8")
-            return 0
+        if args.bundle:
+            items, errors = bundled, []
+        else:
+            items, errors = discover(sources, state, catalogue=catalogue)
+            if state.new:
+                print(f"{profile.id}: first run, baseline recorded ({len(state.certfr)} CERT-FR, {len(state.kev)} KEV)")
+                state.save()
+                (out / "index.json").write_text("[]", encoding="utf-8")
+                return 0
         alerts = relevant(items, profile, sources, settings, InventoryScanner(settings, llm), state, catalogue)
         index = []
         for alert in alerts:
@@ -118,6 +137,31 @@ def cmd_watch(args: argparse.Namespace) -> int:
         except MailError as exc:
             print(f"  ERROR mail to analysts: {exc}", file=sys.stderr)
             errors.append(str(exc))
+    return 3 if errors else 0
+
+
+def cmd_discover(args: argparse.Namespace) -> int:
+    """Public half of the watch: what is new since the last run, written to a bundle."""
+    settings = load_settings(args.settings)
+    settings.sources.feed_cache_hours = min(settings.sources.feed_cache_hours, 0.1)
+    state = State.load(args.state)
+    sources = Sources(settings.sources, fixtures_dir=args.fixtures)
+    try:
+        catalogue = load_catalogue(args.sources) if args.sources and Path(args.sources).exists() else None
+        if catalogue:
+            print(f"sources: {args.sources}, {sum(c.enabled for c in catalogue)} enabled")
+        items, errors = discover(sources, state, catalogue=catalogue)
+        baseline = state.new
+        notes = write_bundle(sources, settings, [] if baseline else items, errors, args.out, baseline)
+    finally:
+        sources.close()
+    state.save()
+    if baseline:
+        print(f"first run, baseline recorded ({len(state.certfr)} CERT-FR, {len(state.kev)} KEV)")
+    for note in notes:
+        print(note)
+    for e in errors:
+        print(f"  ERROR {e}", file=sys.stderr)
     return 3 if errors else 0
 
 
@@ -230,7 +274,15 @@ def main(argv: list[str] | None = None) -> int:
         default="config/watch-sources.yaml",
         help="catalogue of watch sources (default without the file: CERT-FR, KEV, cvelistV5)",
     )
+    w.add_argument("--bundle", help="match the items of a bundle written by `discover` (no network access)")
     w.set_defaults(func=cmd_watch)
+    d = sub.add_parser("discover", help="public half of the watch: write what is new to a bundle")
+    d.add_argument("--settings", default="config/settings.yaml")
+    d.add_argument("--state", default=".cache/discover-state.json", help="what was already seen (kept between runs)")
+    d.add_argument("--out", default="bundle")
+    d.add_argument("--fixtures", help="read sources from a fixtures directory (tests, demos)")
+    d.add_argument("--sources", default="config/watch-sources.yaml", help="catalogue of watch sources")
+    d.set_defaults(func=cmd_discover)
     s = sub.add_parser("send", help="mail the alerts of a watch run to the client")
     s.add_argument("profile", help="client.yaml")
     s.add_argument("--alerts", default="alerts")
