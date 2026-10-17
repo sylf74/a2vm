@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vulnops-assets"
-version = "0.8.3"
+version = "0.8.4"
 description = "vulnops assets stage: multi-tenant asset inventory consolidated from detection observations."
 requires-python = ">=3.11"
 license = {text = "AGPL-3.0-only"}

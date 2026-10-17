@@ -11,10 +11,10 @@
 #
 #     include:
 #       - project: vulnops/vulnops
-#         ref: v0.8.3
+#         ref: v0.8.4
 #         file: templates/client-pipeline.yml
 #     variables:
-#       VULNOPS_REF: v0.8.3        # same version as the include
+#       VULNOPS_REF: v0.8.4        # same version as the include
 #
 # Jobs:
 #   push to the default branch     validate (profile and targets)
@@ -28,6 +28,9 @@
 #   VULNOPS_GVM_USER, VULNOPS_GVM_PASSWORD (masked)   OpenVAS (GMP) account, when targets.yaml has
 #                            an openvas section; VULNOPS_GVM_CA, VULNOPS_GVM_CERT, VULNOPS_GVM_KEY
 #                            (File) for a tls:// GMP endpoint with client certificates (docs/openvas.md)
+#   VULNOPS_RUNNER_TAG, VULNOPS_COLLECT_TAG   runner tags (default llm-lan): set VULNOPS_COLLECT_TAG
+#                            in the client .gitlab-ci.yml to run the collection on the scanner host
+#                            itself (docs/openvas.md, "Scanner host as runner")
 #   VULNOPS_LLM_ENABLED, VULNOPS_LLM_BASE_URL, VULNOPS_LLM_MODEL, LLM_API_KEY   (usually set on the group)
 #   VULNOPS_SMTP_HOST, VULNOPS_SMTP_PORT, VULNOPS_SMTP_TLS, VULNOPS_SMTP_USER, VULNOPS_SMTP_PASSWORD,
 #   VULNOPS_MAIL_FROM, VULNOPS_ANALYST_TO   (watch mode, usually set on the group)
@@ -45,12 +48,14 @@ variables:
   DEBIAN_FRONTEND: noninteractive
   PIP_ROOT_USER_ACTION: ignore
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  VULNOPS_RUNNER_TAG: llm-lan
+  VULNOPS_COLLECT_TAG: llm-lan
 
 stages: [validate, collect, intel, detect, assets, triage, watch, send]
 
 .vulnops:
   image: python:3.12-slim
-  tags: [llm-lan]
+  tags: ["$VULNOPS_RUNNER_TAG"]
   interruptible: false
   cache:
     - {key: pip, paths: [.pip-cache/]}
@@ -59,8 +64,12 @@ stages: [validate, collect, intel, detect, assets, triage, watch, send]
     - apt-get update -qq && apt-get install -y -qq git openssh-client >/dev/null
     # GitLab behind a private CA: the runner hands its CA file to the job
     - if [ -n "${CI_SERVER_TLS_CA_FILE:-}" ]; then export GIT_SSL_CAINFO="$CI_SERVER_TLS_CA_FILE"; fi
+    # GitLab behind a reverse proxy that asks for a client certificate (runner tls-cert-file)
+    - if [ -n "${CI_SERVER_TLS_CERT_FILE:-}" ]; then export GIT_SSL_CERT="$CI_SERVER_TLS_CERT_FILE" GIT_SSL_KEY="$CI_SERVER_TLS_KEY_FILE"; fi
+    # A runner outside the LAN reaches GitLab by another URL: VULNOPS_SERVER_URL in its environment
+    - BASE="${VULNOPS_SERVER_URL:-${CI_SERVER_PROTOCOL}://${CI_SERVER_HOST}:${CI_SERVER_PORT}}"
     - git -c advice.detachedHead=false clone -q --depth 1 --branch "$VULNOPS_REF"
-        "${CI_SERVER_PROTOCOL}://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}:${CI_SERVER_PORT}/${VULNOPS_PROJECT}.git" .vulnops
+        "${BASE%%://*}://gitlab-ci-token:${CI_JOB_TOKEN}@${BASE#*://}/${VULNOPS_PROJECT}.git" .vulnops
     - pip install --quiet .vulnops/core .vulnops/intel ".vulnops/detect[openvas]" .vulnops/assets .vulnops/verdict .vulnops/alert
     - if [ -f settings.yaml ]; then export SETTINGS=settings.yaml; else export SETTINGS=.vulnops/config/settings.yaml; fi
     - echo "vulnops $VULNOPS_REF ($(git -C .vulnops rev-parse --short HEAD)), client $CI_PROJECT_PATH, settings $SETTINGS"
@@ -93,6 +102,7 @@ validate:
 collect:
   extends: .data
   stage: collect
+  tags: ["$VULNOPS_COLLECT_TAG"]
   needs: [validate]
   allow_failure:
     exit_codes: [3]
