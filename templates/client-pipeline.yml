@@ -11,10 +11,10 @@
 #
 #     include:
 #       - project: vulnops/vulnops
-#         ref: v0.8.2
+#         ref: v0.8.3
 #         file: templates/client-pipeline.yml
 #     variables:
-#       VULNOPS_REF: v0.8.2        # same version as the include
+#       VULNOPS_REF: v0.8.3        # same version as the include
 #
 # Jobs:
 #   push to the default branch     validate (profile and targets)
@@ -57,6 +57,8 @@ stages: [validate, collect, intel, detect, assets, triage, watch, send]
     - {key: sources, paths: [.cache/]}
   before_script:
     - apt-get update -qq && apt-get install -y -qq git openssh-client >/dev/null
+    # GitLab behind a private CA: the runner hands its CA file to the job
+    - if [ -n "${CI_SERVER_TLS_CA_FILE:-}" ]; then export GIT_SSL_CAINFO="$CI_SERVER_TLS_CA_FILE"; fi
     - git -c advice.detachedHead=false clone -q --depth 1 --branch "$VULNOPS_REF"
         "${CI_SERVER_PROTOCOL}://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}:${CI_SERVER_PORT}/${VULNOPS_PROJECT}.git" .vulnops
     - pip install --quiet .vulnops/core .vulnops/intel ".vulnops/detect[openvas]" .vulnops/assets .vulnops/verdict .vulnops/alert
