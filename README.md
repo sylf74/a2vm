@@ -162,10 +162,6 @@ push; on a schedule or by hand (optional `TRIAGE_CVES`), `collect` â†’ `intel` â
 days in the client project, intermediate files 7 days. A client moves to a new vulnops version
 by changing the tag in its `.gitlab-ci.yml`. Set-up: `docs/deployment.md`.
 
-Jobs that read client data and jobs that only fetch public data can run on different runners,
-chosen per client with `VULNOPS_RUNNER_DATA` and `VULNOPS_RUNNER_PUBLIC`: data on-prem, at the
-client or in the cloud, public fetches on a shared cloud runner (`docs/deployment-modes.md`).
-
 ## Repository layout
 
 ```
@@ -178,7 +174,6 @@ docs/deployment.md                         GitLab groups, runner, code and clien
 docs/scanning.md                           read-only scanner set-up
 docs/alerts.md                             watch mode, sources, alert sheets, mail
 docs/gti.md                                Google Threat Intelligence connector
-docs/deployment-modes.md                   where each client's data is processed: on-prem, at the client, cloud
 tests/                                     tests and offline fixtures
 scripts/run-pipeline.sh                    the CI pipeline, locally
 .gitlab/CODEOWNERS                         one owner per stage

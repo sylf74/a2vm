@@ -120,15 +120,8 @@ CERT-FR summary or the vendor's description.
 3. Client project > Build > Pipeline schedules > New schedule: `*/10 * * * *`, branch `main`,
    variable `VULNOPS_JOB` = `watch`. Keep the daily triage schedule as it is.
 
-Each watch pipeline runs two jobs. `watch-discover` reads the sources and writes what is new to a
-bundle (public data only: items, CVE records, KEV, EPSS, GTI answers). `watch` matches the bundle to
-the client, drafts the alerts and mails the analysts, without network access to the sources. They can
-run on two runners in different zones (`docs/deployment-modes.md`), or on the same one.
-
-The first run records what already exists and alerts on nothing. Each side keeps its state in the
-GitLab cache: `.watch/discover.json` (what was seen, public side) and `.watch/state.json` (what was
-alerted to this client, 14 days). If the discovery cache is cleared, the next run records a new
-baseline. Upgrading from v0.8 starts with one such baseline run.
+The first run records what already exists and alerts on nothing. The state lives in the GitLab
+cache (`.watch/state.json`); if the cache is cleared, the next run records a new baseline.
 
 ## Limits (to address with the PostgreSQL storage)
 

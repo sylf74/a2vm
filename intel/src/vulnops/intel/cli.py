@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-"""`vulnops-intel collect`: fetch and normalise vulnerability records into a records file.
-`vulnops-intel cve-ids`: list the CVE ids found by scanners (input of a collect run on another runner)."""
+"""`vulnops-intel collect`: fetch and normalise vulnerability records into a records file."""
 
 from __future__ import annotations
 
@@ -30,17 +29,6 @@ def read_cve_file(path: str) -> list[str]:
     return [line.split("#")[0].strip() for line in text.splitlines() if line.split("#")[0].strip()]
 
 
-def export_cve_ids(detect_dir: str, out: str) -> int:
-    """The only thing a runner without client data needs from a collection: which CVEs to fetch.
-    No host name, package or version leaves with it."""
-    found = sorted({f.cve_id for p in detection_files(detect_dir) for f in read_detection(p).findings})
-    path = Path(out)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("".join(f"{c}\n" for c in found), encoding="utf-8")
-    print(f"{len(found)} CVE ids found by scanners -> {path}")
-    return 0
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="vulnops-intel", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -56,12 +44,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     c.add_argument("--fixtures", help="read sources from a local fixtures directory (no network)")
     c.add_argument("--out", default="work/records.json")
-    e = sub.add_parser("cve-ids", help="list the CVE ids found by scanners, one per line, and nothing else")
-    e.add_argument("--detect", default="work/detect", help="detect stage output directory")
-    e.add_argument("--out", default="cve-list/cve-ids.txt")
     args = parser.parse_args(argv)
-    if args.command == "cve-ids":
-        return export_cve_ids(args.detect, args.out)
 
     settings = load_settings(args.settings)
     print(describe_gti(settings))

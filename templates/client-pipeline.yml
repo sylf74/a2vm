@@ -10,36 +10,23 @@
 #
 #     include:
 #       - project: vulnops/vulnops
-#         ref: v0.9.0
+#         ref: v0.8.0
 #         file: templates/client-pipeline.yml
 #     variables:
-#       VULNOPS_REF: v0.9.0        # same version as the include
+#       VULNOPS_REF: v0.8.0        # same version as the include
 #
 # Jobs:
 #   push to the default branch     validate (profile and targets)
-#   schedule or "Run pipeline"     collect -> cve-list -> intel -> detect -> assets -> triage
+#   schedule or "Run pipeline"     collect -> intel -> detect -> assets -> triage
 #                                  optional TRIAGE_CVES="CVE-... CVE-...", TRIAGE_SINCE (default 26h)
-#   same, with VULNOPS_JOB=watch   watch-discover -> watch (alerts mailed to the analysts)
-#                                  -> send-alerts (manual: the validation)
-#
-# Two kinds of runners (docs/deployment-modes.md):
-#   VULNOPS_RUNNER_DATA     tag of the runner for jobs that read client data (profile, targets, scans,
-#                           local LLM): validate, collect, cve-list, detect, assets, triage, watch, send
-#   VULNOPS_RUNNER_PUBLIC   tag of the runner for jobs that only fetch public data: intel (CVE records,
-#                           KEV, EPSS, GTI for a list of CVE ids) and watch-discover (watch sources).
-#                           They do not check out the client project; they read only settings.yaml and
-#                           watch-sources.yaml from it, and run in the "public-data" environment.
-#   Both default to llm-lan: one runner does everything. Set them per client project to choose where
-#   that client's data is processed (on-prem, at the client, in the cloud).
+#   same, with VULNOPS_JOB=watch   watch (CERT-FR, KEV, critical CVEs matched to the client; alerts
+#                                  mailed to the analysts) -> send-alerts (manual: the validation)
 #
 # CI/CD variables (client project, or inherited from the groups):
 #   VULNOPS_SSH_KEY          File, protected: private key of this client's read-only scan account
 #   VULNOPS_LLM_ENABLED, VULNOPS_LLM_BASE_URL, VULNOPS_LLM_MODEL, LLM_API_KEY   (usually set on the group)
-#   VULNOPS_GTI_ENABLED, GTI_API_KEY   (optional, Google Threat Intelligence, used by public jobs)
 #   VULNOPS_SMTP_HOST, VULNOPS_SMTP_PORT, VULNOPS_SMTP_TLS, VULNOPS_SMTP_USER, VULNOPS_SMTP_PASSWORD,
 #   VULNOPS_MAIL_FROM, VULNOPS_ANALYST_TO   (watch mode, usually set on the group)
-#   With two runners, scope the client secrets (SSH key, LLM key, mail) to the "client-data"
-#   environment so that public jobs never receive them.
 #
 # The code is fetched with the job token: in the vulnops code project, Settings > CI/CD >
 # Job token permissions must allow the client projects (e.g. the group vulnops/clients).
@@ -49,55 +36,31 @@ variables:
   VULNOPS_REF: main
   VULNOPS_PROFILE: client.yaml
   VULNOPS_TARGETS: targets.yaml
-  VULNOPS_RUNNER_DATA: llm-lan
-  VULNOPS_RUNNER_PUBLIC: llm-lan
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
   VULNOPS_CACHE_DIR: "$CI_PROJECT_DIR/.cache"
   DEBIAN_FRONTEND: noninteractive
   PIP_ROOT_USER_ACTION: ignore
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
 
-stages: [validate, collect, intel, detect, assets, triage, watch, alert, send]
+stages: [validate, collect, intel, detect, assets, triage, watch, send]
 
 .vulnops:
   image: python:3.12-slim
+  tags: [llm-lan]
   interruptible: false
   cache:
     - {key: pip, paths: [.pip-cache/]}
     - {key: sources, paths: [.cache/]}
   before_script:
     - apt-get update -qq && apt-get install -y -qq git openssh-client >/dev/null
-    - |
-      if [ "${GIT_STRATEGY:-}" = "none" ]; then
-        # Public job: no checkout of the client project. Only the two files that say which sources
-        # to read are taken from it; client.yaml, targets.yaml and contacts.yaml never reach this runner.
-        rm -f settings.yaml watch-sources.yaml
-        if git clone -q --depth 1 --filter=blob:none --no-checkout "$CI_REPOSITORY_URL" .client 2>/dev/null; then
-          for f in settings.yaml watch-sources.yaml; do git -C .client show "HEAD:$f" > "$f" 2>/dev/null || rm -f "$f"; done
-        fi
-        rm -rf .client
-      fi
     - git -c advice.detachedHead=false clone -q --depth 1 --branch "$VULNOPS_REF"
         "${CI_SERVER_PROTOCOL}://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}:${CI_SERVER_PORT}/${VULNOPS_PROJECT}.git" .vulnops
     - pip install --quiet .vulnops/core .vulnops/intel .vulnops/detect .vulnops/assets .vulnops/verdict .vulnops/alert
     - if [ -f settings.yaml ]; then export SETTINGS=settings.yaml; else export SETTINGS=.vulnops/config/settings.yaml; fi
-    - echo "vulnops $VULNOPS_REF ($(git -C .vulnops rev-parse --short HEAD)), client $CI_PROJECT_PATH, settings $SETTINGS, runner $CI_RUNNER_DESCRIPTION"
+    - echo "vulnops $VULNOPS_REF ($(git -C .vulnops rev-parse --short HEAD)), client $CI_PROJECT_PATH, settings $SETTINGS"
 
-# Jobs that read client data: profile, targets, scans, local LLM, contacts.
-.on-data:
+.data:
   extends: .vulnops
-  tags: [$VULNOPS_RUNNER_DATA]
-  environment: {name: client-data, action: access}
-
-# Jobs that only fetch public data, possibly on a runner in another zone.
-.on-public:
-  extends: .vulnops
-  tags: [$VULNOPS_RUNNER_PUBLIC]
-  environment: {name: public-data, action: access}
-  variables:
-    GIT_STRATEGY: none
-
-.daily:
   rules:
     - if: $VULNOPS_JOB == "watch"
       when: never
@@ -106,12 +69,8 @@ stages: [validate, collect, intel, detect, assets, triage, watch, alert, send]
     paths: [work/]
     expire_in: 7 days
 
-.watch-rules:
-  rules:
-    - if: $VULNOPS_JOB == "watch" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
-
 validate:
-  extends: .on-data
+  extends: .vulnops
   stage: validate
   rules:
     - if: $VULNOPS_JOB == "watch"
@@ -126,7 +85,7 @@ validate:
 # Exit code 3 = collection incomplete: the job shows as a warning and the pipeline goes on with
 # what was collected (plus the declared inventory).
 collect:
-  extends: [.on-data, .daily]
+  extends: .data
   stage: collect
   needs: [validate]
   allow_failure:
@@ -156,48 +115,33 @@ collect:
       du -sh work/* 2>/dev/null || true
       if [ "$rc" -ne 0 ]; then exit 3; fi
 
-# What the public runner may know of the collection: the CVE ids, nothing else (no host, package
-# or version). Its own artifact, so that the intel job never downloads the detection files.
-cve-list:
-  extends: [.on-data, .daily]
+intel:
+  extends: .data
   stage: intel
   needs: [collect]
-  script:
-    - vulnops-intel cve-ids --detect work/detect --out cve-list/cve-ids.txt
-  artifacts:
-    paths: [cve-list/]
-    expire_in: 1 day
-
-intel:
-  extends: [.on-public, .daily]
-  stage: intel
-  needs: [cve-list]
   script:
     - |
       ARGS=""
       for c in ${TRIAGE_CVES:-}; do ARGS="$ARGS --cve $c"; done
       if [ -z "$ARGS" ]; then ARGS="--since ${TRIAGE_SINCE:-26h}"; fi
-      vulnops-intel collect --settings "$SETTINGS" --cve-file cve-list/cve-ids.txt --out work/records.json $ARGS
-  artifacts:
-    paths: [work/records.json]
-    expire_in: 7 days
+      vulnops-intel collect --settings "$SETTINGS" --detect work/detect --out work/records.json $ARGS
 
 detect:
-  extends: [.on-data, .daily]
+  extends: .data
   stage: detect
-  needs: [collect, intel]
+  needs: [intel]
   script:
     - vulnops-detect inventory "$VULNOPS_PROFILE" --settings "$SETTINGS" --records work/records.json --out work/detect
 
 assets:
-  extends: [.on-data, .daily]
+  extends: .data
   stage: assets
   needs: [detect]
   script:
     - vulnops-assets build "$VULNOPS_PROFILE" --detect work/detect --out work/assets
 
 triage:
-  extends: [.on-data, .daily]
+  extends: .data
   stage: triage
   needs: [assets]
   script:
@@ -208,41 +152,23 @@ triage:
     expire_in: 30 days
 
 # -- Watch mode: schedule every 10 minutes with the variable VULNOPS_JOB=watch -------------------
-# watch-discover (public runner) reads the sources and writes what is new to a bundle; watch (data
-# runner) matches the bundle to the client, drafts the alerts and mails them to the analysts. Each
-# side keeps its own state in the GitLab cache: what was seen (public), what was alerted (client).
-# Exit code 3: a source or the mail failed (warning).
-watch-discover:
-  extends: [.on-public, .watch-rules]
-  stage: watch
-  resource_group: watch-discover
-  cache:
-    - {key: pip, paths: [.pip-cache/]}
-    - {key: sources, paths: [.cache/]}
-    - {key: watch-discover, paths: [.watch/], when: always}
-  allow_failure:
-    exit_codes: [3]
-  script:
-    - if [ -f watch-sources.yaml ]; then export SOURCES=watch-sources.yaml; else export SOURCES=.vulnops/config/watch-sources.yaml; fi
-    - vulnops-alert discover --settings "$SETTINGS" --sources "$SOURCES" --state .watch/discover.json --out bundle
-  artifacts:
-    when: always
-    paths: [bundle/]
-    expire_in: 1 day
-
+# The state (what was already seen) lives in the GitLab cache; without it, a run only records the
+# current state and alerts on nothing. Exit code 3: a source or the mail failed (warning).
 watch:
-  extends: [.on-data, .watch-rules]
-  stage: alert
-  needs: [watch-discover]
+  extends: .vulnops
+  stage: watch
+  rules:
+    - if: $VULNOPS_JOB == "watch" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
   resource_group: watch
   cache:
     - {key: pip, paths: [.pip-cache/]}
+    - {key: sources, paths: [.cache/]}  # CVE records and GTI answers, shared with the daily run
     - {key: watch-state, paths: [.watch/], when: always}
   allow_failure:
     exit_codes: [3]
   script:
     - if [ -f watch-sources.yaml ]; then export SOURCES=watch-sources.yaml; else export SOURCES=.vulnops/config/watch-sources.yaml; fi
-    - vulnops-alert watch "$VULNOPS_PROFILE" --settings "$SETTINGS" --sources "$SOURCES" --bundle bundle --state .watch/state.json --out alerts
+    - vulnops-alert watch "$VULNOPS_PROFILE" --settings "$SETTINGS" --sources "$SOURCES" --state .watch/state.json --out alerts
   artifacts:
     when: always
     paths: [alerts/]
@@ -250,7 +176,7 @@ watch:
 
 # The analyst's validation: running this job mails the alerts of this pipeline to the client.
 send-alerts:
-  extends: .on-data
+  extends: .vulnops
   stage: send
   needs: [watch]
   rules:
