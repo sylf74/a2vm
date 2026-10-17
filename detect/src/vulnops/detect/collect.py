@@ -9,14 +9,18 @@ Targets file (YAML), one per client — see examples/lab/targets.yaml:
     - {host: gitlab.lab.example, ip: 192.0.2.102, method: trivy}
     - {host: edge01.lab.example, method: dnf-updateinfo}
     - {host: poc-llm01.lab.example, method: trivy, images: [vllm/vllm-openai:latest]}
+  openvas:                           # optional: network scan by a Greenbone scanner (openvas.py)
+    gmp: tls://scanner.lab.example:9390
+    hosts: [192.0.2.0/24]
 
-Every command only reads: Trivy scans the OS package database (`--pkg-types os`, no file-system
+Every SSH command only reads: Trivy scans the OS package database (`--pkg-types os`, no file-system
 traversal) at the lowest CPU and I/O priority; dnf lists the security advisories that apply.
 Nothing is installed, changed or exploited on the targets.
 """
 
 from __future__ import annotations
 
+import os
 import re
 import shlex
 import subprocess
@@ -28,6 +32,8 @@ import yaml
 
 from vulnops.core.io import Detection
 
+from .openvas import GmpError, OpenvasConfig, parse_gmp_report, run_scan
+from .openvas import connect as gmp_connect
 from .scanners import Target, load_dnf_file, load_trivy_file, merge
 
 METHODS = ("trivy", "dnf-updateinfo")
@@ -61,6 +67,7 @@ class TargetsFile:
     ssh_options: list[str]
     timeout_seconds: int
     targets: list[HostTarget]
+    openvas: OpenvasConfig | None = None
 
 
 def load_targets(path: str | Path) -> TargetsFile:
@@ -72,8 +79,9 @@ def load_targets(path: str | Path) -> TargetsFile:
         if ht.method not in METHODS:
             raise ValueError(f"{path}: {ht.host}: unknown method {ht.method!r} (expected one of {METHODS})")
         targets.append(ht)
-    if not data.get("client") or not targets:
-        raise ValueError(f"{path}: 'client' and at least one target are required")
+    openvas = OpenvasConfig.from_dict(data["openvas"], f"{path}: openvas") if data.get("openvas") else None
+    if not data.get("client") or not (targets or openvas):
+        raise ValueError(f"{path}: 'client' and at least one target (or an openvas section) are required")
     return TargetsFile(
         client=data["client"],
         user=ssh.get("user"),
@@ -81,6 +89,7 @@ def load_targets(path: str | Path) -> TargetsFile:
         ssh_options=list(ssh.get("options") or DEFAULT_SSH_OPTIONS),
         timeout_seconds=int(ssh.get("timeout_seconds", 600)),
         targets=targets,
+        openvas=openvas,
     )
 
 
@@ -126,12 +135,35 @@ def raw_name(target: Target) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "_", target.ref)
 
 
-def collect(tf: TargetsFile, raw_dir: str | Path, runner=subprocess.run) -> tuple[list[Detection], list[str]]:
-    """Run every scan; return the detections (one per source) and the per-target errors."""
+def collect(
+    tf: TargetsFile,
+    raw_dir: str | Path,
+    runner=subprocess.run,
+    ssh: bool = True,
+    gmp_session=None,
+    env: dict[str, str] | None = None,
+) -> tuple[list[Detection], list[str]]:
+    """Run every scan; return the detections (one per source) and the per-target errors.
+
+    `ssh=False` skips the SSH targets (no key available); `gmp_session` replaces the GMP connection
+    (tests)."""
     raw_dir = Path(raw_dir)
     by_source: dict[str, list[Detection]] = {}
     errors: list[str] = []
-    for t, method, remote, target in plan(tf):
+    if tf.openvas:
+        try:
+            session = gmp_session or gmp_connect(tf.openvas, env if env is not None else dict(os.environ))
+            with session as gmp:
+                xml = run_scan(gmp, tf.openvas, tf.client)
+            path = raw_dir / tf.client / "openvas" / "report.xml"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(xml)
+            by_source["openvas"] = [parse_gmp_report(xml, tf.client, tf.openvas.min_qod)]
+        except (GmpError, OSError, ValueError) as exc:
+            errors.append(f"openvas [{tf.openvas.gmp}]: {exc}")
+        except Exception as exc:  # noqa: BLE001 - python-gvm raises its own error classes
+            errors.append(f"openvas [{tf.openvas.gmp}]: {type(exc).__name__}: {exc}")
+    for t, method, remote, target in plan(tf) if ssh else []:
         cmd = ssh_command(tf, t, remote)
         try:
             proc = runner(cmd, capture_output=True, text=True, timeout=tf.timeout_seconds)

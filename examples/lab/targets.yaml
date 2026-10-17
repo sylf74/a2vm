@@ -19,3 +19,7 @@ targets:
   - {host: node04.lab.example, method: trivy}                                   # Rocky 9.5
   - {host: node08.lab.example, method: dnf-updateinfo}                          # Rocky 10.1
   - {host: edge01.lab.example, ip: 198.51.100.4, method: dnf-updateinfo}           # Rocky 10.2, Internet-facing
+# Optional network scan by a Greenbone OpenVAS scanner (docs/openvas.md):
+# openvas:
+#   gmp: tls://scanner.lab.example:9390
+#   hosts: [192.0.2.0/24]

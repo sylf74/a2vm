@@ -123,3 +123,8 @@ Then delete the private key from the runner (`rm ~/vulnops_scan ~/vulnops_scan.p
 it from the GitLab variable. Run the client pipeline (**Build > Pipelines > Run pipeline**): the
 `collect` job lists each target and any error; the detection files (`work/detect/`) are kept 7 days
 in the job artifacts.
+
+## Network scans
+
+For hosts where no account can be created (appliances, BMC, network devices) or to see what is
+reachable from a given network position, add an OpenVAS scan to the targets file: `docs/openvas.md`.

@@ -172,6 +172,7 @@ templates/client-pipeline.yml              pipeline included by every client pro
 examples/                                  fictitious client projects (profile, targets, CI)
 docs/deployment.md                         GitLab groups, runner, code and client projects
 docs/scanning.md                           read-only scanner set-up
+docs/openvas.md                            OpenVAS network scans (Greenbone), mutual TLS to GMP
 docs/alerts.md                             watch mode, sources, alert sheets, mail
 docs/gti.md                                Google Threat Intelligence connector
 tests/                                     tests and offline fixtures

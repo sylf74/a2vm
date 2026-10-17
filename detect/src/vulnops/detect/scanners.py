@@ -4,6 +4,7 @@
   trivy           `trivy rootfs|image --format json` (Linux hosts, container images)
   dnf-updateinfo  `dnf -q updateinfo list --security --with-cve` (Rocky / RHEL hosts Trivy does not
                   cover, e.g. Rocky 10): only advisories with an update available are listed
+  openvas         network scans by Greenbone OpenVAS (see openvas.py): one report, many hosts
 
 One output file = one asset. The host name comes from the file name (`<host>.json`, `<host>.txt`)
 unless given explicitly; addresses and FQDNs come from the collection targets when known.
@@ -71,6 +72,7 @@ class _Builder:
         status: str,
         severity: str,
         cvss: tuple[str, str] = ("", ""),
+        note: str = "",
     ) -> None:
         if not CVE_RE.match(vuln_id or ""):
             self.skipped[f"non-CVE id ({(vuln_id or '?').split('-')[0]})"] += 1
@@ -78,7 +80,7 @@ class _Builder:
         obs = FindingObservation(
             source=self.source,
             observed_at=self.observed_at,
-            match=Match("scanner", "", package, 1.0, f"{self.source} package match"),
+            match=Match("scanner", "", package, 1.0, note or f"{self.source} package match"),
             package=package,
             installed_version=installed,
             fixed_version=fixed,

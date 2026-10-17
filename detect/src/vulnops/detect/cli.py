@@ -2,8 +2,10 @@
 """vulnops-detect: produce detection files (asset observations + findings), one per client and source.
 
   plan       check a targets file and list the scans it would run (no connection)
-  collect    run read-only scanners over SSH on the targets of a client, then import their output
-  import     import scanner output files produced elsewhere (Trivy JSON, dnf updateinfo text)
+  collect    run read-only scanners over SSH on the targets of a client, and the OpenVAS network scan
+             when the targets file has an `openvas` section, then import their output
+  import     import scanner output files produced elsewhere (Trivy JSON, dnf updateinfo text,
+             OpenVAS XML report)
   inventory  match a records file against the assets declared in client profiles
 
 Output: <out>/<client>/<source>.json (default work/detect).
@@ -22,6 +24,7 @@ from vulnops.core.profile import ProfileError, load_profile
 
 from .collect import collect, load_targets, plan
 from .inventory import InventoryScanner
+from .openvas import load_openvas_file
 from .scanners import load_dnf_file, load_trivy_file, merge
 
 
@@ -62,8 +65,10 @@ def cmd_collect(args: argparse.Namespace) -> int:
     status = 0
     for path in args.targets:
         tf = load_targets(path)
-        print(f"{tf.client}: {len(tf.targets)} targets")
-        detections, errors = collect(tf, args.raw)
+        ssh_note = "" if not args.no_ssh else " (SSH targets skipped: no key)"
+        openvas = f", openvas scan of {', '.join(tf.openvas.hosts)}" if tf.openvas else ""
+        print(f"{tf.client}: {len(tf.targets)} SSH targets{ssh_note}{openvas}")
+        detections, errors = collect(tf, args.raw, ssh=not args.no_ssh)
         for e in errors:
             print(f"  ERROR {e}", file=sys.stderr)
         for d in detections:
@@ -89,10 +94,17 @@ def cmd_plan(args: argparse.Namespace) -> int:
     print(f"{tf.client}: {len(tf.targets)} targets, {len(jobs)} scans, ssh user {tf.user or '(default)'}")
     for t, method, _remote, target in jobs:
         print(f"  {t.host:<32} {method:<15} {target.kind}:{target.ref}")
+    if tf.openvas:
+        o = tf.openvas
+        excl = f", except {', '.join(o.exclude)}" if o.exclude else ""
+        print(f"  openvas via {o.gmp}: {', '.join(o.hosts)}{excl} (QoD >= {o.min_qod}, max {o.timeout_minutes} min)")
     return 0
 
 
 def cmd_import(args: argparse.Namespace) -> int:
+    if args.source == "openvas":
+        _write(args.out, merge([load_openvas_file(f, args.client, args.min_qod) for f in args.files]))
+        return 0
     loader = load_trivy_file if args.source == "trivy" else load_dnf_file
     _write(args.out, merge([loader(f, args.client) for f in args.files]))
     return 0
@@ -121,12 +133,18 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("targets", nargs="+", help="targets YAML files, e.g. examples/lab/targets.yaml")
     c.add_argument("--raw", default="work/scans", help="where raw scanner outputs are kept")
     c.add_argument("--out", default="work/detect")
+    c.add_argument("--no-ssh", action="store_true", help="skip the SSH targets (OpenVAS only)")
     c.set_defaults(func=cmd_collect)
 
     m = sub.add_parser("import", help="import scanner output files (one file per host or image)")
     m.add_argument("--client", required=True)
-    m.add_argument("--source", required=True, choices=["trivy", "dnf-updateinfo"])
-    m.add_argument("files", nargs="+", help="<host>.json (Trivy) or <host>.txt (dnf): the file name is the host")
+    m.add_argument("--source", required=True, choices=["trivy", "dnf-updateinfo", "openvas"])
+    m.add_argument(
+        "files",
+        nargs="+",
+        help="<host>.json (Trivy) or <host>.txt (dnf): the file name is the host; OpenVAS XML report",
+    )
+    m.add_argument("--min-qod", type=int, default=70, help="OpenVAS: minimum quality of detection (default 70)")
     m.add_argument("--out", default="work/detect")
     m.set_defaults(func=cmd_import)
 

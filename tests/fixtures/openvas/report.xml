@@ -1,0 +1,97 @@
+<get_reports_response status="200" status_text="OK">
+  <report id="5b6d0c0e-0000-4000-8000-000000000001" format_id="a994b278-1f62-11e1-96ac-406186ea4fc5" extension="xml" content_type="text/xml">
+    <name>2099-10-16T05:00:00Z</name>
+    <report id="5b6d0c0e-0000-4000-8000-000000000001">
+      <scan_run_status>Done</scan_run_status>
+      <scan_start>2099-10-16T05:00:12Z</scan_start>
+      <results start="1" max="-1">
+        <result id="r1">
+          <name>OpenSSH Remote Code Execution Vulnerability</name>
+          <host>192.0.2.10<asset asset_id="a1"/><hostname>node00.lab.example</hostname></host>
+          <port>22/tcp</port>
+          <nvt oid="1.3.6.1.4.1.25623.1.0.999001">
+            <type>nvt</type>
+            <name>OpenSSH Remote Code Execution Vulnerability</name>
+            <family>General</family>
+            <cvss_base>8.1</cvss_base>
+            <severities score="8.1">
+              <severity type="cvss_base_v3"><origin/><date>2099-07-01T00:00:00Z</date><score>8.1</score>
+                <value>CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H</value></severity>
+            </severities>
+            <solution type="VendorFix">Update to version 9.8p1 or later.</solution>
+            <refs>
+              <ref type="cve" id="CVE-2024-6387"/>
+              <ref type="url" id="https://www.openssh.com/txt/release-9.8"/>
+              <ref type="cert-bund" id="WID-SEC-2024-0000"/>
+            </refs>
+          </nvt>
+          <threat>High</threat>
+          <severity>8.1</severity>
+          <qod><value>80</value><type>remote_banner</type></qod>
+          <description>Installed version: 8.7p1
+Fixed version:     9.8p1
+Installation
+path / port:       22/tcp</description>
+        </result>
+        <result id="r2">
+          <name>Apache HTTP Server Multiple Vulnerabilities</name>
+          <host>192.0.2.10<hostname>node00.lab.example</hostname></host>
+          <port>443/tcp</port>
+          <nvt oid="1.3.6.1.4.1.25623.1.0.999002">
+            <name>Apache HTTP Server Multiple Vulnerabilities</name>
+            <severities score="7.5"><severity type="cvss_base_v3"><score>7.5</score><value>CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H</value></severity></severities>
+            <solution type="VendorFix">Update to version 2.4.62 or later.</solution>
+            <refs><ref type="cve" id="CVE-2024-38476"/><ref type="cve" id="CVE-2024-38477"/></refs>
+          </nvt>
+          <threat>High</threat>
+          <severity>7.5</severity>
+          <qod><value>80</value></qod>
+          <description>Installed version: 2.4.57
+Fixed version:     2.4.62</description>
+        </result>
+        <result id="r3">
+          <name>Weak banner guess</name>
+          <host>192.0.2.11</host>
+          <port>80/tcp</port>
+          <nvt oid="1.3.6.1.4.1.25623.1.0.999003">
+            <name>Weak banner guess</name>
+            <refs><ref type="cve" id="CVE-2099-10001"/></refs>
+          </nvt>
+          <threat>Medium</threat>
+          <severity>5.0</severity>
+          <qod><value>30</value></qod>
+          <description/>
+        </result>
+        <result id="r4">
+          <name>OS Detection Consolidation and Reporting</name>
+          <host>192.0.2.11</host>
+          <port>general/tcp</port>
+          <nvt oid="1.3.6.1.4.1.25623.1.0.105937"><name>OS Detection Consolidation and Reporting</name><cve>NOCVE</cve></nvt>
+          <threat>Log</threat>
+          <severity>0.0</severity>
+          <qod><value>80</value></qod>
+        </result>
+        <result id="r5">
+          <name>Legacy CVE element</name>
+          <host>192.0.2.11</host>
+          <port>8080/tcp</port>
+          <nvt oid="1.3.6.1.4.1.25623.1.0.999005"><name>Legacy CVE element</name><cve>CVE-2099-10002, CVE-2099-10003</cve></nvt>
+          <threat>Medium</threat>
+          <severity>6.1</severity>
+          <qod><value>75</value></qod>
+        </result>
+        <result id="r6">
+          <name>TLS weak cipher suites</name>
+          <host>192.0.2.11</host>
+          <port>443/tcp</port>
+          <nvt oid="1.3.6.1.4.1.25623.1.0.999006"><name>TLS weak cipher suites</name><refs><ref type="url" id="https://example.org"/></refs></nvt>
+          <threat>Medium</threat>
+          <severity>5.3</severity>
+          <qod><value>98</value></qod>
+        </result>
+      </results>
+      <host><ip>192.0.2.10</ip><detail><name>hostname</name><value>node00.lab.example</value></detail><detail><name>best_os_txt</name><value>Rocky Linux 9</value></detail></host>
+      <host><ip>192.0.2.11</ip><detail><name>best_os_txt</name><value>Ubuntu 24.04</value></detail></host>
+    </report>
+  </report>
+</get_reports_response>
