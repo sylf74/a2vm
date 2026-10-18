@@ -2,8 +2,11 @@
 # Schema: core/src/vulnops/core/schemas/client_profile.schema.json (checked in CI).
 #
 # Field guide (CISA SSVC wording):
-#   exposure                 internet = reachable by unauthenticated or untrusted entities via public
-#                            networks; internal = corporate network; isolated = segmented / offline
+#   exposure                 SSVC System Exposure. open = reachable from the internet or another widely
+#                            accessible network; controlled = networked, access restricted by measures
+#                            that reliably interrupt an attack; small = local or isolated network
+#                            (the former internet / internal / isolated are still read, with a warning)
+#   zone                     optional free label for reports (dmz, lan, ot...)
 #   mission_prevalence       minimal | support | essential   (role of the asset in the client's mission)
 #   public_wellbeing_impact  minimal | material | irreversible (physical, psychological, financial harm)
 #   versions                 deployed versions; leave empty if unknown (rows are then flagged for review)
@@ -22,7 +25,7 @@ assets:
     product: PAN-OS
     cpe: "cpe:2.3:o:paloaltonetworks:pan-os"
     versions: ["11.1.2-h1"]
-    exposure: internet
+    exposure: open
     mission_prevalence: essential
     public_wellbeing_impact: minimal
     owner: network-team
@@ -33,7 +36,7 @@ assets:
     product: Example HR Portal
     product_aliases: ["HR Portal"]
     versions: ["4.2.1"]
-    exposure: internal
+    exposure: controlled
     mission_prevalence: support
     public_wellbeing_impact: minimal
     owner: apps-team
@@ -43,7 +46,7 @@ assets:
     vendor: Acme Networks
     product: SecureGate OS
     versions: ["7.2.1", "7.0.9"]
-    exposure: internet
+    exposure: open
     mission_prevalence: essential
     public_wellbeing_impact: material
     owner: network-team
@@ -52,7 +55,7 @@ assets:
     description: CI build servers (isolated network)
     vendor: Example Soft
     product: BuildBox
-    exposure: isolated
+    exposure: small
     mission_prevalence: minimal
     public_wellbeing_impact: minimal
     owner: devops-team

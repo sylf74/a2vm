@@ -44,7 +44,7 @@
       }
     },
     "defaults": {
-      "description": "Default assumptions for attributes no declaration, rule or source provides. Every use is flagged in reports. Absent: worst case (internet, essential, minimal, unknown owner).",
+      "description": "Default assumptions for attributes no declaration, rule or source provides. Every use is flagged in reports. Absent: worst case (open, essential, minimal, unknown owner).",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -106,6 +106,9 @@
               "owner": {
                 "type": "string",
                 "minLength": 1
+              },
+              "zone": {
+                "$ref": "#/$defs/zone"
               }
             }
           }
@@ -184,6 +187,9 @@
             "type": "string",
             "minLength": 1,
             "description": "Team or mailbox in charge of remediation."
+          },
+          "zone": {
+            "$ref": "#/$defs/zone"
           }
         }
       }
@@ -251,11 +257,19 @@
   "$defs": {
     "exposure": {
       "enum": [
+        "open",
+        "controlled",
+        "small",
         "internet",
         "internal",
         "isolated"
       ],
-      "description": "internet = reachable by unauthenticated or untrusted entities via public networks (CISA 'Publicly Exposed')."
+      "description": "SSVC System Exposure. open = reachable from the internet or another widely accessible network, access cannot plausibly be restricted (CISA 'Publicly Exposed'); controlled = networked, access restricted or protected by measures that reliably interrupt an attack; small = local service, or a highly controlled or isolated network. Deprecated: internet (read as open), internal (controlled), isolated (small)."
+    },
+    "zone": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "description": "Free label grouping assets in reports (dmz, lan, ot, admin...); no effect on decisions."
     },
     "mission_prevalence": {
       "enum": [

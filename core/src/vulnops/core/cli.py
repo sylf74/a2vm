@@ -21,6 +21,8 @@ def main(argv: list[str] | None = None) -> int:
         try:
             profile = load_profile(path)
             print(f"OK    {path} ({profile.id}, {len(profile.assets)} assets)")
+            for warning in profile.warnings:
+                print(f"WARN  {path}: {warning}")
         except (ProfileError, OSError) as exc:
             failed += 1
             print(f"FAIL  {exc}", file=sys.stderr)

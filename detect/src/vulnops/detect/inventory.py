@@ -33,7 +33,7 @@ SOURCE = "inventory"
 def declared_observations(profile: ClientProfile, observed_at: str) -> list[AssetObservation]:
     out = []
     for a in profile.assets:
-        attributes = {k: getattr(a, k) for k in ATTRIBUTES if getattr(a, k)}
+        attributes = {k: getattr(a, k) for k in (*ATTRIBUTES, "zone") if getattr(a, k)}
         out.append(
             AssetObservation(
                 ref=a.id,

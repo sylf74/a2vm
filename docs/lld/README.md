@@ -9,5 +9,5 @@ The high-level design (stages, common model, principles) and the technical archi
 | intel | — | To write |
 | detect | — | To write |
 | assets | — | To write (the v0.9.x external reconciliation is described in `verdict.md` for now) |
-| verdict | [verdict.md](verdict.md) | v0.8.6 as built, v0.9.x planned |
+| verdict | [verdict.md](verdict.md) | v0.9.0 as built, v0.9.1 and v0.9.2 planned |
 | alert | — | To write |

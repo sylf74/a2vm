@@ -87,7 +87,7 @@ into its inventory and re-keys its findings on consolidated assets:
 - reconciliation: host observations sharing an FQDN, a short host name or an address are one asset;
 - attributes (exposure, mission prevalence, public well-being impact, owner), first source wins:
   declared in the profile → profile rule (host name / FQDN glob, CIDR) → source → default
-  assumption (the client's `defaults`, else the worst case: internet, essential);
+  assumption (the client's `defaults`, else the worst case: open, essential);
 - every default assumption is named in the decision, in the rationale and flags the row for review.
 
 The inventory is rebuilt at each run for now; history comes with the PostgreSQL storage.

@@ -3,7 +3,7 @@
 | | |
 | --- | --- |
 | Stage | Triage (`vulnops-verdict`, command `verdict`) |
-| Describes | v0.8.6 as built; v0.9.x changes marked **Planned (v0.9.x)** |
+| Describes | v0.9.0 as built; later changes marked **Planned (v0.9.1)** or **Planned (v0.9.2)** |
 | Higher-level documents | HLD (stages and common model), DAT (servers, zones, flows) |
 | Code | `verdict/src/vulnops/verdict/`, shared model in `core/src/vulnops/core/models.py` |
 
@@ -88,9 +88,11 @@ Rows are sorted ACT, ATTEND, TRACK, then by decreasing EPSS, CVE id and asset.
 | `assumptions` | French strings | Asset attributes taken from a default |
 | `fixes` | `<package> <fixed version>` | Scanner observations |
 | `rationale`, `rationale_source` | text; `template`, `llm (<model>)` or `template (<why>)` | Section 7 |
+| `exposure`, `exposure_source`, `zone` | `open`, `controlled`, `small`; where it comes from; free label | Section 5 |
 
-**Planned (v0.9.x):** `exposure`, `exposure_source` and `zone` are added to the row and to
-`triage.csv`; `publicly_exposed` stays, derived from `exposure`.
+`publicly_exposed` is kept, derived from `exposure`. `triage.csv` carries `exposure`,
+`exposure_source` and `zone`; the report's per-asset table shows them, e.g. "dmz · ouverte
+(Internet), règle".
 
 ## 3. Processing
 
@@ -150,7 +152,7 @@ assessment, not an equivalent.
 | Decision point | Rule |
 | --- | --- |
 | Mission and Well-Being Impact | `high` if `mission_prevalence` is `essential` or `public_wellbeing_impact` is `irreversible`; `low` if both are `minimal`; `medium` otherwise (including `minimal` mission with `material` well-being, which CISA leaves undefined) |
-| Publicly exposed (BOD 26-04) | v0.8.6: `exposure == internet`. **Planned (v0.9.x):** `exposure == open` (section 5) |
+| Publicly exposed (BOD 26-04) | `exposure == open` (section 5) |
 
 The asset attributes are set by the assets stage, first source wins: the profile declares it, a
 profile rule matches the host name, FQDN or address, a scanner reported it, or the default
@@ -199,7 +201,7 @@ A row needs review when any of these holds, and each reason is listed in French:
 Review does not change the decision: a flagged ACT stays ACT. The flag tells the analyst which
 input to confirm before the report goes to the client.
 
-## 5. Exposure — **Planned (v0.9.x)**
+## 5. Exposure
 
 ### 5.1 Model
 
@@ -214,9 +216,14 @@ access cannot plausibly be restricted; `controlled` — networked, access restri
 measures that reliably interrupt an attack; `small` — local service, or a highly controlled or
 isolated network.
 
-Compatibility: the profile schema accepts the former values with a deprecation warning, read as
-`internet` → `open`, `internal` → `controlled`, `isolated` → `small`. The built-in default becomes
-`open`, source `assumed`.
+Compatibility: the profile schema accepts the former values, read as `internet` → `open`,
+`internal` → `controlled`, `isolated` → `small` when the profile is loaded; `vulnops-profiles
+validate` (the `validate` job) prints one deprecation warning per former value. The assets stage
+and the alert stage apply the same reading to any value that bypasses the loader. The built-in
+default is `open`, source `assumed`.
+
+`zone` is set by a declared asset or a profile rule (`set: {zone: dmz}`), first match wins as for
+the other attributes; it never defaults and has no effect on decisions.
 
 Exposure feeds the BOD table only; the CISA Coordinator table has no exposure input. The value is
 kept as SSVC defines it so that the CERT/CC deployer table, which uses System Exposure, can be
@@ -224,13 +231,13 @@ added later without changing the data.
 
 ### 5.2 Precedence
 
-`external-scan` > `declared` > `rule` > `<scanner>` > `assumed`.
+v0.9.0: `declared` > `rule` > `<scanner>` > `assumed`. **Planned (v0.9.1):** `external-scan` first.
 
 An external scan only proves reachability: it can set `open`, never lower a value. An asset the
 external scan does not reach keeps its declared value; absence from a scan is not evidence (source
 filtering, scan window, host down).
 
-### 5.3 External detection and published endpoints
+### 5.3 External detection and published endpoints — **Planned (v0.9.1)**
 
 The external scan runs in the client's `<client>-external` project, collection only (DAT,
 "Exposure and external scans"). The internal pipeline brings its result in before the assets
@@ -267,7 +274,7 @@ stage:
 First iteration: a finding on an endpoint goes to `asset`. Attributing it to an asset in `behind`
 when the scanner identifies that asset's product (version banner) is left for a later version.
 
-### 5.4 Exposure gap
+### 5.4 Exposure gap — **Planned (v0.9.2)**
 
 A gap is an external host that `published` does not list, or an asset declared `controlled` or
 `small` that the external scan reaches. The assets stage writes the gaps to
@@ -295,7 +302,7 @@ alert stage and is an open point of the DAT.
 | `llm.tasks.parallel` | `4` | Concurrent rationale requests |
 | `llm.tasks.max_consecutive_errors` | `3` | Then the LLM is treated as down for the rest of the run |
 
-**Planned (v0.9.x):** profile keys `external` and `published` (section 5.3), CI/CD variable
+**Planned (v0.9.1):** profile keys `external` and `published` (section 5.3), CI/CD variable
 `VULNOPS_EXTERNAL_PROJECT`.
 
 ## 7. LLM
@@ -322,7 +329,7 @@ keep the template and `rationale_source` says why. The run never fails because o
 | Profile, records, assets or findings unreadable, or of another client | Exit 2 |
 | LLM unreachable or slow | Template rationales and policy defaults, rows flagged; breaker after 3 errors |
 | SSVC table incomplete | Fails at load (36 and 16 rows expected) |
-| **Planned (v0.9.x):** external detection missing or older than `max_age_days` | Collect ends in warning; exposures stay as declared or assumed; the report says the external view is missing |
+| **Planned (v0.9.1):** external detection missing or older than `max_age_days` | Collect ends in warning; exposures stay as declared or assumed; the report says the external view is missing |
 
 ## 9. Tests
 
@@ -330,12 +337,11 @@ keep the template and `rationale_source` says why. The run never fails because o
 | --- | --- |
 | `tests/test_ssvc_policy.py` | Table completeness, Coordinator outcomes, Mission and Well-Being, BOD timelines, policy mapping and escalations, invalid policy values |
 | `tests/test_pipeline.py` | End-to-end run on fixtures: records, assets, findings to reports |
-| `tests/test_detection_assets.py` | Asset reconciliation and attribute precedence feeding verdict |
+| `tests/test_detection_assets.py` | Asset reconciliation and attribute precedence feeding verdict; former exposure values and their warnings; zone and exposure source carried to the decision |
 | `tests/test_gti.py` | GTI view to Exploitation, unconfirmed reports |
 
-**Planned (v0.9.x):**
+**Planned (v0.9.1, v0.9.2):**
 
-- exposure compatibility mapping and the deprecation warning;
 - precedence: an external scan raises to `open`, never lowers; absence leaves the declared value;
 - `published`: endpoint with and without port, `behind` assets set `open`, unmatched host
   becomes a gap;

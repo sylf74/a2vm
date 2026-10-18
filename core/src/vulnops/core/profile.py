@@ -11,7 +11,7 @@ import jsonschema
 import yaml
 
 from .io import load_schema
-from .models import AttributeRule, ClientProfile, DeclaredAsset
+from .models import LEGACY_EXPOSURE, AttributeRule, ClientProfile, DeclaredAsset, exposure_value
 
 
 class ProfileError(ValueError):
@@ -57,6 +57,7 @@ def load_profile(path: str | Path) -> ClientProfile:
     errors = validate_profile_data(data, str(path))
     if errors:
         raise ProfileError("\n".join(errors))
+    warnings = _normalise_exposures(data)
     assets = [DeclaredAsset(**a) for a in data.get("assets", [])]
     rules = [AttributeRule(**r) for r in data.get("rules", [])]
     client = data["client"]
@@ -69,4 +70,20 @@ def load_profile(path: str | Path) -> ClientProfile:
         defaults=dict(data.get("defaults", {})),
         source_path=str(path),
         alerts=dict(data.get("alerts", {})),
+        warnings=warnings,
     )
+
+
+def _normalise_exposures(data: dict[str, Any]) -> list[str]:
+    """Rewrite the former exposure values (internet, internal, isolated) in place; one warning per value."""
+    places = [*data.get("assets", []), *(r["set"] for r in data.get("rules", [])), data.get("defaults", {})]
+    seen: dict[str, int] = {}
+    for place in places:
+        old = place.get("exposure")
+        if old in LEGACY_EXPOSURE:
+            place["exposure"] = exposure_value(old)
+            seen[old] = seen.get(old, 0) + 1
+    return [
+        f"exposure '{old}' is deprecated, read as '{LEGACY_EXPOSURE[old]}' ({n} place{'s' if n > 1 else ''})"
+        for old, n in sorted(seen.items())
+    ]

@@ -19,6 +19,9 @@ CSV_FIELDS = [
     "asset",
     "owner",
     "exposed",
+    "exposure",
+    "exposure_source",
+    "zone",
     "kev",
     "epss",
     "cvss",
@@ -30,6 +33,18 @@ CSV_FIELDS = [
     "needs_review",
     "rationale",
 ]
+
+
+EXPOSURE_FR = {"open": "ouverte (Internet)", "controlled": "contrôlée", "small": "restreinte"}
+EXPOSURE_SOURCE_FR = {"assumed": "supposée", "declared": "déclarée", "rule": "règle", "external-scan": "scan externe"}
+
+
+def _exposure_cell(r: TriageRow) -> str:
+    """e.g. "ouverte (Internet), supposée"; the zone, when set, in front."""
+    if not r.exposure:
+        return "oui" if r.publicly_exposed else ""
+    text = f"{EXPOSURE_FR.get(r.exposure, r.exposure)}, {EXPOSURE_SOURCE_FR.get(r.exposure_source, r.exposure_source)}"
+    return f"{r.zone} · {text}" if r.zone else text
 
 
 def _md_escape(text: str) -> str:
@@ -62,6 +77,9 @@ def write_csv(run: TriageRun, path: Path) -> None:
                     "asset": r.asset_id,
                     "owner": r.owner,
                     "exposed": "yes" if r.publicly_exposed else "no",
+                    "exposure": r.exposure,
+                    "exposure_source": r.exposure_source,
+                    "zone": r.zone,
                     "kev": "yes" if r.in_kev else "no",
                     "epss": "" if r.epss is None else f"{r.epss:.3f}",
                     "cvss": "" if not r.cvss else r.cvss.score,
@@ -145,13 +163,13 @@ def render_markdown(run: TriageRun) -> str:
     # Per asset: where the work is.
     assets: dict[str, dict[str, object]] = {}
     for r in run.rows:
-        a = assets.setdefault(r.asset_id, {"desc": r.asset_description, "exposed": r.publicly_exposed})
+        a = assets.setdefault(r.asset_id, {"desc": r.asset_description, "exposure": _exposure_cell(r)})
         a[r.delivery_decision] = int(a.get(r.delivery_decision, 0)) + 1
     if assets:
-        lines += ["## Par actif", "", "| Actif | Internet | ACT | ATTEND | TRACK |", "|---|---|---|---|---|"]
+        lines += ["## Par actif", "", "| Actif | Exposition | ACT | ATTEND | TRACK |", "|---|---|---|---|---|"]
         for _name, a in sorted(assets.items(), key=lambda kv: tuple(-int(kv[1].get(d, 0)) for d in decisions)):
             lines.append(
-                f"| {_md_escape(str(a['desc']))} | {'oui' if a['exposed'] else ''} | "
+                f"| {_md_escape(str(a['desc']))} | {a['exposure']} | "
                 + " | ".join(str(a.get(d, 0)) for d in decisions)
                 + " |"
             )
