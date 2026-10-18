@@ -220,3 +220,45 @@ def test_missing_credentials_is_a_collection_error(tmp_path):
     path.write_text(yaml.safe_dump({"client": "lab", "openvas": {"gmp": "tls://scanner:9390", "hosts": ["h"]}}))
     detections, errors = collect(load_targets(path), tmp_path / "raw", env={})
     assert detections == [] and errors and "openvas" in errors[0]
+
+
+GENERIC_REPORT = """<get_reports_response><report id="r"><report id="r">
+<scan_start>2099-10-18T05:00:00Z</scan_start><results>
+<result id="g1"><host>198.51.100.7<hostname>www.example.org</hostname></host><port>443/tcp</port>
+ <nvt oid="1.3.6.1.4.1.25623.1.0.11213"><name>HTTP Debugging Methods (TRACE/TRACK) Enabled</name>
+  <severities score="5.8"><severity type="cvss_base_v2">
+   <value>AV:N/AC:M/Au:N/C:P/I:P/A:N</value></severity></severities>
+  <refs>{refs}</refs></nvt>
+ <threat>Medium</threat><severity>5.8</severity><qod><value>99</value></qod><description>TRACE answered.</description>
+</result>
+<result id="s1"><host>198.51.100.7<hostname>www.example.org</hostname></host><port>443/tcp</port>
+ <nvt oid="1.3.6.1.4.1.25623.1.0.999009"><name>Specific test</name>
+  <tags>cvss_base_vector=AV:N/AC:L/Au:N/C:C/I:C/A:C|summary=x</tags>
+  <refs><ref type="cve" id="CVE-2004-2320"/></refs></nvt>
+ <threat>High</threat><severity>10.0</severity><qod><value>80</value></qod>
+ <description>Installed version: 1.0
+Fixed version: 1.1</description>
+</result>
+</results></report></report></get_reports_response>"""
+
+
+def test_generic_multi_cve_test_is_flagged_and_v2_vector_kept():
+    cves = ["CVE-2003-1567", "CVE-2004-2320", "CVE-2004-2763", "CVE-2005-3398", "CVE-2006-4683", "CVE-2007-3008"]
+    refs = "".join(f'<ref type="cve" id="{c}"/>' for c in cves)
+    det = parse_gmp_report(GENERIC_REPORT.format(refs=refs), "lab")
+    by_cve = {f.cve_id: f for f in det.findings}
+    assert len(by_cve) == 6
+    generic = by_cve["CVE-2003-1567"]
+    assert generic.status == "under_investigation" and "générique (6 CVE" in generic.review_reasons[0]
+    assert generic.observations[0].cvss_vector == "AV:N/AC:M/Au:N/C:P/I:P/A:N"
+    assert generic.observations[0].cvss_source == "openvas (CVSS v2)"
+    # also reported by a specific test, with an installed version: not flagged; v2 vector read from the tags
+    specific = by_cve["CVE-2004-2320"]
+    assert specific.status == "affected" and not specific.review_reasons
+    assert "AV:N/AC:L/Au:N/C:C/I:C/A:C" in [o.cvss_vector for o in specific.observations]
+
+
+def test_few_cves_is_not_generic():
+    refs = '<ref type="cve" id="CVE-2003-1567"/><ref type="cve" id="CVE-2004-2763"/>'
+    det = parse_gmp_report(GENERIC_REPORT.format(refs=refs), "lab")
+    assert all(f.status == "affected" and not f.review_reasons for f in det.findings)

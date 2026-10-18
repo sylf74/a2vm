@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Any
 
-from vulnops.core.models import VulnRecord
+from vulnops.core.models import REJECTED, VulnRecord
 
 from .gti import enrich
 from .record import parse_record
@@ -70,7 +70,7 @@ def collect(sources: Sources, cve_ids: list[str]) -> Collection:
             out.errors.append({"cve": cve_id, "error": f"unreadable record: {exc}"})
             continue
         if record.state.upper() == "REJECTED":
-            out.errors.append({"cve": cve_id, "error": "CVE rejected"})
+            out.errors.append({"cve": cve_id, "error": REJECTED})
             continue
         record.kev = kev.get(cve_id)
         if cve_id in epss:

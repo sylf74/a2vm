@@ -45,6 +45,7 @@ def write_json(run: TriageRun, path: Path) -> None:
         "rows": [r.to_dict() for r in run.rows],
         "not_affected": [asdict(n) for n in run.not_affected],
         "errors": run.errors,
+        "ignored": run.ignored,
     }
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -202,6 +203,15 @@ def render_markdown(run: TriageRun) -> str:
         if len(run.not_affected) > LIST_LIMIT:
             lines.append(f"- … et {len(run.not_affected) - LIST_LIMIT} autres (voir `triage.json`)")
         lines.append("")
+    if run.ignored:
+        ids = ", ".join(e["cve"] for e in run.ignored[:LIST_LIMIT])
+        more = f" et {len(run.ignored) - LIST_LIMIT} autres" if len(run.ignored) > LIST_LIMIT else ""
+        lines += [
+            "## Ignorées",
+            "",
+            f"CVE rejetées par le programme CVE, encore citées par une source : {ids}{more}.",
+            "",
+        ]
     if run.errors:
         lines += ["## Erreurs", ""]
         lines += [f"- {e['cve']} : {e['error']}" for e in run.errors[:LIST_LIMIT]]

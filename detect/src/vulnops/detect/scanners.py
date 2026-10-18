@@ -126,10 +126,10 @@ class _Builder:
 
 # -- Trivy ---------------------------------------------------------------------------------------
 def trivy_cvss(v: dict[str, Any]) -> tuple[str, str]:
-    """(vector, source) of the best CVSS vector Trivy reports: NVD first, then the vendors; v4 before v3."""
+    """(vector, source) of the best CVSS vector Trivy reports: NVD first, then the vendors; v4, v3, then v2."""
     cvss = v.get("CVSS") or {}
     sources = (["nvd"] if "nvd" in cvss else []) + sorted(k for k in cvss if k != "nvd")
-    for key in ("V40Vector", "V3Vector"):
+    for key in ("V40Vector", "V3Vector", "V2Vector"):
         for src in sources:
             vector = (cvss.get(src) or {}).get(key)
             if vector:

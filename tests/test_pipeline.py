@@ -77,10 +77,8 @@ def test_deterministic_run(settings, sources, profile, tmp_path):
     assert (build.automatable.value, build.technical_impact.value) == ("yes", "total")
     assert build.automatable.source == "default" and build.version_status == "unknown"
 
-    assert {e["cve"]: e["error"] for e in run.errors} == {
-        "CVE-2099-10006": "CVE rejected",
-        "CVE-2099-10007": "CVE record not found",
-    }
+    assert {e["cve"]: e["error"] for e in run.errors} == {"CVE-2099-10007": "CVE record not found"}
+    assert [e["cve"] for e in run.ignored] == ["CVE-2099-10006"]  # rejected: listed, not an error
     assert [r.delivery_decision for r in run.rows] == sorted(
         (r.delivery_decision for r in run.rows), key=["ACT", "ATTEND", "TRACK"].index
     )
@@ -235,3 +233,36 @@ def test_scanner_cvss_replaces_missing_record_cvss(settings):
     metric = scanner_metrics([f])["CVE-2099-1"]
     assert (metric.version, metric.source) == ("3.1", "trivy:nvd")
     assert cvss_heuristic(metric) == ("no", "total")
+
+
+def test_cvss_v2_heuristic_and_preference_for_v3():
+    from vulnops.core.models import FindingObservation, Match
+    from vulnops.verdict.triage import scanner_metrics
+
+    match = Match("scanner", "", "443/tcp", 1.0, "")
+    v2 = FindingObservation("openvas", "2026-10-18", match, cvss_vector="AV:N/AC:M/Au:N/C:P/I:P/A:N")
+    metric = scanner_metrics([Finding("id", "c", "host:a", "CVE-2003-1567", "affected", [], [v2])])["CVE-2003-1567"]
+    assert metric.version == "2.0" and cvss_heuristic(metric) == ("no", "partial")
+    full = FindingObservation("openvas", "2026-10-18", match, cvss_vector="AV:N/AC:L/Au:N/C:C/I:C/A:C")
+    assert cvss_heuristic(scanner_metrics([Finding("i", "c", "h", "CVE-1", "affected", [], [full])])["CVE-1"]) == (
+        "yes",
+        "total",
+    )
+    v3 = FindingObservation("trivy", "2026-10-18", match, cvss_vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")
+    both = Finding("i", "c", "h", "CVE-2", "affected", [], [v2, v3])
+    assert scanner_metrics([both])["CVE-2"].version == "3.1"
+
+
+def test_rejected_cves_are_ignored_not_errors(settings, sources, profile):
+    from vulnops.core.models import REJECTED
+
+    collected = collect(sources, ALL)
+    detection = InventoryScanner(settings).scan(profile, collected.records)
+    inv = build_inventory(profile, [detection])
+    records = {r.cve_id: r for r in collected.records}
+    errors = [{"cve": "CVE-2026-105391", "error": REJECTED}, {"cve": "CVE-2099-99999", "error": "timeout"}]
+    run = Triage(settings).run(profile, records, {a.id: a for a in inv.assets}, inv.findings, errors=errors)
+    assert [e["cve"] for e in run.ignored] == ["CVE-2026-105391"]
+    assert [e["cve"] for e in run.errors] == ["CVE-2099-99999"]
+    md = render_markdown(run)
+    assert "## Ignorées" in md and "CVE-2026-105391" in md.split("## Ignorées")[1].split("##")[0]

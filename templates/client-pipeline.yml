@@ -11,10 +11,10 @@
 #
 #     include:
 #       - project: vulnops/vulnops
-#         ref: v0.8.5
+#         ref: v0.8.6
 #         file: templates/client-pipeline.yml
 #     variables:
-#       VULNOPS_REF: v0.8.5        # same version as the include
+#       VULNOPS_REF: v0.8.6        # same version as the include
 #
 # Jobs:
 #   push to the default branch     validate (profile and targets)

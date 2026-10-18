@@ -25,6 +25,7 @@ from vulnops.core.gti import RANK, gti_unconfirmed, ssvc_exploitation
 from vulnops.core.io import now
 from vulnops.core.llm import LlmClient, LlmError
 from vulnops.core.models import (
+    REJECTED,
     Assessed,
     Asset,
     ClientProfile,
@@ -52,9 +53,12 @@ def _cvss_fields(metric: CvssMetric) -> dict[str, str]:
 
 
 def cvss_heuristic(metric: CvssMetric) -> tuple[str, str]:
-    """(automatable, technical_impact) derived from a CVSS v3.x / v4.0 vector."""
+    """(automatable, technical_impact) derived from a CVSS v2 / v3.x / v4.0 vector."""
     f = _cvss_fields(metric)
-    if metric.version == "4.0":
+    if metric.version == "2.0":  # no user-interaction metric in v2; complete loss of C and I = total
+        auto = all(f.get(k) == v for k, v in {"AV": "N", "AC": "L", "Au": "N"}.items())
+        total = f.get("C") == "C" and f.get("I") == "C"
+    elif metric.version == "4.0":
         auto = all(f.get(k) == v for k, v in {"AV": "N", "AC": "L", "AT": "N", "PR": "N", "UI": "N"}.items())
         total = f.get("VC") == "H" and f.get("VI") == "H"
     else:
@@ -64,16 +68,22 @@ def cvss_heuristic(metric: CvssMetric) -> tuple[str, str]:
 
 
 def scanner_metrics(findings: list[Finding]) -> dict[str, CvssMetric]:
-    """CVE -> CVSS vector reported by a scanner, for CVE records that carry none (no NVD here)."""
+    """CVE -> CVSS vector reported by a scanner, for CVE records that carry none (no NVD here).
+
+    A v3 or v4 vector is preferred to a v2 one (old CVEs often have only v2)."""
     out: dict[str, CvssMetric] = {}
     for finding in findings:
-        if finding.cve_id in out:
-            continue
         for obs in finding.observations:
-            if obs.cvss_vector.startswith("CVSS:"):
-                version = obs.cvss_vector.split("/", 1)[0].split(":", 1)[1]
-                out[finding.cve_id] = CvssMetric(version, obs.cvss_vector, None, None, obs.cvss_source)
-                break
+            vector = obs.cvss_vector
+            if vector.startswith("CVSS:"):
+                version = vector.split("/", 1)[0].split(":", 1)[1]
+            elif vector.startswith("AV:") and "/Au:" in vector:
+                version = "2.0"
+            else:
+                continue
+            current = out.get(finding.cve_id)
+            if current is None or (current.version == "2.0" and version != "2.0"):
+                out[finding.cve_id] = CvssMetric(version, vector, None, None, obs.cvss_source)
     return out
 
 
@@ -193,7 +203,9 @@ class Triage:
                 raise ValueError(f"finding {finding.id} refers to an unknown asset {finding.asset_ref!r}")
             inputs = self.cve_inputs(record, scanner_cvss.get(finding.cve_id))
             run.rows.append(self._row(profile, inputs, asset, finding))
-        known = {e["cve"] for e in run.errors}
+        run.ignored = [e for e in run.errors if e.get("error") == REJECTED]
+        run.errors = [e for e in run.errors if e.get("error") != REJECTED]
+        known = {e["cve"] for e in run.errors} | {e["cve"] for e in run.ignored}
         for cve, n in sorted(missing.items()):
             if cve not in known:
                 run.errors.append({"cve": cve, "error": f"no vulnerability record for {n} finding(s)"})

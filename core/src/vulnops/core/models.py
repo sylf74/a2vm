@@ -80,6 +80,10 @@ class VulnRecord:
         return cls(**d)
 
 
+# Error text of a CVE id that the CVE program rejected (a scanner may still cite it): verdict lists
+# such ids as ignored, not as errors.
+REJECTED = "CVE rejected"
+
 # Kept for readability in the record parser: a record built from a single CVE JSON 5 document.
 CveFacts = VulnRecord
 
@@ -324,3 +328,4 @@ class TriageRun:
     not_affected: list[NotAffected] = field(default_factory=list)
     errors: list[dict[str, str]] = field(default_factory=list)
     llm_model: str | None = None
+    ignored: list[dict[str, str]] = field(default_factory=list)  # rejected CVE ids cited by a source

@@ -45,6 +45,11 @@ XML_REPORT_FORMAT = "a994b278-1f62-11e1-96ac-406186ea4fc5"
 FINISHED = {"Done", "Stopped", "Interrupted"}
 ACTIVE = {"Requested", "Queued", "Running", "Stop Requested"}
 CVE_RE = re.compile(r"CVE-\d{4}-\d{4,}")
+# A test that lists this many CVEs without reporting an installed version is a generic check (e.g.
+# "HTTP TRACE enabled" lists the CVEs of every product that ever had that flaw): its CVEs are kept
+# but flagged, the product being unconfirmed.
+GENERIC_NVT_CVES = 5
+GENERIC_REASON = "test OpenVAS générique ({n} CVE, produit non identifié) : CVE à confirmer"
 
 
 @dataclass
@@ -93,11 +98,16 @@ def _cves(nvt: Any) -> list[str]:
     return sorted({i for i in ids if CVE_RE.fullmatch(i)})
 
 
-def _cvss3(nvt: Any) -> tuple[str, str]:
-    for sev in nvt.findall("severities/severity"):
-        vector = _text(sev, "value")
-        if vector.startswith("CVSS:3") or vector.startswith("CVSS:4"):
+def _cvss(nvt: Any) -> tuple[str, str]:
+    """(vector, source): CVSS v4 or v3 when the NVT has one, else its CVSS v2 vector (old NVTs)."""
+    values = [_text(sev, "value") for sev in nvt.findall("severities/severity")]
+    for vector in values:
+        if vector.startswith(("CVSS:4", "CVSS:3")):
             return vector, "openvas"
+    tags = dict(t.split("=", 1) for t in _text(nvt, "tags").split("|") if "=" in t)
+    for vector in [*values, tags.get("cvss_base_vector", "")]:
+        if vector.startswith("AV:") and "/Au:" in vector:
+            return vector, "openvas (CVSS v2)"
     return "", ""
 
 
@@ -129,6 +139,8 @@ def parse_gmp_report(xml: str | bytes, client_id: str, min_qod: int = 70, observ
     details = _host_details(root)
     builders: dict[str, _Builder] = {}
     skipped: dict[str, int] = {}
+    generic: dict[tuple[str, str], int] = {}  # (ip, cve) -> CVE count of the generic test that reported it
+    specific: set[tuple[str, str]] = set()  # (ip, cve) also reported by a specific test
 
     def skip(reason: str) -> None:
         skipped[reason] = skipped.get(reason, 0) + 1
@@ -168,9 +180,20 @@ def parse_gmp_report(xml: str | bytes, client_id: str, min_qod: int = 70, observ
         port = _text(result, "port") or "general"
         solution = (nvt.find("solution").get("type", "") if nvt.find("solution") is not None else "").lower()
         label = f"{port} · {_text(nvt, 'name')[:120]}"
+        is_generic = len(cves) >= GENERIC_NVT_CVES and not installed
         for cve in cves:
-            b.add(cve, label, installed, fixed, solution or "affected", _text(result, "threat"), _cvss3(nvt),
+            b.add(cve, label, installed, fixed, solution or "affected", _text(result, "threat"), _cvss(nvt),
                   note=f"openvas NVT {nvt.get('oid', '')} on {port}")  # fmt: skip
+            if is_generic:
+                generic[(ip, cve)] = max(generic.get((ip, cve), 0), len(cves))
+            else:
+                specific.add((ip, cve))
+    for (ip, cve), n in generic.items():
+        if (ip, cve) in specific:
+            continue
+        finding = builders[ip].findings[cve]
+        finding.status = "under_investigation"
+        finding.review_reasons.append(GENERIC_REASON.format(n=n))
     detections = [b.detection(details.get(ip, {}).get("os") or None) for ip, b in builders.items()]
     out = merge(detections) if detections else Detection(client_id, SOURCE, [], [])
     for reason, n in skipped.items():

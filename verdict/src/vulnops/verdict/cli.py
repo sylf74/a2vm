@@ -59,7 +59,7 @@ def main(argv: list[str] | None = None) -> int:
             llm_failures = [r for r in run.rows if r.rationale_source.startswith("template (LLM")]
             print(
                 f"{profile.id}: ACT={counts['ACT']} ATTEND={counts['ATTEND']} TRACK={counts['TRACK']} "
-                f"review={sum(r.needs_review for r in run.rows)} errors={len(run.errors)} "
+                f"review={sum(r.needs_review for r in run.rows)} errors={len(run.errors)} ignored={len(run.ignored)} "
                 f"llm_calls={triage.llm_calls} llm_fallbacks={len(llm_failures)} -> {target}"
             )
             if triage.llm_stopped:

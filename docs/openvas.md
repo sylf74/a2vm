@@ -165,7 +165,14 @@ this project only, and keep client projects with internal data on internal runne
 - One asset per scanned host (IP, host name, OS when the scanner found them); it merges with the
   same host seen by Trivy or dnf (same FQDN, host name or address).
 - One finding per host and CVE; the port and the NVT are kept on each observation, with the
-  installed and fixed versions when the NVT reports them, and its CVSS v3 vector.
+  installed and fixed versions when the NVT reports them, and its CVSS vector (v4 or v3, else the
+  v2 vector of older NVTs).
+- A generic test that lists 5 CVEs or more without reporting an installed version (for instance
+  "HTTP Debugging Methods (TRACE/TRACK) Enabled", which cites the CVEs of every product that once
+  had the flaw) gives findings in status `under_investigation`, flagged for review: the product is
+  not confirmed. The same CVE reported by a specific test is not flagged.
+- CVE ids rejected by the CVE program but still cited by an NVT are listed as ignored in the
+  report, not as errors.
 - Left out, and counted: results below the QoD threshold (guesses from banners), log-level
   results, results without a CVE (configuration findings such as weak TLS ciphers).
 - The report is parsed with defusedxml (no entity expansion, no external entities): it carries
