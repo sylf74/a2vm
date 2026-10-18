@@ -11,10 +11,10 @@
 #
 #     include:
 #       - project: vulnops/vulnops
-#         ref: v0.8.4
+#         ref: v0.8.5
 #         file: templates/client-pipeline.yml
 #     variables:
-#       VULNOPS_REF: v0.8.4        # same version as the include
+#       VULNOPS_REF: v0.8.5        # same version as the include
 #
 # Jobs:
 #   push to the default branch     validate (profile and targets)
@@ -31,6 +31,8 @@
 #   VULNOPS_RUNNER_TAG, VULNOPS_COLLECT_TAG   runner tags (default llm-lan): set VULNOPS_COLLECT_TAG
 #                            in the client .gitlab-ci.yml to run the collection on the scanner host
 #                            itself (docs/openvas.md, "Scanner host as runner")
+#   An OpenVAS scan often runs longer than GitLab's default job timeout (1 h): raise the project's
+#   timeout (Settings > CI/CD > General pipelines) above the targets' timeout_minutes (default 240).
 #   VULNOPS_LLM_ENABLED, VULNOPS_LLM_BASE_URL, VULNOPS_LLM_MODEL, LLM_API_KEY   (usually set on the group)
 #   VULNOPS_SMTP_HOST, VULNOPS_SMTP_PORT, VULNOPS_SMTP_TLS, VULNOPS_SMTP_USER, VULNOPS_SMTP_PASSWORD,
 #   VULNOPS_MAIL_FROM, VULNOPS_ANALYST_TO   (watch mode, usually set on the group)

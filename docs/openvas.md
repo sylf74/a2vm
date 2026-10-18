@@ -88,8 +88,18 @@ openvas:
   # scan_config: daba56c8-73ec-11df-a475-002264764cea   Full and fast (default, safe checks on)
   # port_list:   33d0cd82-57c6-11e1-8ed1-406186ea4fc5   All IANA assigned TCP (default)
   # min_qod: 70                         quality of detection threshold (Greenbone's default view)
-  # timeout_minutes: 240
+  # timeout_minutes: 240                how long the collect job waits for the scan
+  # reuse_hours: 6                      a scan finished less than this ago is collected, not redone
 ```
+
+A full scan of a few hosts on every TCP port takes hours. The GitLab job timeout (1 h by default)
+must be longer than `timeout_minutes`: set it in the client project, **Settings > CI/CD > General
+pipelines > Timeout** (e.g. `5h`), and check the runner's own maximum job timeout. If the job is
+killed anyway, gvmd goes on scanning: a later run waits for the running scan, or collects the
+finished one when it is younger than `reuse_hours`.
+
+List each address once: a host name and the address it resolves to are two targets for the
+scanner, and the same machine is then scanned twice.
 
 CI/CD variables of the client project:
 

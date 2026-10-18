@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vulnops-intel"
-version = "0.8.4"
+version = "0.8.5"
 description = "vulnops intelligence stage: collects and normalises vulnerability records."
 requires-python = ">=3.11"
 license = {text = "AGPL-3.0-only"}

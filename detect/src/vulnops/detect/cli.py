@@ -97,7 +97,8 @@ def cmd_plan(args: argparse.Namespace) -> int:
     if tf.openvas:
         o = tf.openvas
         excl = f", except {', '.join(o.exclude)}" if o.exclude else ""
-        print(f"  openvas via {o.gmp}: {', '.join(o.hosts)}{excl} (QoD >= {o.min_qod}, max {o.timeout_minutes} min)")
+        limits = f"QoD >= {o.min_qod}, max {o.timeout_minutes} min, reuse < {o.reuse_hours:g} h"
+        print(f"  openvas via {o.gmp}: {', '.join(o.hosts)}{excl} ({limits})")
     return 0
 
 

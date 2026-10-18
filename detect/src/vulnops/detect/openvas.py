@@ -25,6 +25,7 @@ import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -58,6 +59,7 @@ class OpenvasConfig:
     scanner: str = OPENVAS_SCANNER
     min_qod: int = 70
     timeout_minutes: int = 240
+    reuse_hours: float = 6  # a finished scan younger than this is collected instead of a new scan (0: never)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any], where: str = "openvas") -> OpenvasConfig:
@@ -192,6 +194,22 @@ def _first_id(response: Any, tag: str, name: str) -> str | None:
     return None
 
 
+def _recent_report(task: Any, max_hours: float, now: datetime) -> tuple[str, str] | None:
+    """(report id, end time) of the task's last report when it finished less than max_hours ago."""
+    last = task.find("last_report/report")
+    if max_hours <= 0 or last is None or not last.get("id"):
+        return None
+    ended = (last.findtext("scan_end") or last.findtext("timestamp") or "").strip()
+    try:
+        when = datetime.fromisoformat(ended.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=UTC)
+    age_hours = (now - when).total_seconds() / 3600
+    return (last.get("id"), ended) if 0 <= age_hours <= max_hours else None
+
+
 def run_scan(
     gmp: Any,
     cfg: OpenvasConfig,
@@ -199,11 +217,14 @@ def run_scan(
     log: Callable[[str], None] = print,
     sleep: Callable[[float], None] = time.sleep,
     poll_seconds: float = 30,
+    clock: Callable[[], datetime] = lambda: datetime.now(UTC),
 ) -> bytes:
     """Scan with an authenticated python-gvm Gmp object; returns the report XML.
 
     The target and the task are reused from one run to the next (same name), so gvmd keeps the
-    history of the scans; a scan already running for this client is waited for, not doubled.
+    history of the scans; a scan already running for this client is waited for, not doubled; a scan
+    that finished less than `reuse_hours` ago is collected as is (e.g. after a job killed by its
+    timeout while gvmd went on scanning).
     """
     name = cfg.key(client)
     target_id = _first_id(gmp.get_targets(filter_string=f'name="{name}"'), "target", name)
@@ -223,10 +244,14 @@ def run_scan(
 
     task = gmp.get_task(task_id).find("task")
     status = task.findtext("status") if task is not None else ""
+    recent = _recent_report(task, cfg.reuse_hours, clock()) if status == "Done" else None
     if status in ACTIVE:
         current = task.find("current_report/report")
         report_id = current.get("id") if current is not None else None
         log(f"openvas: a scan is already {status.lower()}, waiting for it")
+    elif recent:
+        report_id, ended = recent
+        log(f"openvas: last scan finished at {ended}, less than {cfg.reuse_hours:g} h ago: collecting it")
     else:
         report_id = gmp.start_task(task_id).findtext("report_id")
         log(f"openvas: scan started, report {report_id}")

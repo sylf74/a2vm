@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-only
+from datetime import datetime
+
 import pytest
 import yaml
 from lxml import etree as ET
@@ -143,6 +145,37 @@ def test_scan_reuses_and_waits_for_a_running_scan():
     names = [c[0] for c in gmp.calls]
     assert "create_target" not in names and "create_task" not in names and "start_task" not in names
     assert gmp.calls[-1][1] == "rep-running"
+
+
+class DoneGmp(FakeGmp):
+    """A task whose last scan ended at 2026-10-18T08:40:00Z (job killed, gvmd went on)."""
+
+    def __init__(self):
+        super().__init__(existing=True)
+
+    def get_task(self, task_id):
+        if any(c[0] == "start_task" for c in self.calls):
+            return super().get_task(task_id)
+        return self._el("<r><task id='k1'><status>Done</status><progress>-1</progress><last_report>"
+                        "<report id='rep-done'><scan_end>2026-10-18T08:40:00Z</scan_end></report>"
+                        "</last_report></task></r>")  # fmt: skip
+
+
+def _at(hhmm):
+    return lambda: datetime.fromisoformat(f"2026-10-18T{hhmm}:00+00:00")
+
+
+def test_scan_collects_a_recent_finished_report():
+    gmp = DoneGmp()
+    run_scan(gmp, _cfg(), "lab", log=lambda m: None, sleep=lambda s: None, clock=_at("10:30"))
+    assert "start_task" not in [c[0] for c in gmp.calls] and gmp.calls[-1][1] == "rep-done"
+
+
+def test_scan_starts_again_when_the_last_report_is_old_or_reuse_is_off():
+    for cfg, clock in ((_cfg(), _at("15:00")), (_cfg(reuse_hours=0), _at("09:00"))):
+        gmp = DoneGmp()
+        run_scan(gmp, cfg, "lab", log=lambda m: None, sleep=lambda s: None, clock=clock)
+        assert "start_task" in [c[0] for c in gmp.calls] and gmp.calls[-1][1] == "rep-new"
 
 
 def test_scan_name_changes_with_the_hosts():
