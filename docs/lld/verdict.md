@@ -363,10 +363,8 @@ Agreed for the next versions; each moves into the sections above when built.
 
 | Addition | What verdict does | When |
 | --- | --- | --- |
-| Evidence or assumption | Each decision says whether it rests only on evidence or on at least one default value (`is_default`); the report and the dashboard separate the two kinds of ACT and list the context the client should complete | v0.9.x |
 | Policy version and run manifest | Each decision carries the policy version; `triage.json` gets a manifest with the hash of every input and output and the versions of code, policy and SSVC tables. A CI test enumerates every combination leading to ACT; a policy change comes with a report of the decisions it changes | v0.9.x |
 | Run checks | Before publication: share of decisions that change without a new policy, volume drop of a source, drop of assets at stable volume. Alert first; blocking once the history exists | v0.9.x (alert), P1 (blocking) |
 | Risk acceptance | An `exceptions.yaml` in the client project: CVE, asset, justification, approver, expiry date. An accepted finding keeps its decision but leaves the lists to handle until expiry; changed by merge request approved by the risk approver | v0.9.x or P1 |
 | Finding lifecycle | Stable identity (asset, CVE, component) and states: open, reclassified, remediation claimed, remediation verified, reopened, risk accepted. A finding closes only when a new observation confirms the absence | P1 (history database) |
 | Downgrade alert | An exit from ACT without verified remediation, or a drop of exposure or criticality on an asset carrying exploited findings, raises a security event; the decision journal is append-only and hash-chained | P1 |
-| Exposure import mapping | Exposure values from a client inventory or CMDB map onto SSVC: public internet → `open`; filtered internet access or internal network → `controlled`; administration-only or isolated → `small` | With a CMDB import connector |
