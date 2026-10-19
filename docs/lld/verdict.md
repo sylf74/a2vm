@@ -1,10 +1,10 @@
 # verdict — low-level design
 
-| | |
+| Item | Value |
 | --- | --- |
-| Stage | Triage (`vulnops-verdict`, command `verdict`) |
-| Describes | v0.9.0 as built; later changes marked **Planned (v0.9.1)** or **Planned (v0.9.2)** |
-| Higher-level documents | HLD (stages and common model), DAT (servers, zones, flows) |
+| Building block | `verdict`, the triage and prioritisation stage (`vulnops-verdict`, command `verdict`) |
+| Status | v0.9.0 as built; later changes marked **Planned (v0.9.1)** or **Planned (v0.9.2)** |
+| Place in the set | C4 level 3 of the `verdict` block of the HLD (§6 Logical architecture); holds its building-block and runtime views. Goals, constraints and decisions: HLD. Servers, zones and flows: DAT |
 | Code | `verdict/src/vulnops/verdict/`, shared model in `core/src/vulnops/core/models.py` |
 
 This document says how verdict turns findings into decisions: its inputs and outputs, the rules

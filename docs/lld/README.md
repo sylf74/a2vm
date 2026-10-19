@@ -1,8 +1,10 @@
 # Low-level designs
 
-One document per stage, kept with the code it describes and updated in the same merge request.
-The high-level design (stages, common model, principles) and the technical architecture document
-(servers, zones, flows) live outside the repository.
+One document per building block, kept with the code it describes and updated in the same merge
+request. Each LLD is the C4 level 3 of one block of the high-level design (HLD, §6 Logical
+architecture); the HLD (goals, constraints, context, decisions) and the technical architecture
+document (DAT: servers, zones, flows) live outside the repository. The three follow the same
+arc42-based structure.
 
 | Stage | Document | Status |
 | --- | --- | --- |
