@@ -170,6 +170,8 @@ remediate/                                 not started
 config/settings.yaml                       default settings (a client project may override them)
 templates/client-pipeline.yml              pipeline included by every client project
 examples/                                  fictitious client projects (profile, targets, CI)
+docs/hld/                                  high-level design: product strategy and one chapter per pillar
+docs/lld/                                  low-level design, one per pillar
 docs/deployment.md                         GitLab groups, runner, code and client projects
 docs/scanning.md                           read-only scanner set-up
 docs/openvas.md                            OpenVAS network scans (Greenbone), mutual TLS to GMP
@@ -177,7 +179,8 @@ docs/alerts.md                             watch mode, sources, alert sheets, ma
 docs/gti.md                                Google Threat Intelligence connector
 tests/                                     tests and offline fixtures
 scripts/run-pipeline.sh                    the CI pipeline, locally
-.gitlab/CODEOWNERS                         one owner per stage
+scripts/build-hld.sh                       the HLD assembled into one document
+.gitlab/CODEOWNERS                         one owner per pillar
 ```
 
 ## License

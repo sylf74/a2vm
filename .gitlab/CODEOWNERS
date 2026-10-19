@@ -1,26 +1,36 @@
-# One owner per stage (the product owner of each pillar). Replace @product-owner with each owner's
-# GitLab username as they join. On GitLab CE (Free) the owners are shown on merge requests;
-# making their approval mandatory requires GitLab Premium.
+# One owner per pillar (its product owner) and the product manager for what binds the pillars.
+# Replace the placeholder handles with each owner's GitLab username as they join. On GitLab CE (Free)
+# the owners are shown on merge requests; making their approval mandatory requires GitLab Premium.
 
-*               @product-owner
+*                                           @product-manager
 
-# Common model: schemas, exchange files, settings, LLM client
-/core/          @product-owner
+# High-level design: strategy (shared) and one chapter per pillar
+/docs/hld/                                  @product-manager
+/docs/hld/10-vulnerability-intelligence.md  @po-intelligence
+/docs/hld/20-vulnerability-detection.md     @po-detection
+/docs/hld/30-triage-prioritization.md       @po-triage
+/docs/hld/40-dispatch-capitalization.md     @po-dispatch
+/docs/hld/50-emergency-actions.md           @po-emergency
 
-# Intelligence
-/intel/         @product-owner
+# Low-level designs
+/docs/lld/triage-prioritization.md          @po-triage
 
-# Detection
-/detect/        @product-owner
+# Common model: schemas, exchange files, settings, LLM client (contracts between pillars)
+/core/                                      @product-manager
 
-# Asset inventory
-/assets/        @product-owner
+# Pillar 1 — Vulnerability Intelligence
+/intel/                                     @po-intelligence
+/alert/                                     @po-intelligence
 
-# Triage
-/verdict/       @product-owner
+# Pillar 2 — Vulnerability Detection
+/detect/                                    @po-detection
 
-# Remediation
-/remediate/     @product-owner
+# Pillar 3 — Triage & Prioritization
+/assets/                                    @po-triage
+/verdict/                                   @po-triage
 
-# Client pipeline template (runs in every client project)
-/templates/     @product-owner
+# Pillar 4 — Dispatch & Capitalization
+/remediate/                                 @po-dispatch
+
+# Client pipeline template (runs in every tenant project)
+/templates/                                 @product-manager

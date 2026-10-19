@@ -1,0 +1,384 @@
+# AI-Assisted Vulnerability Management — Product strategy
+
+Part of the high-level design (HLD); see [README.md](README.md) for the other chapters. This
+chapter holds everything that binds the five pillars together: goals, constraints, context,
+structuring decisions, contracts between pillars, AI strategy, deployment modes, cross-cutting
+security and the overall roadmap. A pillar chapter details its own part and never contradicts this
+one.
+
+## 1. Vision and goals
+
+The platform turns vulnerability intelligence and scanner findings into one prioritised,
+explainable decision per client and finding, then into actions followed to closure. AI assists at
+precise points; deterministic rules and people take every decision. It targets production use for
+a managed vulnerability management service.
+
+### Business goals
+
+1. Aggregate vulnerability intelligence from multiple sources and cross-check exploitation evidence (pillar 1).
+2. Confront that intelligence with each client's actual assets, internal and internet-exposed (pillar 2).
+3. Produce one global SSVC decision per client and finding, with internal and external detections reconciled and the asset context made explicit (pillar 3).
+4. Dispatch the resulting actions to the teams that remediate, follow them to verified closure and capitalise on them (pillar 4).
+5. In a crisis, act outside the normal cadence with emergency measures across clients (pillar 5).
+6. Keep the ideas reusable: client configuration kept outside the code, and a licence decided once the merge with the internal VERDICT project is settled.
+
+### Quality goals (top 5)
+
+| Priority | Quality goal | What it means here |
+| --- | --- | --- |
+| 1 | Confidentiality | Client data and TLP:RED/AMBER material go only to components and LLM endpoints approved for that client; on premises by default |
+| 2 | Explainability | Every decision can be traced to its inputs and decision points |
+| 3 | Determinism | Same inputs give the same decision; AI proposes or writes, never decides |
+| 4 | Multi-tenancy | Strict separation between tenants: data, configuration and LLM endpoints |
+| 5 | Operability | Reproducible, observable runs |
+
+### Quality scenarios
+
+Targets are set on the pilot client; until then the scenarios fix what is measured.
+
+| Quality | Scenario | Measure |
+| --- | --- | --- |
+| Confidentiality | A pipeline runs on a client's data | No client data reaches a component or LLM endpoint not approved for that client; LLM prompts are not stored |
+| Explainability | An analyst questions an ACT | Every input of the decision shows its source, assumed and AI-estimated values included |
+| Determinism | The same run is replayed | Same records, assets, findings, policy version: same decisions |
+| Timeliness | A daily run for a client | Duration of the run and time of publication, against targets set on the pilot |
+| Detection quality | Past decisions are replayed against later exploitation | Share of TRACK or ATTEND findings exploited afterwards (false negatives) |
+| Robustness | A hostile scanner export or an unreachable LLM | The input is rejected without side effect; the run ends with templates and flagged rows |
+
+### Stakeholders
+
+| Role | Expectation |
+| --- | --- |
+| Vulnerability management service lead | Product direction, delivery to clients |
+| Pillar product owners | Scope and roadmap of each pillar |
+| Analysts (production team) | Daily intel watch, monthly indicators, validated decisions |
+| Clients | Prioritised, justified actions on their assets |
+| SOC / CTI teams | STIX exchanges with OpenCTI and the SOC |
+| Infrastructure and security teams | Hosting, network flows, DICT compliance |
+
+## 2. Value chain
+
+Five pillars, one chain: intelligence and detections converge on the asset context, Triage &
+Prioritization decides, Dispatch & Capitalization acts and follows up; Emergency Actions short-cut
+the chain in a crisis.
+
+```mermaid
+flowchart LR
+  subgraph P1["1. Vulnerability Intelligence"]
+    intel["intel: one record per CVE,<br/>exploitation evidence"]
+    alert["alert: watch on the estate,<br/>CVE sheets"]
+  end
+  subgraph P2["2. Vulnerability Detection"]
+    detect["detect: packages, network scans,<br/>declared inventory<br/>(observations only)"]
+  end
+  subgraph P3["3. Triage & Prioritization"]
+    assets["Asset context (assets):<br/>exposure, criticality, zone,<br/>each with its source"]
+    decision["Decision (verdict):<br/>SSVC tree, BOD 26-04, policy:<br/>ACT / ATTEND / TRACK"]
+  end
+  subgraph P4["4. Dispatch & Capitalization (not started)"]
+    dispatch["actions to remediation teams,<br/>follow-up to verified closure"]
+  end
+  subgraph P5["5. Emergency Actions (not started)"]
+    emergency["off-cadence: exploited 0-day,<br/>emergency measures"]
+  end
+
+  intel -- records --> detect
+  detect -- "observations, findings" --> assets
+  assets --> decision
+  intel -- records --> decision
+  decision -- decisions --> dispatch
+  alert -. alerts .-> emergency
+  assets -. exposed assets .-> emergency
+
+  tenants[("Tenant projects: profile, targets,<br/>contacts, published mapping, LLM endpoint")]
+  llm["LLM endpoint (OpenAI-compatible, per tenant):<br/>serves pillars 1 to 3, proposes, never decides"]
+  tenants --- P3
+  llm -.- P3
+```
+
+| Pillar | GitLab name | Role in the chain | Status | Chapter |
+| --- | --- | --- | --- | --- |
+| 1. Vulnerability Intelligence | `intel` (+ `alert`) | Knows every CVE and its exploitation; watches the estate | In development | [10-vulnerability-intelligence.md](10-vulnerability-intelligence.md) |
+| 2. Vulnerability Detection | `detect` | States what is installed and exposed, without judging it | In development | [20-vulnerability-detection.md](20-vulnerability-detection.md) |
+| 3. Triage & Prioritization | `verdict` (+ `assets`) | Holds the asset context and takes the only decision | In development (v0.9.0) | [30-triage-prioritization.md](30-triage-prioritization.md) |
+| 4. Dispatch & Capitalization | — | Turns decisions into actions and follows them to closure | Not started | [40-dispatch-capitalization.md](40-dispatch-capitalization.md) |
+| 5. Emergency Actions | — | Acts outside the normal cadence in a crisis | Not started | [50-emergency-actions.md](50-emergency-actions.md) |
+
+Status scale used throughout: Not started → In development → Pilot → In service.
+
+## 3. Constraints
+
+Confidentiality drives most constraints: client data and restricted intelligence go only where the
+client has approved, and on premises by default, LLM inference included.
+
+| Type | Constraint | Consequence |
+| --- | --- | --- |
+| Security | Client data is only sent to an LLM endpoint approved for that client; on premises by default | Any OpenAI-compatible endpoint can be used (vLLM, Ollama, Azure OpenAI…); in MSSP mode a client's own SaaS LLM requires its written approval and is configured for that client only (§9) |
+| Security | TLP:RED/AMBER documents must not reach services outside the trusted perimeter | Restricted intelligence is processed on premises only; licensed content is never sent to an LLM |
+| Security | DICT requirements built up progressively towards production | Security controls are part of each release, not a final phase |
+| Network | The corporate proxy blocks some RSS and CSAF feeds, and possibly NVD | Intel collection runs from a DMZ host with its own outbound access |
+| Network | Internet-facing scans must originate outside the corporate network | External scanning runs from a cloud host acting as a GitLab runner |
+| Organisation | No interactive access to client CMDBs | Asset inventory is rebuilt from scanners, client exports and SIEM data |
+| Platform | GitLab is the control plane (code, projects per tenant, changes reviewed by merge request) and orchestrates the per-tenant jobs | Long-running services (pillar 1 first, then pillars 4 and 5) need a container runtime; Kubernetes is the candidate, still to be validated |
+| Data | Internal model is business-oriented; STIX only at interfaces | STIX mapping is confined to OpenCTI / SOC connectors |
+| Legal | Proprietary for now; earlier versions were published under AGPL-3.0 | No distribution outside the authorised people until the licence is decided; copies of earlier versions keep their AGPL rights; ownership to be settled in writing with the employer before the merge |
+| Cost | Google Threat Intelligence billed per request, Vulners per API call | Quotas and caching on paid sources |
+
+## 4. System context
+
+The platform consumes vulnerability intelligence, scanner results and client asset data, and
+delivers decisions to analysts, clients, the SOC and dashboards. It calls an LLM endpoint approved
+for each tenant.
+
+```mermaid
+flowchart LR
+  feeds["Vulnerability feeds<br/>CVE records (CNA, CISA ADP),<br/>KEV, EPSS, CERT-FR, vendor RSS"]
+  paid["Paid intel APIs<br/>Google Threat Intelligence (optional)<br/>Vulners: planned"]
+  estate["Client estate<br/>internal hosts, public endpoints:<br/>packages, network scans"]
+  cdata["Client project data<br/>profile, targets, published map<br/>SIEMs and exports: planned"]
+  platform(["The platform<br/>five pillars (§2)<br/>AI proposes; rules, people decide"])
+  analysts["Analysts<br/>review and validate decisions<br/>and alerts before delivery"]
+  clients["Clients<br/>prioritised actions, validated<br/>alerts, reports"]
+  cti["OpenCTI and SOC<br/>STIX 2.1 exchanges (planned)"]
+  dash["Dashboards<br/>run page today; indicators over time:<br/>tool to be decided"]
+  llm["LLM endpoint<br/>OpenAI-compatible, per tenant<br/>proposals and texts only"]
+
+  feeds --> platform
+  paid --> platform
+  estate --> platform
+  cdata --> platform
+  platform <--> analysts
+  platform --> clients
+  platform <--> cti
+  platform --> dash
+  platform <--> llm
+```
+
+| Partner | Direction | Exchanged | Interface | Status |
+| --- | --- | --- | --- | --- |
+| Public sources: CVE records (CNA and CISA ADP), CISA KEV, FIRST EPSS | In | Vulnerability records, exploitation evidence, EPSS | HTTPS, JSON | In place |
+| Advisory feeds: CERT-FR, vendor RSS and CSAF | In | Advisories for the watch mode | RSS, CSAF | CERT-FR and RSS in place; CSAF partly |
+| Google Threat Intelligence (licensed) | In; only CVE ids out | Exploitation state, exploit availability | REST API, API key | In place, optional |
+| Vulners, NVD | In | Aggregated exploits, NVD enrichment | REST API | Not used today |
+| Client internal hosts | In | Package inventories; internal network scan | Read-only SSH; network vulnerability scanner | In place |
+| Client public endpoints | In | External network scan | Network vulnerability scanner run from the cloud | In place |
+| Other scanners (Tenable, Qualys, Cyberwatch), client SIEMs and asset exports | In | Findings, assets | API, report import, SIEM queries | Planned |
+| Client project (profile, targets, contacts, `published`) | In | Declared assets, attribute rules, scan targets, alert recipients | Files in the tenant's GitLab project | In place; `published` in v0.9.1 |
+| LLM endpoint approved for the tenant | Out and back | Facts of one CVE and asset, kept in memory only; proposals and texts back (§8) | OpenAI-compatible HTTPS API: vLLM or Ollama on premises, Azure OpenAI (Azure AI Foundry), or the client's own LLM; chosen per deployment and recorded in its DAT | In place (on premises), optional |
+| OpenCTI, SOC | In and out | CTI linked to CVEs; per-client STIX bundles | STIX 2.1, TAXII | Planned |
+| Analysts | In and out | Review, alert validation, reports | GitLab interface, job artifacts | In place |
+| Client contacts | Out | Validated alert mails, reports | SMTP relay, after analyst validation | In place |
+| Dashboards | Out | Reporting dataset | Run page today; Grafana or other tool to decide | Open |
+| SIEM of the platform | Out | Platform logs | Syslog | Target |
+
+## 5. Structuring decisions
+
+The platform is organised in five pillars, built from one code repository; GitLab is the control
+plane, with projects per tenant holding their configuration and results, and orchestrates
+per-tenant jobs, while tenant-independent pillars run as services. AI proposes and writes;
+deterministic rules and people decide. Decisions that concern one pillar only are in its chapter.
+
+| # | Decision | Rationale |
+| --- | --- | --- |
+| D1 | Single monorepo (`vulnops`) for all pillars | Shared data model and tooling; pillars evolve together |
+| D2 | Projects per tenant, configuration outside the code repository | Tenant isolation, code reusable |
+| D3 | Two execution models: per-tenant batch jobs (pillars 2 and 3) orchestrated by GitLab; tenant-independent or event-driven work (pillar 1, later 4 and 5) as long-running services on a container runtime. GitLab stays the control plane for both | Batch per tenant keeps GitLab traceability and merge-request review; a service fits continuous collection, shared state (records, cache, quotas) and an API consumed by the other pillars |
+| D4 | SSVC decision points come from evidence (KEV, GTI, CISA ADP, CVSS, asset context); AI only proposes a missing one, flagged for review; a deterministic tree decides | Explainable, reproducible decisions; AI errors are visible inputs |
+| D5 | Three delivery levels, ACT / ATTEND / TRACK, from the CISA Coordinator tree, the BOD 26-04 timelines and a policy configurable per client | Clients differ in the asset criticality and exposure data they provide |
+| D6 | One global decision per client, internal and external detections reconciled | External scan collects only; the tenant project maps public endpoints to internal assets |
+| D7 | Exposure uses SSVC values (open / controlled / small), with descriptive zones (dmz, lan…) kept alongside | Standard decision input without losing network context |
+| D8 | LLM reached through an OpenAI-compatible API, endpoint configured per tenant | Model, engine and hosting interchangeable; confidentiality decided per client and deployment mode |
+| D9 | Business-oriented internal data model, STIX only at interfaces | Simpler core, interoperability where needed |
+| D10 | Asset context belongs to Triage & Prioritization: Detection supplies observations, Triage turns them into context (exposure, criticality, zone, each with its source) | The pillar that defines the model owns it; detection stays factual |
+| D11 | AI proposes, never decides: every AI output is a proposal or a text, with a deterministic fallback, shown with its source and reviewed | Accountability stays with rules and people; the platform works without an LLM |
+
+### Execution
+
+- Each tenant project includes the pipeline template at a pinned vulnops tag: `validate` on every push; `collect → intel → detect → assets → triage` on the daily schedule; `watch`, then the manual `send-alerts` (the analyst's validation), on a 10-minute schedule.
+- Jobs fetch the vulnops code at that tag with their job token; the tenant project holds only its own data.
+- A client with an internet exposure also has a collection-only external project, run by the cloud scanner; from v0.9.1 the internal pipeline pulls its latest detection and reconciles it, so one decision is taken per asset and CVE.
+- Target: pillar 1 becomes a long-running service on the container runtime (record API, collection and watch as scheduled tasks), read by the per-tenant jobs; the per-tenant jobs themselves can run on the same runtime through GitLab's Kubernetes executor. The current implementation (v0.9.x) runs everything as GitLab pipelines.
+
+## 6. Contracts between pillars
+
+### Common data model
+
+| Object | Role | Produced by | Consumed by |
+| --- | --- | --- | --- |
+| Vulnerability record | Everything known about one CVE: description, CWE, CVSS, affected products, CISA ADP decision points, KEV, EPSS, GTI view | Pillar 1 | Pillars 2, 3, 5 |
+| Asset observation | One sighting of an asset by one source | Pillar 2 | Pillar 3 (asset context) |
+| Asset | One consolidated element of a client's estate, each attribute with its source | Pillar 3 (asset context) | Pillar 3 (decision), pillars 1, 4, 5 (read only) |
+| Finding | One asset affected by one CVE, one observation per source and package; stable id `<client>:<asset>:<CVE>` | Pillar 2, re-keyed by pillar 3 | Pillars 3, 4 |
+| Decision | The verdict on a finding: level, SSVC outcome, timeline, each input with its source, rationale, review flag | Pillar 3 | Reports, pillar 4, indicators |
+
+Every field carries its source (kev, gti, cisa-adp, scanner, declared, rule, llm, default), so an
+estimated or assumed value stays visible end to end; the schemas are JSON Schema, versioned in the
+repository and checked in CI. The model aligns on CVE JSON 5, VEX statuses, OCSF Vulnerability
+Finding and CISA SSVC; STIX 2.1 is used only at the interfaces.
+
+A change to an object of this table is a change to this chapter: it is reviewed by the product
+owner of every pillar that produces or consumes it.
+
+### Shared building blocks
+
+| Block | Responsibility | Status |
+| --- | --- | --- |
+| `core` | Common model, JSON schemas, settings, LLM client and its output guard | In development |
+| Tenant projects | Per-tenant data: profile, targets, contacts, `published` mapping, LLM endpoint; results as job artifacts | In development |
+| Connectors | STIX 2.1 to OpenCTI and SOCs; reporting dataset for dashboards | Not started |
+
+## 7. Tenant and client context
+
+The same CVE does not call for the same action at two clients: what makes a decision
+client-specific is the context the platform holds about each client. That context is client data,
+kept in the tenant's projects, never in the code repository. The unit that holds it is the tenant:
+the isolation boundary of the platform for configuration, context, data, results and LLM endpoint.
+In MSSP mode each client is one tenant, or several when its entities must stay apart; in
+self-hosted mode the platform usually has a single tenant.
+
+| Level | What is known | Main uses |
+| --- | --- | --- |
+| Client | Deployment mode, approved LLM endpoint, delivery expectations (cadence, contacts, alert recipients, reporting language), decision policy (escalations, timelines adopted) | All pillars; pillar 3 policy; pillar 4 dispatch |
+| Perimeter | Internal and external scan targets, public endpoints mapped to internal assets (`published`), zones | Pillar 2 collection; pillar 3 reconciliation |
+| Asset | Exposure, mission and well-being impact, zone, owner — detailed in [30-triage-prioritization.md](30-triage-prioritization.md) | Pillar 3 decision; pillar 4 routing; pillar 5 impacted-client list |
+| Watchlist | Products and technologies the client wants watched, whether detected or not | Pillar 1 watch and alerts |
+| Exceptions | Accepted risks, each with justification, approver and expiry date | Pillar 3 decision; pillar 4 follow-up |
+
+Principles:
+
+- Context is collected at onboarding (delivery sheet) and kept as code in the tenant project: every change goes through a merge request reviewed by the context qualifier role (§10 Roles).
+- An assumed value is never hidden: the decision and the report show which inputs rest on a default.
+- A client with little context still gets decisions; providing more context makes them more precise, never less safe.
+- Pillars 1, 4 and 5 read the context; only pillar 3 (asset context) consolidates it.
+
+## 8. AI strategy
+
+AI assists at four points in the current implementation, all optional; each pillar chapter lists
+its own use cases. The invariants below apply to every current and future use case, in every
+pillar.
+
+| Pillar | Use cases | Status |
+| --- | --- | --- |
+| 1. Intelligence | CVE sheet prose; translation into the tenant's reporting language | In development; translation not started |
+| 2. Detection | Product match proposal | In development; proposal-only from v0.9.1 |
+| 3. Triage & Prioritization | Missing SSVC inputs; rationale | In development |
+| 4. Dispatch & Capitalization | Ideas: remediation instructions or tickets, capitalisation summaries | Not started |
+| 5. Emergency Actions | Idea: crisis communications | Not started |
+
+Invariants:
+
+- AI proposes or writes; it never decides. The SSVC tree and the policy are deterministic, and a proposal becomes a fact only through review.
+- Every use case has a deterministic fallback; the platform works without an LLM.
+- Vendor text is untrusted: passed as data only, and the model has no tools.
+- Every AI output is marked as such, with the model, and checked against a schema or a guard before reaching a report.
+- Licensed content (Google Threat Intelligence) is never sent to an LLM.
+- Client data goes only to the LLM endpoint approved for that tenant (§3, §9).
+- The model is recorded with each run; prompts are not stored, as they carry client data.
+
+## 9. Deployment modes
+
+The platform is deployed in one of two modes. Detailed sizing, addressing and flows belong to the
+DAT of each deployment.
+
+| | MSSP mode (the service operates the platform for its clients) | Self-hosted mode (a client operates the platform) |
+| --- | --- | --- |
+| Who operates | The vulnerability management service | The client |
+| LLM endpoint | Chosen by the service, on premises by default; the client's own SaaS LLM only with its written approval (contract or delivery sheet) | Chosen by the client, under its responsibility |
+| Isolation | One endpoint configured per tenant (CI variable); a tenant's data never reaches another tenant's endpoint or an endpoint it has not approved | Single tenant |
+| Where it is recorded | MSSP DAT and the tenant project configuration | The client's DAT |
+| Hosting options | MSSP datacenter (confidentiality, shared platform; network flows to each client) or company cloud zone (elastic runners; confidentiality review per client) | At the client (data never leaves the client; one platform per client to operate) |
+
+### MSSP reference deployment
+
+The work target spreads the platform over four zones: intel collection in the public DMZ, GitLab
+in the internal zone, inference on GPU capacity operated by the service, and development and
+external scanning in the cloud.
+
+| Zone | Components | Why there |
+| --- | --- | --- |
+| Public DMZ | Intel VM (fetches, mirrors and signs public data; read by the internal runner); reverse proxy publishing GitLab with a client certificate | Direct outbound access to feeds blocked by the corporate proxy; cloud runners reach GitLab only through the proxy |
+| Internal zone | GitLab (code + tenant projects), internal runner(s) | Client data stays on premises |
+| AI inference | Default LLM endpoint (OpenAI-compatible API) on GPU capacity operated by the service, on premises or in the cloud; reached only by the internal runner | Hardware and hosting chosen in the DAT on cost and confidentiality |
+| Cloud | Development and qualification VMs; external scanner host acting as a GitLab runner | Internet-facing scans originate outside the corporate network |
+
+## 10. Cross-cutting concerns
+
+Security and AI governance apply to every pillar; each pillar chapter and LLD details how its
+pillar implements them.
+
+| Concern | Principle |
+| --- | --- |
+| Tenant isolation | GitLab projects per tenant; runners, tokens and LLM endpoint scoped per tenant; no cross-tenant data in the code repository |
+| Secrets | API keys (Google Threat Intelligence, Vulners, scanners, SIEM, LLM endpoints) stored as protected, masked CI/CD variables of type File or in a vault — never in Git |
+| Data classification | TLP marking carried on intel items; TLP:RED/AMBER material processed on premises only; client data sent only to the LLM endpoint approved for that tenant |
+| Network | Least-privilege flows between zones; in the MSSP reference deployment only the internal runner reaches the inference API |
+| AI governance | The invariants of §8 |
+| Traceability | Every decision stores each input with its source, the SSVC outcome, the BOD 26-04 timeline, the policy steps and where its rationale comes from; results kept as job artifacts (30 days), history database planned |
+| Observability | Pipeline status and duration, source availability, LLM latency and error rate |
+| Interoperability | STIX 2.1 export to OpenCTI and the SOC; dashboards fed from pipeline outputs (Power BI at work; Grafana under consideration) |
+| Backup | GitLab backup covers code, tenant configuration and results |
+| Confidentiality of the repository | No real infrastructure names or client identifiers in the code repository or its history |
+| External lookups | Only deduplicated keys free of client data leave towards an external source (CVE ids; product and version pairs at most), never a per-asset inventory; since the source address can identify the client, this residual risk is accepted explicitly per source |
+| Roles | Reader, remediator, context qualifier, risk approver, policy maintainer (proposes, never applies alone), administrator without access to client data, auditor; approver and maintainer are never the same person. Mapped onto GitLab roles, protected branches and CODEOWNERS in the DAT |
+| Reporting | Self-hosted dashboards only; aggregates by default, detail only for the entity concerned; the tool reads a dedicated read-only reporting dataset and recomputes no metric; public sharing disabled |
+
+## 11. Roadmap, risks and open points
+
+### Roadmap
+
+Target: production within about three months (from October 2026), security built up release by
+release.
+
+| Step | Content | Pillars |
+| --- | --- | --- |
+| v0.9.x (current) | One global SSVC decision per client with internal and external detections reconciled: v0.9.0 exposure model (released), v0.9.1 published endpoints, external detection pulled by the tenant project, product match as proposal only, v0.9.2 exposure gap | 2, 3 |
+| Next (to confirm) | History database and finding lifecycle; pillar 1 as a service on the container runtime | 1, 3, 4 |
+| Then (to confirm) | Dispatch & Capitalization; Emergency Actions | 4, 5 |
+
+### Risks
+
+| Risk | Mitigation |
+| --- | --- |
+| AI proposes a wrong decision point or product match | Proposal flagged and justified, analyst validation before delivery, regression set of known CVEs |
+| Client data sent to a non-approved LLM endpoint | Endpoint configured per tenant, approval recorded in the DAT, no default cloud endpoint |
+| Incomplete asset data from clients | Per-client decision tree with safe defaults when criticality or exposure is unknown |
+| Feed outages or blocking | Multi-source collection, source health monitoring |
+| Cost drift on paid APIs | Quotas, caching, per-client usage reporting |
+| GitLab as single execution backbone | GitLab backup and restore tested; runners rebuildable from code |
+| Cross-tenant data leak | Project isolation, scoped tokens and endpoints, review of shared artefacts |
+
+### Open points
+
+- Hosting option per client within the MSSP mode: MSSP datacenter or company cloud zone
+- Container runtime for the services: Kubernetes is the candidate, to be validated
+- Dashboard tool for the platform's outputs
+- Points on hold from the review of another internal architecture document, to settle with its team
+
+Open points of a single pillar are in its chapter.
+
+## 12. Glossary
+
+| Term | Meaning |
+| --- | --- |
+| AI-Assisted Vulnerability Management | The product described here |
+| vulnops | Name of the project and of its GitLab repository |
+| Pillar | One of the five functional areas of the platform: Vulnerability Intelligence, Vulnerability Detection, Triage & Prioritization, Dispatch & Capitalization, Emergency Actions |
+| Tenant | Isolation boundary of the platform: configuration, context, data, results and LLM endpoint of one client, or of one of its entities; a self-hosted platform usually has a single tenant |
+| MSSP mode / self-hosted mode | The platform operated by the service for its clients / by a client for itself |
+| SSVC | Stakeholder-Specific Vulnerability Categorization — decision tree producing an action priority |
+| ACT / ATTEND / TRACK | The three delivery levels: remediate now / plan the remediation / monitor |
+| Decision point | One SSVC input: exploitation, automatable, technical impact, mission and well-being (CISA Coordinator); in KEV and publicly exposed (BOD 26-04) |
+| Verdict | GitLab name of the Triage & Prioritization pillar, and its per-client output |
+| Asset context | Part of pillar 3 (GitLab: `assets`) that turns observations into one inventory per tenant, each attribute with its source |
+| KEV | CISA Known Exploited Vulnerabilities catalogue |
+| EPSS | Exploit Prediction Scoring System — probability of exploitation |
+| CSAF | Common Security Advisory Framework — machine-readable advisories |
+| STIX | Structured Threat Information eXpression — CTI exchange format |
+| TLP | Traffic Light Protocol — sharing restrictions (RED, AMBER, GREEN, CLEAR) |
+| DICT | Availability, Integrity, Confidentiality, Traceability |
+| `published` | Tenant-project section mapping public endpoints to internal assets |
+| Exposure | SSVC System Exposure of an asset: open (reachable from the internet, "publicly exposed" for BOD 26-04), controlled, small; recorded with its source (declared, rule, scanner, external scan, assumed) |
+| BOD 26-04 | CISA directive whose SSVC table gives remediation timelines (3, 14 or 60 days, or at the next upgrade) from KEV listing, public exposure, automatability and technical impact |
+| Finding | One asset affected by one CVE, merged across the sources that saw it |
+| Zone | Free label of an asset's network place (dmz, lan, ot...), for reports only |
+| LLM endpoint | An OpenAI-compatible API serving a language model, approved per tenant |
