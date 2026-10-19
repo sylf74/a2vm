@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
 """detect's LLM task: is the product named in a vulnerability record the client's asset?
 
 Only called for fuzzy (name-similarity) candidates; a confirmed match is always flagged for

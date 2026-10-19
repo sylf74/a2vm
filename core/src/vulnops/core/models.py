@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
 """The common data model shared by every vulnops stage.
 
   VulnRecord        everything known about one vulnerability (intel)

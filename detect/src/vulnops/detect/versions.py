@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
 """Best-effort comparison of vendor version strings against CVE JSON 5 version ranges.
 
 Vendor versions are not standardized ("11.1.2-h3", "7.0.12 build 1234", "2.4.58p1"). The key

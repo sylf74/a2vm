@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
 """Checks applied to free text produced by the LLM before it reaches a report.
 
 The model only rephrases facts computed by the pipeline. Any version number, score or CVE id it

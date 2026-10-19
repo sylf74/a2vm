@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
 """Scanner connectors: turn scanner outputs into asset observations and findings.
 
   trivy           `trivy rootfs|image --format json` (Linux hosts, container images)

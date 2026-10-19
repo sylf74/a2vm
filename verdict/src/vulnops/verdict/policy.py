@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
 """Turn SSVC outcomes into the delivery decision used in client reports (ACT / ATTEND / TRACK).
 
 Everything here is configurable in settings.yaml (`policy` section); each escalation that fires

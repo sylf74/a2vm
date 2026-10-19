@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
 """vulnops-alert: watch mode of a client project.
 
   watch   new CERT-FR publications, KEV additions and critical CVEs since the last run, matched to

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
 """Parse a CVE JSON 5 record (cvelistV5 / CVE Services) into CveFacts."""
 
 from __future__ import annotations

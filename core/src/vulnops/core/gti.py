@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
 """Reading the Google Threat Intelligence view of a record (filled by vulnops.intel.gti) as SSVC input.
 
 Kept in core so that verdict and alert interpret GTI the same way without depending on intel.

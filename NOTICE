@@ -1,9 +1,8 @@
 vulnops — AI-assisted Vulnerability Pipeline
 Copyright (C) 2026 The vulnops authors
 
-This program is free software: you can redistribute it and/or modify it under the terms of the
-GNU Affero General Public License, version 3 only (AGPL-3.0-only), as published by the Free
-Software Foundation. It is distributed WITHOUT ANY WARRANTY; see the LICENSE file.
+All rights reserved; see the LICENSE file. The material listed below is not covered by that
+notice and keeps its own licence.
 
 Third-party material included in this repository:
 
@@ -13,6 +12,3 @@ Third-party material included in this repository:
   Aqua Security, Apache License 2.0 (see tests/fixtures/trivy/README.md).
 - CVE records (tests/fixtures/cves/): from the CVE List (cvelistV5), under the CVE Program's
   terms of use; some records are synthetic and marked as such (CVE-2099-*).
-
-Network use (AGPL-3.0, section 13): if you run a modified version of vulnops that users interact
-with over a network, you must offer them the corresponding source code of your version.

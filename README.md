@@ -182,6 +182,6 @@ scripts/run-pipeline.sh                    the CI pipeline, locally
 
 ## License
 
-AGPL-3.0-only (see `LICENSE` and `NOTICE`). Running a modified vulnops as a network service for
-others requires offering them its source code. Contributions: `CONTRIBUTING.md` (DCO sign-off).
+Proprietary, all rights reserved, pending a licensing decision (see `LICENSE` and `NOTICE`);
+earlier versions were published under AGPL-3.0-only. Contributions: `CONTRIBUTING.md`.
 Security issues: `SECURITY.md`.

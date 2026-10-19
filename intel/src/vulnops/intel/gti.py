@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
 """Google Threat Intelligence (GTI, VirusTotal API v3) enrichment of vulnerability records.
 
 One lookup per CVE: GET {gti_url}/collections/vulnerability--cve-yyyy-nnnn, header x-apikey. Only
