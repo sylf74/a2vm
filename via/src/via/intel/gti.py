@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
+# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 """Google Threat Intelligence (GTI, VirusTotal API v3) enrichment of vulnerability records.
 
 One lookup per CVE: GET {gti_url}/collections/vulnerability--cve-yyyy-nnnn, header x-apikey. Only
@@ -20,8 +20,8 @@ import datetime as dt
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
-from vulnops.gti import gti_unconfirmed, ssvc_exploitation  # noqa: F401  (re-exported)
-from vulnops.models import VulnRecord
+from a2vm.gti import gti_unconfirmed, ssvc_exploitation  # noqa: F401  (re-exported)
+from a2vm.models import VulnRecord
 
 from .sources import SourceAuthError, SourceError, Sources
 

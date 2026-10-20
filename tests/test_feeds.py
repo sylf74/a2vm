@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
+# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 import json
 from pathlib import Path
 

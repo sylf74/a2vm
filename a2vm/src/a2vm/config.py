@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
+# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 """Runtime settings shared by all stages (config/settings.yaml), with environment overrides for CI.
 
 Each stage reads its own section: `sources` (intel), `fuzzy_threshold` (detect), `policy` (verdict),

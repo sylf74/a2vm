@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
+# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 """Triage: findings + vulnerability records + consolidated assets -> one decision per finding.
 
 verdict collects nothing itself: records come from the intel stage, assets and findings from the
@@ -21,11 +21,11 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
-from vulnops.config import Settings
-from vulnops.gti import RANK, gti_unconfirmed, ssvc_exploitation
-from vulnops.io import now
-from vulnops.llm import LlmClient, LlmError
-from vulnops.models import (
+from a2vm.config import Settings
+from a2vm.gti import RANK, gti_unconfirmed, ssvc_exploitation
+from a2vm.io import now
+from a2vm.llm import LlmClient, LlmError
+from a2vm.models import (
     REJECTED,
     Assessed,
     Asset,

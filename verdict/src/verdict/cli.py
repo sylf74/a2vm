@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
+# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 """`verdict`: pillar 3 commands.
 
 verdict assets build …   consolidate the detection files of each client into its asset inventory
@@ -11,10 +11,10 @@ import argparse
 import sys
 from pathlib import Path
 
-from vulnops.config import describe_llm, load_settings
-from vulnops.io import ExchangeError, read_assets, read_findings, read_records
-from vulnops.llm import LlmClient
-from vulnops.profile import ProfileError, load_profile
+from a2vm.config import describe_llm, load_settings
+from a2vm.io import ExchangeError, read_assets, read_findings, read_records
+from a2vm.llm import LlmClient
+from a2vm.profile import ProfileError, load_profile
 
 from .report import write_all
 from .triage import Triage

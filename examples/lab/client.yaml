@@ -22,7 +22,7 @@ rules:
   - description: hypervisors
     hostname: "node*"
     set: {exposure: controlled, mission_prevalence: essential, public_wellbeing_impact: minimal, owner: lab-admin}
-  - description: vulnops proof of concept
+  - description: A2VM lab
     hostname: "poc-*"
     set: {exposure: controlled, mission_prevalence: support, public_wellbeing_impact: minimal, owner: lab-admin}
   - description: GitLab

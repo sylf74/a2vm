@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
+# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 """Match the products named in a CVE record against a client's asset profile."""
 
 from __future__ import annotations
@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 
-from vulnops.models import AffectedEntry, CveFacts, DeclaredAsset, Match
+from a2vm.models import AffectedEntry, CveFacts, DeclaredAsset, Match
 
 
 def norm(value: str) -> str:

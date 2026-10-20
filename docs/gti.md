@@ -1,6 +1,6 @@
 # Google Threat Intelligence (optional)
 
-vulnops can ask Google Threat Intelligence (GTI, the VirusTotal API v3) what it knows about each
+A2VM can ask Google Threat Intelligence (GTI, the VirusTotal API v3) what it knows about each
 CVE: exploitation state, exploit availability, risk rating. It needs a GTI Enterprise or
 Enterprise Plus licence; without one, leave it disabled (the default) and nothing changes.
 

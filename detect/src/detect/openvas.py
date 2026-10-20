@@ -1,8 +1,8 @@
-# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
+# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 """OpenVAS (Greenbone Community Edition) connector: network scans, without agent or SSH account.
 
 Two ways in:
-  - scan: vulnops drives gvmd over GMP (python-gvm): it creates or reuses a target and a task named
+  - scan: detect drives gvmd over GMP (python-gvm): it creates or reuses a target and a task named
     after the client, starts the scan, waits for it and downloads the report in XML;
   - import: a report exported from the Greenbone web interface (XML), read the same way.
 
@@ -32,7 +32,7 @@ from typing import Any
 from defusedxml import ElementTree as SafeET
 from defusedxml.common import DefusedXmlException
 
-from vulnops.io import Detection, now
+from a2vm.io import Detection, now
 
 from .scanners import Target, _Builder, merge
 

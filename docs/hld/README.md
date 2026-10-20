@@ -9,7 +9,7 @@ never contradicts the strategy.
 | Status | Draft for review |
 | Version | 0.2 |
 | Product | AI-Assisted Vulnerability Management |
-| Project / repository | vulnops |
+| Project / repository | A2VM, GitLab project `vulnops/a2vm` |
 | Maturity | In development |
 | Out of scope | Implementation detail: see the LLDs in [`../lld/`](../lld/README.md); servers, zones and flows: the DAT of each deployment (outside the repository) |
 | Licence of the software | Proprietary, all rights reserved, pending a licensing decision |

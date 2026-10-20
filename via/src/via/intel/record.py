@@ -1,11 +1,11 @@
-# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
+# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 """Parse a CVE JSON 5 record (cvelistV5 / CVE Services) into CveFacts."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from vulnops.models import AffectedEntry, CveFacts, CvssMetric
+from a2vm.models import AffectedEntry, CveFacts, CvssMetric
 
 _CVSS_KEYS = {"cvssV4_0": "4.0", "cvssV3_1": "3.1", "cvssV3_0": "3.0"}
 

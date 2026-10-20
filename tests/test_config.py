@@ -1,5 +1,5 @@
-# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
-from vulnops.config import describe_llm, load_settings
+# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+from a2vm.config import describe_llm, load_settings
 
 from .conftest import ROOT
 

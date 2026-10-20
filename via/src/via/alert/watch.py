@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
+# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 """Watch mode: what is new since the last check, and which of it concerns this client.
 
 New items come from the sources of the catalogue (config/watch-sources.yaml), read every few
@@ -27,12 +27,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from a2vm.config import Settings
+from a2vm.extensions import AssetMatcher
+from a2vm.gti import ssvc_exploitation
+from a2vm.models import ClientProfile, DeclaredAsset, Finding, VulnRecord, exposure_value
 from via.intel.collect import collect
 from via.intel.sources import SourceError, Sources
-from vulnops.config import Settings
-from vulnops.extensions import AssetMatcher
-from vulnops.gti import ssvc_exploitation
-from vulnops.models import ClientProfile, DeclaredAsset, Finding, VulnRecord, exposure_value
 
 from .certfr import Publication, parse_feed, parse_publication
 from .feeds import MAX_NEW_PER_RUN, Source, parse_generic_feed, read_csaf

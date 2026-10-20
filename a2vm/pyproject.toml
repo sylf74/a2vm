@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "a2vm"
+version = "0.11.0"
+description = "A2VM common contract: data model, exchange files and their schemas, settings, client profiles, LLM client, extension points between pillars."
+requires-python = ">=3.11"
+license = {text = "LicenseRef-a2vm-proprietary"}
+dependencies = ["httpx>=0.27", "PyYAML>=6.0", "jsonschema>=4.20"]
+
+[project.scripts]
+a2vm = "a2vm.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"a2vm" = ["schemas/*.json"]

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
+# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 """Best-effort comparison of vendor version strings against CVE JSON 5 version ranges.
 
 Vendor versions are not standardized ("11.1.2-h3", "7.0.12 build 1234", "2.4.58p1"). The key
@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from vulnops.models import AffectedEntry
+from a2vm.models import AffectedEntry
 
 _TOKEN = re.compile(r"\d+|[a-z]+")
 _PRERELEASE = {"alpha", "a", "beta", "b", "rc", "pre", "preview", "dev", "snapshot", "m"}

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
+# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 import json
 from pathlib import Path
 
@@ -77,13 +77,13 @@ def test_advisories_only_with_level_all(tmp_path, monkeypatch):
 
 
 def test_prose_written_by_llm_and_guarded(settings):
+    from a2vm.llm import LlmClient
+    from a2vm.profile import load_profile
     from detect.inventory import InventoryScanner
     from via.alert.certfr import FeedItem, parse_publication
     from via.alert.fiche import build
     from via.alert.watch import Item, relevant
     from via.intel.sources import Sources
-    from vulnops.llm import LlmClient
-    from vulnops.profile import load_profile
 
     from .conftest import fake_llm_transport
 
@@ -137,8 +137,8 @@ def test_graph_transport(monkeypatch):
 
 
 def test_contacts_by_level_and_role(tmp_path, capsys):
+    from a2vm.profile import load_profile
     from via.alert.contacts import load_contacts, recipients
-    from vulnops.profile import load_profile
 
     lab = ROOT / "examples" / "lab"
     contacts = load_contacts(lab / "contacts.yaml")

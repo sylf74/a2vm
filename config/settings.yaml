@@ -1,4 +1,4 @@
-# vulnops runtime settings, shared by all stages. No secrets here: the LLM API key is read from the
+# A2VM runtime settings, shared by all pillars. No secrets here: the LLM API key is read from the
 # environment variable named in llm.api_key_env.
 #
 # Environment overrides (handy in GitLab CI):

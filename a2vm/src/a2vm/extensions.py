@@ -1,15 +1,15 @@
-# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
+# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 """Extension points between pillars.
 
-The pillars (via, detect, verdict) never import one another: each depends on vulnops only. When a
-pillar needs a capability owned by another one, it asks vulnops for it here, and the owner offers it
+The pillars (via, detect, verdict) never import one another: each depends on a2vm only. When a
+pillar needs a capability owned by another one, it asks a2vm for it here, and the owner offers it
 as a Python entry point in its pyproject.toml. The platform assembles them by installing the pillars
 side by side; a pillar that is not installed simply offers nothing.
 
 | Entry-point group             | Offered by | Used by   | What                                                     |
 | ----------------------------- | ---------- | --------- | -------------------------------------------------------- |
-| vulnops.asset_matcher         | detect     | via watch | factory(settings, llm) -> object with scan(profile, recs) |
-| vulnops.remediation_timeline  | verdict    | via sheet | f(settings, record, publicly_exposed) -> French label    |
+| a2vm.asset_matcher         | detect     | via watch | factory(settings, llm) -> object with scan(profile, recs) |
+| a2vm.remediation_timeline  | verdict    | via sheet | f(settings, record, publicly_exposed) -> French label    |
 """
 
 from __future__ import annotations
@@ -18,8 +18,8 @@ from collections.abc import Callable
 from importlib.metadata import entry_points
 from typing import Any, Protocol
 
-ASSET_MATCHER = "vulnops.asset_matcher"
-REMEDIATION_TIMELINE = "vulnops.remediation_timeline"
+ASSET_MATCHER = "a2vm.asset_matcher"
+REMEDIATION_TIMELINE = "a2vm.remediation_timeline"
 
 
 class ExtensionMissing(RuntimeError):

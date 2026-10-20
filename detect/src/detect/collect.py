@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
+# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 """Read-only collection over SSH: run a scanner on each target and keep its raw output.
 
 Targets file (YAML), one per client — see examples/lab/targets.yaml:
@@ -30,7 +30,7 @@ from typing import Any
 
 import yaml
 
-from vulnops.io import Detection
+from a2vm.io import Detection
 
 from .openvas import GmpError, OpenvasConfig, parse_gmp_report, run_scan
 from .openvas import connect as gmp_connect

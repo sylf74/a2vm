@@ -1,8 +1,8 @@
-# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
+# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 import yaml
 
-from vulnops.llm.guard import unsupported_tokens
-from vulnops.profile import validate_profile_data
+from a2vm.llm.guard import unsupported_tokens
+from a2vm.profile import validate_profile_data
 
 from .conftest import ROOT
 

@@ -100,7 +100,7 @@ flowchart LR
 | --- | --- | --- | --- | --- |
 | 1. Vulnerability Intelligence | `via` (`via.intel`, `via.alert`) | Knows every CVE and its exploitation; watches the estate | In development | [10-vulnerability-intelligence.md](10-vulnerability-intelligence.md) |
 | 2. Vulnerability Detection | `detect` | States what is installed and exposed, without judging it | In development | [20-vulnerability-detection.md](20-vulnerability-detection.md) |
-| 3. Triage & Prioritization | `verdict` (`verdict.assets`) | Holds the asset context and takes the only decision | In development (v0.10.0) | [30-triage-prioritization.md](30-triage-prioritization.md) |
+| 3. Triage & Prioritization | `verdict` (`verdict.assets`) | Holds the asset context and takes the only decision | In development (v0.11.0) | [30-triage-prioritization.md](30-triage-prioritization.md) |
 | 4. Dispatch & Capitalization | — | Turns decisions into actions and follows them to closure | Not started | [40-dispatch-capitalization.md](40-dispatch-capitalization.md) |
 | 5. Emergency Actions | — | Acts outside the normal cadence in a crisis | Not started | [50-emergency-actions.md](50-emergency-actions.md) |
 
@@ -180,7 +180,7 @@ deterministic rules and people decide. Decisions that concern one pillar only ar
 
 | # | Decision | Rationale |
 | --- | --- | --- |
-| D1 | Single repository (`vulnops`) for the common contract and all pillars | Shared data model and tooling; pillars evolve together |
+| D1 | Single repository (`vulnops/a2vm`) for the common contract and all pillars | Shared data model and tooling; pillars evolve together |
 | D2 | Projects per tenant, configuration outside the code repository | Tenant isolation, code reusable |
 | D3 | Two execution models: per-tenant batch jobs (pillars 2 and 3) orchestrated by GitLab; tenant-independent or event-driven work (pillar 1, later 4 and 5) as long-running services on a container runtime. GitLab stays the control plane for both | Batch per tenant keeps GitLab traceability and merge-request review; a service fits continuous collection, shared state (records, cache, quotas) and an API consumed by the other pillars |
 | D4 | SSVC decision points come from evidence (KEV, GTI, CISA ADP, CVSS, asset context); AI only proposes a missing one, flagged for review; a deterministic tree decides | Explainable, reproducible decisions; AI errors are visible inputs |
@@ -191,12 +191,12 @@ deterministic rules and people decide. Decisions that concern one pillar only ar
 | D9 | Business-oriented internal data model, STIX only at interfaces | Simpler core, interoperability where needed |
 | D10 | Asset context belongs to Triage & Prioritization: Detection supplies observations, Triage turns them into context (exposure, criticality, zone, each with its source) | The pillar that defines the model owns it; detection stays factual |
 | D11 | AI proposes, never decides: every AI output is a proposal or a text, with a deterministic fallback, shown with its source and reviewed | Accountability stays with rules and people; the platform works without an LLM |
-| D12 | Pillars are independent packages, each with its own command (`via`, `detect`, `verdict`); they depend only on the common contract (package `vulnops`) and never import one another; a capability needed across pillars is offered through a vulnops extension point | Each pillar can evolve, be owned and later be deployed on its own; a test enforces the rule |
+| D12 | Pillars are independent packages, each with its own command (`via`, `detect`, `verdict`); they depend only on the common contract (package `a2vm`) and never import one another; a capability needed across pillars is offered through an a2vm extension point | Each pillar can evolve, be owned and later be deployed on its own; a test enforces the rule |
 
 ### Execution
 
-- Each tenant project includes the pipeline template at a pinned vulnops tag: `validate` on every push; `collect → via → detect → assets → triage` on the daily schedule; `watch`, then the manual `send-alerts` (the analyst's validation), on a 10-minute schedule.
-- Jobs fetch the vulnops code at that tag with their job token; the tenant project holds only its own data.
+- Each tenant project includes the pipeline template at a pinned A2VM tag: `validate` on every push; `collect → via → detect → assets → triage` on the daily schedule; `watch`, then the manual `send-alerts` (the analyst's validation), on a 10-minute schedule.
+- Jobs fetch the A2VM code at that tag with their job token; the tenant project holds only its own data.
 - A client with an internet exposure also has a collection-only external project, run by the cloud scanner; from v0.10.1 the internal pipeline pulls its latest detection and reconciles it, so one decision is taken per asset and CVE.
 - Target: pillar 1 becomes a long-running service on the container runtime (record API, collection and watch as scheduled tasks), read by the per-tenant jobs; the per-tenant jobs themselves can run on the same runtime through GitLab's Kubernetes executor. The current implementation (v0.9.x) runs everything as GitLab pipelines.
 
@@ -332,7 +332,8 @@ release.
 
 | Step | Content | Pillars |
 | --- | --- | --- |
-| v0.10.0 (current) | Repository organised by pillar: `vulnops` (common contract), `via`, `detect`, `verdict`, each with its own command; no functional change | All |
+| v0.11.0 (current) | Project renamed A2VM: GitLab project `vulnops/a2vm`, common contract package and command `a2vm`; GitLab group, CI/CD variables (`VULNOPS_*`), exchange-file identifiers and scan accounts unchanged | All |
+| v0.10.0 | Repository organised by pillar: `vulnops` (common contract), `via`, `detect`, `verdict`, each with its own command; no functional change | All |
 | v0.10.1, v0.10.2 | One global SSVC decision per client with internal and external detections reconciled: published endpoints, external detection pulled by the tenant project, product match as proposal only (v0.10.1); exposure gap (v0.10.2). The exposure model was released in v0.9.0 | 2, 3 |
 | Next (to confirm) | History database and finding lifecycle; pillar 1 as a service on the container runtime | 1, 3, 4 |
 | Then (to confirm) | Dispatch & Capitalization; Emergency Actions | 4, 5 |
@@ -363,7 +364,8 @@ Open points of a single pillar are in its chapter.
 | Term | Meaning |
 | --- | --- |
 | AI-Assisted Vulnerability Management | The product described here |
-| vulnops | Name of the project and of its GitLab repository; also its common contract package (`vulnops`), on which every pillar depends |
+| A2VM | AI-Assisted Vulnerability Management (the "2" stands for the two A of AI-Assisted): the product, its GitLab project (`vulnops/a2vm`) and its common contract package (`a2vm`), on which every pillar depends |
+| vulnops | Name of the GitLab group that holds the A2VM project and the tenant projects; prefix of the CI/CD variables (`VULNOPS_*`) |
 | VIA (VIA³) | Vulnerability Intelligence: Advanced, AI-assisted, Alerting. Package and command of pillar 1 (`via`), covering intel and alert |
 | Pillar | One of the five functional areas of the platform: Vulnerability Intelligence, Vulnerability Detection, Triage & Prioritization, Dispatch & Capitalization, Emergency Actions |
 | Tenant | Isolation boundary of the platform: configuration, context, data, results and LLM endpoint of one client, or of one of its entities; a self-hosted platform usually has a single tenant |

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
+# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 """One-page HTML dashboard of a triage run: self-contained (no script, no external resource), so it
 can be opened from the job artifacts, attached to a mail or published with GitLab Pages.
 
@@ -11,7 +11,7 @@ from __future__ import annotations
 import html
 from collections import Counter, defaultdict
 
-from vulnops.models import TriageRun
+from a2vm.models import TriageRun
 
 from .rationale import BOD_FR
 
@@ -155,7 +155,7 @@ def render_dashboard(run: TriageRun) -> str:
         f'<span><span class="dot" style="background:var(--{d.lower()})"></span> {d}</span>' for d in DECISIONS
     )
     return f"""<!doctype html><html lang="fr"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>vulnops — {_e(run.client.name)}</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>A2VM — {_e(run.client.name)}</title>
 <style>{CSS}</style></head><body><main>
 <h1>Vulnérabilités — {_e(run.client.name)}</h1>
 <p class="sub">Triage du {_e(run.generated_at[:16].replace("T", " "))} UTC · {run.cve_count} CVE analysées ·

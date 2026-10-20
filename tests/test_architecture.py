@@ -1,6 +1,6 @@
-# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
-"""The pillars stay independent: each imports vulnops (the common contract) and itself, never another
-pillar; vulnops imports no pillar. Capabilities shared across pillars go through vulnops.extensions."""
+# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+"""The pillars stay independent: each imports a2vm (the common contract) and itself, never another
+pillar; a2vm imports no pillar. Capabilities shared across pillars go through a2vm.extensions."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGES = {
-    "vulnops": ROOT / "vulnops/src/vulnops",
+    "a2vm": ROOT / "a2vm/src/a2vm",
     "via": ROOT / "via/src/via",
     "detect": ROOT / "detect/src/detect",
     "verdict": ROOT / "verdict/src/verdict",
@@ -31,8 +31,8 @@ def imported_roots(path: Path) -> set[str]:
 
 @pytest.mark.parametrize("package", sorted(PACKAGES))
 def test_no_import_across_pillars(package):
-    allowed = {package} | ({"vulnops"} if package in PILLARS else set())
-    forbidden = (PILLARS | {"vulnops"}) - allowed
+    allowed = {package} | ({"a2vm"} if package in PILLARS else set())
+    forbidden = (PILLARS | {"a2vm"}) - allowed
     for path in PACKAGES[package].rglob("*.py"):
         crossing = imported_roots(path) & forbidden
         assert not crossing, f"{path.relative_to(ROOT)} imports {sorted(crossing)}"

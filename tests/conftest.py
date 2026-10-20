@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
+# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 from __future__ import annotations
 
 import json
@@ -8,9 +8,9 @@ from pathlib import Path
 import httpx
 import pytest
 
+from a2vm.config import Settings
+from a2vm.profile import load_profile
 from via.intel.sources import Sources
-from vulnops.config import Settings
-from vulnops.profile import load_profile
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests" / "fixtures"

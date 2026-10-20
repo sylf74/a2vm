@@ -1,16 +1,16 @@
-# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
+# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 from datetime import datetime
 
 import pytest
 import yaml
 from lxml import etree as ET
 
+from a2vm.io import read_detection
+from a2vm.profile import load_profile
 from detect.cli import main
 from detect.collect import collect, load_targets
 from detect.openvas import FULL_AND_FAST, OpenvasConfig, parse_gmp_report, run_scan
 from verdict.assets.build import build_inventory
-from vulnops.io import read_detection
-from vulnops.profile import load_profile
 
 from .conftest import FIXTURES, ROOT
 

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
+# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 """SSVC decision tables, loaded from the CERT/CC SSVC data files shipped in `data/`.
 
 - CISA Coordinator v2.0.3: Exploitation x Automatable x Technical Impact x Mission & Well-Being

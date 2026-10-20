@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
+# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 """CERT-FR publications: RSS feeds for discovery, the JSON view of each publication for details.
 
 Every field is read defensively: an unexpected or missing field degrades the alert (fewer details),

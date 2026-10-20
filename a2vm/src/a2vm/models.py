@@ -1,5 +1,5 @@
-# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
-"""The common data model shared by every vulnops stage.
+# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+"""The common data model shared by every pillar.
 
   VulnRecord        everything known about one vulnerability (intel)
   AssetObservation  one sighting of an asset by one source (detect connectors)
@@ -7,7 +7,7 @@
   Finding           one asset affected by one vulnerability (detect, then re-keyed by assets)
   TriageRow         the decision on one finding (verdict)
 
-Records, observations, assets and findings travel between stages as JSON files (vulnops.io); the
+Records, observations, assets and findings travel between stages as JSON files (a2vm.io); the
 `to_dict` / `from_dict` helpers are the only (de)serialisation code, so a field added here
 is added everywhere.
 """

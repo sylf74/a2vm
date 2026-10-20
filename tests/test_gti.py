@@ -1,16 +1,16 @@
-# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
+# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 import json
 
 import httpx
 import pytest
 
+from a2vm.config import describe_gti, load_settings
+from a2vm.gti import gti_unconfirmed, ssvc_exploitation
+from a2vm.io import read_records, write_records
 from verdict.triage import Triage
 from via.intel.collect import collect
 from via.intel.gti import enrich, parse_gti
 from via.intel.sources import Sources
-from vulnops.config import describe_gti, load_settings
-from vulnops.gti import gti_unconfirmed, ssvc_exploitation
-from vulnops.io import read_records, write_records
 
 from .conftest import FIXTURES
 
@@ -158,10 +158,10 @@ def test_env_override(monkeypatch):
 
 
 def test_alert_fiche_uses_gti_facts_not_prose(gti_settings):
+    from a2vm.profile import load_profile
     from detect.inventory import InventoryScanner
     from via.alert.fiche import build
     from via.alert.watch import Item, relevant
-    from vulnops.profile import load_profile
 
     from .conftest import ROOT
 

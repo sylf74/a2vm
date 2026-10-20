@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run the vulnops pipeline locally, like the CI does:
+# Run the A2VM pipeline locally, like the CI does:
 #   [collect] -> via collect -> detect inventory -> verdict assets -> verdict run
 #
 #   scripts/run-pipeline.sh --since 26h

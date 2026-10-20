@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
+# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 """The inventory scanner: findings computed by matching vulnerability records against the assets a
 client declared in its profile (products, versions). Used for clients without a scanner, and for
 products scanners do not see (appliances, network devices, SaaS).
@@ -9,10 +9,10 @@ profile declares; the assets stage completes the missing ones from rules and def
 
 from __future__ import annotations
 
-from vulnops.config import Settings
-from vulnops.io import Detection, now
-from vulnops.llm import LlmClient, LlmError
-from vulnops.models import (
+from a2vm.config import Settings
+from a2vm.io import Detection, now
+from a2vm.llm import LlmClient, LlmError
+from a2vm.models import (
     ATTRIBUTES,
     AssetObservation,
     ClientProfile,
