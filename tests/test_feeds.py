@@ -4,9 +4,9 @@ from pathlib import Path
 
 import yaml
 
-from vulnops.alert.cli import main
-from vulnops.alert.feeds import Source, csaf_entries, parse_generic_feed
-from vulnops.alert.watch import State
+from via.alert.cli import main
+from via.alert.feeds import Source, csaf_entries, parse_generic_feed
+from via.alert.watch import State
 
 from .conftest import FIXTURES, ROOT
 
@@ -94,7 +94,7 @@ def test_check_sources(capsys):
 
 
 def test_catalogue_is_valid():
-    from vulnops.alert.feeds import load_catalogue
+    from via.alert.feeds import load_catalogue
 
     cat = load_catalogue(ROOT / "config" / "watch-sources.yaml")
     assert {s.category for s in cat} == {"institutional", "vendor", "research"}

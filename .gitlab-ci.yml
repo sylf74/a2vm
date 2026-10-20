@@ -44,8 +44,8 @@ examples:
     VULNOPS_LLM_ENABLED: "false"
   script:
     - *install
-    - vulnops-profiles validate examples/*/client.yaml
-    - vulnops-detect plan examples/lab/targets.yaml --profile examples/lab/client.yaml
+    - vulnops validate examples/*/client.yaml
+    - detect plan examples/lab/targets.yaml --profile examples/lab/client.yaml
     - scripts/run-pipeline.sh --fixtures tests/fixtures --since 2099-10-01 --include-updated
   artifacts:
     paths: [output/]
@@ -58,7 +58,7 @@ release:
   script:
     - |
       want="${CI_COMMIT_TAG#v}"
-      for p in core intel detect assets verdict alert; do
+      for p in vulnops via detect verdict; do
         got=$(sed -n 's/^version = "\(.*\)"/\1/p' $p/pyproject.toml)
         [ "$got" = "$want" ] || { echo "$p/pyproject.toml has version $got, tag says $want"; exit 1; }
       done

@@ -4,15 +4,15 @@ import subprocess
 import pytest
 import yaml
 
-from vulnops.assets.build import WORST_CASE, build_inventory
-from vulnops.core.config import Settings
-from vulnops.core.io import Detection, now
-from vulnops.core.models import AssetObservation
-from vulnops.core.profile import load_profile, validate_profile_data
-from vulnops.detect.collect import DNF, TRIVY_HOST, collect, load_targets, plan, ssh_command
-from vulnops.detect.scanners import Target, load_dnf_file, load_trivy_file, parse_trivy
-from vulnops.intel.collect import collect as collect_records
-from vulnops.verdict.triage import Triage
+from detect.collect import DNF, TRIVY_HOST, collect, load_targets, plan, ssh_command
+from detect.scanners import Target, load_dnf_file, load_trivy_file, parse_trivy
+from verdict.assets.build import WORST_CASE, build_inventory
+from verdict.triage import Triage
+from via.intel.collect import collect as collect_records
+from vulnops.config import Settings
+from vulnops.io import Detection, now
+from vulnops.models import AssetObservation
+from vulnops.profile import load_profile, validate_profile_data
 
 from .conftest import FIXTURES, ROOT
 
@@ -225,8 +225,8 @@ def test_settings_rationale_scope():
 
 
 def test_targets_extra_ips_and_eosl(tmp_path):
-    from vulnops.detect.collect import load_targets
-    from vulnops.detect.scanners import Target, parse_trivy
+    from detect.collect import load_targets
+    from detect.scanners import Target, parse_trivy
 
     tf = load_targets(ROOT / "examples" / "lab" / "targets.yaml")
     node02 = next(t for t in tf.targets if t.host.startswith("node02"))
@@ -238,7 +238,7 @@ def test_targets_extra_ips_and_eosl(tmp_path):
 
 
 def test_plan_checks_client_id(capsys):
-    from vulnops.detect.cli import main
+    from detect.cli import main
 
     lab = str(ROOT / "examples" / "lab")
     assert main(["plan", f"{lab}/targets.yaml", "--profile", f"{lab}/client.yaml"]) == 0
@@ -248,8 +248,8 @@ def test_plan_checks_client_id(capsys):
 
 
 def test_former_exposure_values_are_read_with_a_warning(tmp_path):
-    from vulnops.core.cli import main as profiles_main
-    from vulnops.core.profile import load_profile
+    from vulnops.cli import main as profiles_main
+    from vulnops.profile import load_profile
 
     path = tmp_path / "client.yaml"
     path.write_text(
@@ -284,6 +284,6 @@ def test_zone_and_exposure_source_reach_the_decision(lab, settings, sources):
     inv = build_inventory(lab, [d])
     [row] = Triage(settings).run(lab, {record.cve_id: record}, {a.id: a for a in inv.assets}, inv.findings).rows
     assert (row.exposure, row.exposure_source, row.zone, row.publicly_exposed) == ("open", "rule", "dmz", True)
-    from vulnops.verdict.report import _exposure_cell
+    from verdict.report import _exposure_cell
 
     assert _exposure_cell(row) == "dmz · ouverte (Internet), règle"

@@ -64,16 +64,16 @@ the chain in a crisis.
 
 ```mermaid
 flowchart LR
-  subgraph P1["1. Vulnerability Intelligence"]
-    intel["intel: one record per CVE,<br/>exploitation evidence"]
-    alert["alert: watch on the estate,<br/>CVE sheets"]
+  subgraph P1["1. VIA — Vulnerability Intelligence"]
+    intel["via collect: one record per CVE,<br/>exploitation evidence"]
+    alert["via watch: watch on the estate,<br/>CVE sheets"]
   end
   subgraph P2["2. Vulnerability Detection"]
     detect["detect: packages, network scans,<br/>declared inventory<br/>(observations only)"]
   end
   subgraph P3["3. Triage & Prioritization"]
-    assets["Asset context (assets):<br/>exposure, criticality, zone,<br/>each with its source"]
-    decision["Decision (verdict):<br/>SSVC tree, BOD 26-04, policy:<br/>ACT / ATTEND / TRACK"]
+    assets["Asset context (verdict assets):<br/>exposure, criticality, zone,<br/>each with its source"]
+    decision["Decision (verdict run):<br/>SSVC tree, BOD 26-04, policy:<br/>ACT / ATTEND / TRACK"]
   end
   subgraph P4["4. Dispatch & Capitalization (not started)"]
     dispatch["actions to remediation teams,<br/>follow-up to verified closure"]
@@ -96,11 +96,11 @@ flowchart LR
   llm -.- P3
 ```
 
-| Pillar | GitLab name | Role in the chain | Status | Chapter |
+| Pillar | Package and command | Role in the chain | Status | Chapter |
 | --- | --- | --- | --- | --- |
-| 1. Vulnerability Intelligence | `intel` (+ `alert`) | Knows every CVE and its exploitation; watches the estate | In development | [10-vulnerability-intelligence.md](10-vulnerability-intelligence.md) |
+| 1. Vulnerability Intelligence | `via` (`via.intel`, `via.alert`) | Knows every CVE and its exploitation; watches the estate | In development | [10-vulnerability-intelligence.md](10-vulnerability-intelligence.md) |
 | 2. Vulnerability Detection | `detect` | States what is installed and exposed, without judging it | In development | [20-vulnerability-detection.md](20-vulnerability-detection.md) |
-| 3. Triage & Prioritization | `verdict` (+ `assets`) | Holds the asset context and takes the only decision | In development (v0.9.0) | [30-triage-prioritization.md](30-triage-prioritization.md) |
+| 3. Triage & Prioritization | `verdict` (`verdict.assets`) | Holds the asset context and takes the only decision | In development (v0.10.0) | [30-triage-prioritization.md](30-triage-prioritization.md) |
 | 4. Dispatch & Capitalization | — | Turns decisions into actions and follows them to closure | Not started | [40-dispatch-capitalization.md](40-dispatch-capitalization.md) |
 | 5. Emergency Actions | — | Acts outside the normal cadence in a crisis | Not started | [50-emergency-actions.md](50-emergency-actions.md) |
 
@@ -163,7 +163,7 @@ flowchart LR
 | Client internal hosts | In | Package inventories; internal network scan | Read-only SSH; network vulnerability scanner | In place |
 | Client public endpoints | In | External network scan | Network vulnerability scanner run from the cloud | In place |
 | Other scanners (Tenable, Qualys, Cyberwatch), client SIEMs and asset exports | In | Findings, assets | API, report import, SIEM queries | Planned |
-| Client project (profile, targets, contacts, `published`) | In | Declared assets, attribute rules, scan targets, alert recipients | Files in the tenant's GitLab project | In place; `published` in v0.9.1 |
+| Client project (profile, targets, contacts, `published`) | In | Declared assets, attribute rules, scan targets, alert recipients | Files in the tenant's GitLab project | In place; `published` in v0.10.1 |
 | LLM endpoint approved for the tenant | Out and back | Facts of one CVE and asset, kept in memory only; proposals and texts back (§8) | OpenAI-compatible HTTPS API: vLLM or Ollama on premises, Azure OpenAI (Azure AI Foundry), or the client's own LLM; chosen per deployment and recorded in its DAT | In place (on premises), optional |
 | OpenCTI, SOC | In and out | CTI linked to CVEs; per-client STIX bundles | STIX 2.1, TAXII | Planned |
 | Analysts | In and out | Review, alert validation, reports | GitLab interface, job artifacts | In place |
@@ -180,7 +180,7 @@ deterministic rules and people decide. Decisions that concern one pillar only ar
 
 | # | Decision | Rationale |
 | --- | --- | --- |
-| D1 | Single monorepo (`vulnops`) for all pillars | Shared data model and tooling; pillars evolve together |
+| D1 | Single repository (`vulnops`) for the common contract and all pillars | Shared data model and tooling; pillars evolve together |
 | D2 | Projects per tenant, configuration outside the code repository | Tenant isolation, code reusable |
 | D3 | Two execution models: per-tenant batch jobs (pillars 2 and 3) orchestrated by GitLab; tenant-independent or event-driven work (pillar 1, later 4 and 5) as long-running services on a container runtime. GitLab stays the control plane for both | Batch per tenant keeps GitLab traceability and merge-request review; a service fits continuous collection, shared state (records, cache, quotas) and an API consumed by the other pillars |
 | D4 | SSVC decision points come from evidence (KEV, GTI, CISA ADP, CVSS, asset context); AI only proposes a missing one, flagged for review; a deterministic tree decides | Explainable, reproducible decisions; AI errors are visible inputs |
@@ -191,12 +191,13 @@ deterministic rules and people decide. Decisions that concern one pillar only ar
 | D9 | Business-oriented internal data model, STIX only at interfaces | Simpler core, interoperability where needed |
 | D10 | Asset context belongs to Triage & Prioritization: Detection supplies observations, Triage turns them into context (exposure, criticality, zone, each with its source) | The pillar that defines the model owns it; detection stays factual |
 | D11 | AI proposes, never decides: every AI output is a proposal or a text, with a deterministic fallback, shown with its source and reviewed | Accountability stays with rules and people; the platform works without an LLM |
+| D12 | Pillars are independent packages, each with its own command (`via`, `detect`, `verdict`); they depend only on the common contract (package `vulnops`) and never import one another; a capability needed across pillars is offered through a vulnops extension point | Each pillar can evolve, be owned and later be deployed on its own; a test enforces the rule |
 
 ### Execution
 
-- Each tenant project includes the pipeline template at a pinned vulnops tag: `validate` on every push; `collect → intel → detect → assets → triage` on the daily schedule; `watch`, then the manual `send-alerts` (the analyst's validation), on a 10-minute schedule.
+- Each tenant project includes the pipeline template at a pinned vulnops tag: `validate` on every push; `collect → via → detect → assets → triage` on the daily schedule; `watch`, then the manual `send-alerts` (the analyst's validation), on a 10-minute schedule.
 - Jobs fetch the vulnops code at that tag with their job token; the tenant project holds only its own data.
-- A client with an internet exposure also has a collection-only external project, run by the cloud scanner; from v0.9.1 the internal pipeline pulls its latest detection and reconciles it, so one decision is taken per asset and CVE.
+- A client with an internet exposure also has a collection-only external project, run by the cloud scanner; from v0.10.1 the internal pipeline pulls its latest detection and reconciles it, so one decision is taken per asset and CVE.
 - Target: pillar 1 becomes a long-running service on the container runtime (record API, collection and watch as scheduled tasks), read by the per-tenant jobs; the per-tenant jobs themselves can run on the same runtime through GitLab's Kubernetes executor. The current implementation (v0.9.x) runs everything as GitLab pipelines.
 
 ## 6. Contracts between pillars
@@ -260,7 +261,7 @@ pillar.
 | Pillar | Use cases | Status |
 | --- | --- | --- |
 | 1. Intelligence | CVE sheet prose; translation into the tenant's reporting language | In development; translation not started |
-| 2. Detection | Product match proposal | In development; proposal-only from v0.9.1 |
+| 2. Detection | Product match proposal | In development; proposal-only from v0.10.1 |
 | 3. Triage & Prioritization | Missing SSVC inputs; rationale | In development |
 | 4. Dispatch & Capitalization | Ideas: remediation instructions or tickets, capitalisation summaries | Not started |
 | 5. Emergency Actions | Idea: crisis communications | Not started |
@@ -331,7 +332,8 @@ release.
 
 | Step | Content | Pillars |
 | --- | --- | --- |
-| v0.9.x (current) | One global SSVC decision per client with internal and external detections reconciled: v0.9.0 exposure model (released), v0.9.1 published endpoints, external detection pulled by the tenant project, product match as proposal only, v0.9.2 exposure gap | 2, 3 |
+| v0.10.0 (current) | Repository organised by pillar: `vulnops` (common contract), `via`, `detect`, `verdict`, each with its own command; no functional change | All |
+| v0.10.1, v0.10.2 | One global SSVC decision per client with internal and external detections reconciled: published endpoints, external detection pulled by the tenant project, product match as proposal only (v0.10.1); exposure gap (v0.10.2). The exposure model was released in v0.9.0 | 2, 3 |
 | Next (to confirm) | History database and finding lifecycle; pillar 1 as a service on the container runtime | 1, 3, 4 |
 | Then (to confirm) | Dispatch & Capitalization; Emergency Actions | 4, 5 |
 
@@ -361,15 +363,16 @@ Open points of a single pillar are in its chapter.
 | Term | Meaning |
 | --- | --- |
 | AI-Assisted Vulnerability Management | The product described here |
-| vulnops | Name of the project and of its GitLab repository |
+| vulnops | Name of the project and of its GitLab repository; also its common contract package (`vulnops`), on which every pillar depends |
+| VIA (VIA³) | Vulnerability Intelligence: Advanced, AI-assisted, Alerting. Package and command of pillar 1 (`via`), covering intel and alert |
 | Pillar | One of the five functional areas of the platform: Vulnerability Intelligence, Vulnerability Detection, Triage & Prioritization, Dispatch & Capitalization, Emergency Actions |
 | Tenant | Isolation boundary of the platform: configuration, context, data, results and LLM endpoint of one client, or of one of its entities; a self-hosted platform usually has a single tenant |
 | MSSP mode / self-hosted mode | The platform operated by the service for its clients / by a client for itself |
 | SSVC | Stakeholder-Specific Vulnerability Categorization — decision tree producing an action priority |
 | ACT / ATTEND / TRACK | The three delivery levels: remediate now / plan the remediation / monitor |
 | Decision point | One SSVC input: exploitation, automatable, technical impact, mission and well-being (CISA Coordinator); in KEV and publicly exposed (BOD 26-04) |
-| Verdict | GitLab name of the Triage & Prioritization pillar, and its per-client output |
-| Asset context | Part of pillar 3 (GitLab: `assets`) that turns observations into one inventory per tenant, each attribute with its source |
+| Verdict | Package and command of the Triage & Prioritization pillar, and its per-client output |
+| Asset context | Part of pillar 3 (`verdict.assets`, command `verdict assets`) that turns observations into one inventory per tenant, each attribute with its source |
 | KEV | CISA Known Exploited Vulnerabilities catalogue |
 | EPSS | Exploit Prediction Scoring System — probability of exploitation |
 | CSAF | Common Security Advisory Framework — machine-readable advisories |

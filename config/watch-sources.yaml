@@ -1,4 +1,4 @@
-# Watch sources read by vulnops-alert (watch mode), every 10 minutes.
+# Watch sources read by via (watch mode), every 10 minutes.
 #
 #   category  institutional | vendor | research
 #   kind      certfr   CERT-FR alerts / advisories (RSS + JSON of each publication)
@@ -11,7 +11,7 @@
 #   urgent    every publication of the source is urgent (otherwise: urgent when exploited, KEV, or
 #             critical on an Internet-exposed asset; info otherwise)
 #   enabled   false until the source has been checked from the runner:
-#             vulnops-alert check-sources --sources config/watch-sources.yaml
+#             via check-sources --sources config/watch-sources.yaml
 #
 # A client project may provide its own watch-sources.yaml, which replaces this file for that client.
 

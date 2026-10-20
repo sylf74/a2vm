@@ -111,7 +111,7 @@ CI/CD variables of the client project:
 | `VULNOPS_GVM_CERT` | File, protected | `client.crt` |
 | `VULNOPS_GVM_KEY` | File, protected | `client.key` |
 
-Check the file with `vulnops-detect plan targets.yaml` (the validate job does it). The daily
+Check the file with `detect plan targets.yaml` (the validate job does it). The daily
 `collect` job then runs the scan; it needs no `VULNOPS_SSH_KEY` when the file has no SSH target.
 
 ## 5. Scanner host as runner (external scans)
@@ -183,5 +183,5 @@ this project only, and keep client projects with internal data on internal runne
 Export the report from the web interface (Reports, download, format XML), then:
 
 ```bash
-vulnops-detect import --client lab --source openvas report.xml --out work/detect
+detect import --client lab --source openvas report.xml --out work/detect
 ```

@@ -2,10 +2,10 @@
 
 | Item | Value |
 | --- | --- |
-| Building block | `verdict`, the triage and prioritisation stage (`vulnops-verdict`, command `verdict`) |
-| Status | v0.9.0 as built; later changes marked **Planned (v0.9.1)** or **Planned (v0.9.2)** |
-| Place in the set | C4 level 3 of pillar 3 of the HLD ([`../hld/30-triage-prioritization.md`](../hld/30-triage-prioritization.md)); this version covers its Decision block (`verdict`), the Asset context block (`assets`) is to be added. Goals, constraints and contracts: HLD. Servers, zones and flows: DAT |
-| Code | `verdict/src/vulnops/verdict/`, shared model in `core/src/vulnops/core/models.py` |
+| Building block | Pillar 3 package `verdict` (command `verdict`): Decision (`verdict run`) and Asset context (`verdict.assets`, `verdict assets build`) |
+| Status | v0.10.0 as built (decision logic unchanged since v0.9.0); later changes marked **Planned (v0.10.1)** or **Planned (v0.10.2)** |
+| Place in the set | C4 level 3 of pillar 3 of the HLD ([`../hld/30-triage-prioritization.md`](../hld/30-triage-prioritization.md)); this version covers its Decision block (`verdict run`), the Asset context block (`verdict.assets`) is to be added. Goals, constraints and contracts: HLD. Servers, zones and flows: DAT |
+| Code | `verdict/src/verdict/`, shared model in `vulnops/src/vulnops/models.py` |
 
 This document says how verdict turns findings into decisions: its inputs and outputs, the rules
 and their order, the defaults, the configuration, the failure modes and the tests. It is updated
@@ -57,7 +57,7 @@ In the client pipeline, the `triage` job runs `verdict run "$VULNOPS_PROFILE" --
 | `work/assets/<client>/assets.json` | assets | Consolidated assets with their attributes and the source of each | `assets.schema.json` |
 | `work/assets/<client>/findings.json` | assets | Findings re-keyed to consolidated assets, and the declared assets found not affected | `findings.schema.json` |
 
-All files are read through `vulnops.core.io`; a file whose client id differs from the profile's is
+All files are read through `vulnops.io`; a file whose client id differs from the profile's is
 rejected (exit 2).
 
 ### 2.3 Outputs
@@ -132,7 +132,7 @@ Computed once per CVE and reused for every asset and client of the run.
 | Automatable | `yes`, `no` | CISA ADP; else the CVSS heuristic on the record's best vector (CNA first, newest version), else on the scanner's vector (a v4 or v3 vector before a v2 one); else the LLM (flagged) | `yes` if `policy.unknown_inputs: conservative`, `no` if `optimistic`; flagged |
 | Technical Impact | `partial`, `total` | Same as Automatable, from the same source | `total` / `partial`, same rule; flagged |
 
-GTI is read through `vulnops.core.gti.ssvc_exploitation`: confirmed or wide exploitation gives
+GTI is read through `vulnops.gti.ssvc_exploitation`: confirmed or wide exploitation gives
 `active`; a publicly available or trivial exploit gives `poc`; reported or suspected exploitation
 gives no value and flags the row for review unless another source already says `active`.
 
@@ -217,7 +217,7 @@ measures that reliably interrupt an attack; `small` — local service, or a high
 isolated network.
 
 Compatibility: the profile schema accepts the former values, read as `internet` → `open`,
-`internal` → `controlled`, `isolated` → `small` when the profile is loaded; `vulnops-profiles
+`internal` → `controlled`, `isolated` → `small` when the profile is loaded; `vulnops
 validate` (the `validate` job) prints one deprecation warning per former value. The assets stage
 and the alert stage apply the same reading to any value that bypasses the loader. The built-in
 default is `open`, source `assumed`.
@@ -231,13 +231,13 @@ added later without changing the data.
 
 ### 5.2 Precedence
 
-v0.9.0: `declared` > `rule` > `<scanner>` > `assumed`. **Planned (v0.9.1):** `external-scan` first.
+v0.9.0: `declared` > `rule` > `<scanner>` > `assumed`. **Planned (v0.10.1):** `external-scan` first.
 
 An external scan only proves reachability: it can set `open`, never lower a value. An asset the
 external scan does not reach keeps its declared value; absence from a scan is not evidence (source
 filtering, scan window, host down).
 
-### 5.3 External detection and published endpoints — **Planned (v0.9.1)**
+### 5.3 External detection and published endpoints — **Planned (v0.10.1)**
 
 The external scan runs in the client's `<client>-external` project, collection only (DAT,
 "Exposure and external scans"). The internal pipeline brings its result in before the assets
@@ -274,7 +274,7 @@ stage:
 First iteration: a finding on an endpoint goes to `asset`. Attributing it to an asset in `behind`
 when the scanner identifies that asset's product (version banner) is left for a later version.
 
-### 5.4 Exposure gap — **Planned (v0.9.2)**
+### 5.4 Exposure gap — **Planned (v0.10.2)**
 
 A gap is an external host that `published` does not list, or an asset declared `controlled` or
 `small` that the external scan reaches. The assets stage writes the gaps to
@@ -302,7 +302,7 @@ alert stage and is an open point of the DAT.
 | `llm.tasks.parallel` | `4` | Concurrent rationale requests |
 | `llm.tasks.max_consecutive_errors` | `3` | Then the LLM is treated as down for the rest of the run |
 
-**Planned (v0.9.1):** profile keys `external` and `published` (section 5.3), CI/CD variable
+**Planned (v0.10.1):** profile keys `external` and `published` (section 5.3), CI/CD variable
 `VULNOPS_EXTERNAL_PROJECT`.
 
 ## 7. LLM
@@ -329,7 +329,7 @@ keep the template and `rationale_source` says why. The run never fails because o
 | Profile, records, assets or findings unreadable, or of another client | Exit 2 |
 | LLM unreachable or slow | Template rationales and policy defaults, rows flagged; breaker after 3 errors |
 | SSVC table incomplete | Fails at load (36 and 16 rows expected) |
-| **Planned (v0.9.1):** external detection missing or older than `max_age_days` | Collect ends in warning; exposures stay as declared or assumed; the report says the external view is missing |
+| **Planned (v0.10.1):** external detection missing or older than `max_age_days` | Collect ends in warning; exposures stay as declared or assumed; the report says the external view is missing |
 
 ## 9. Tests
 
@@ -340,7 +340,7 @@ keep the template and `rationale_source` says why. The run never fails because o
 | `tests/test_detection_assets.py` | Asset reconciliation and attribute precedence feeding verdict; former exposure values and their warnings; zone and exposure source carried to the decision |
 | `tests/test_gti.py` | GTI view to Exploitation, unconfirmed reports |
 
-**Planned (v0.9.1, v0.9.2):**
+**Planned (v0.10.1, v0.10.2):**
 
 - precedence: an external scan raises to `open`, never lowers; absence leaves the declared value;
 - `published`: endpoint with and without port, `behind` assets set `open`, unmatched host

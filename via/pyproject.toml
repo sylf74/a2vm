@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "via"
+version = "0.10.0"
+description = "VIA, pillar 1 (Vulnerability Intelligence: Advanced, AI-assisted, Alerting): vulnerability records and the watch."
+requires-python = ">=3.11"
+license = {text = "LicenseRef-vulnops-proprietary"}
+dependencies = ["vulnops"]
+
+[project.scripts]
+via = "via.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

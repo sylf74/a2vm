@@ -6,7 +6,7 @@ pillar 5.
 
 | Item | Value |
 | --- | --- |
-| GitLab name | — |
+| Package and command | — |
 | Status | Not started |
 | LLD | — |
 
@@ -54,5 +54,5 @@ To define.
 
 | Item | Content |
 | --- | --- |
-| Status | Not started; begins after v0.9.x |
+| Status | Not started; begins after v0.10.x |
 | Open points | Trigger mechanism (manual pipeline, API call, watchlist rule) |

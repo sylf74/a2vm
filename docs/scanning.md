@@ -23,7 +23,7 @@ not covered by these methods. They are declared in the client profile and matche
 records by product and version; a network scanner (OpenVAS) or a Windows collector comes next.
 
 At a client, active collection requires the client's written authorization; by default vulnops
-ingests the outputs of the client's own scanners (`vulnops-detect import`).
+ingests the outputs of the client's own scanners (`detect import`).
 
 Addresses and host names below are examples (RFC 5737, `lab.example`); the runner is `192.0.2.104`.
 

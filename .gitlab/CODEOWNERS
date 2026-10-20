@@ -15,22 +15,24 @@
 # Low-level designs
 /docs/lld/triage-prioritization.md          @po-triage
 
-# Common model: schemas, exchange files, settings, LLM client (contracts between pillars)
-/core/                                      @product-manager
+# Common contract: model, exchange-file schemas, settings, profiles, LLM client, extension points
+/vulnops/                                   @product-manager
 
-# Pillar 1 — Vulnerability Intelligence
-/intel/                                     @po-intelligence
-/alert/                                     @po-intelligence
+# Pillar 1 — VIA, Vulnerability Intelligence
+/via/                                       @po-intelligence
+/docs/alerts.md                             @po-intelligence
+/docs/gti.md                                @po-intelligence
 
 # Pillar 2 — Vulnerability Detection
 /detect/                                    @po-detection
+/docs/scanning.md                           @po-detection
+/docs/openvas.md                            @po-detection
 
 # Pillar 3 — Triage & Prioritization
-/assets/                                    @po-triage
 /verdict/                                   @po-triage
 
 # Pillar 4 — Dispatch & Capitalization
 /remediate/                                 @po-dispatch
 
-# Client pipeline template (runs in every tenant project)
+# Assembly: client pipeline template (runs in every tenant project)
 /templates/                                 @product-manager

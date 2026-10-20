@@ -2,9 +2,9 @@
 import json
 from pathlib import Path
 
-from vulnops.alert.certfr import parse_feed
-from vulnops.alert.cli import main
-from vulnops.alert.watch import State
+from via.alert.certfr import parse_feed
+from via.alert.cli import main
+from via.alert.watch import State
 
 from .conftest import FIXTURES, ROOT
 
@@ -77,13 +77,13 @@ def test_advisories_only_with_level_all(tmp_path, monkeypatch):
 
 
 def test_prose_written_by_llm_and_guarded(settings):
-    from vulnops.alert.certfr import FeedItem, parse_publication
-    from vulnops.alert.fiche import build
-    from vulnops.alert.watch import Item, relevant
-    from vulnops.core.llm import LlmClient
-    from vulnops.core.profile import load_profile
-    from vulnops.detect.inventory import InventoryScanner
-    from vulnops.intel.sources import Sources
+    from detect.inventory import InventoryScanner
+    from via.alert.certfr import FeedItem, parse_publication
+    from via.alert.fiche import build
+    from via.alert.watch import Item, relevant
+    from via.intel.sources import Sources
+    from vulnops.llm import LlmClient
+    from vulnops.profile import load_profile
 
     from .conftest import fake_llm_transport
 
@@ -112,7 +112,7 @@ def test_prose_written_by_llm_and_guarded(settings):
 def test_graph_transport(monkeypatch):
     import httpx
 
-    from vulnops.alert.mail import message, send
+    from via.alert.mail import message, send
 
     calls = []
 
@@ -137,8 +137,8 @@ def test_graph_transport(monkeypatch):
 
 
 def test_contacts_by_level_and_role(tmp_path, capsys):
-    from vulnops.alert.contacts import load_contacts, recipients
-    from vulnops.core.profile import load_profile
+    from via.alert.contacts import load_contacts, recipients
+    from vulnops.profile import load_profile
 
     lab = ROOT / "examples" / "lab"
     contacts = load_contacts(lab / "contacts.yaml")

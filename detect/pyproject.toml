@@ -3,20 +3,22 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "vulnops-detect"
-version = "0.9.0"
-description = "vulnops detection stage: produces findings (inventory matching, scanner connectors)."
+name = "detect"
+version = "0.10.0"
+description = "Pillar 2 (Vulnerability Detection): asset and vulnerability observations (inventory matching, scanner connectors)."
 requires-python = ">=3.11"
 license = {text = "LicenseRef-vulnops-proprietary"}
-dependencies = ["vulnops-core", "defusedxml>=0.7"]
+dependencies = ["vulnops", "defusedxml>=0.7"]
 
 [project.optional-dependencies]
 openvas = ["python-gvm>=26"]
 
 [project.scripts]
-vulnops-detect = "vulnops.detect.cli:main"
+detect = "detect.cli:main"
+
+# Offered to the other pillars through the vulnops extension points (vulnops.extensions).
+[project.entry-points."vulnops.asset_matcher"]
+detect = "detect.inventory:InventoryScanner"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-namespaces = true
-

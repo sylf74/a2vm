@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run the vulnops pipeline locally, like the CI does:
-#   [collect] -> intel -> detect inventory -> assets -> verdict
+#   [collect] -> via collect -> detect inventory -> verdict assets -> verdict run
 #
 #   scripts/run-pipeline.sh --since 26h
 #   scripts/run-pipeline.sh --cve CVE-2024-3400
@@ -18,9 +18,9 @@ OUT=${OUT:-output}
 
 rm -rf "$WORK/detect" "$WORK/assets"
 if [ -n "$TARGETS" ]; then
-  vulnops-detect collect $TARGETS --raw "$WORK/scans" --out "$WORK/detect" || echo "collection incomplete, continuing"
+  detect collect $TARGETS --raw "$WORK/scans" --out "$WORK/detect" || echo "collection incomplete, continuing"
 fi
-vulnops-intel collect --settings "$SETTINGS" --detect "$WORK/detect" --out "$WORK/records.json" "$@"
-vulnops-detect inventory $PROFILES --settings "$SETTINGS" --records "$WORK/records.json" --out "$WORK/detect"
-vulnops-assets build $PROFILES --detect "$WORK/detect" --out "$WORK/assets"
+via collect --settings "$SETTINGS" --detect "$WORK/detect" --out "$WORK/records.json" "$@"
+detect inventory $PROFILES --settings "$SETTINGS" --records "$WORK/records.json" --out "$WORK/detect"
+verdict assets build $PROFILES --detect "$WORK/detect" --out "$WORK/assets"
 verdict run $PROFILES --settings "$SETTINGS" --records "$WORK/records.json" --assets "$WORK/assets" --out "$OUT"

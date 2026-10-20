@@ -3,19 +3,22 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "vulnops-verdict"
-version = "0.9.0"
-description = "vulnops triage stage: deterministic SSVC decisions on findings, LLM-written rationale."
+name = "verdict"
+version = "0.10.0"
+description = "Pillar 3 (Triage & Prioritization): asset context and deterministic SSVC decisions, LLM-written rationale."
 requires-python = ">=3.11"
 license = {text = "LicenseRef-vulnops-proprietary"}
-dependencies = ["vulnops-core"]
+dependencies = ["vulnops"]
 
 [project.scripts]
-verdict = "vulnops.verdict.cli:main"
+verdict = "verdict.cli:main"
+
+# Offered to the other pillars through the vulnops extension points (vulnops.extensions).
+[project.entry-points."vulnops.remediation_timeline"]
+verdict = "verdict.timeline:remediation_timeline"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-namespaces = true
 
 [tool.setuptools.package-data]
-"vulnops.verdict" = ["data/*"]
+"verdict" = ["data/*"]

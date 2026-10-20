@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: LicenseRef-vulnops-proprietary
 import yaml
 
-from vulnops.core.llm.guard import unsupported_tokens
-from vulnops.core.profile import validate_profile_data
+from vulnops.llm.guard import unsupported_tokens
+from vulnops.profile import validate_profile_data
 
 from .conftest import ROOT
 
