@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
 """`vulnops-assets build`: consolidate the detection files of each client into its asset inventory.
 
 Reads <detect>/<client>/*.json, writes <out>/<client>/assets.json and <out>/<client>/findings.json.

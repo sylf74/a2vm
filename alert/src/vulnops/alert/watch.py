@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
 """Watch mode: what is new since the last check, and which of it concerns this client.
 
 New items come from the sources of the catalogue (config/watch-sources.yaml), read every few
@@ -29,7 +29,7 @@ from typing import Any
 
 from vulnops.core.config import Settings
 from vulnops.core.gti import ssvc_exploitation
-from vulnops.core.models import ClientProfile, DeclaredAsset, Finding, VulnRecord
+from vulnops.core.models import ClientProfile, DeclaredAsset, Finding, VulnRecord, exposure_value
 from vulnops.detect.inventory import InventoryScanner
 from vulnops.intel.collect import collect
 from vulnops.intel.sources import SourceError, Sources
@@ -275,7 +275,7 @@ def cna_label(records: list[VulnRecord], catalogue: list[Source]) -> str:
 
 def exposure(profile: ClientProfile, asset: DeclaredAsset | None) -> str:
     """Declared exposure, else the client's default, else the worst case (as the assets stage does)."""
-    return (asset and asset.exposure) or profile.defaults.get("exposure") or "internet"
+    return exposure_value((asset and asset.exposure) or profile.defaults.get("exposure") or "open")
 
 
 def _critical(record: VulnRecord) -> bool:
@@ -326,7 +326,7 @@ def relevant(
             reasons.append(f"publication {it.source}")
         if any((r.adp_ssvc or {}).get("exploitation") in {"poc", "active"} for r in recs):
             reasons.append("exploitation ou preuve de concept signalée par la CISA")
-        exposed = [f.asset_ref for f in findings if exposure(profile, assets.get(f.asset_ref)) == "internet"]
+        exposed = [f.asset_ref for f in findings if exposure(profile, assets.get(f.asset_ref)) == "open"]
         if exposed and any(_critical(r) for r in recs):
             reasons.append("vulnérabilité critique sur un actif exposé à Internet")
         level = "urgent" if reasons else "info"

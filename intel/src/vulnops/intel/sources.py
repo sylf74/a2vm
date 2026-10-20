@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
 """Data sources: CVE JSON 5 records, CISA KEV, FIRST EPSS, cvelistV5 delta log, CERT-FR feeds,
 Google Threat Intelligence (optional, licensed).
 

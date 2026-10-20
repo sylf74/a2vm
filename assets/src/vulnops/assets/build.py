@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
 """Consolidate the asset observations of one client into an inventory, and re-key its findings.
 
 Reconciliation (minimal first scope): two host observations are the same asset when they share an
@@ -10,6 +10,9 @@ Attributes (exposure, mission_prevalence, public_wellbeing_impact, owner), first
   2. rule       a profile rule matches the host name, FQDN or address
   3. <scanner>  a source reported it (e.g. a scanner tag)
   4. default    the client's default assumption, or the built-in worst case — flagged in reports
+
+Exposure uses the SSVC values (open, controlled, small); a former value from a source is read in the
+new form. The optional zone label comes from a declaration or a rule only, and never defaults.
 """
 
 from __future__ import annotations
@@ -28,10 +31,11 @@ from vulnops.core.models import (
     ClientProfile,
     Finding,
     NotAffected,
+    exposure_value,
 )
 
 WORST_CASE = {
-    "exposure": "internet",
+    "exposure": "open",
     "mission_prevalence": "essential",
     "public_wellbeing_impact": "minimal",
     "owner": "inconnu",
@@ -134,7 +138,22 @@ def _attributes(profile: ClientProfile, group: list[AssetObservation], ids: dict
             continue
         origin = "client default" if name in profile.defaults else "worst case"
         out[name] = Attribute(defaults[name], "default", origin)
+    out["exposure"].value = exposure_value(out["exposure"].value)
+    zone = _zone(profile, group, ids, kind)
+    if zone:
+        out["zone"] = zone
     return out
+
+
+def _zone(profile: ClientProfile, group: list[AssetObservation], ids: dict, kind: str) -> Attribute | None:
+    declared = next((o for o in group if o.kind == "declared" and o.attributes.get("zone")), None)
+    if declared:
+        return Attribute(declared.attributes["zone"], "declared")
+    if kind != "declared":
+        rule = next((r for r in profile.rules if "zone" in r.set and _rule_matches(r, ids)), None)
+        if rule:
+            return Attribute(rule.set["zone"], "rule", rule.description or rule.hostname or rule.fqdn or rule.ip or "")
+    return None
 
 
 def build_inventory(profile: ClientProfile, detections: list[Detection]) -> Inventory:

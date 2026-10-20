@@ -15,7 +15,7 @@ A network scanner sees what its network position lets it see:
 | Placement | Sees | Use |
 | --- | --- | --- |
 | A VM inside the client network (or the lab) | Internal hosts and services | Internal vulnerability scan |
-| A host on the internet (VPS) | Only what the client exposes to the internet | External exposure, a check of the `exposure: internet` declarations |
+| A host on the internet (VPS) | Only what the client exposes to the internet | External exposure, a check of the `exposure: open` declarations |
 
 Scan only addresses the client owns and has agreed to have scanned. A cloud or VPS provider may
 restrict outbound scanning in its terms: scanning your own public addresses is usually allowed,

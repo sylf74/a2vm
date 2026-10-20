@@ -2,7 +2,7 @@
 # Linux hosts are discovered by the scanners (targets.yaml); the rules below give
 # them their exposure and criticality. Appliances and Windows servers, which the scanners do not
 # cover, are declared as assets and matched against the CVE records by product and version.
-# Anything not covered falls back to the worst case (internet, essential), flagged in reports.
+# Anything not covered falls back to the worst case (open, essential), flagged in reports.
 
 schema_version: 2
 client:
@@ -18,16 +18,16 @@ alerts:
 rules:
   - description: reverse proxy published on the Internet (443)
     hostname: edge01
-    set: {exposure: internet, mission_prevalence: essential, public_wellbeing_impact: minimal, owner: lab-admin}
+    set: {exposure: open, mission_prevalence: essential, public_wellbeing_impact: minimal, owner: lab-admin}
   - description: hypervisors
     hostname: "node*"
-    set: {exposure: internal, mission_prevalence: essential, public_wellbeing_impact: minimal, owner: lab-admin}
+    set: {exposure: controlled, mission_prevalence: essential, public_wellbeing_impact: minimal, owner: lab-admin}
   - description: vulnops proof of concept
     hostname: "poc-*"
-    set: {exposure: internal, mission_prevalence: support, public_wellbeing_impact: minimal, owner: lab-admin}
+    set: {exposure: controlled, mission_prevalence: support, public_wellbeing_impact: minimal, owner: lab-admin}
   - description: GitLab
     hostname: gitlab
-    set: {exposure: internal, mission_prevalence: support, public_wellbeing_impact: minimal, owner: lab-admin}
+    set: {exposure: controlled, mission_prevalence: support, public_wellbeing_impact: minimal, owner: lab-admin}
 
 assets:
   - id: exchange
@@ -35,7 +35,7 @@ assets:
     vendor: Microsoft
     product: Exchange Server 2019
     product_aliases: ["Microsoft Exchange Server 2019", "Exchange Server"]
-    exposure: internet
+    exposure: open
     mission_prevalence: essential
     public_wellbeing_impact: minimal
     owner: lab-admin
@@ -43,7 +43,7 @@ assets:
     description: Active Directory domain controller (Windows Server)
     vendor: Microsoft
     product: Windows Server
-    exposure: internal
+    exposure: controlled
     mission_prevalence: essential
     public_wellbeing_impact: minimal
     owner: lab-admin
@@ -51,7 +51,7 @@ assets:
     description: VyOS router and firewall (Internet edge)
     vendor: VyOS
     product: VyOS
-    exposure: internet
+    exposure: open
     mission_prevalence: essential
     public_wellbeing_impact: minimal
     owner: lab-admin
@@ -60,7 +60,7 @@ assets:
     vendor: Synology
     product: DiskStation Manager
     product_aliases: ["DSM"]
-    exposure: internal
+    exposure: controlled
     mission_prevalence: support
     public_wellbeing_impact: minimal
     owner: lab-admin
@@ -70,7 +70,7 @@ assets:
     product: Home Assistant Core
     vendor_aliases: ["home-assistant"]
     product_aliases: ["Home Assistant", "core"]
-    exposure: internal
+    exposure: controlled
     mission_prevalence: support
     public_wellbeing_impact: minimal
     owner: lab-admin

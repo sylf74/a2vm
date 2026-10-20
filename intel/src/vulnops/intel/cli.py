@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
 """`vulnops-intel collect`: fetch and normalise vulnerability records into a records file."""
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
 import subprocess
 
 import pytest
@@ -156,21 +156,22 @@ def test_reconciliation_merges_on_fqdn_hostname_and_ip(lab):
     hosts = {a.id: a for a in inv.assets}
     gitlab = hosts["host:gitlab.lab.example"]
     assert gitlab.sources == ["openvas", "trivy"] and gitlab.identifiers["ips"] == ["192.0.2.102"]
-    assert gitlab.attributes["exposure"].value == "internal" and gitlab.attributes["exposure"].source == "rule"
+    assert gitlab.attributes["exposure"].value == "controlled" and gitlab.attributes["exposure"].source == "rule"
     unknown = hosts["host:192.0.2.200"]
     assert {k: (v.value, v.source) for k, v in unknown.attributes.items() if k != "owner"} == {
-        "exposure": ("internet", "default"),
+        "exposure": ("open", "default"),
         "mission_prevalence": ("essential", "default"),
         "public_wellbeing_impact": ("minimal", "default"),
     }
-    assert WORST_CASE["exposure"] == "internet"
+    assert WORST_CASE["exposure"] == "open"
 
 
 def test_client_defaults_replace_worst_case(lab):
     lab.defaults = {"exposure": "internal"}
     inv = build_inventory(lab, [Detection("lab", "x", [_obs("a.lan", "x", hostname="a")], [])])
     attr = inv.assets[0].attributes["exposure"]
-    assert (attr.value, attr.source, attr.note) == ("internal", "default", "client default")
+    # a former value set without the profile loader is still read in the SSVC form
+    assert (attr.value, attr.source, attr.note) == ("controlled", "default", "client default")
 
 
 def test_lab_end_to_end(lab, settings, sources):
@@ -200,7 +201,7 @@ def test_assumed_attributes_flag_review(lab, settings, sources):
     inv = build_inventory(lab, [d])
     [row] = Triage(settings).run(lab, {record.cve_id: record}, {a.id: a for a in inv.assets}, inv.findings).rows
     assert row.publicly_exposed and row.needs_review
-    assert any(a.startswith("exposition supposée : internet (pire cas)") for a in row.assumptions)
+    assert any(a.startswith("exposition supposée : open (pire cas)") for a in row.assumptions)
     assert "Hypothèses :" in row.rationale
 
 
@@ -244,3 +245,45 @@ def test_plan_checks_client_id(capsys):
     assert "lab: 10 targets" in capsys.readouterr().out
     other = str(ROOT / "examples" / "example-client" / "client.yaml")
     assert main(["plan", f"{lab}/targets.yaml", "--profile", other]) == 2
+
+
+def test_former_exposure_values_are_read_with_a_warning(tmp_path):
+    from vulnops.core.cli import main as profiles_main
+    from vulnops.core.profile import load_profile
+
+    path = tmp_path / "client.yaml"
+    path.write_text(
+        """schema_version: 2
+client: {id: old, name: Old profile, updated: 2026-10-18}
+defaults: {exposure: internal}
+rules:
+  - {hostname: "web*", set: {exposure: internet, zone: dmz}}
+  - {hostname: "db*", set: {exposure: internet}}
+assets:
+  - {id: fw, description: Firewall, vendor: Fortinet, product: FortiOS, exposure: isolated, zone: admin}
+""",
+        encoding="utf-8",
+    )
+    profile = load_profile(path)
+    assert profile.defaults["exposure"] == "controlled"
+    assert [r.set["exposure"] for r in profile.rules] == ["open", "open"]
+    assert profile.assets[0].exposure == "small" and profile.assets[0].zone == "admin"
+    assert profile.warnings == [
+        "exposure 'internal' is deprecated, read as 'controlled' (1 place)",
+        "exposure 'internet' is deprecated, read as 'open' (2 places)",
+        "exposure 'isolated' is deprecated, read as 'small' (1 place)",
+    ]
+    assert profiles_main(["validate", str(path)]) == 0
+
+
+def test_zone_and_exposure_source_reach_the_decision(lab, settings, sources):
+    lab.rules[0].set["zone"] = "dmz"  # edge01, declared open by rule
+    record = collect_records(sources, ["CVE-2024-3400"]).records[0]
+    d = load_trivy_file(TRIVY / "node00.lab.example.json", "lab", Target("edge01", fqdn="edge01.lab.example"))
+    d.findings[0].cve_id = "CVE-2024-3400"
+    inv = build_inventory(lab, [d])
+    [row] = Triage(settings).run(lab, {record.cve_id: record}, {a.id: a for a in inv.assets}, inv.findings).rows
+    assert (row.exposure, row.exposure_source, row.zone, row.publicly_exposed) == ("open", "rule", "dmz", True)
+    from vulnops.verdict.report import _exposure_cell
+
+    assert _exposure_cell(row) == "dmz · ouverte (Internet), règle"

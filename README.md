@@ -87,7 +87,7 @@ into its inventory and re-keys its findings on consolidated assets:
 - reconciliation: host observations sharing an FQDN, a short host name or an address are one asset;
 - attributes (exposure, mission prevalence, public well-being impact, owner), first source wins:
   declared in the profile → profile rule (host name / FQDN glob, CIDR) → source → default
-  assumption (the client's `defaults`, else the worst case: internet, essential);
+  assumption (the client's `defaults`, else the worst case: open, essential);
 - every default assumption is named in the decision, in the rationale and flags the row for review.
 
 The inventory is rebuilt at each run for now; history comes with the PostgreSQL storage.
@@ -170,6 +170,8 @@ remediate/                                 not started
 config/settings.yaml                       default settings (a client project may override them)
 templates/client-pipeline.yml              pipeline included by every client project
 examples/                                  fictitious client projects (profile, targets, CI)
+docs/hld/                                  high-level design: product strategy and one chapter per pillar
+docs/lld/                                  low-level design, one per pillar
 docs/deployment.md                         GitLab groups, runner, code and client projects
 docs/scanning.md                           read-only scanner set-up
 docs/openvas.md                            OpenVAS network scans (Greenbone), mutual TLS to GMP
@@ -177,11 +179,12 @@ docs/alerts.md                             watch mode, sources, alert sheets, ma
 docs/gti.md                                Google Threat Intelligence connector
 tests/                                     tests and offline fixtures
 scripts/run-pipeline.sh                    the CI pipeline, locally
-.gitlab/CODEOWNERS                         one owner per stage
+scripts/build-hld.sh                       the HLD assembled into one document
+.gitlab/CODEOWNERS                         one owner per pillar
 ```
 
 ## License
 
-AGPL-3.0-only (see `LICENSE` and `NOTICE`). Running a modified vulnops as a network service for
-others requires offering them its source code. Contributions: `CONTRIBUTING.md` (DCO sign-off).
+Proprietary, all rights reserved, pending a licensing decision (see `LICENSE` and `NOTICE`);
+earlier versions were published under AGPL-3.0-only. Contributions: `CONTRIBUTING.md`.
 Security issues: `SECURITY.md`.

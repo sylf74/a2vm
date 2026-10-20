@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
 """vulnops-detect: produce detection files (asset observations + findings), one per client and source.
 
   plan       check a targets file and list the scans it would run (no connection)

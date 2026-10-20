@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
 """The alert sheet sent to a client, in the team's CVE sheet layout (French):
 
   CVE / Produit concerné / Type de vulnérabilité / CVSS / Impact principal / État d'exploitation /
@@ -21,7 +21,7 @@ from vulnops.core.config import Settings
 from vulnops.core.gti import gti_unconfirmed, ssvc_exploitation
 from vulnops.core.llm import LlmClient, LlmError
 from vulnops.core.llm.guard import unsupported_tokens
-from vulnops.core.models import AffectedEntry, VulnRecord
+from vulnops.core.models import AffectedEntry, VulnRecord, exposure_value
 from vulnops.verdict import ssvc
 from vulnops.verdict.rationale import BOD_FR
 from vulnops.verdict.triage import Triage
@@ -276,7 +276,7 @@ def _fix_status(alert: Alert) -> str:
 def exposure_label(alert: Alert, asset_ref: str) -> str:
     asset = alert.assets.get(asset_ref)
     declared = asset.exposure if asset else None
-    if declared == "internet":
+    if declared and exposure_value(declared) == "open":
         return "exposé à Internet"
     if declared:
         return "non exposé à Internet"

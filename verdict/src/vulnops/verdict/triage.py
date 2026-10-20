@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
 """Triage: findings + vulnerability records + consolidated assets -> one decision per finding.
 
 verdict collects nothing itself: records come from the intel stage, assets and findings from the
@@ -8,7 +8,8 @@ assets stage. Decision inputs and their precedence:
   Automatable        CISA ADP -> CVSS heuristic (CVE record, else scanner) -> LLM -> policy default (review)
   Technical Impact   CISA ADP -> CVSS heuristic (CVE record, else scanner) -> LLM -> policy default (review)
   Mission/Well-being asset attributes (declared, rule, source, or the client's default assumption)
-  Publicly exposed   asset attribute exposure == internet
+  Publicly exposed   asset attribute exposure == open (SSVC System Exposure; the former "internet"
+                     is read as open)
 
 An attribute that comes from a default assumption is named in the row and flags it for review.
 
@@ -35,6 +36,8 @@ from vulnops.core.models import (
     TriageRow,
     TriageRun,
     VulnRecord,
+    exposure_source,
+    exposure_value,
 )
 
 from . import ssvc
@@ -222,7 +225,9 @@ class Triage:
         wellbeing = asset.attr("public_wellbeing_impact")
         owner = asset.attr("owner")
         mwi = ssvc.mission_wellbeing(mission.value, wellbeing.value)
-        exposed = exposure.value == "internet"
+        exposure_ssvc = exposure_value(exposure.value)
+        exposed = exposure_ssvc == "open"
+        zone = asset.attributes.get("zone")
         decision = ssvc.coordinator_decision(
             inputs.exploitation.value, inputs.automatable.value, inputs.technical_impact.value, mwi
         )
@@ -271,6 +276,9 @@ class Triage:
             finding_source=", ".join(finding.sources),
             asset_id_full=asset.id,
             assumptions=assumptions,
+            exposure=exposure_ssvc,
+            exposure_source=exposure_source(exposure),
+            zone=zone.value if zone else "",
             fixes=sorted({f"{o.package} {o.fixed_version}" for o in finding.observations if o.fixed_version}),
         )
         row.rationale = template_rationale(row)

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
 """The common data model shared by every vulnops stage.
 
   VulnRecord        everything known about one vulnerability (intel)
@@ -100,7 +100,7 @@ class DeclaredAsset:
     description: str
     vendor: str
     product: str
-    exposure: str | None = None  # internet | internal | isolated
+    exposure: str | None = None  # open | controlled | small (SSVC System Exposure)
     mission_prevalence: str | None = None  # minimal | support | essential
     public_wellbeing_impact: str | None = None  # minimal | material | irreversible
     owner: str | None = None
@@ -108,6 +108,7 @@ class DeclaredAsset:
     product_aliases: list[str] = field(default_factory=list)
     cpe: str | None = None
     versions: list[str] = field(default_factory=list)
+    zone: str | None = None  # free label for reports (dmz, lan, ot...), no effect on decisions
 
 
 @dataclass
@@ -131,6 +132,7 @@ class ClientProfile:
     defaults: dict[str, str] = field(default_factory=dict)  # default assumptions per attribute
     source_path: str = ""
     alerts: dict[str, Any] = field(default_factory=dict)  # recipients, level, watchlist (watch mode)
+    warnings: list[str] = field(default_factory=list)  # e.g. deprecated values read in a newer form
 
     def declared(self, asset_id: str) -> DeclaredAsset:
         for a in self.assets:
@@ -141,6 +143,21 @@ class ClientProfile:
 
 # -- asset inventory ---------------------------------------------------------------------------
 ATTRIBUTES = ("exposure", "mission_prevalence", "public_wellbeing_impact", "owner")
+
+# Exposure takes the values of the SSVC decision point System Exposure; `open` is "publicly exposed"
+# for CISA BOD 26-04. Profiles written before v0.9.0 used internet / internal / isolated.
+EXPOSURES = ("open", "controlled", "small")
+LEGACY_EXPOSURE = {"internet": "open", "internal": "controlled", "isolated": "small"}
+
+
+def exposure_value(value: str) -> str:
+    """The SSVC value of an exposure, the former values included."""
+    return LEGACY_EXPOSURE.get(value, value)
+
+
+def exposure_source(attribute: Attribute) -> str:
+    """Where an asset's exposure comes from, as shown in reports: assumed when it is a default."""
+    return "assumed" if attribute.source == "default" else attribute.source
 
 
 @dataclass
@@ -314,6 +331,9 @@ class TriageRow:
     fixes: list[str] = field(default_factory=list)  # "<package> <fixed version>" reported by scanners
     rationale: str = ""
     rationale_source: str = "template"
+    exposure: str = ""  # open | controlled | small
+    exposure_source: str = ""  # declared | rule | <scanner> | assumed (external-scan from v0.9.1)
+    zone: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

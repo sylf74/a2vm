@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
 """Send mail, configured by CI/CD variables. Set on the group, they apply to every client; set on a
 client project, they override the group's for that client (e.g. one client through its own tenant).
 
