@@ -1,5 +1,5 @@
 # Example client profile — copy to client.yaml in the client's project and adapt.
-# Schema: core/src/vulnops/core/schemas/client_profile.schema.json (checked in CI).
+# Schema: vulnops/src/vulnops/schemas/client_profile.schema.json (checked in CI).
 #
 # Field guide (CISA SSVC wording):
 #   exposure                 SSVC System Exposure. open = reachable from the internet or another widely

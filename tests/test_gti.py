@@ -4,13 +4,13 @@ import json
 import httpx
 import pytest
 
-from vulnops.core.config import describe_gti, load_settings
-from vulnops.core.gti import gti_unconfirmed, ssvc_exploitation
-from vulnops.core.io import read_records, write_records
-from vulnops.intel.collect import collect
-from vulnops.intel.gti import enrich, parse_gti
-from vulnops.intel.sources import Sources
-from vulnops.verdict.triage import Triage
+from verdict.triage import Triage
+from via.intel.collect import collect
+from via.intel.gti import enrich, parse_gti
+from via.intel.sources import Sources
+from vulnops.config import describe_gti, load_settings
+from vulnops.gti import gti_unconfirmed, ssvc_exploitation
+from vulnops.io import read_records, write_records
 
 from .conftest import FIXTURES
 
@@ -158,10 +158,10 @@ def test_env_override(monkeypatch):
 
 
 def test_alert_fiche_uses_gti_facts_not_prose(gti_settings):
-    from vulnops.alert.fiche import build
-    from vulnops.alert.watch import Item, relevant
-    from vulnops.core.profile import load_profile
-    from vulnops.detect.inventory import InventoryScanner
+    from detect.inventory import InventoryScanner
+    from via.alert.fiche import build
+    from via.alert.watch import Item, relevant
+    from vulnops.profile import load_profile
 
     from .conftest import ROOT
 

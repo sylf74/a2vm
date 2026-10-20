@@ -40,7 +40,7 @@ A source is read for the first time only to record its current state (no flood o
 Sources marked `enabled: false` have URLs still to be checked from the runner:
 
 ```bash
-vulnops-alert check-sources --sources config/watch-sources.yaml
+via check-sources --sources config/watch-sources.yaml
 ```
 
 Levels:
@@ -103,7 +103,7 @@ CERT-FR summary or the vendor's description.
    ```
 
    Contacts with their role go in `contacts.yaml` of the client project (optional; checked by the
-   `validate` job; `vulnops-alert contacts client.yaml` lists who receives what):
+   `validate` job; `via contacts client.yaml` lists who receives what):
 
    ```yaml
    schema_version: 1

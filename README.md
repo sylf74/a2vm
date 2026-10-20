@@ -1,30 +1,38 @@
-# vulnops — AI-assisted Vulnerability Pipeline
+# vulnops — AI-Assisted Vulnerability Management
 
-A vulnerability data pipeline in five stages linked by a common data model. Decisions are
-deterministic (CISA SSVC tables + per-client policy); the LLM assists — it fills flagged gaps,
-confirms uncertain matches and writes rationales — but never decides.
+vulnops is the project that brings the pillars of the platform together: each pillar is an
+independent package with its own command, and they meet only through vulnops, the common contract
+(data model, exchange files and their schemas, settings, client profiles, LLM client, extension
+points). Decisions are deterministic (CISA SSVC tables + per-client policy); AI proposes and
+writes — it fills flagged gaps, proposes uncertain matches and writes rationales — but never
+decides.
 
 ```
-intel/      Vulnerability Intelligence   public sources + CTI (Google CTI planned)       -> work/records.json
-detect/     Detection                    scanners (Trivy, dnf) + declared inventory      -> work/detect/<client>/<source>.json
-assets/     Asset inventory              multi-tenant inventory consolidated per client  -> work/assets/<client>/
-verdict/    Triage & Prioritization      CISA SSVC + policy, French rationale (local LLM) -> output/<client>/<date>/
-remediate/  (not started)                actions, plans, deadlines
-core/       common model                 data classes, exchange-file schemas, settings, profiles, LLM client
+vulnops/    common contract              model, schemas, settings, profiles, LLM client, extension points
+via/        1. VIA (Vulnerability Intelligence: Advanced, AI-assisted, Alerting)
+              via collect                public sources + CTI                              -> work/records.json
+              via watch / send           watch on each client's estate, alert sheets       -> alerts/
+detect/     2. Vulnerability Detection   scanners + declared inventory                     -> work/detect/<client>/<source>.json
+verdict/    3. Triage & Prioritization
+              verdict assets build       asset context consolidated per client             -> work/assets/<client>/
+              verdict run                CISA SSVC + policy, French rationale              -> output/<client>/<date>/
+remediate/  4. Dispatch & Capitalization (not started)
 ```
 
-Each stage reads and writes only the common model, and every exchange file is validated
-against its JSON Schema on write and on read. A new source, scanner or LLM engine plugs into
-one stage without touching the others. The design is described in the architecture document
-("vulnops — AI-assisted Vulnerability Pipeline: architecture").
+The pillars never import one another (a test checks it): each reads and writes only the common
+model, and every exchange file is validated against its JSON Schema on write and on read. When a
+pillar needs a capability of another one (the watch needs asset matching from detect and the
+remediation delay from verdict), it asks `vulnops.extensions`, which the owner fills through a
+Python entry point. The design is described in `docs/hld/` (high level) and `docs/lld/` (per
+pillar).
 
 ## Quick start
 
 ```bash
 python -m venv .venv && . .venv/bin/activate        # PowerShell: .venv\Scripts\Activate.ps1
-pip install -r requirements-dev.txt                 # every stage, editable, + pytest and ruff
+pip install -r requirements-dev.txt                 # vulnops + every pillar, editable, + pytest and ruff
 
-vulnops-profiles validate examples/*/client.yaml
+vulnops validate examples/*/client.yaml
 scripts/run-pipeline.sh --fixtures tests/fixtures --since 2099-10-01 --include-updated   # offline demo
 scripts/run-pipeline.sh --since 26h                 # real CVEs of the last 26 hours + KEV additions
 scripts/run-pipeline.sh --cve CVE-2024-3400
@@ -40,17 +48,17 @@ PROFILES=../homelab/client.yaml TARGETS=../homelab/targets.yaml scripts/run-pipe
 Or stage by stage:
 
 ```bash
-vulnops-detect plan targets.yaml --profile client.yaml                # what would be scanned
-vulnops-detect collect targets.yaml --out work/detect                 # read-only scans over SSH
-vulnops-intel collect --since 26h --detect work/detect --out work/records.json
-vulnops-detect inventory client.yaml --records work/records.json --out work/detect
-vulnops-assets build client.yaml --detect work/detect --out work/assets
+detect plan targets.yaml --profile client.yaml                # what would be scanned
+detect collect targets.yaml --out work/detect                 # read-only scans over SSH
+via collect --since 26h --detect work/detect --out work/records.json
+detect inventory client.yaml --records work/records.json --out work/detect
+verdict assets build client.yaml --detect work/detect --out work/assets
 verdict run client.yaml --records work/records.json --assets work/assets --out output
 ```
 
-## Stages
+## Pillars
 
-**intel — Vulnerability Intelligence** (`vulnops-intel collect`) — builds one vulnerability
+**VIA, intel — Vulnerability Intelligence** (`via collect`) — builds one vulnerability
 record per CVE from two families of sources:
 
 | Family | Source | What it adds | Status |
@@ -66,7 +74,7 @@ and missing CVEs are reported as errors. CTI sources are paid per request: they 
 only for CVEs that matter (with findings, or above a threshold), with a cache, and their API
 keys come from CI/CD variables, never from the repository.
 
-**detect — Detection** (`vulnops-detect`) — writes one detection file per client and source:
+**detect — Detection** (`detect`) — writes one detection file per client and source:
 asset observations (what a source saw) and findings (asset × CVE, with package, installed and
 fixed versions).
 
@@ -81,7 +89,7 @@ the lowest CPU and I/O priority, no file-system traversal, no network scan (`doc
 Windows and appliances are declared in the profile until a network scanner or a Windows
 collector is added.
 
-**assets — Asset inventory** (`vulnops-assets build`) — consolidates the observations of a client
+**verdict, assets — Asset context** (`verdict assets build`) — consolidates the observations of a client
 into its inventory and re-keys its findings on consolidated assets:
 
 - reconciliation: host observations sharing an FQDN, a short host name or an address are one asset;
@@ -92,7 +100,7 @@ into its inventory and re-keys its findings on consolidated assets:
 
 The inventory is rebuilt at each run for now; history comes with the PostgreSQL storage.
 
-**verdict — Triage & Prioritization** (`verdict run`) — one decision per finding:
+**verdict, decision — Triage & Prioritization** (`verdict run`) — one decision per finding:
 
 ```
 Exploitation       KEV -> CISA ADP (Vulnrichment) -> exploit reference -> none (review)
@@ -105,7 +113,7 @@ Mission/Well-being asset attributes        Publicly exposed   asset attribute ex
         -> rationale: LLM text behind a guard, template fallback
 ```
 
-The SSVC tables are the official CERT/CC data files (`verdict/src/vulnops/verdict/data/`,
+The SSVC tables are the official CERT/CC data files (`verdict/src/verdict/data/`,
 MIT (SEI)-style license, see `LICENSE-SSVC`). The LLM never decides; it writes rationales for ACT
 and ATTEND decisions only (`llm.rationale_for`), the template covers TRACK. Rationales name the
 fixed packages reported by scanners.
@@ -113,7 +121,7 @@ fixed packages reported by scanners.
 ## Client profiles
 
 One YAML file per client (`client.yaml` of the client project), validated against
-`core/src/vulnops/core/schemas/client_profile.schema.json` (schema version 2; version 1 profiles
+`vulnops/src/vulnops/schemas/client_profile.schema.json` (schema version 2; version 1 profiles
 remain valid):
 
 - `assets`: declared assets or product families, for inventory matching (optional);
@@ -157,7 +165,7 @@ vulnops/                 group: group runner (tag llm-lan), shared variables (LL
 ```
 
 Each client project includes `templates/client-pipeline.yml` at a fixed tag: `validate` on every
-push; on a schedule or by hand (optional `TRIAGE_CVES`), `collect` → `intel` → `detect` →
+push; on a schedule or by hand (optional `TRIAGE_CVES`), `collect` → `via` → `detect` →
 `assets` → `triage`, each passing `work/` to the next. Reports and the asset inventory are kept 30
 days in the client project, intermediate files 7 days. A client moves to a new vulnops version
 by changing the tag in its `.gitlab-ci.yml`. Set-up: `docs/deployment.md`.
@@ -165,7 +173,8 @@ by changing the tag in its `.gitlab-ci.yml`. Set-up: `docs/deployment.md`.
 ## Repository layout
 
 ```
-core/ intel/ detect/ assets/ verdict/      one Python package per stage (namespace vulnops.*)
+vulnops/                                   common contract (package and command `vulnops`)
+via/ detect/ verdict/                      one package and one command per pillar
 remediate/                                 not started
 config/settings.yaml                       default settings (a client project may override them)
 templates/client-pipeline.yml              pipeline included by every client project

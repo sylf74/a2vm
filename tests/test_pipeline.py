@@ -2,8 +2,12 @@
 import datetime as dt
 import json
 
-from vulnops.assets.build import build_inventory
-from vulnops.core.io import (
+from detect.inventory import InventoryScanner
+from verdict.assets.build import build_inventory
+from verdict.report import render_markdown, write_all
+from verdict.triage import Triage, cvss_heuristic
+from via.intel.collect import collect, select_cve_ids
+from vulnops.io import (
     read_assets,
     read_detection,
     read_findings,
@@ -13,12 +17,8 @@ from vulnops.core.io import (
     write_findings,
     write_records,
 )
-from vulnops.core.llm import LlmClient
-from vulnops.core.models import Finding
-from vulnops.detect.inventory import InventoryScanner
-from vulnops.intel.collect import collect, select_cve_ids
-from vulnops.verdict.report import render_markdown, write_all
-from vulnops.verdict.triage import Triage, cvss_heuristic
+from vulnops.llm import LlmClient
+from vulnops.models import Finding
 
 from .conftest import fake_llm_transport
 
@@ -182,7 +182,7 @@ def test_records_merge_kev_and_epss(sources):
 def test_exchange_files_are_validated(tmp_path):
     import pytest
 
-    from vulnops.core.io import ExchangeError
+    from vulnops.io import ExchangeError
 
     bad = tmp_path / "records.json"
     bad.write_text(json.dumps({"schema": "vulnops.findings/2"}))
@@ -223,8 +223,8 @@ def test_one_rationale_per_cve_most_urgent_first(settings, sources, profile):
 
 
 def test_scanner_cvss_replaces_missing_record_cvss(settings):
-    from vulnops.core.models import FindingObservation, Match
-    from vulnops.verdict.triage import scanner_metrics
+    from verdict.triage import scanner_metrics
+    from vulnops.models import FindingObservation, Match
 
     vector = "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H"
     match = Match("scanner", "", "kernel", 1.0, "")
@@ -236,8 +236,8 @@ def test_scanner_cvss_replaces_missing_record_cvss(settings):
 
 
 def test_cvss_v2_heuristic_and_preference_for_v3():
-    from vulnops.core.models import FindingObservation, Match
-    from vulnops.verdict.triage import scanner_metrics
+    from verdict.triage import scanner_metrics
+    from vulnops.models import FindingObservation, Match
 
     match = Match("scanner", "", "443/tcp", 1.0, "")
     v2 = FindingObservation("openvas", "2026-10-18", match, cvss_vector="AV:N/AC:M/Au:N/C:P/I:P/A:N")
@@ -254,7 +254,7 @@ def test_cvss_v2_heuristic_and_preference_for_v3():
 
 
 def test_rejected_cves_are_ignored_not_errors(settings, sources, profile):
-    from vulnops.core.models import REJECTED
+    from vulnops.models import REJECTED
 
     collected = collect(sources, ALL)
     detection = InventoryScanner(settings).scan(profile, collected.records)

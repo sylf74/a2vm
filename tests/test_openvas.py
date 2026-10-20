@@ -5,12 +5,12 @@ import pytest
 import yaml
 from lxml import etree as ET
 
-from vulnops.assets.build import build_inventory
-from vulnops.core.io import read_detection
-from vulnops.core.profile import load_profile
-from vulnops.detect.cli import main
-from vulnops.detect.collect import collect, load_targets
-from vulnops.detect.openvas import FULL_AND_FAST, OpenvasConfig, parse_gmp_report, run_scan
+from detect.cli import main
+from detect.collect import collect, load_targets
+from detect.openvas import FULL_AND_FAST, OpenvasConfig, parse_gmp_report, run_scan
+from verdict.assets.build import build_inventory
+from vulnops.io import read_detection
+from vulnops.profile import load_profile
 
 from .conftest import FIXTURES, ROOT
 
@@ -62,7 +62,7 @@ def test_import_command(tmp_path):
 
 def test_hosts_reconcile_with_ssh_collection(tmp_path):
     """The OpenVAS host node00 (by FQDN) and the Trivy host node00 become one asset."""
-    from vulnops.detect.scanners import load_trivy_file
+    from detect.scanners import load_trivy_file
 
     profile = load_profile(ROOT / "examples" / "lab" / "client.yaml")
     trivy = load_trivy_file(FIXTURES / "trivy" / "node00.lab.example.json", "lab")
@@ -202,7 +202,7 @@ def test_targets_file_with_openvas_only(tmp_path):
     def quick(gmp, cfg, client):
         return run_scan(gmp, cfg, client, sleep=lambda s: None)
 
-    with patch("vulnops.detect.collect.run_scan", quick):
+    with patch("detect.collect.run_scan", quick):
         detections, errors = collect(tf, tmp_path / "raw", gmp_session=Session())
     assert errors == [] and detections[0].source == "openvas"
     assert (tmp_path / "raw" / "lab" / "openvas" / "report.xml").exists()

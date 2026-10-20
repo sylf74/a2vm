@@ -6,8 +6,8 @@ pillar 3.
 
 | Item | Value |
 | --- | --- |
-| GitLab name | `verdict` (+ `assets`) |
-| Status | In development (v0.9.0) |
+| Package and command | `verdict` (modules `verdict.assets` and the decision) |
+| Status | In development (v0.10.0) |
 | LLD | [../lld/triage-prioritization.md](../lld/triage-prioritization.md) |
 
 ## 1. Responsibility
@@ -35,8 +35,8 @@ Pillar 3 holds the asset context and takes the only decision of the platform.
 
 | Block | Responsibility | Reads → writes |
 | --- | --- | --- |
-| Asset context (`assets`) | Consolidates observations into one inventory per tenant and sets each attribute with its source (exposure as SSVC value, zone, mission, well-being, owner); reconciles declared and observed assets, internal and external | Detections → `assets.json`, `findings.json` |
-| Decision (`verdict`) | One SSVC decision per finding, BOD 26-04 timeline, reasons, review flags, rationale; risk acceptance | Records, assets, findings → `triage.json`, `triage.csv`, report, run page |
+| Asset context (`verdict assets build`) | Consolidates observations into one inventory per tenant and sets each attribute with its source (exposure as SSVC value, zone, mission, well-being, owner); reconciles declared and observed assets, internal and external | Detections → `assets.json`, `findings.json` |
+| Decision (`verdict run`) | One SSVC decision per finding, BOD 26-04 timeline, reasons, review flags, rationale; risk acceptance | Records, assets, findings → `triage.json`, `triage.csv`, report, run page |
 
 ## 4. Asset context
 
@@ -84,6 +84,6 @@ client CMDB, when available, is the reference for context.
 | Item | Content |
 | --- | --- |
 | In place | v0.9.0: SSVC decision with BOD 26-04 timelines, exposure model with source and zone |
-| Planned | v0.9.1: `published` endpoints and external detection pulled by the tenant project; v0.9.2: exposure gap |
+| Planned | v0.10.1: `published` endpoints and external detection pulled by the tenant project; v0.10.2: exposure gap |
 | Risks | Incomplete asset data from clients (safe defaults when criticality or exposure is unknown); AI proposes a wrong decision point (flagged, analyst validation) |
 | Open points | Exposure gap: immediate alert through the watch (pillar 1), or a section of the daily report |

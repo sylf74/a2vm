@@ -11,14 +11,14 @@
 #
 #     include:
 #       - project: vulnops/vulnops
-#         ref: v0.9.0
+#         ref: v0.10.0
 #         file: templates/client-pipeline.yml
 #     variables:
-#       VULNOPS_REF: v0.9.0        # same version as the include
+#       VULNOPS_REF: v0.10.0        # same version as the include
 #
 # Jobs:
 #   push to the default branch     validate (profile and targets)
-#   schedule or "Run pipeline"     collect -> intel -> detect -> assets -> triage
+#   schedule or "Run pipeline"     collect -> via -> detect -> assets -> triage
 #                                  optional TRIAGE_CVES="CVE-... CVE-...", TRIAGE_SINCE (default 26h)
 #   same, with VULNOPS_JOB=watch   watch (CERT-FR, KEV, critical CVEs matched to the client; alerts
 #                                  mailed to the analysts) -> send-alerts (manual: the validation)
@@ -53,7 +53,7 @@ variables:
   VULNOPS_RUNNER_TAG: llm-lan
   VULNOPS_COLLECT_TAG: llm-lan
 
-stages: [validate, collect, intel, detect, assets, triage, watch, send]
+stages: [validate, collect, via, detect, assets, triage, watch, send]
 
 .vulnops:
   image: python:3.12-slim
@@ -72,7 +72,7 @@ stages: [validate, collect, intel, detect, assets, triage, watch, send]
     - BASE="${VULNOPS_SERVER_URL:-${CI_SERVER_PROTOCOL}://${CI_SERVER_HOST}:${CI_SERVER_PORT}}"
     - git -c advice.detachedHead=false clone -q --depth 1 --branch "$VULNOPS_REF"
         "${BASE%%://*}://gitlab-ci-token:${CI_JOB_TOKEN}@${BASE#*://}/${VULNOPS_PROJECT}.git" .vulnops
-    - pip install --quiet .vulnops/core .vulnops/intel ".vulnops/detect[openvas]" .vulnops/assets .vulnops/verdict .vulnops/alert
+    - pip install --quiet .vulnops/vulnops .vulnops/via ".vulnops/detect[openvas]" .vulnops/verdict
     - if [ -f settings.yaml ]; then export SETTINGS=settings.yaml; else export SETTINGS=.vulnops/config/settings.yaml; fi
     - echo "vulnops $VULNOPS_REF ($(git -C .vulnops rev-parse --short HEAD)), client $CI_PROJECT_PATH, settings $SETTINGS"
 
@@ -95,9 +95,9 @@ validate:
     - if: $CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"
   script:
-    - vulnops-profiles validate "$VULNOPS_PROFILE"
-    - if [ -f "$VULNOPS_TARGETS" ]; then vulnops-detect plan "$VULNOPS_TARGETS" --profile "$VULNOPS_PROFILE"; fi
-    - if [ -f contacts.yaml ]; then vulnops-alert contacts "$VULNOPS_PROFILE" --contacts contacts.yaml; fi
+    - vulnops validate "$VULNOPS_PROFILE"
+    - if [ -f "$VULNOPS_TARGETS" ]; then detect plan "$VULNOPS_TARGETS" --profile "$VULNOPS_PROFILE"; fi
+    - if [ -f contacts.yaml ]; then via contacts "$VULNOPS_PROFILE" --contacts contacts.yaml; fi
 
 # Exit code 3 = collection incomplete: the job shows as a warning and the pipeline goes on with
 # what was collected (plus the declared inventory).
@@ -132,36 +132,36 @@ collect:
         echo "scan key: $(ssh-keygen -l -f ~/.ssh/vulnops_scan)"
       fi
       rc=0
-      vulnops-detect collect "$VULNOPS_TARGETS" $NO_SSH --raw work/scans --out work/detect || rc=$?
+      detect collect "$VULNOPS_TARGETS" $NO_SSH --raw work/scans --out work/detect || rc=$?
       # Raw outputs are not kept: Trivy JSON runs to hundreds of MB; what matters is in work/detect.
       rm -rf work/scans
       du -sh work/* 2>/dev/null || true
       if [ "$rc" -ne 0 ]; then exit 3; fi
 
-intel:
+via:
   extends: .data
-  stage: intel
+  stage: via
   needs: [collect]
   script:
     - |
       ARGS=""
       for c in ${TRIAGE_CVES:-}; do ARGS="$ARGS --cve $c"; done
       if [ -z "$ARGS" ]; then ARGS="--since ${TRIAGE_SINCE:-26h}"; fi
-      vulnops-intel collect --settings "$SETTINGS" --detect work/detect --out work/records.json $ARGS
+      via collect --settings "$SETTINGS" --detect work/detect --out work/records.json $ARGS
 
 detect:
   extends: .data
   stage: detect
-  needs: [intel]
+  needs: [via]
   script:
-    - vulnops-detect inventory "$VULNOPS_PROFILE" --settings "$SETTINGS" --records work/records.json --out work/detect
+    - detect inventory "$VULNOPS_PROFILE" --settings "$SETTINGS" --records work/records.json --out work/detect
 
 assets:
   extends: .data
   stage: assets
   needs: [detect]
   script:
-    - vulnops-assets build "$VULNOPS_PROFILE" --detect work/detect --out work/assets
+    - verdict assets build "$VULNOPS_PROFILE" --detect work/detect --out work/assets
 
 triage:
   extends: .data
@@ -191,7 +191,7 @@ watch:
     exit_codes: [3]
   script:
     - if [ -f watch-sources.yaml ]; then export SOURCES=watch-sources.yaml; else export SOURCES=.vulnops/config/watch-sources.yaml; fi
-    - vulnops-alert watch "$VULNOPS_PROFILE" --settings "$SETTINGS" --sources "$SOURCES" --state .watch/state.json --out alerts
+    - via watch "$VULNOPS_PROFILE" --settings "$SETTINGS" --sources "$SOURCES" --state .watch/state.json --out alerts
   artifacts:
     when: always
     paths: [alerts/]
@@ -208,4 +208,4 @@ send-alerts:
       allow_failure: true
   cache: []
   script:
-    - vulnops-alert send "$VULNOPS_PROFILE" --alerts alerts
+    - via send "$VULNOPS_PROFILE" --alerts alerts

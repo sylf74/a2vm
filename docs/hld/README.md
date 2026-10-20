@@ -17,9 +17,9 @@ never contradicts the strategy.
 | Chapter | Content | Owner |
 | --- | --- | --- |
 | [00-product-strategy.md](00-product-strategy.md) | Vision and goals, value chain, constraints, system context, structuring decisions, contracts between pillars, tenant and client context, AI strategy, deployment modes, cross-cutting security, roadmap, glossary | Product manager |
-| [10-vulnerability-intelligence.md](10-vulnerability-intelligence.md) | Pillar 1 (`intel`, `alert`) | Pillar 1 product owner |
+| [10-vulnerability-intelligence.md](10-vulnerability-intelligence.md) | Pillar 1, VIA (`via`) | Pillar 1 product owner |
 | [20-vulnerability-detection.md](20-vulnerability-detection.md) | Pillar 2 (`detect`) | Pillar 2 product owner |
-| [30-triage-prioritization.md](30-triage-prioritization.md) | Pillar 3 (`verdict`, `assets`) | Pillar 3 product owner |
+| [30-triage-prioritization.md](30-triage-prioritization.md) | Pillar 3 (`verdict`) | Pillar 3 product owner |
 | [40-dispatch-capitalization.md](40-dispatch-capitalization.md) | Pillar 4 | Pillar 4 product owner |
 | [50-emergency-actions.md](50-emergency-actions.md) | Pillar 5 | Pillar 5 product owner |
 

@@ -6,7 +6,7 @@ pillar 4.
 
 | Item | Value |
 | --- | --- |
-| GitLab name | — |
+| Package and command | — |
 | Status | Not started |
 | LLD | — |
 
@@ -51,5 +51,5 @@ verified closure.
 
 | Item | Content |
 | --- | --- |
-| Status | Not started; begins after v0.9.x |
+| Status | Not started; begins after v0.10.x |
 | Open points | Ticketing integration; indicators and dashboard |

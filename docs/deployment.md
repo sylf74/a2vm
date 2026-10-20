@@ -80,10 +80,10 @@ The code project's own pipeline only runs lint, tests and the offline examples.
 ```yaml
 include:
   - project: vulnops/vulnops
-    ref: v0.9.0
+    ref: v0.10.0
     file: templates/client-pipeline.yml
 variables:
-  VULNOPS_REF: v0.9.0
+  VULNOPS_REF: v0.10.0
 ```
 
 3. If `targets.yaml` is used: scan key and target accounts as in `docs/scanning.md`, then the

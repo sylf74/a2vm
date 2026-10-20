@@ -1,9 +1,7 @@
-# Editable install of every stage + test tooling (local development and CI).
--e ./core
--e ./intel
+# Editable install of the common contract and every pillar + test tooling (local development and CI).
+-e ./vulnops
+-e ./via
 -e ./detect[openvas]   # python-gvm and lxml: the OpenVAS tests need them
--e ./assets
 -e ./verdict
--e ./alert
 pytest>=8
 ruff>=0.6

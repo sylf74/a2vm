@@ -6,7 +6,7 @@ notice and keeps its own licence.
 
 Third-party material included in this repository:
 
-- CISA SSVC decision tables (verdict/src/vulnops/verdict/data/): from the CERT/CC SSVC project,
+- CISA SSVC decision tables (verdict/src/verdict/data/): from the CERT/CC SSVC project,
   Carnegie Mellon University, under the license reproduced in LICENSE-SSVC.
 - Trivy report samples (tests/fixtures/trivy/): trimmed from the Trivy project's test data,
   Aqua Security, Apache License 2.0 (see tests/fixtures/trivy/README.md).
