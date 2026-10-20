@@ -11,7 +11,7 @@ analysts only: it is licensed content, so it is neither sent to the LLM nor copi
 deliverables.
 
 Access needs a GTI Enterprise or Enterprise Plus licence. Disabled unless sources.gti_enabled
-(or VULNOPS_GTI_ENABLED=true) and the API key variable (GTI_API_KEY by default) is set.
+(or A2VM_GTI_ENABLED=true) and the API key variable (GTI_API_KEY by default) is set.
 """
 
 from __future__ import annotations

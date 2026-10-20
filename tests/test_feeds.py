@@ -43,7 +43,7 @@ def test_csaf_index_newest_first():
 
 
 def test_watch_with_catalogue(tmp_path, monkeypatch):
-    monkeypatch.delenv("VULNOPS_ANALYST_TO", raising=False)
+    monkeypatch.delenv("A2VM_ANALYST_TO", raising=False)
     data = yaml.safe_load((ROOT / "examples" / "example-client" / "client.yaml").read_text())
     data["alerts"] = {"level": "all", "watchlist": ["Fortinet FortiOS", "Siemens SCALANCE X"]}
     profile = tmp_path / "client.yaml"

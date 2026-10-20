@@ -6,7 +6,7 @@
 client: lab
 ssh:
   user: vulnops                       # dedicated unprivileged account on every target
-  identity_file: ~/.ssh/vulnops_scan  # in CI: written from the VULNOPS_SSH_KEY variable
+  identity_file: ~/.ssh/vulnops_scan  # in CI: written from the A2VM_SSH_KEY variable
   timeout_seconds: 600
 targets:
   - {host: gitlab.lab.example, ip: 192.0.2.102, method: trivy}                 # Ubuntu 24.04

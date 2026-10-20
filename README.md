@@ -135,13 +135,13 @@ targets describe client infrastructure and never go in this repository.
 ## Local LLM
 
 Any OpenAI-compatible server with JSON-schema structured output (vLLM, SGLang). Enable it in
-`config/settings.yaml` or with `VULNOPS_LLM_ENABLED`, `VULNOPS_LLM_BASE_URL`,
-`VULNOPS_LLM_MODEL` (the former `VERDICT_*` names still work). Each stage prints the LLM
+`config/settings.yaml` or with `A2VM_LLM_ENABLED`, `A2VM_LLM_BASE_URL`,
+`A2VM_LLM_MODEL` (the former `VERDICT_*` names still work). Each stage prints the LLM
 configuration it received at start-up, and the cause of any LLM fallback.
 
 ## Google Threat Intelligence (optional)
 
-With a GTI licence, `VULNOPS_GTI_ENABLED=true` and a masked `GTI_API_KEY` variable, the intel stage
+With a GTI licence, `A2VM_GTI_ENABLED=true` and a masked `GTI_API_KEY` variable, the intel stage
 adds GTI's exploitation state to each CVE (only CVE ids are sent). Confirmed exploitation counts as
 active in SSVC and makes a watch alert urgent; GTI's licensed prose stays with the analysts
 (`docs/gti.md`).

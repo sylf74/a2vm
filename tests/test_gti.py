@@ -151,7 +151,7 @@ def test_budget_and_missing_key(settings, sources, monkeypatch):
 
 
 def test_env_override(monkeypatch):
-    monkeypatch.setenv("VULNOPS_GTI_ENABLED", "true")
+    monkeypatch.setenv("A2VM_GTI_ENABLED", "true")
     monkeypatch.setenv("GTI_API_KEY", "secret-123")
     line = describe_gti(load_settings())
     assert line.startswith("GTI: enabled") and "api key set" in line and "secret-123" not in line

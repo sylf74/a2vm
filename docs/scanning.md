@@ -39,7 +39,7 @@ cat ~/vulnops_scan.pub        # public key, for step 2
 
 In GitLab, **client project** (e.g. `vulnops/clients/<client>`): **Settings > CI/CD > Variables > Add variable**
 
-- Type: **File** · Key: `VULNOPS_SSH_KEY` · Value: the content of `~/vulnops_scan` (private key)
+- Type: **File** · Key: `A2VM_SSH_KEY` · Value: the content of `~/vulnops_scan` (private key)
 - Protect variable: **checked** — only pipelines of protected branches (`main`, the schedule) get it
 - Visibility: **Visible** — a private key spans several lines and GitLab cannot mask it; the job
   never prints it, and the key only opens an unprivileged account, from the runner's address only

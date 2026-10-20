@@ -105,14 +105,14 @@ CI/CD variables of the client project:
 
 | Key | Type | Value |
 | --- | --- | --- |
-| `VULNOPS_GVM_USER` | Variable | `vulnops` |
-| `VULNOPS_GVM_PASSWORD` | Variable, masked, protected | the GMP password |
-| `VULNOPS_GVM_CA` | File | `ca.pem` |
-| `VULNOPS_GVM_CERT` | File, protected | `client.crt` |
-| `VULNOPS_GVM_KEY` | File, protected | `client.key` |
+| `A2VM_GVM_USER` | Variable | `vulnops` |
+| `A2VM_GVM_PASSWORD` | Variable, masked, protected | the GMP password |
+| `A2VM_GVM_CA` | File | `ca.pem` |
+| `A2VM_GVM_CERT` | File, protected | `client.crt` |
+| `A2VM_GVM_KEY` | File, protected | `client.key` |
 
 Check the file with `detect plan targets.yaml` (the validate job does it). The daily
-`collect` job then runs the scan; it needs no `VULNOPS_SSH_KEY` when the file has no SSH target.
+`collect` job then runs the scan; it needs no `A2VM_SSH_KEY` when the file has no SSH target.
 
 ## 5. Scanner host as runner (external scans)
 
@@ -132,12 +132,12 @@ triage with the LLM) stay on the internal runner and get the detection through t
      clone_url = "https://gitlab.example.org"
      tls-cert-file = "/etc/gitlab-runner/certs/scanner.crt"
      tls-key-file = "/etc/gitlab-runner/certs/scanner.key"
-     environment = ["VULNOPS_SERVER_URL=https://gitlab.example.org"]
+     environment = ["A2VM_SERVER_URL=https://gitlab.example.org"]
      [runners.docker]
        volumes = ["/cache", "greenbone-community-edition_gvmd_socket_vol:/run/gvmd"]
    ```
 
-   `VULNOPS_SERVER_URL` makes the job fetch the vulnops code by the public URL; the client
+   `A2VM_SERVER_URL` makes the job fetch the vulnops code by the public URL; the client
    certificate is handed to git through `CI_SERVER_TLS_CERT_FILE` and `CI_SERVER_TLS_KEY_FILE`.
 
 2. In the client project, run the collection there and talk to gvmd over the socket:
@@ -145,7 +145,7 @@ triage with the LLM) stay on the internal runner and get the detection through t
    ```yaml
    # .gitlab-ci.yml
    variables:
-     VULNOPS_COLLECT_TAG: scan-cloud
+     A2VM_COLLECT_TAG: scan-cloud
    ```
 
    ```yaml
@@ -155,7 +155,7 @@ triage with the LLM) stay on the internal runner and get the detection through t
      hosts: [203.0.113.10, www.example.org]
    ```
 
-   Only `VULNOPS_GVM_USER` and `VULNOPS_GVM_PASSWORD` are needed (no certificates over a socket).
+   Only `A2VM_GVM_USER` and `A2VM_GVM_PASSWORD` are needed (no certificates over a socket).
 
 The scanner host then holds a runner token and, while a job runs, a job token: register it on
 this project only, and keep client projects with internal data on internal runners.

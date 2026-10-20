@@ -332,7 +332,7 @@ class TriageRow:
     rationale: str = ""
     rationale_source: str = "template"
     exposure: str = ""  # open | controlled | small
-    exposure_source: str = ""  # declared | rule | <scanner> | assumed (external-scan from v0.10.1)
+    exposure_source: str = ""  # declared | rule | <scanner> | assumed (external-scan from v0.11.2)
     zone: str = ""
 
     def to_dict(self) -> dict[str, Any]:

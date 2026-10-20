@@ -50,8 +50,8 @@ your GTI contract allows these facts to be passed on to clients (MSSP use).
 | Key | Value | Options |
 | --- | --- | --- |
 | `GTI_API_KEY` | the key | Masked, protected |
-| `VULNOPS_GTI_ENABLED` | `true` | Visible |
-| `VULNOPS_GTI_MAX_CALLS` | `2000` (optional) | Visible |
+| `A2VM_GTI_ENABLED` | `true` | Visible |
+| `A2VM_GTI_MAX_CALLS` | `2000` (optional) | Visible |
 
 3. The runner must reach `www.virustotal.com` (HTTPS; `HTTPS_PROXY` / `SSL_CERT_FILE` are honoured).
 

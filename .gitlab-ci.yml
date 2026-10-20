@@ -41,7 +41,7 @@ test:
 examples:
   stage: examples
   variables:
-    VULNOPS_LLM_ENABLED: "false"
+    A2VM_LLM_ENABLED: "false"
   script:
     - *install
     - a2vm validate examples/*/client.yaml
