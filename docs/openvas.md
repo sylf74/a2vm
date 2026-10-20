@@ -1,6 +1,6 @@
 # OpenVAS network scans (Greenbone Community Edition)
 
-vulnops drives a Greenbone scanner (gvmd + OpenVAS) over GMP: it creates or reuses a target and a
+A2VM (pillar 2, detect) drives a Greenbone scanner (gvmd + OpenVAS) over GMP: it creates or reuses a target and a
 task per client, starts the scan, waits for it and imports the XML report. A report exported from
 the Greenbone web interface can also be imported by hand.
 
@@ -31,7 +31,7 @@ the compose file it provides, `docker compose up -d`, then wait for the first fe
 (it can take hours; scans before it is complete find little). Size the VM generously: the scanner
 and its database need several cores and several GB of RAM.
 
-Create a dedicated GMP account for vulnops, with the User role (not Admin):
+Create a dedicated GMP account for A2VM (named `vulnops`, unchanged since v0.11.0 to keep existing set-ups), with the User role (not Admin):
 
 ```bash
 docker compose exec -u gvmd gvmd gvmd --create-user=vulnops --role=User --password='<password>'

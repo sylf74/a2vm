@@ -7,7 +7,7 @@ pillar 3.
 | Item | Value |
 | --- | --- |
 | Package and command | `verdict` (modules `verdict.assets` and the decision) |
-| Status | In development (v0.10.0) |
+| Status | In development (v0.11.0) |
 | LLD | [../lld/triage-prioritization.md](../lld/triage-prioritization.md) |
 
 ## 1. Responsibility

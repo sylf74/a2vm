@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
+# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 """Watch sources other than CERT-FR, KEV and cvelistV5: generic feeds (RSS 2.0, Atom, RDF) and CSAF
 providers. The catalogue (config/watch-sources.yaml) says which ones are read and how they are
 labelled: institutional bodies, vendors and manufacturers, research.

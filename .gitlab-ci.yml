@@ -1,4 +1,4 @@
-# vulnops code project pipeline: quality checks only. No client data is ever processed here.
+# A2VM code project pipeline: quality checks only. No client data is ever processed here.
 #
 # Client pipelines run in the client projects (group vulnops/clients), which include
 # templates/client-pipeline.yml at a fixed version (tag). See docs/deployment.md.
@@ -44,7 +44,7 @@ examples:
     VULNOPS_LLM_ENABLED: "false"
   script:
     - *install
-    - vulnops validate examples/*/client.yaml
+    - a2vm validate examples/*/client.yaml
     - detect plan examples/lab/targets.yaml --profile examples/lab/client.yaml
     - scripts/run-pipeline.sh --fixtures tests/fixtures --since 2099-10-01 --include-updated
   artifacts:
@@ -58,8 +58,8 @@ release:
   script:
     - |
       want="${CI_COMMIT_TAG#v}"
-      for p in vulnops via detect verdict; do
+      for p in a2vm via detect verdict; do
         got=$(sed -n 's/^version = "\(.*\)"/\1/p' $p/pyproject.toml)
         [ "$got" = "$want" ] || { echo "$p/pyproject.toml has version $got, tag says $want"; exit 1; }
       done
-      echo "vulnops $CI_COMMIT_TAG: client projects can include templates/client-pipeline.yml at ref $CI_COMMIT_TAG"
+      echo "A2VM $CI_COMMIT_TAG: client projects can include templates/client-pipeline.yml at ref $CI_COMMIT_TAG"

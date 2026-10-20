@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
+# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 """Data sources: CVE JSON 5 records, CISA KEV, FIRST EPSS, cvelistV5 delta log, CERT-FR feeds,
 Google Threat Intelligence (optional, licensed).
 
@@ -19,7 +19,7 @@ from typing import Any
 
 import httpx
 
-from vulnops.config import SourceSettings
+from a2vm.config import SourceSettings
 
 CVE_ID = re.compile(r"^CVE-(\d{4})-(\d{4,})$")
 

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
+# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 """Client contacts (contacts.yaml of the client project): who receives which alerts, and in what role.
 
   schema_version: 1
@@ -20,8 +20,8 @@ from pathlib import Path
 import jsonschema
 import yaml
 
-from vulnops.io import load_schema
-from vulnops.models import ClientProfile
+from a2vm.io import load_schema
+from a2vm.models import ClientProfile
 
 
 class ContactsError(ValueError):

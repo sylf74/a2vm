@@ -2,7 +2,7 @@
 
 ```
 vulnops/                 group — group runner, shared CI/CD variables (LLM endpoint)
-├── vulnops              code project — no client data; releases are tags vX.Y.Z
+├── a2vm                  code project — no client data; releases are tags vX.Y.Z
 └── clients/             subgroup — one private project per client
     ├── homelab
     └── <client>
@@ -53,14 +53,14 @@ A client project can override any of them (e.g. another engine for a client that
 Optional Google Threat Intelligence enrichment: `VULNOPS_GTI_ENABLED` and `GTI_API_KEY` (masked,
 protected), see `docs/gti.md`.
 
-## 4. Code project `vulnops/vulnops`
+## 4. Code project `vulnops/a2vm`
 
 1. Create the project in the group `vulnops`, **without** a README (empty repository).
 2. Push the code and the release tag:
 
 ```bash
-git clone vulnops.bundle vulnops && cd vulnops
-git remote set-url origin git@gitlab.lab.example:vulnops/vulnops.git
+git clone a2vm.bundle a2vm && cd a2vm
+git remote set-url origin git@gitlab.lab.example:vulnops/a2vm.git
 git push -u origin main && git push origin --tags
 ```
 
@@ -79,11 +79,11 @@ The code project's own pipeline only runs lint, tests and the offline examples.
 
 ```yaml
 include:
-  - project: vulnops/vulnops
-    ref: v0.10.0
+  - project: vulnops/a2vm
+    ref: v0.11.0
     file: templates/client-pipeline.yml
 variables:
-  VULNOPS_REF: v0.10.0
+  VULNOPS_REF: v0.11.0
 ```
 
 3. If `targets.yaml` is used: scan key and target accounts as in `docs/scanning.md`, then the

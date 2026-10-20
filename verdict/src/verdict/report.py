@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
+# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 """Write a triage run as JSON (full detail), CSV (one row per CVE x asset) and Markdown (French)."""
 
 from __future__ import annotations
@@ -8,7 +8,7 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 
-from vulnops.models import TriageRow, TriageRun
+from a2vm.models import TriageRow, TriageRun
 
 from .dashboard import render_dashboard
 from .rationale import BOD_FR, EXPLOITATION_FR

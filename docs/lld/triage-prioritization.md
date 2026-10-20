@@ -3,9 +3,9 @@
 | Item | Value |
 | --- | --- |
 | Building block | Pillar 3 package `verdict` (command `verdict`): Decision (`verdict run`) and Asset context (`verdict.assets`, `verdict assets build`) |
-| Status | v0.10.0 as built (decision logic unchanged since v0.9.0); later changes marked **Planned (v0.10.1)** or **Planned (v0.10.2)** |
+| Status | v0.11.0 as built (decision logic unchanged since v0.9.0); later changes marked **Planned (v0.10.1)** or **Planned (v0.10.2)** |
 | Place in the set | C4 level 3 of pillar 3 of the HLD ([`../hld/30-triage-prioritization.md`](../hld/30-triage-prioritization.md)); this version covers its Decision block (`verdict run`), the Asset context block (`verdict.assets`) is to be added. Goals, constraints and contracts: HLD. Servers, zones and flows: DAT |
-| Code | `verdict/src/verdict/`, shared model in `vulnops/src/vulnops/models.py` |
+| Code | `verdict/src/verdict/`, shared model in `a2vm/src/a2vm/models.py` |
 
 This document says how verdict turns findings into decisions: its inputs and outputs, the rules
 and their order, the defaults, the configuration, the failure modes and the tests. It is updated
@@ -57,7 +57,7 @@ In the client pipeline, the `triage` job runs `verdict run "$VULNOPS_PROFILE" --
 | `work/assets/<client>/assets.json` | assets | Consolidated assets with their attributes and the source of each | `assets.schema.json` |
 | `work/assets/<client>/findings.json` | assets | Findings re-keyed to consolidated assets, and the declared assets found not affected | `findings.schema.json` |
 
-All files are read through `vulnops.io`; a file whose client id differs from the profile's is
+All files are read through `a2vm.io`; a file whose client id differs from the profile's is
 rejected (exit 2).
 
 ### 2.3 Outputs
@@ -132,7 +132,7 @@ Computed once per CVE and reused for every asset and client of the run.
 | Automatable | `yes`, `no` | CISA ADP; else the CVSS heuristic on the record's best vector (CNA first, newest version), else on the scanner's vector (a v4 or v3 vector before a v2 one); else the LLM (flagged) | `yes` if `policy.unknown_inputs: conservative`, `no` if `optimistic`; flagged |
 | Technical Impact | `partial`, `total` | Same as Automatable, from the same source | `total` / `partial`, same rule; flagged |
 
-GTI is read through `vulnops.gti.ssvc_exploitation`: confirmed or wide exploitation gives
+GTI is read through `a2vm.gti.ssvc_exploitation`: confirmed or wide exploitation gives
 `active`; a publicly available or trivial exploit gives `poc`; reported or suspected exploitation
 gives no value and flags the row for review unless another source already says `active`.
 
@@ -284,7 +284,7 @@ alert stage and is an open point of the DAT.
 
 ## 6. Configuration
 
-`config/settings.yaml` of the vulnops version in use; a `settings.yaml` in the client project replaces it as a whole:
+`config/settings.yaml` of the A2VM version in use; a `settings.yaml` in the client project replaces it as a whole:
 
 | Key | Default | Effect |
 | --- | --- | --- |

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
+# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 """The alert sheet sent to a client, in the team's CVE sheet layout (French):
 
   CVE / Produit concerné / Type de vulnérabilité / CVSS / Impact principal / État d'exploitation /
@@ -17,12 +17,12 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
-from vulnops.config import Settings
-from vulnops.extensions import remediation_timeline
-from vulnops.gti import gti_unconfirmed, ssvc_exploitation
-from vulnops.llm import LlmClient, LlmError
-from vulnops.llm.guard import unsupported_tokens
-from vulnops.models import AffectedEntry, VulnRecord, exposure_value
+from a2vm.config import Settings
+from a2vm.extensions import remediation_timeline
+from a2vm.gti import gti_unconfirmed, ssvc_exploitation
+from a2vm.llm import LlmClient, LlmError
+from a2vm.llm.guard import unsupported_tokens
+from a2vm.models import AffectedEntry, VulnRecord, exposure_value
 
 from .watch import Alert, exposure
 
@@ -217,7 +217,7 @@ def build(alert: Alert, settings: Settings, llm: LlmClient | None = None) -> Fic
     fiche.sections.append(("Description", [p.strip() for p in description.split("\n\n") if p.strip()]))
 
     # Recommended delay (CISA BOD 26-04) for the most exposed asset.
-    # Offered by pillar 3 through vulnops.extensions; the section is left out when it is not installed.
+    # Offered by pillar 3 through a2vm.extensions; the section is left out when it is not installed.
     timeline = remediation_timeline()
     if first and alert.findings and timeline:
         delay = timeline(settings, first, worst_exposed)

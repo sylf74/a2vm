@@ -1,9 +1,9 @@
-# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
+# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 """VIA, pillar 1: Vulnerability Intelligence — Advanced, AI-assisted, Alerting.
 
 intel builds one vulnerability record per CVE; alert watches each client's estate and drafts alert
-sheets. VIA depends on vulnops only; asset matching and remediation delays come from the other
-pillars through vulnops.extensions.
+sheets. VIA depends on a2vm only; asset matching and remediation delays come from the other
+pillars through a2vm.extensions.
 """
 
-__version__ = "0.10.0"
+__version__ = "0.11.0"

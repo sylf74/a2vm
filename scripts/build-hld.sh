@@ -1,5 +1,5 @@
 #!/bin/sh
-# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
+# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 # Assemble the HLD chapters (docs/hld/) into one document for a review outside GitLab.
 # Usage: scripts/build-hld.sh [output-dir]   (default: build/hld)
 # Always writes hld.md; also hld.html and hld.pdf when pandoc (and a PDF engine) are installed.

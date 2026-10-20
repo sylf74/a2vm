@@ -4,17 +4,17 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "verdict"
-version = "0.10.0"
+version = "0.11.0"
 description = "Pillar 3 (Triage & Prioritization): asset context and deterministic SSVC decisions, LLM-written rationale."
 requires-python = ">=3.11"
-license = {text = "LicenseRef-vulnops-proprietary"}
-dependencies = ["vulnops"]
+license = {text = "LicenseRef-a2vm-proprietary"}
+dependencies = ["a2vm"]
 
 [project.scripts]
 verdict = "verdict.cli:main"
 
-# Offered to the other pillars through the vulnops extension points (vulnops.extensions).
-[project.entry-points."vulnops.remediation_timeline"]
+# Offered to the other pillars through the a2vm extension points (a2vm.extensions).
+[project.entry-points."a2vm.remediation_timeline"]
 verdict = "verdict.timeline:remediation_timeline"
 
 [tool.setuptools.packages.find]

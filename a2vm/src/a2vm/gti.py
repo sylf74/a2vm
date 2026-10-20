@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
+# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 """Reading the Google Threat Intelligence view of a record (filled by via.intel.gti) as SSVC input.
 
 Kept in core so that verdict and alert interpret GTI the same way without depending on intel.

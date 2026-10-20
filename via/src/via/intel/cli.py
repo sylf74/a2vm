@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
+# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 """`via collect`: fetch and normalise vulnerability records into a records file."""
 
 from __future__ import annotations
@@ -8,8 +8,8 @@ import datetime as dt
 import sys
 from pathlib import Path
 
-from vulnops.config import describe_gti, load_settings
-from vulnops.io import detection_files, read_detection, write_records
+from a2vm.config import describe_gti, load_settings
+from a2vm.io import detection_files, read_detection, write_records
 
 from .collect import collect, select_cve_ids
 from .sources import Sources

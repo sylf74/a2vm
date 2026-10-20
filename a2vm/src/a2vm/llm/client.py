@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
+# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 """Minimal client for an OpenAI-compatible chat completions API (vLLM, SGLang, llama.cpp server...).
 
 Every call asks for a JSON object constrained by a JSON Schema (`response_format=json_schema`,

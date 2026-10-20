@@ -1,2 +1,2 @@
-# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
-"""vulnops assets stage: consolidated, multi-tenant asset inventory."""
+# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+"""verdict assets (asset context): consolidated, multi-tenant asset inventory."""

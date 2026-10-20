@@ -1,14 +1,14 @@
-# vulnops — AI-Assisted Vulnerability Management
+# A2VM — AI-Assisted Vulnerability Management
 
-vulnops is the project that brings the pillars of the platform together: each pillar is an
-independent package with its own command, and they meet only through vulnops, the common contract
+A2VM is the project that brings the pillars of the platform together: each pillar is an
+independent package with its own command, and they meet only through `a2vm`, the common contract
 (data model, exchange files and their schemas, settings, client profiles, LLM client, extension
 points). Decisions are deterministic (CISA SSVC tables + per-client policy); AI proposes and
 writes — it fills flagged gaps, proposes uncertain matches and writes rationales — but never
 decides.
 
 ```
-vulnops/    common contract              model, schemas, settings, profiles, LLM client, extension points
+a2vm/        common contract              model, schemas, settings, profiles, LLM client, extension points
 via/        1. VIA (Vulnerability Intelligence: Advanced, AI-assisted, Alerting)
               via collect                public sources + CTI                              -> work/records.json
               via watch / send           watch on each client's estate, alert sheets       -> alerts/
@@ -22,7 +22,7 @@ remediate/  4. Dispatch & Capitalization (not started)
 The pillars never import one another (a test checks it): each reads and writes only the common
 model, and every exchange file is validated against its JSON Schema on write and on read. When a
 pillar needs a capability of another one (the watch needs asset matching from detect and the
-remediation delay from verdict), it asks `vulnops.extensions`, which the owner fills through a
+remediation delay from verdict), it asks `a2vm.extensions`, which the owner fills through a
 Python entry point. The design is described in `docs/hld/` (high level) and `docs/lld/` (per
 pillar).
 
@@ -30,9 +30,9 @@ pillar).
 
 ```bash
 python -m venv .venv && . .venv/bin/activate        # PowerShell: .venv\Scripts\Activate.ps1
-pip install -r requirements-dev.txt                 # vulnops + every pillar, editable, + pytest and ruff
+pip install -r requirements-dev.txt                 # a2vm + every pillar, editable, + pytest and ruff
 
-vulnops validate examples/*/client.yaml
+a2vm validate examples/*/client.yaml
 scripts/run-pipeline.sh --fixtures tests/fixtures --since 2099-10-01 --include-updated   # offline demo
 scripts/run-pipeline.sh --since 26h                 # real CVEs of the last 26 hours + KEV additions
 scripts/run-pipeline.sh --cve CVE-2024-3400
@@ -121,7 +121,7 @@ fixed packages reported by scanners.
 ## Client profiles
 
 One YAML file per client (`client.yaml` of the client project), validated against
-`vulnops/src/vulnops/schemas/client_profile.schema.json` (schema version 2; version 1 profiles
+`a2vm/src/a2vm/schemas/client_profile.schema.json` (schema version 2; version 1 profiles
 remain valid):
 
 - `assets`: declared assets or product families, for inventory matching (optional);
@@ -159,7 +159,7 @@ deadlines and the ACT list, in one self-contained page.
 
 ```
 vulnops/                 group: group runner (tag llm-lan), shared variables (LLM endpoint)
-├── vulnops              this code project: lint, tests, examples; releases are tags vX.Y.Z
+├── a2vm                  this code project: lint, tests, examples; releases are tags vX.Y.Z
 └── clients/             one private project per client: client.yaml, targets.yaml, variables
     └── <client>         (scan key), schedule, artifacts — nothing shared between clients
 ```
@@ -167,13 +167,13 @@ vulnops/                 group: group runner (tag llm-lan), shared variables (LL
 Each client project includes `templates/client-pipeline.yml` at a fixed tag: `validate` on every
 push; on a schedule or by hand (optional `TRIAGE_CVES`), `collect` → `via` → `detect` →
 `assets` → `triage`, each passing `work/` to the next. Reports and the asset inventory are kept 30
-days in the client project, intermediate files 7 days. A client moves to a new vulnops version
+days in the client project, intermediate files 7 days. A client moves to a new A2VM version
 by changing the tag in its `.gitlab-ci.yml`. Set-up: `docs/deployment.md`.
 
 ## Repository layout
 
 ```
-vulnops/                                   common contract (package and command `vulnops`)
+a2vm/                                       common contract (package and command `a2vm`)
 via/ detect/ verdict/                      one package and one command per pillar
 remediate/                                 not started
 config/settings.yaml                       default settings (a client project may override them)

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
+# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 """via (alert): watch mode of a client project.
 
   watch   new CERT-FR publications, KEV additions and critical CVEs since the last run, matched to
@@ -21,11 +21,11 @@ import os
 import sys
 from pathlib import Path
 
+from a2vm.config import describe_llm, load_settings
+from a2vm.extensions import ExtensionMissing, asset_matcher
+from a2vm.llm import LlmClient
+from a2vm.profile import ProfileError, load_profile
 from via.intel.sources import Sources
-from vulnops.config import describe_llm, load_settings
-from vulnops.extensions import ExtensionMissing, asset_matcher
-from vulnops.llm import LlmClient
-from vulnops.profile import ProfileError, load_profile
 
 from .contacts import ContactsError, load_contacts, recipients
 from .feeds import load_catalogue
@@ -113,7 +113,7 @@ def cmd_watch(args: argparse.Namespace) -> int:
             + "</p>"
         )
         msg = message(
-            f"[vulnops][{profile.id}] À valider — {a['title']}",
+            f"[CERT Alert][{profile.id}] À valider — {a['title']}",
             note + fiche_html,
             (out / f"{a['id']}.md").read_text(encoding="utf-8"),
             analysts,

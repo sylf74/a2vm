@@ -1,5 +1,5 @@
-# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
-"""`vulnops validate client.yaml ...`: check client profiles against their schema."""
+# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+"""`a2vm validate client.yaml ...`: check client profiles against their schema."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from .profile import ProfileError, load_profile
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="vulnops", description=__doc__)
+    parser = argparse.ArgumentParser(prog="a2vm", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
     v = sub.add_parser("validate", help="validate client profiles against the schema")
     v.add_argument("profiles", nargs="+")

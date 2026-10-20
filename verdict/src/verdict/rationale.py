@@ -1,13 +1,13 @@
-# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
+# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 """French explanation of each triage row: a deterministic template, optionally rephrased by the LLM."""
 
 from __future__ import annotations
 
 import json
 
-from vulnops.llm import LlmClient, LlmError
-from vulnops.llm.guard import unsupported_tokens
-from vulnops.models import TriageRow
+from a2vm.llm import LlmClient, LlmError
+from a2vm.llm.guard import unsupported_tokens
+from a2vm.models import TriageRow
 
 from .llm_tasks import write_rationale
 

@@ -1,10 +1,10 @@
-# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
+# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 import json
 
+from a2vm.models import AffectedEntry, DeclaredAsset
 from detect.matching import match_assets
 from detect.versions import evaluate, version_key
 from via.intel.record import parse_record
-from vulnops.models import AffectedEntry, DeclaredAsset
 
 from .conftest import FIXTURES
 

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
+# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 """Exchange files between stages: JSON documents with a declared kind and schema version.
 
 Every file a stage writes is validated against its JSON Schema before it is written, and every
@@ -39,7 +39,7 @@ class ExchangeError(ValueError):
 
 @cache
 def load_schema(name: str) -> dict[str, Any]:
-    text = resources.files("vulnops").joinpath("schemas", f"{name}.schema.json").read_text(encoding="utf-8")
+    text = resources.files("a2vm").joinpath("schemas", f"{name}.schema.json").read_text(encoding="utf-8")
     return json.loads(text)
 
 

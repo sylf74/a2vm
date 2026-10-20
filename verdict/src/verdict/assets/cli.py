@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
+# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 """`verdict assets build`: consolidate the detection files of each client into its asset inventory.
 
 Reads <detect>/<client>/*.json, writes <out>/<client>/assets.json and <out>/<client>/findings.json.
@@ -13,8 +13,8 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-from vulnops.io import ExchangeError, detection_files, read_detection, write_assets, write_findings
-from vulnops.profile import ProfileError, load_profile
+from a2vm.io import ExchangeError, detection_files, read_detection, write_assets, write_findings
+from a2vm.profile import ProfileError, load_profile
 
 from .build import build_inventory
 

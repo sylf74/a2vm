@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
+# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 """detect's LLM task: is the product named in a vulnerability record the client's asset?
 
 Only called for fuzzy (name-similarity) candidates; a confirmed match is always flagged for
@@ -10,9 +10,9 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from vulnops.llm import UNTRUSTED as _UNTRUSTED
-from vulnops.llm import LlmClient
-from vulnops.models import AffectedEntry, DeclaredAsset, VulnRecord
+from a2vm.llm import UNTRUSTED as _UNTRUSTED
+from a2vm.llm import LlmClient
+from a2vm.models import AffectedEntry, DeclaredAsset, VulnRecord
 
 MATCH_SCHEMA: dict[str, Any] = {
     "type": "object",

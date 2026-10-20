@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-vulnops-proprietary
+# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 """detect: produce detection files (asset observations + findings), one per client and source.
 
   plan       check a targets file and list the scans it would run (no connection)
@@ -17,10 +17,10 @@ import argparse
 import sys
 from pathlib import Path
 
-from vulnops.config import describe_llm, load_settings
-from vulnops.io import Detection, read_records, write_detection
-from vulnops.llm import LlmClient
-from vulnops.profile import ProfileError, load_profile
+from a2vm.config import describe_llm, load_settings
+from a2vm.io import Detection, read_records, write_detection
+from a2vm.llm import LlmClient
+from a2vm.profile import ProfileError, load_profile
 
 from .collect import collect, load_targets, plan
 from .inventory import InventoryScanner
