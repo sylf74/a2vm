@@ -20,7 +20,7 @@ every 10 min   the sources of config/watch-sources.yaml, in three categories:
                CVE, product, type, CVSS, main impact, exploitation status, fixes, description,
                delay, links
       v
-               mail to the analysts (VULNOPS_ANALYST_TO), naming the recipients, with a link
+               mail to the analysts (A2VM_ANALYST_TO), naming the recipients, with a link
       v
                analyst runs the manual job "send-alerts"  ->  mail to the client's contacts
 ```
@@ -61,15 +61,15 @@ CERT-FR summary or the vendor's description.
 
    | Key | Example | Options |
    | --- | --- | --- |
-   | `VULNOPS_SMTP_HOST` | `smtp.example.com` | Visible |
-   | `VULNOPS_SMTP_PORT` | `587` | Visible |
-   | `VULNOPS_SMTP_TLS` | `starttls` (or `ssl`, `none`) | Visible |
-   | `VULNOPS_SMTP_USER` | `alerts@example.com` | Visible |
-   | `VULNOPS_SMTP_PASSWORD` | | Masked and hidden, protected |
-   | `VULNOPS_MAIL_FROM` | `Veille vulnérabilités <alerts@example.com>` | Visible |
-   | `VULNOPS_ANALYST_TO` | `analyst1@example.com, analyst2@example.com` | Visible |
+   | `A2VM_SMTP_HOST` | `smtp.example.com` | Visible |
+   | `A2VM_SMTP_PORT` | `587` | Visible |
+   | `A2VM_SMTP_TLS` | `starttls` (or `ssl`, `none`) | Visible |
+   | `A2VM_SMTP_USER` | `alerts@example.com` | Visible |
+   | `A2VM_SMTP_PASSWORD` | | Masked and hidden, protected |
+   | `A2VM_MAIL_FROM` | `Veille vulnérabilités <alerts@example.com>` | Visible |
+   | `A2VM_ANALYST_TO` | `analyst1@example.com, analyst2@example.com` | Visible |
 
-   Without `VULNOPS_SMTP_HOST`, nothing is sent: messages are written to `alerts/outbox/*.eml`
+   Without `A2VM_SMTP_HOST`, nothing is sent: messages are written to `alerts/outbox/*.eml`
    (job artifacts), which is a convenient dry run.
 
    **Per client:** a variable set on a client project overrides the group's one. A client whose
@@ -77,15 +77,15 @@ CERT-FR summary or the vendor's description.
    variables in its project; the others use the group's.
 
    **Microsoft 365 (Exchange Online):** SMTP with a password (Basic auth) is being switched off by
-   Microsoft; use Microsoft Graph instead (`VULNOPS_MAIL_TRANSPORT=graph`):
+   Microsoft; use Microsoft Graph instead (`A2VM_MAIL_TRANSPORT=graph`):
 
    | Key | Value |
    | --- | --- |
-   | `VULNOPS_MAIL_TRANSPORT` | `graph` |
-   | `VULNOPS_GRAPH_TENANT_ID` | directory (tenant) id |
-   | `VULNOPS_GRAPH_CLIENT_ID` | application (client) id |
-   | `VULNOPS_GRAPH_CLIENT_SECRET` | client secret — masked and hidden, protected |
-   | `VULNOPS_GRAPH_SENDER` | mailbox that sends, e.g. `veille@example.com` |
+   | `A2VM_MAIL_TRANSPORT` | `graph` |
+   | `A2VM_GRAPH_TENANT_ID` | directory (tenant) id |
+   | `A2VM_GRAPH_CLIENT_ID` | application (client) id |
+   | `A2VM_GRAPH_CLIENT_SECRET` | client secret — masked and hidden, protected |
+   | `A2VM_GRAPH_SENDER` | mailbox that sends, e.g. `veille@example.com` |
 
    In Entra ID: App registrations > New registration; Certificates & secrets > New client secret;
    API permissions > Microsoft Graph > Application permissions > `Mail.Send`, then grant admin
@@ -118,7 +118,7 @@ CERT-FR summary or the vendor's description.
    sending. The analysts' mail names who will receive the alert (name and role) before validation.
 
 3. Client project > Build > Pipeline schedules > New schedule: `*/10 * * * *`, branch `main`,
-   variable `VULNOPS_JOB` = `watch`. Keep the daily triage schedule as it is.
+   variable `A2VM_JOB` = `watch`. Keep the daily triage schedule as it is.
 
 The first run records what already exists and alerts on nothing. The state lives in the GitLab
 cache (`.watch/state.json`); if the cache is cleared, the next run records a new baseline.

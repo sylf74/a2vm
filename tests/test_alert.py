@@ -24,7 +24,7 @@ def test_feed_parsing():
 
 
 def test_first_run_records_a_baseline_then_alerts_on_news(tmp_path, monkeypatch):
-    monkeypatch.delenv("VULNOPS_ANALYST_TO", raising=False)
+    monkeypatch.delenv("A2VM_ANALYST_TO", raising=False)
     assert _watch(tmp_path) == 0
     assert json.loads((tmp_path / "alerts" / "index.json").read_text()) == []
     state = State.load(tmp_path / "state.json")
@@ -52,7 +52,7 @@ def test_first_run_records_a_baseline_then_alerts_on_news(tmp_path, monkeypatch)
 def test_advisories_only_with_level_all(tmp_path, monkeypatch):
     import yaml
 
-    monkeypatch.delenv("VULNOPS_ANALYST_TO", raising=False)
+    monkeypatch.delenv("A2VM_ANALYST_TO", raising=False)
     data = yaml.safe_load(Path(PROFILE).read_text())
     data["alerts"] = {"level": "all", "recipients": ["rssi@client.example"], "watchlist": ["Unrelated Product"]}
     profile = tmp_path / "client.yaml"
@@ -70,7 +70,7 @@ def test_advisories_only_with_level_all(tmp_path, monkeypatch):
     assert all(a["level"] == "info" for a in index if "AVI" in a["id"])
 
     # send: no SMTP host -> dry run, one .eml per alert, addressed to the client
-    monkeypatch.delenv("VULNOPS_SMTP_HOST", raising=False)
+    monkeypatch.delenv("A2VM_SMTP_HOST", raising=False)
     assert main(["send", str(profile), "--alerts", str(tmp_path / "alerts")]) == 0
     eml = list((tmp_path / "alerts" / "outbox").glob("*.eml"))
     assert len(eml) == len(index) and "rssi@client.example" in eml[0].read_text()
@@ -128,8 +128,8 @@ def test_graph_transport(monkeypatch):
         return httpx.Response(202)
 
     for k, v in {"TENANT_ID": "tid", "CLIENT_ID": "cid", "CLIENT_SECRET": "sec", "SENDER": "veille@x.example"}.items():
-        monkeypatch.setenv(f"VULNOPS_GRAPH_{k}", v)
-    monkeypatch.setenv("VULNOPS_MAIL_TRANSPORT", "graph")
+        monkeypatch.setenv(f"A2VM_GRAPH_{k}", v)
+    monkeypatch.setenv("A2VM_MAIL_TRANSPORT", "graph")
     msg = message("Sujet", "<p>fiche</p>", "fiche", ["rssi@client.example"], "veille@x.example")
     out = send(msg, transport=httpx.MockTransport(handler))
     assert "Microsoft Graph" in out and len(calls) == 2

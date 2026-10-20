@@ -32,6 +32,7 @@ from typing import Any
 from defusedxml import ElementTree as SafeET
 from defusedxml.common import DefusedXmlException
 
+from a2vm.config import env as cfg_env
 from a2vm.io import Detection, now
 
 from .scanners import Target, _Builder, merge
@@ -307,24 +308,24 @@ def run_scan(
 
 
 def connect(cfg: OpenvasConfig, env: dict[str, str]):
-    """An authenticated Gmp context manager from the CI variables (VULNOPS_GVM_*)."""
+    """An authenticated Gmp context manager from the CI variables (A2VM_GVM_*)."""
     try:
         from gvm.connections import TLSConnection, UnixSocketConnection
         from gvm.protocols.gmp import Gmp
         from gvm.transforms import EtreeCheckCommandTransform
     except ImportError as exc:  # pragma: no cover - depends on the installation
         raise GmpError("python-gvm is not installed: pip install 'detect[openvas]'") from exc
-    user, password = env.get("VULNOPS_GVM_USER"), env.get("VULNOPS_GVM_PASSWORD")
+    user, password = cfg_env("GVM_USER", environ=env) or None, cfg_env("GVM_PASSWORD", environ=env) or None
     if not user or not password:
-        raise GmpError("VULNOPS_GVM_USER and VULNOPS_GVM_PASSWORD must be set")
+        raise GmpError("A2VM_GVM_USER and A2VM_GVM_PASSWORD must be set")
     if cfg.gmp.startswith("unix://"):
         connection = UnixSocketConnection(path=cfg.gmp[len("unix://") :], timeout=300)
     else:
         host, _, port = cfg.gmp[len("tls://") :].rpartition(":")
         connection = TLSConnection(
             hostname=host or cfg.gmp[len("tls://") :], port=int(port or 9390), timeout=300,
-            cafile=env.get("VULNOPS_GVM_CA") or None,
-            certfile=env.get("VULNOPS_GVM_CERT") or None, keyfile=env.get("VULNOPS_GVM_KEY") or None,
+            cafile=cfg_env("GVM_CA", environ=env) or None,
+            certfile=cfg_env("GVM_CERT", environ=env) or None, keyfile=cfg_env("GVM_KEY", environ=env) or None,
         )  # fmt: skip
 
     class _Session:

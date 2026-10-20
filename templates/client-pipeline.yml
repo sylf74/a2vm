@@ -11,75 +11,84 @@
 #
 #     include:
 #       - project: vulnops/a2vm
-#         ref: v0.11.0
+#         ref: v0.11.1
 #         file: templates/client-pipeline.yml
 #     variables:
-#       VULNOPS_REF: v0.11.0        # same version as the include
+#       A2VM_REF: v0.11.1        # same version as the include
 #
 # Jobs:
 #   push to the default branch     validate (profile and targets)
 #   schedule or "Run pipeline"     collect -> via -> detect -> assets -> triage
 #                                  optional TRIAGE_CVES="CVE-... CVE-...", TRIAGE_SINCE (default 26h)
-#   same, with VULNOPS_JOB=watch   watch (CERT-FR, KEV, critical CVEs matched to the client; alerts
+#   same, with A2VM_JOB=watch   watch (CERT-FR, KEV, critical CVEs matched to the client; alerts
 #                                  mailed to the analysts) -> send-alerts (manual: the validation)
 #
 # CI/CD variables (client project, or inherited from the groups):
-#   VULNOPS_SSH_KEY          File, protected: private key of this client's read-only scan account
-#   VULNOPS_GVM_USER, VULNOPS_GVM_PASSWORD (masked)   OpenVAS (GMP) account, when targets.yaml has
-#                            an openvas section; VULNOPS_GVM_CA, VULNOPS_GVM_CERT, VULNOPS_GVM_KEY
+#   A2VM_SSH_KEY          File, protected: private key of this client's read-only scan account
+#   A2VM_GVM_USER, A2VM_GVM_PASSWORD (masked)   OpenVAS (GMP) account, when targets.yaml has
+#                            an openvas section; A2VM_GVM_CA, A2VM_GVM_CERT, A2VM_GVM_KEY
 #                            (File) for a tls:// GMP endpoint with client certificates (docs/openvas.md)
-#   VULNOPS_RUNNER_TAG, VULNOPS_COLLECT_TAG   runner tags (default llm-lan): set VULNOPS_COLLECT_TAG
+#   A2VM_RUNNER_TAG, A2VM_COLLECT_TAG   runner tags (default llm-lan): set A2VM_COLLECT_TAG
 #                            in the client .gitlab-ci.yml to run the collection on the scanner host
 #                            itself (docs/openvas.md, "Scanner host as runner")
 #   An OpenVAS scan often runs longer than GitLab's default job timeout (1 h): raise the project's
 #   timeout (Settings > CI/CD > General pipelines) above the targets' timeout_minutes (default 240).
-#   VULNOPS_LLM_ENABLED, VULNOPS_LLM_BASE_URL, VULNOPS_LLM_MODEL, LLM_API_KEY   (usually set on the group)
-#   VULNOPS_SMTP_HOST, VULNOPS_SMTP_PORT, VULNOPS_SMTP_TLS, VULNOPS_SMTP_USER, VULNOPS_SMTP_PASSWORD,
-#   VULNOPS_MAIL_FROM, VULNOPS_ANALYST_TO   (watch mode, usually set on the group)
+#   A2VM_LLM_ENABLED, A2VM_LLM_BASE_URL, A2VM_LLM_MODEL, LLM_API_KEY   (usually set on the group)
+#   A2VM_SMTP_HOST, A2VM_SMTP_PORT, A2VM_SMTP_TLS, A2VM_SMTP_USER, A2VM_SMTP_PASSWORD,
+#   A2VM_MAIL_FROM, A2VM_ANALYST_TO   (watch mode, usually set on the group)
 #
 # The code is fetched with the job token: in the A2VM code project (vulnops/a2vm), Settings > CI/CD >
 # Job token permissions must allow the client projects (e.g. the group vulnops/clients).
 
 variables:
-  VULNOPS_PROJECT: vulnops/a2vm
-  VULNOPS_REF: main
-  VULNOPS_PROFILE: client.yaml
-  VULNOPS_TARGETS: targets.yaml
+  A2VM_PROJECT: vulnops/a2vm
+  A2VM_REF: main
+  A2VM_PROFILE: client.yaml
+  A2VM_TARGETS: targets.yaml
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
-  VULNOPS_CACHE_DIR: "$CI_PROJECT_DIR/.cache"
+  A2VM_CACHE_DIR: "$CI_PROJECT_DIR/.cache"
   DEBIAN_FRONTEND: noninteractive
   PIP_ROOT_USER_ACTION: ignore
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
-  VULNOPS_RUNNER_TAG: llm-lan
-  VULNOPS_COLLECT_TAG: llm-lan
+  A2VM_RUNNER_TAG: llm-lan
+  A2VM_COLLECT_TAG: llm-lan
 
 stages: [validate, collect, via, detect, assets, triage, watch, send]
 
 .a2vm:
   image: python:3.12-slim
-  tags: ["$VULNOPS_RUNNER_TAG"]
+  tags: ["$A2VM_RUNNER_TAG"]
   interruptible: false
   cache:
     - {key: pip, paths: [.pip-cache/]}
     - {key: sources, paths: [.cache/]}
   before_script:
+    # CI/CD variables renamed VULNOPS_* -> A2VM_* in v0.11.1: a VULNOPS_ variable still defined, whose
+    # A2VM_ name is not, is copied with a warning. Not for the variables this template defines
+    # (A2VM_REF, A2VM_PROJECT, A2VM_PROFILE, A2VM_TARGETS, runner tags): rename them in .gitlab-ci.yml.
+    - |
+      for v in $(env | sed -n 's/^VULNOPS_\([A-Z0-9_]*\)=.*/\1/p' | sort -u); do
+        if eval "[ -z \"\${A2VM_$v+x}\" ]"; then
+          eval "export A2VM_$v=\"\$VULNOPS_$v\""; echo "WARN  CI/CD variable VULNOPS_$v is deprecated: rename it A2VM_$v"
+        fi
+      done
     - apt-get update -qq && apt-get install -y -qq git openssh-client >/dev/null
     # GitLab behind a private CA: the runner hands its CA file to the job
     - if [ -n "${CI_SERVER_TLS_CA_FILE:-}" ]; then export GIT_SSL_CAINFO="$CI_SERVER_TLS_CA_FILE"; fi
     # GitLab behind a reverse proxy that asks for a client certificate (runner tls-cert-file)
     - if [ -n "${CI_SERVER_TLS_CERT_FILE:-}" ]; then export GIT_SSL_CERT="$CI_SERVER_TLS_CERT_FILE" GIT_SSL_KEY="$CI_SERVER_TLS_KEY_FILE"; fi
-    # A runner outside the LAN reaches GitLab by another URL: VULNOPS_SERVER_URL in its environment
-    - BASE="${VULNOPS_SERVER_URL:-${CI_SERVER_PROTOCOL}://${CI_SERVER_HOST}:${CI_SERVER_PORT}}"
-    - git -c advice.detachedHead=false clone -q --depth 1 --branch "$VULNOPS_REF"
-        "${BASE%%://*}://gitlab-ci-token:${CI_JOB_TOKEN}@${BASE#*://}/${VULNOPS_PROJECT}.git" .a2vm
+    # A runner outside the LAN reaches GitLab by another URL: A2VM_SERVER_URL in its environment
+    - BASE="${A2VM_SERVER_URL:-${VULNOPS_SERVER_URL:-${CI_SERVER_PROTOCOL}://${CI_SERVER_HOST}:${CI_SERVER_PORT}}}"
+    - git -c advice.detachedHead=false clone -q --depth 1 --branch "$A2VM_REF"
+        "${BASE%%://*}://gitlab-ci-token:${CI_JOB_TOKEN}@${BASE#*://}/${A2VM_PROJECT}.git" .a2vm
     - pip install --quiet .a2vm/a2vm .a2vm/via ".a2vm/detect[openvas]" .a2vm/verdict
     - if [ -f settings.yaml ]; then export SETTINGS=settings.yaml; else export SETTINGS=.a2vm/config/settings.yaml; fi
-    - echo "A2VM $VULNOPS_REF ($(git -C .a2vm rev-parse --short HEAD)), client $CI_PROJECT_PATH, settings $SETTINGS"
+    - echo "A2VM $A2VM_REF ($(git -C .a2vm rev-parse --short HEAD)), client $CI_PROJECT_PATH, settings $SETTINGS"
 
 .data:
   extends: .a2vm
   rules:
-    - if: $VULNOPS_JOB == "watch"
+    - if: $A2VM_JOB == "watch" || $VULNOPS_JOB == "watch"
       when: never
     - if: $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"
   artifacts:
@@ -90,21 +99,21 @@ validate:
   extends: .a2vm
   stage: validate
   rules:
-    - if: $VULNOPS_JOB == "watch"
+    - if: $A2VM_JOB == "watch" || $VULNOPS_JOB == "watch"
       when: never
     - if: $CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"
   script:
-    - a2vm validate "$VULNOPS_PROFILE"
-    - if [ -f "$VULNOPS_TARGETS" ]; then detect plan "$VULNOPS_TARGETS" --profile "$VULNOPS_PROFILE"; fi
-    - if [ -f contacts.yaml ]; then via contacts "$VULNOPS_PROFILE" --contacts contacts.yaml; fi
+    - a2vm validate "$A2VM_PROFILE"
+    - if [ -f "$A2VM_TARGETS" ]; then detect plan "$A2VM_TARGETS" --profile "$A2VM_PROFILE"; fi
+    - if [ -f contacts.yaml ]; then via contacts "$A2VM_PROFILE" --contacts contacts.yaml; fi
 
 # Exit code 3 = collection incomplete: the job shows as a warning and the pipeline goes on with
 # what was collected (plus the declared inventory).
 collect:
   extends: .data
   stage: collect
-  tags: ["$VULNOPS_COLLECT_TAG"]
+  tags: ["$A2VM_COLLECT_TAG"]
   needs: [validate]
   allow_failure:
     exit_codes: [3]
@@ -115,24 +124,24 @@ collect:
   script:
     - mkdir -p work/detect
     - |
-      if [ ! -f "$VULNOPS_TARGETS" ]; then
-        echo "No $VULNOPS_TARGETS: no scanner collection, declared inventory only"; exit 0
+      if [ ! -f "$A2VM_TARGETS" ]; then
+        echo "No $A2VM_TARGETS: no scanner collection, declared inventory only"; exit 0
       fi
       NO_SSH=""
-      if [ -z "${VULNOPS_SSH_KEY:-}" ]; then
-        echo "No VULNOPS_SSH_KEY: SSH targets skipped (OpenVAS scan only, if configured)"; NO_SSH="--no-ssh"
+      if [ -z "${A2VM_SSH_KEY:-}" ]; then
+        echo "No A2VM_SSH_KEY: SSH targets skipped (OpenVAS scan only, if configured)"; NO_SSH="--no-ssh"
       else
         # Normalise the key pasted in GitLab: no CR, a final newline (OpenSSH rejects the key otherwise).
         mkdir -p ~/.ssh && umask 077
-        tr -d '\r' < "$VULNOPS_SSH_KEY" | sed -e '$a\' > ~/.ssh/vulnops_scan
+        tr -d '\r' < "$A2VM_SSH_KEY" | sed -e '$a\' > ~/.ssh/vulnops_scan
         if ! ssh-keygen -y -f ~/.ssh/vulnops_scan > /dev/null 2>&1; then
-          echo "VULNOPS_SSH_KEY is not a usable private key: paste the whole file, from the BEGIN line to the END line"
+          echo "A2VM_SSH_KEY is not a usable private key: paste the whole file, from the BEGIN line to the END line"
           exit 3
         fi
         echo "scan key: $(ssh-keygen -l -f ~/.ssh/vulnops_scan)"
       fi
       rc=0
-      detect collect "$VULNOPS_TARGETS" $NO_SSH --raw work/scans --out work/detect || rc=$?
+      detect collect "$A2VM_TARGETS" $NO_SSH --raw work/scans --out work/detect || rc=$?
       # Raw outputs are not kept: Trivy JSON runs to hundreds of MB; what matters is in work/detect.
       rm -rf work/scans
       du -sh work/* 2>/dev/null || true
@@ -154,34 +163,34 @@ detect:
   stage: detect
   needs: [via]
   script:
-    - detect inventory "$VULNOPS_PROFILE" --settings "$SETTINGS" --records work/records.json --out work/detect
+    - detect inventory "$A2VM_PROFILE" --settings "$SETTINGS" --records work/records.json --out work/detect
 
 assets:
   extends: .data
   stage: assets
   needs: [detect]
   script:
-    - verdict assets build "$VULNOPS_PROFILE" --detect work/detect --out work/assets
+    - verdict assets build "$A2VM_PROFILE" --detect work/detect --out work/assets
 
 triage:
   extends: .data
   stage: triage
   needs: [assets]
   script:
-    - verdict run "$VULNOPS_PROFILE" --settings "$SETTINGS" --records work/records.json --assets work/assets --out output
+    - verdict run "$A2VM_PROFILE" --settings "$SETTINGS" --records work/records.json --assets work/assets --out output
   artifacts:
     name: "triage-$CI_PROJECT_NAME-$CI_PIPELINE_ID"
     paths: [output/, work/assets/]
     expire_in: 30 days
 
-# -- Watch mode: schedule every 10 minutes with the variable VULNOPS_JOB=watch -------------------
+# -- Watch mode: schedule every 10 minutes with the variable A2VM_JOB=watch -------------------
 # The state (what was already seen) lives in the GitLab cache; without it, a run only records the
 # current state and alerts on nothing. Exit code 3: a source or the mail failed (warning).
 watch:
   extends: .a2vm
   stage: watch
   rules:
-    - if: $VULNOPS_JOB == "watch" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
+    - if: ($A2VM_JOB == "watch" || $VULNOPS_JOB == "watch") && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
   resource_group: watch
   cache:
     - {key: pip, paths: [.pip-cache/]}
@@ -191,7 +200,7 @@ watch:
     exit_codes: [3]
   script:
     - if [ -f watch-sources.yaml ]; then export SOURCES=watch-sources.yaml; else export SOURCES=.a2vm/config/watch-sources.yaml; fi
-    - via watch "$VULNOPS_PROFILE" --settings "$SETTINGS" --sources "$SOURCES" --state .watch/state.json --out alerts
+    - via watch "$A2VM_PROFILE" --settings "$SETTINGS" --sources "$SOURCES" --state .watch/state.json --out alerts
   artifacts:
     when: always
     paths: [alerts/]
@@ -203,9 +212,9 @@ send-alerts:
   stage: send
   needs: [watch]
   rules:
-    - if: $VULNOPS_JOB == "watch" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
+    - if: ($A2VM_JOB == "watch" || $VULNOPS_JOB == "watch") && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
       when: manual
       allow_failure: true
   cache: []
   script:
-    - via send "$VULNOPS_PROFILE" --alerts alerts
+    - via send "$A2VM_PROFILE" --alerts alerts

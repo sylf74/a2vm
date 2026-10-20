@@ -3,7 +3,7 @@
 
   watch   new CERT-FR publications, KEV additions and critical CVEs since the last run, matched to
           the client; each match becomes an alert sheet (Markdown + HTML) mailed to the analysts
-          (VULNOPS_ANALYST_TO) for validation
+          (A2VM_ANALYST_TO) for validation
   send    mail the validated alerts of a watch run to the client: contacts.yaml (by level), plus
           alerts.recipients of client.yaml
   contacts check a contacts.yaml and list who receives what
@@ -21,7 +21,7 @@ import os
 import sys
 from pathlib import Path
 
-from a2vm.config import describe_llm, load_settings
+from a2vm.config import describe_llm, env, load_settings
 from a2vm.extensions import ExtensionMissing, asset_matcher
 from a2vm.llm import LlmClient
 from a2vm.profile import ProfileError, load_profile
@@ -95,7 +95,7 @@ def cmd_watch(args: argparse.Namespace) -> int:
     except ContactsError as exc:
         print(exc, file=sys.stderr)
         contacts, errors = [], [*errors, "contacts.yaml invalid"]
-    analysts = _recipients(os.environ.get("VULNOPS_ANALYST_TO", ""))
+    analysts = _recipients(env("ANALYST_TO"))
     pipeline = os.environ.get("CI_PIPELINE_URL", "")
     for a in index:
         if not analysts:
@@ -151,7 +151,7 @@ def cmd_send(args: argparse.Namespace) -> int:
             failed += 1
             continue
         msg = message(
-            f"[Alerte vulnérabilité] {a['title']}",
+            f"[CERT Alert] {a['title']}",
             (out / f"{a['id']}.html").read_text(encoding="utf-8"),
             (out / f"{a['id']}.md").read_text(encoding="utf-8"),
             [c.email for c in to],

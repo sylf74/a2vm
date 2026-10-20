@@ -44,13 +44,13 @@ detection files in `work/detect` carry what the later stages use.
 
 | Key | Example | Options |
 | --- | --- | --- |
-| `VULNOPS_LLM_ENABLED` | `true` | Visible, not protected |
-| `VULNOPS_LLM_BASE_URL` | `http://192.0.2.103:8000/v1` | Visible, not protected |
-| `VULNOPS_LLM_MODEL` | `qwen3-14b` | Visible, not protected |
+| `A2VM_LLM_ENABLED` | `true` | Visible, not protected |
+| `A2VM_LLM_BASE_URL` | `http://192.0.2.103:8000/v1` | Visible, not protected |
+| `A2VM_LLM_MODEL` | `qwen3-14b` | Visible, not protected |
 | `LLM_API_KEY` | (only if the server requires one) | Masked, protected |
 
 A client project can override any of them (e.g. another engine for a client that allows cloud).
-Optional Google Threat Intelligence enrichment: `VULNOPS_GTI_ENABLED` and `GTI_API_KEY` (masked,
+Optional Google Threat Intelligence enrichment: `A2VM_GTI_ENABLED` and `GTI_API_KEY` (masked,
 protected), see `docs/gti.md`.
 
 ## 4. Code project `vulnops/a2vm`
@@ -80,14 +80,14 @@ The code project's own pipeline only runs lint, tests and the offline examples.
 ```yaml
 include:
   - project: vulnops/a2vm
-    ref: v0.11.0
+    ref: v0.11.1
     file: templates/client-pipeline.yml
 variables:
-  VULNOPS_REF: v0.11.0
+  A2VM_REF: v0.11.1
 ```
 
 3. If `targets.yaml` is used: scan key and target accounts as in `docs/scanning.md`, then the
-   variable `VULNOPS_SSH_KEY` (File, protected) in this project.
+   variable `A2VM_SSH_KEY` (File, protected) in this project.
 4. **Build > Pipeline schedules > New schedule**: daily (e.g. `45 5 * * *`, Europe/Paris), branch
    `main`. Optional variables: `TRIAGE_SINCE` (default `26h`).
 5. First run: **Build > Pipelines > Run pipeline** on `main` (optional `TRIAGE_CVES`).
@@ -100,5 +100,17 @@ inventory are in the `triage` job artifacts (30 days).
 
 1. Bump `version` in the six `pyproject.toml`, merge, tag `vX.Y.Z` on `main`, push the tag: the
    `release` job checks that the tag and the package versions agree.
-2. In each client project, change `ref` and `VULNOPS_REF` in `.gitlab-ci.yml`, one client at a
+2. In each client project, change `ref` and `A2VM_REF` in `.gitlab-ci.yml`, one client at a
    time if needed.
+
+## CI/CD variables renamed in v0.11.1
+
+The CI/CD variables are named `A2VM_*` since v0.11.1 (formerly `VULNOPS_*`). Until a later version,
+a job still reads a `VULNOPS_<name>` whose `A2VM_<name>` is not defined, and logs
+`WARN  CI/CD variable VULNOPS_<name> is deprecated: rename it A2VM_<name>`. Rename each variable in
+Settings > CI/CD > Variables (group, subgroup, client projects), in the `variables:` section of each
+client `.gitlab-ci.yml`, in the pipeline schedules (`A2VM_JOB=watch`) and in the environment of a
+runner outside the LAN (`A2VM_SERVER_URL`). Exception: the variables the template itself defines
+(`A2VM_REF`, `A2VM_PROJECT`, `A2VM_PROFILE`, `A2VM_TARGETS`, `A2VM_RUNNER_TAG`, `A2VM_COLLECT_TAG`)
+are not copied from their old names: rename them in the client `.gitlab-ci.yml` at the same time as
+the move to v0.11.1. A job without warnings has nothing left to rename.

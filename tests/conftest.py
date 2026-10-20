@@ -22,7 +22,7 @@ def isolated_environment(monkeypatch):
     import os
 
     for name in list(os.environ):
-        if name.startswith(("VULNOPS_", "VERDICT_")) or name in ("LLM_API_KEY", "GTI_API_KEY"):
+        if name.startswith(("A2VM_", "VULNOPS_", "VERDICT_")) or name in ("LLM_API_KEY", "GTI_API_KEY"):
             monkeypatch.delenv(name)
 
 

@@ -3,7 +3,7 @@
 | Item | Value |
 | --- | --- |
 | Building block | Pillar 3 package `verdict` (command `verdict`): Decision (`verdict run`) and Asset context (`verdict.assets`, `verdict assets build`) |
-| Status | v0.11.0 as built (decision logic unchanged since v0.9.0); later changes marked **Planned (v0.10.1)** or **Planned (v0.10.2)** |
+| Status | v0.11.0 as built (decision logic unchanged since v0.9.0); later changes marked **Planned (v0.11.2)** or **Planned (v0.11.3)** |
 | Place in the set | C4 level 3 of pillar 3 of the HLD ([`../hld/30-triage-prioritization.md`](../hld/30-triage-prioritization.md)); this version covers its Decision block (`verdict run`), the Asset context block (`verdict.assets`) is to be added. Goals, constraints and contracts: HLD. Servers, zones and flows: DAT |
 | Code | `verdict/src/verdict/`, shared model in `a2vm/src/a2vm/models.py` |
 
@@ -45,7 +45,7 @@ verdict run <client.yaml>... [--settings config/settings.yaml] [--records work/r
 One line per client on stdout: counts per decision, rows to review, errors, ignored CVEs, LLM calls and
 fallbacks, output directory. LLM fallbacks are listed on stderr (first 20).
 
-In the client pipeline, the `triage` job runs `verdict run "$VULNOPS_PROFILE" --settings
+In the client pipeline, the `triage` job runs `verdict run "$A2VM_PROFILE" --settings
 "$SETTINGS" --records work/records.json --assets work/assets --out output`.
 
 ### 2.2 Inputs
@@ -231,20 +231,20 @@ added later without changing the data.
 
 ### 5.2 Precedence
 
-v0.9.0: `declared` > `rule` > `<scanner>` > `assumed`. **Planned (v0.10.1):** `external-scan` first.
+v0.9.0: `declared` > `rule` > `<scanner>` > `assumed`. **Planned (v0.11.2):** `external-scan` first.
 
 An external scan only proves reachability: it can set `open`, never lower a value. An asset the
 external scan does not reach keeps its declared value; absence from a scan is not evidence (source
 filtering, scan window, host down).
 
-### 5.3 External detection and published endpoints — **Planned (v0.10.1)**
+### 5.3 External detection and published endpoints — **Planned (v0.11.2)**
 
 The external scan runs in the client's `<client>-external` project, collection only (DAT,
 "Exposure and external scans"). The internal pipeline brings its result in before the assets
 stage:
 
 1. The internal client project names the external project in a CI/CD variable,
-   `VULNOPS_EXTERNAL_PROJECT`. The `collect` job downloads the latest successful `collect` artifact
+   `A2VM_EXTERNAL_PROJECT`. The `collect` job downloads the latest successful `collect` artifact
    of that project's default branch with its job token (the external project allows the internal
    one in its job token allowlist).
 2. The detection is accepted when its client id is the one the profile declares in
@@ -274,7 +274,7 @@ stage:
 First iteration: a finding on an endpoint goes to `asset`. Attributing it to an asset in `behind`
 when the scanner identifies that asset's product (version banner) is left for a later version.
 
-### 5.4 Exposure gap — **Planned (v0.10.2)**
+### 5.4 Exposure gap — **Planned (v0.11.3)**
 
 A gap is an external host that `published` does not list, or an asset declared `controlled` or
 `small` that the external scan reaches. The assets stage writes the gaps to
@@ -294,7 +294,7 @@ alert stage and is an open point of the DAT.
 | `policy.escalations.epss_attend_threshold` | `0.1` | Step 4 of 4.4; `null` disables |
 | `policy.unknown_inputs` | `conservative` | `conservative` = `yes`/`total`, `optimistic` = `no`/`partial` |
 | `policy.fuzzy_match_without_llm` | `review` | Read by detect: keep a fuzzy match flagged, or drop it |
-| `llm.enabled` | `false` | Overridden by `VULNOPS_LLM_ENABLED` |
+| `llm.enabled` | `false` | Overridden by `A2VM_LLM_ENABLED` |
 | `llm.tasks.ssvc_inputs` | `true` | LLM estimate of Automatable and Technical Impact |
 | `llm.tasks.rationale` | `true` | LLM rationales |
 | `llm.tasks.rationale_for` | `[ACT, ATTEND]` | Levels that get an LLM rationale; the others keep the template |
@@ -302,8 +302,8 @@ alert stage and is an open point of the DAT.
 | `llm.tasks.parallel` | `4` | Concurrent rationale requests |
 | `llm.tasks.max_consecutive_errors` | `3` | Then the LLM is treated as down for the rest of the run |
 
-**Planned (v0.10.1):** profile keys `external` and `published` (section 5.3), CI/CD variable
-`VULNOPS_EXTERNAL_PROJECT`.
+**Planned (v0.11.2):** profile keys `external` and `published` (section 5.3), CI/CD variable
+`A2VM_EXTERNAL_PROJECT`.
 
 ## 7. LLM
 
@@ -329,7 +329,7 @@ keep the template and `rationale_source` says why. The run never fails because o
 | Profile, records, assets or findings unreadable, or of another client | Exit 2 |
 | LLM unreachable or slow | Template rationales and policy defaults, rows flagged; breaker after 3 errors |
 | SSVC table incomplete | Fails at load (36 and 16 rows expected) |
-| **Planned (v0.10.1):** external detection missing or older than `max_age_days` | Collect ends in warning; exposures stay as declared or assumed; the report says the external view is missing |
+| **Planned (v0.11.2):** external detection missing or older than `max_age_days` | Collect ends in warning; exposures stay as declared or assumed; the report says the external view is missing |
 
 ## 9. Tests
 
@@ -340,7 +340,7 @@ keep the template and `rationale_source` says why. The run never fails because o
 | `tests/test_detection_assets.py` | Asset reconciliation and attribute precedence feeding verdict; former exposure values and their warnings; zone and exposure source carried to the decision |
 | `tests/test_gti.py` | GTI view to Exploitation, unconfirmed reports |
 
-**Planned (v0.10.1, v0.10.2):**
+**Planned (v0.11.2, v0.11.3):**
 
 - precedence: an external scan raises to `open`, never lowers; absence leaves the declared value;
 - `published`: endpoint with and without port, `behind` assets set `open`, unmatched host

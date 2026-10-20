@@ -163,7 +163,7 @@ flowchart LR
 | Client internal hosts | In | Package inventories; internal network scan | Read-only SSH; network vulnerability scanner | In place |
 | Client public endpoints | In | External network scan | Network vulnerability scanner run from the cloud | In place |
 | Other scanners (Tenable, Qualys, Cyberwatch), client SIEMs and asset exports | In | Findings, assets | API, report import, SIEM queries | Planned |
-| Client project (profile, targets, contacts, `published`) | In | Declared assets, attribute rules, scan targets, alert recipients | Files in the tenant's GitLab project | In place; `published` in v0.10.1 |
+| Client project (profile, targets, contacts, `published`) | In | Declared assets, attribute rules, scan targets, alert recipients | Files in the tenant's GitLab project | In place; `published` in v0.11.2 |
 | LLM endpoint approved for the tenant | Out and back | Facts of one CVE and asset, kept in memory only; proposals and texts back (§8) | OpenAI-compatible HTTPS API: vLLM or Ollama on premises, Azure OpenAI (Azure AI Foundry), or the client's own LLM; chosen per deployment and recorded in its DAT | In place (on premises), optional |
 | OpenCTI, SOC | In and out | CTI linked to CVEs; per-client STIX bundles | STIX 2.1, TAXII | Planned |
 | Analysts | In and out | Review, alert validation, reports | GitLab interface, job artifacts | In place |
@@ -197,7 +197,7 @@ deterministic rules and people decide. Decisions that concern one pillar only ar
 
 - Each tenant project includes the pipeline template at a pinned A2VM tag: `validate` on every push; `collect → via → detect → assets → triage` on the daily schedule; `watch`, then the manual `send-alerts` (the analyst's validation), on a 10-minute schedule.
 - Jobs fetch the A2VM code at that tag with their job token; the tenant project holds only its own data.
-- A client with an internet exposure also has a collection-only external project, run by the cloud scanner; from v0.10.1 the internal pipeline pulls its latest detection and reconciles it, so one decision is taken per asset and CVE.
+- A client with an internet exposure also has a collection-only external project, run by the cloud scanner; from v0.11.2 the internal pipeline pulls its latest detection and reconciles it, so one decision is taken per asset and CVE.
 - Target: pillar 1 becomes a long-running service on the container runtime (record API, collection and watch as scheduled tasks), read by the per-tenant jobs; the per-tenant jobs themselves can run on the same runtime through GitLab's Kubernetes executor. The current implementation (v0.9.x) runs everything as GitLab pipelines.
 
 ## 6. Contracts between pillars
@@ -261,7 +261,7 @@ pillar.
 | Pillar | Use cases | Status |
 | --- | --- | --- |
 | 1. Intelligence | CVE sheet prose; translation into the tenant's reporting language | In development; translation not started |
-| 2. Detection | Product match proposal | In development; proposal-only from v0.10.1 |
+| 2. Detection | Product match proposal | In development; proposal-only from v0.11.2 |
 | 3. Triage & Prioritization | Missing SSVC inputs; rationale | In development |
 | 4. Dispatch & Capitalization | Ideas: remediation instructions or tickets, capitalisation summaries | Not started |
 | 5. Emergency Actions | Idea: crisis communications | Not started |
@@ -332,9 +332,10 @@ release.
 
 | Step | Content | Pillars |
 | --- | --- | --- |
-| v0.11.0 (current) | Project renamed A2VM: GitLab project `vulnops/a2vm`, common contract package and command `a2vm`; GitLab group, CI/CD variables (`VULNOPS_*`), exchange-file identifiers and scan accounts unchanged | All |
+| v0.11.1 (current) | CI/CD variables renamed `VULNOPS_*` → `A2VM_*` (the old names are still read, with a warning, until a later version); client alert mails titled `[CERT Alert]` | All |
+| v0.11.0 | Project renamed A2VM: GitLab project `vulnops/a2vm`, common contract package and command `a2vm`; GitLab group, CI/CD variables (then `VULNOPS_*`), exchange-file identifiers and scan accounts unchanged | All |
 | v0.10.0 | Repository organised by pillar: `vulnops` (common contract), `via`, `detect`, `verdict`, each with its own command; no functional change | All |
-| v0.10.1, v0.10.2 | One global SSVC decision per client with internal and external detections reconciled: published endpoints, external detection pulled by the tenant project, product match as proposal only (v0.10.1); exposure gap (v0.10.2). The exposure model was released in v0.9.0 | 2, 3 |
+| v0.11.2, v0.11.3 | One global SSVC decision per client with internal and external detections reconciled: published endpoints, external detection pulled by the tenant project, product match as proposal only (v0.11.2); exposure gap (v0.11.3). The exposure model was released in v0.9.0 | 2, 3 |
 | Next (to confirm) | History database and finding lifecycle; pillar 1 as a service on the container runtime | 1, 3, 4 |
 | Then (to confirm) | Dispatch & Capitalization; Emergency Actions | 4, 5 |
 
@@ -365,7 +366,7 @@ Open points of a single pillar are in its chapter.
 | --- | --- |
 | AI-Assisted Vulnerability Management | The product described here |
 | A2VM | AI-Assisted Vulnerability Management (the "2" stands for the two A of AI-Assisted): the product, its GitLab project (`vulnops/a2vm`) and its common contract package (`a2vm`), on which every pillar depends |
-| vulnops | Name of the GitLab group that holds the A2VM project and the tenant projects; prefix of the CI/CD variables (`VULNOPS_*`) |
+| vulnops | Name of the GitLab group that holds the A2VM project and the tenant projects (CI/CD variables: `A2VM_*`, formerly `VULNOPS_*`) |
 | VIA (VIA³) | Vulnerability Intelligence: Advanced, AI-assisted, Alerting. Package and command of pillar 1 (`via`), covering intel and alert |
 | Pillar | One of the five functional areas of the platform: Vulnerability Intelligence, Vulnerability Detection, Triage & Prioritization, Dispatch & Capitalization, Emergency Actions |
 | Tenant | Isolation boundary of the platform: configuration, context, data, results and LLM endpoint of one client, or of one of its entities; a self-hosted platform usually has a single tenant |

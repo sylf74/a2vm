@@ -9,6 +9,8 @@ verdict, so that core does not depend on any stage.
 from __future__ import annotations
 
 import os
+import sys
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -77,7 +79,7 @@ class Settings:
     fuzzy_threshold: float = 0.75
 
 
-# VULNOPS_* is the current prefix; VERDICT_* is still accepted so existing CI variables keep working.
+# A2VM_* is the current prefix; VERDICT_* is still accepted so existing CI variables keep working.
 _ENV_OVERRIDES = {
     "LLM_ENABLED": ("llm", "enabled"),
     "LLM_BASE_URL": ("llm", "base_url"),
@@ -88,7 +90,27 @@ _ENV_OVERRIDES = {
     "GTI_ENABLED": ("sources", "gti_enabled"),
     "GTI_MAX_CALLS": ("sources", "gti_max_calls"),
 }
-ENV_PREFIXES = ("VULNOPS_", "VERDICT_")
+ENV_PREFIXES = ("A2VM_", "VULNOPS_", "VERDICT_")
+LEGACY_PREFIXES = ENV_PREFIXES[1:]  # read when the A2VM_ name is absent, with a warning (removed later)
+_warned: set[str] = set()
+
+
+def _legacy_warning(old: str, new: str) -> None:
+    if old not in _warned:
+        _warned.add(old)
+        print(f"WARN  CI/CD variable {old} is deprecated: rename it {new}", file=sys.stderr)
+
+
+def env(name: str, default: str = "", environ: Mapping[str, str] | None = None) -> str:
+    """A2VM_<name>, else a legacy VULNOPS_<name> (with a warning), else the default."""
+    source = os.environ if environ is None else environ
+    if f"A2VM_{name}" in source:
+        return source[f"A2VM_{name}"]
+    for prefix in LEGACY_PREFIXES:
+        if prefix + name in source:
+            _legacy_warning(prefix + name, f"A2VM_{name}")
+            return source[prefix + name]
+    return default
 
 
 def _coerce(current: Any, raw: str) -> Any:
@@ -125,6 +147,8 @@ def load_settings(path: str | Path | None = None) -> Settings:
     for suffix, (section, key) in _ENV_OVERRIDES.items():
         for prefix in ENV_PREFIXES:
             if prefix + suffix in os.environ:
+                if prefix in LEGACY_PREFIXES:
+                    _legacy_warning(prefix + suffix, "A2VM_" + suffix)
                 target = getattr(settings, section)
                 setattr(target, key, _coerce(getattr(target, key), os.environ[prefix + suffix]))
                 break

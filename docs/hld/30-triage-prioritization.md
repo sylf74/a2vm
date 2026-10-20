@@ -84,6 +84,6 @@ client CMDB, when available, is the reference for context.
 | Item | Content |
 | --- | --- |
 | In place | v0.9.0: SSVC decision with BOD 26-04 timelines, exposure model with source and zone |
-| Planned | v0.10.1: `published` endpoints and external detection pulled by the tenant project; v0.10.2: exposure gap |
+| Planned | v0.11.2: `published` endpoints and external detection pulled by the tenant project; v0.11.3: exposure gap |
 | Risks | Incomplete asset data from clients (safe defaults when criticality or exposure is unknown); AI proposes a wrong decision point (flagged, analyst validation) |
 | Open points | Exposure gap: immediate alert through the watch (pillar 1), or a section of the daily report |
