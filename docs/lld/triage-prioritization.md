@@ -70,6 +70,7 @@ Written to `<out>/<client id>/<YYYY-MM-DD>/`:
 | `triage.csv` | One row per CVE and asset, `;`-separated: decision, CVE, asset, owner, exposed, KEV, EPSS, CVSS, SSVC outcome, BOD timeline, exploitation, version status, affected versions, needs review, rationale | Analysts, spreadsheets |
 | `report.md` | French report: counts, work per asset, ACT detail, ATTEND table (200 CVEs at most; rationales when 30 CVEs or fewer), not-affected assets, errors | Analysts, client after review |
 | `dashboard.html` | Self-contained French dashboard | Analysts, client after review |
+| `reporting.json` — **Planned (v0.11.2)** | Reporting dataset of the run, the only file the client portal reads (section 12); also copied to `<out>/<client id>/reporting.json` so that its path never changes | Client portal (Grafana) |
 
 Rows are sorted ACT, ATTEND, TRACK, then by decreasing EPSS, CVE id and asset.
 
@@ -354,6 +355,8 @@ keep the template and `rationale_source` says why. The run never fails because o
 - Exposure gap: immediate alert through the watch job (proposed) or a section of the daily report
   only (DAT).
 - `behind` attribution by product identification: after the first iteration.
+- Reporting history: until the history database exists, the portal only sees the runs whose
+  artifacts GitLab still keeps (30 days); trends over longer periods come with it.
 - Whether `controlled` assets reached from a partner network should count as publicly exposed for
   BOD 26-04: no for now (only `open` counts).
 
@@ -368,3 +371,47 @@ Agreed for the next versions; each moves into the sections above when built.
 | Risk acceptance | An `exceptions.yaml` in the client project: CVE, asset, justification, approver, expiry date. An accepted finding keeps its decision but leaves the lists to handle until expiry; changed by merge request approved by the risk approver | v0.9.x or P1 |
 | Finding lifecycle | Stable identity (asset, CVE, component) and states: open, reclassified, remediation claimed, remediation verified, reopened, risk accepted. A finding closes only when a new observation confirms the absence | P1 (history database) |
 | Downgrade alert | An exit from ACT without verified remediation, or a drop of exposure or criticality on an asset carrying exploited findings, raises a security event; the decision journal is append-only and hash-chained | P1 |
+
+## 12. Reporting dataset — **Planned (v0.11.2)**
+
+`reporting.json` is the contract between the platform and any restitution tool, starting with the
+client portal (Grafana, HLD strategy §4). The portal reads this file and nothing else: not the
+logs, not `triage.json`, not the job layout. Renaming a job or changing an internal file therefore
+never breaks the portal; changing this file does, and follows the rules below.
+
+### 12.1 Location and access
+
+- Written by `verdict run` next to the other outputs, and copied to
+  `<out>/<client id>/reporting.json` (stable path).
+- The portal fetches it from the last successful daily pipeline of the tenant project, through the
+  GitLab API: `GET /projects/:id/jobs/artifacts/main/raw/output/<client id>/reporting.json?job=triage`.
+- Credentials: one GitLab access token per tenant (group or project token, scope `read_api`, role
+  Reporter, expiry date set), stored in the portal, never in the tenant project. A token reads one
+  tenant only.
+
+### 12.2 Content (schema `a2vm.reporting/1`)
+
+| Section | Fields |
+| --- | --- |
+| `run` | Tenant id and name, generation time, A2VM version, policy version, pipeline id and URL, sources used with their status and observation date (internal scans, external scan and its age, intel sources) |
+| `totals` | Findings and assets counted by level (ACT, ATTEND, TRACK), rows flagged for review, decisions resting on an assumed input, not-affected assets, errors |
+| `by_exposure` | Same counts per exposure (open, controlled, small) and per zone |
+| `deadlines` | ACT and ATTEND findings by BOD 26-04 timeline, with the due date computed from the first observation; overdue and due within 7 days |
+| `decisions` | One entry per decision: finding id, asset, zone, exposure and its source, CVE, short title, level, SSVC outcome, BOD timeline and due date, KEV, EPSS, review flag, short rationale |
+| `assets` | One entry per asset: id, zone, exposure, owner, counts by level |
+
+### 12.3 Rules
+
+- Generated from the decisions of the run only; the portal recomputes no metric (HLD strategy §10,
+  Reporting).
+- Per tenant only: no data of another tenant, no licensed prose (Google Threat Intelligence), no
+  LLM prompt, no secret.
+- JSON Schema in the common contract (`a2vm/src/a2vm/schemas/reporting.schema.json`), checked on
+  write and in CI. Within `/1`, fields are only added; a field removed or changed in meaning
+  makes `/2`, and both versions are written during one release so that the portal can follow.
+- Deterministic: the same run gives the same file, except the generation time.
+
+### 12.4 Tests
+
+Schema validation of the file produced on the fixtures; counts in `totals` equal to the rows of
+`triage.json`; no field of another tenant; stable path written.

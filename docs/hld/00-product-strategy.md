@@ -140,7 +140,7 @@ flowchart LR
   analysts["Analysts<br/>review and validate decisions<br/>and alerts before delivery"]
   clients["Clients<br/>prioritised actions, validated<br/>alerts, reports"]
   cti["OpenCTI and SOC<br/>STIX 2.1 exchanges (planned)"]
-  dash["Dashboards<br/>run page today; indicators over time:<br/>tool to be decided"]
+  dash["Client portal (Grafana)<br/>per-tenant dashboards,<br/>reporting dataset via GitLab API"]
   llm["LLM endpoint<br/>OpenAI-compatible, per tenant<br/>proposals and texts only"]
 
   feeds --> platform
@@ -168,7 +168,7 @@ flowchart LR
 | OpenCTI, SOC | In and out | CTI linked to CVEs; per-client STIX bundles | STIX 2.1, TAXII | Planned |
 | Analysts | In and out | Review, alert validation, reports | GitLab interface, job artifacts | In place |
 | Client contacts | Out | Validated alert mails, reports | SMTP relay, after analyst validation | In place |
-| Dashboards | Out | Reporting dataset | Run page today; Grafana or other tool to decide | Open |
+| Client portal (Grafana) | Out | Reporting dataset of each tenant (`reporting.json`) | GitLab API, one read-only token per tenant; one Grafana organisation per tenant | Planned (dataset in v0.11.2, portal VM next) |
 | SIEM of the platform | Out | Platform logs | Syslog | Target |
 
 ## 5. Structuring decisions
@@ -192,6 +192,7 @@ deterministic rules and people decide. Decisions that concern one pillar only ar
 | D10 | Asset context belongs to Triage & Prioritization: Detection supplies observations, Triage turns them into context (exposure, criticality, zone, each with its source) | The pillar that defines the model owns it; detection stays factual |
 | D11 | AI proposes, never decides: every AI output is a proposal or a text, with a deterministic fallback, shown with its source and reviewed | Accountability stays with rules and people; the platform works without an LLM |
 | D12 | Pillars are independent packages, each with its own command (`via`, `detect`, `verdict`); they depend only on the common contract (package `a2vm`) and never import one another; a capability needed across pillars is offered through an a2vm extension point | Each pillar can evolve, be owned and later be deployed on its own; a test enforces the rule |
+| D13 | Client restitution through a Grafana portal that reads only the reporting dataset of each tenant, fetched from GitLab with a read-only token per tenant; the portal runs on its own VM, always on, internal by default, its publication to the client decided per client | Clients get a readable view without access to GitLab; the portal depends on one versioned file, not on the pipeline internals; isolation per tenant is kept |
 
 ### Execution
 
@@ -226,7 +227,8 @@ owner of every pillar that produces or consumes it.
 | --- | --- | --- |
 | `core` | Common model, JSON schemas, settings, LLM client and its output guard | In development |
 | Tenant projects | Per-tenant data: profile, targets, contacts, `published` mapping, LLM endpoint; results as job artifacts | In development |
-| Connectors | STIX 2.1 to OpenCTI and SOCs; reporting dataset for dashboards | Not started |
+| Connectors | STIX 2.1 to OpenCTI and SOCs | Not started |
+| Client portal | Grafana, one organisation per tenant, reading the tenant's `reporting.json` through the GitLab API | Planned |
 
 ## 7. Tenant and client context
 
@@ -299,6 +301,7 @@ external scanning in the cloud.
 | --- | --- | --- |
 | Public DMZ | Intel VM (fetches, mirrors and signs public data; read by the internal runner); reverse proxy publishing GitLab with a client certificate | Direct outbound access to feeds blocked by the corporate proxy; cloud runners reach GitLab only through the proxy |
 | Internal zone | GitLab (code + tenant projects), internal runner(s) | Client data stays on premises |
+| Internal zone — portal | Client portal VM (Grafana), always on, reading GitLab through its API | Internal by default for cost; per client, published through the reverse proxy, or hosted at the client in self-hosted mode — the client decides |
 | AI inference | Default LLM endpoint (OpenAI-compatible API) on GPU capacity operated by the service, on premises or in the cloud; reached only by the internal runner | Hardware and hosting chosen in the DAT on cost and confidentiality |
 | Cloud | Development and qualification VMs; external scanner host acting as a GitLab runner | Internet-facing scans originate outside the corporate network |
 
@@ -321,7 +324,7 @@ pillar implements them.
 | Confidentiality of the repository | No real infrastructure names or client identifiers in the code repository or its history |
 | External lookups | Only deduplicated keys free of client data leave towards an external source (CVE ids; product and version pairs at most), never a per-asset inventory; since the source address can identify the client, this residual risk is accepted explicitly per source |
 | Roles | Reader, remediator, context qualifier, risk approver, policy maintainer (proposes, never applies alone), administrator without access to client data, auditor; approver and maintainer are never the same person. Mapped onto GitLab roles, protected branches and CODEOWNERS in the DAT |
-| Reporting | Self-hosted dashboards only; aggregates by default, detail only for the entity concerned; the tool reads a dedicated read-only reporting dataset and recomputes no metric; public sharing disabled |
+| Reporting | Self-hosted dashboards only (the Grafana client portal, one organisation per tenant); aggregates by default, detail only for the entity concerned; the tool reads a dedicated read-only reporting dataset and recomputes no metric; public sharing disabled |
 
 ## 11. Roadmap, risks and open points
 
@@ -335,8 +338,8 @@ release.
 | v0.11.1 (current) | CI/CD variables renamed `VULNOPS_*` → `A2VM_*` (the old names are still read, with a warning, until a later version); client alert mails titled `[CERT Alert]` | All |
 | v0.11.0 | Project renamed A2VM: GitLab project `vulnops/a2vm`, common contract package and command `a2vm`; GitLab group, CI/CD variables (then `VULNOPS_*`), exchange-file identifiers and scan accounts unchanged | All |
 | v0.10.0 | Repository organised by pillar: `vulnops` (common contract), `via`, `detect`, `verdict`, each with its own command; no functional change | All |
-| v0.11.2, v0.11.3 | One global SSVC decision per client with internal and external detections reconciled: published endpoints, external detection pulled by the tenant project, product match as proposal only (v0.11.2); exposure gap (v0.11.3). The exposure model was released in v0.9.0 | 2, 3 |
-| Next (to confirm) | History database and finding lifecycle; pillar 1 as a service on the container runtime | 1, 3, 4 |
+| v0.11.2, v0.11.3 | One global SSVC decision per client with internal and external detections reconciled: published endpoints, external detection pulled by the tenant project, product match as proposal only, reporting dataset for the client portal (v0.11.2); exposure gap (v0.11.3). The exposure model was released in v0.9.0 | 2, 3 |
+| Next (to confirm) | Client portal VM (Grafana); history database and finding lifecycle; pillar 1 as a service on the container runtime | 1, 3, 4 |
 | Then (to confirm) | Dispatch & Capitalization; Emergency Actions | 4, 5 |
 
 ### Risks
@@ -355,7 +358,7 @@ release.
 
 - Hosting option per client within the MSSP mode: MSSP datacenter or company cloud zone
 - Container runtime for the services: Kubernetes is the candidate, to be validated
-- Dashboard tool for the platform's outputs
+- Client portal: publication per client (internal only, through the reverse proxy, at the client) and how clients authenticate
 - Points on hold from the review of another internal architecture document, to settle with its team
 
 Open points of a single pillar are in its chapter.
@@ -388,3 +391,5 @@ Open points of a single pillar are in its chapter.
 | Finding | One asset affected by one CVE, merged across the sources that saw it |
 | Zone | Free label of an asset's network place (dmz, lan, ot...), for reports only |
 | LLM endpoint | An OpenAI-compatible API serving a language model, approved per tenant |
+| Client portal | Grafana instance showing each client its own dashboards, fed only by the reporting dataset |
+| Reporting dataset | `reporting.json`: the versioned file of one tenant and run that restitution tools read (LLD triage §12) |
