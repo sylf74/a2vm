@@ -1,9 +1,17 @@
 # SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 """Read the job artifacts of a GitLab project (the external detection, the last daily inventory).
 
-Inside a pipeline the job token authenticates the request (the source project must allow the
-reading project in Settings > CI/CD > Job token permissions); outside, A2VM_GITLAB_TOKEN (scope
-read_api). The API is reached at A2VM_SERVER_URL/api/v4 when the runner uses another URL than the
+Two ways to authenticate, the first available wins:
+
+- A2VM_GITLAB_TOKEN (a project access token of the source project, role Reporter, scope read_api):
+  the latest successful job of that name is looked up among the project's jobs, whatever the
+  pipeline it ran in. Works on every GitLab edition. Use it when the source project also runs
+  other pipelines on the same branch (a watch every 10 minutes, a push), or on GitLab CE, where
+  the job token may not read another project's artifacts.
+- The job token (CI_JOB_TOKEN): GitLab answers with the job of that name in the latest successful
+  pipeline of the branch, and nothing when that pipeline has no such job. The source project must
+  allow the reading project in Settings > CI/CD > Job token permissions.
+ The API is reached at A2VM_SERVER_URL/api/v4 when the runner uses another URL than the
 one GitLab advertises, else at CI_API_V4_URL. The private CA and the client certificate that the
 runner hands to the job are honoured.
 """
@@ -49,10 +57,10 @@ def api_base(environ: Mapping[str, str] | None = None) -> str:
 
 def _client_options(environ: Mapping[str, str]) -> dict:
     headers = {}
-    if environ.get("CI_JOB_TOKEN"):
-        headers["JOB-TOKEN"] = environ["CI_JOB_TOKEN"]
-    elif env("GITLAB_TOKEN", environ=environ):
+    if env("GITLAB_TOKEN", environ=environ):
         headers["PRIVATE-TOKEN"] = env("GITLAB_TOKEN", environ=environ)
+    elif environ.get("CI_JOB_TOKEN"):
+        headers["JOB-TOKEN"] = environ["CI_JOB_TOKEN"]
     else:
         raise GitLabError("no GitLab credentials: CI_JOB_TOKEN (pipeline) or A2VM_GITLAB_TOKEN")
     options: dict = {"headers": headers, "timeout": 60, "follow_redirects": True}
@@ -78,24 +86,55 @@ def download_artifacts(
 
     Returns the extracted files (paths relative to `prefix` are kept)."""
     source = _environ(environ)
-    url = f"{api_base(source)}/projects/{quote(str(project), safe='')}/jobs/artifacts/{quote(ref, safe='')}/download"
+    options = _client_options(source)
+    base = f"{api_base(source)}/projects/{quote(str(project), safe='')}"
     try:
-        with httpx.Client(transport=transport, **_client_options(source)) as client:
-            resp = client.get(url, params={"job": job})
+        with httpx.Client(transport=transport, **options) as client:
+            if "PRIVATE-TOKEN" in options["headers"]:
+                job_id = _latest_job(client, base, project, job, ref)
+                resp = client.get(f"{base}/jobs/{job_id}/artifacts")
+            else:
+                resp = client.get(f"{base}/jobs/artifacts/{quote(ref, safe='')}/download", params={"job": job})
     except httpx.HTTPError as exc:
         raise GitLabError(f"{project}: {exc}") from exc
     if resp.status_code == 404:
-        raise ArtifactNotFound(f"{project}: no artifacts of job {job!r} on {ref!r} (none yet, expired, or no access)")
+        raise ArtifactNotFound(
+            f"{project}: no artifacts of job {job!r} on {ref!r} (none yet, expired, not in the latest "
+            "successful pipeline of the branch, or no access; A2VM_GITLAB_TOKEN finds the latest job)"
+        )
     if resp.status_code in (401, 403):
         raise GitLabError(
             f"{project}: HTTP {resp.status_code}: this project is not allowed to read it "
-            "(Settings > CI/CD > Job token permissions of the source project)"
+            "(job token: Settings > CI/CD > Job token permissions of the source project; "
+            "A2VM_GITLAB_TOKEN: a token of that project, role Reporter, scope read_api)"
         )
     if resp.status_code != 200:
         raise GitLabError(f"{project}: HTTP {resp.status_code} {resp.text[:200]}")
     if len(resp.content) > MAX_ARTIFACT_BYTES:
         raise GitLabError(f"{project}: artifacts larger than {MAX_ARTIFACT_BYTES // 2**20} MB")
     return _extract(resp.content, prefix, Path(dest))
+
+
+MAX_JOB_PAGES = 5
+
+
+def _latest_job(client: httpx.Client, base: str, project, job: str, ref: str) -> int:
+    """Id of the latest successful `job` on `ref` that kept artifacts (newest jobs first)."""
+    for page in range(1, MAX_JOB_PAGES + 1):
+        resp = client.get(f"{base}/jobs", params={"scope[]": "success", "per_page": 100, "page": page})
+        if resp.status_code in (401, 403):
+            raise GitLabError(
+                f"{project}: HTTP {resp.status_code}: A2VM_GITLAB_TOKEN cannot list the jobs (read_api, Reporter)"
+            )
+        if resp.status_code != 200:
+            raise GitLabError(f"{project}: HTTP {resp.status_code} {resp.text[:200]}")
+        jobs = resp.json()
+        for j in jobs:
+            if j.get("name") == job and j.get("ref") == ref and j.get("artifacts_file"):
+                return j["id"]
+        if len(jobs) < 100:
+            break
+    raise ArtifactNotFound(f"{project}: no successful job {job!r} with artifacts on {ref!r} among the latest jobs")
 
 
 def _extract(content: bytes, prefix: str, dest: Path) -> list[Path]:

@@ -168,7 +168,7 @@ flowchart LR
 | OpenCTI, SOC | In and out | CTI linked to CVEs; per-client STIX bundles | STIX 2.1, TAXII | Planned |
 | Analysts | In and out | Review, alert validation, reports | GitLab interface, job artifacts | In place |
 | Client contacts | Out | Validated alert mails, reports | SMTP relay, after analyst validation | In place |
-| Client portal (Grafana) | Out | Reporting dataset of each tenant (`reporting.json`) | GitLab API, one read-only token per tenant; one Grafana organisation per tenant | Planned (dataset in v0.11.3, portal VM next) |
+| Client portal (Grafana) | Out | Reporting dataset of each tenant (`reporting.json`) | GitLab API, one read-only token per tenant; one Grafana organisation per tenant | Planned (dataset since v0.11.3, portal VM next) |
 | SIEM of the platform | Out | Platform logs | Syslog | Target |
 
 ## 5. Structuring decisions
@@ -335,12 +335,12 @@ release.
 
 | Step | Content | Pillars |
 | --- | --- | --- |
-| v0.11.2 (current) | External detection pulled by the tenant project and joined through the profile's `published` endpoints (exposure `open`, source `external-scan`); the watch reads the last daily inventory and the alert sheet lists the client's assets concerned (zone, exposure, installed and fixed versions, owner, source, inventory date); fuzzy product match by the LLM is a proposal only, never a drop | 1, 2, 3 |
+| v0.11.2 | External detection pulled by the tenant project and joined through the profile's `published` endpoints (exposure `open`, source `external-scan`); the watch reads the last daily inventory and the alert sheet lists the client's assets concerned (zone, exposure, installed and fixed versions, owner, source, inventory date); fuzzy product match by the LLM is a proposal only, never a drop | 1, 2, 3 |
 | v0.11.1 | CI/CD variables renamed `VULNOPS_*` → `A2VM_*` (the old names are still read, with a warning, until a later version); client alert mails titled `[CERT Alert]` | All |
 | v0.11.0 | Project renamed A2VM: GitLab project `vulnops/a2vm`, common contract package and command `a2vm`; GitLab group, CI/CD variables (then `VULNOPS_*`), exchange-file identifiers and scan accounts unchanged | All |
 | v0.10.0 | Repository organised by pillar: `vulnops` (common contract), `via`, `detect`, `verdict`, each with its own command; no functional change | All |
-| v0.11.3 | Reporting dataset for the client portal (`reporting.json`); analysts choose which alerts are sent (`A2VM_SEND_ONLY`), alert id in the analysts' mail, trace of sent alerts; mail test job; validate checks the include ref against `A2VM_REF`; a source fails only after several consecutive failures | 1, 3, 4 |
-| v0.11.4 | Exposure gap: one global SSVC decision per client with internal and external views reconciled. The exposure model was released in v0.9.0 | 2, 3 |
+| v0.11.3 | Reporting dataset for the client portal (`reporting.json`); analysts choose which alerts are sent (`A2VM_SEND_ONLY`), alert number and id in the analysts' mail, journal of the alerts and trace of the mails sent; mail test job; validate checks the include ref against `A2VM_REF`; a watch source is in error only after several failed runs in a row; CISA advisories read as CSAF; the watch reads the daily inventory from the runner cache; external detection read with a project access token (GitLab CE) | 1, 3, 4 |
+| v0.11.4 (current) | Exposure gaps listed in the report and the reporting dataset; alert sheet as a Word file from a template per client (tags), sent to the client as Word or as a PDF made from it; analysts edit a sheet (text or Word) in the client project before sending | 1, 3 |
 | Next (to confirm) | Client portal VM (Grafana); history database and finding lifecycle; pillar 1 as a service on the container runtime | 1, 3, 4 |
 | Then (to confirm) | Dispatch & Capitalization; Emergency Actions | 4, 5 |
 

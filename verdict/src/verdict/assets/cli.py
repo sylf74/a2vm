@@ -17,6 +17,7 @@ from a2vm.io import ExchangeError, detection_files, read_detection, write_assets
 from a2vm.profile import ProfileError, load_profile
 
 from .build import build_inventory
+from .gaps import write_gaps
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -42,6 +43,9 @@ def main(argv: list[str] | None = None) -> int:
         target = Path(args.out) / profile.id
         write_assets(target / "assets.json", profile.id, inv.assets)
         write_findings(target / "findings.json", profile.id, inv.findings, inv.not_affected)
+        write_gaps(target / "exposure_gaps.json", profile.id, inv.exposure_gaps)
+        for g in inv.exposure_gaps:
+            print(f"  WARN  exposure gap ({g['kind']}): {g['name']}: {g['detail']}")
         assumed = Counter(n for a in inv.assets for n, attr in a.attributes.items() if attr.assumed)
         assumed_txt = ", ".join(f"{k}: {v}" for k, v in sorted(assumed.items())) or "none"
         print(

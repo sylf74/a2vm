@@ -6,6 +6,8 @@
   via send …            mail the alerts of a watch run to the client (alert)
   via check-sources …   read every watch source once and report (alert)
   via contacts …        check contacts.yaml and list who receives what (alert)
+  via test-mail …       send one test message with this project's mail settings (alert)
+  via check-template …  check the Word template of the alert sheet (alert)
 
 `via <command> -h` gives the options of each command.
 """
@@ -15,7 +17,7 @@ from __future__ import annotations
 import sys
 
 INTEL = {"collect"}
-ALERT = {"watch", "send", "check-sources", "contacts"}
+ALERT = {"watch", "send", "check-sources", "contacts", "test-mail", "check-template"}
 
 
 def main(argv: list[str] | None = None) -> int:

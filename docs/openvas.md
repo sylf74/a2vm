@@ -160,16 +160,25 @@ triage with the LLM) stay on the internal runner and get the detection through t
 The scanner host then holds a runner token and, while a job runs, a job token: register it on
 this project only, and keep client projects with internal data on internal runners.
 
-## 6. Joining the external scan to the internal run (v0.11.2)
+## 6. Joining the external scan to the internal run (v0.11.2, token v0.11.3)
 
 The external scan usually lives in its own collection-only project (`<client>-external`), so that
 the internal project, which holds the client's internal data, never runs on the cloud scanner. The
 internal pipeline then brings the external detection in, and one decision is taken per asset and
 CVE (LLD triage, section 5.3).
 
-1. **External project** (`vulnops/clients/<client>-external`): Settings > CI/CD > **Job token
-   permissions**, add the internal project (or the group `vulnops/clients`) to the allowlist. Its
-   daily `collect` job keeps `work/detect/` as artifacts; the internal project reads the latest one.
+1. **External project** (`vulnops/clients/<client>-external`): its daily `collect` job keeps
+   `work/detect/` as artifacts; the internal project reads the latest one. Give the internal
+   project a way in, one of:
+   - **a project access token** (recommended, required on GitLab CE, v0.11.3): in the external
+     project, Settings > Access tokens, role Reporter, scope `read_api`, with an expiry date. Store
+     it in the internal project as the CI/CD variable `A2VM_GITLAB_TOKEN` (masked, protected).
+     The latest successful `collect` job is then found among the project's jobs, whatever other
+     pipelines run there;
+   - **the job token**: Settings > CI/CD > Job token permissions, add the internal project (or
+     the group `vulnops/clients`). GitLab then serves the `collect` job of the latest successful
+     pipeline of `main` only: any other pipeline on `main` (a push, another schedule) hides it,
+     and some GitLab editions do not let a job token read another project's artifacts.
 2. **Internal project**: CI/CD variable (or `.gitlab-ci.yml` variable)
    `A2VM_EXTERNAL_PROJECT: vulnops/clients/<client>-external`.
 3. **Internal profile** (`client.yaml`): name the external client and map the public endpoints to

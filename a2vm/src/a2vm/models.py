@@ -57,6 +57,7 @@ class VulnRecord:
     epss: float | None = None
     epss_percentile: float | None = None
     gti: dict[str, Any] | None = None  # Google Threat Intelligence vulnerability view (intel.gti)
+    cwe_names: dict[str, str] = field(default_factory=dict)  # CWE id -> name, from the record
 
     @property
     def in_kev(self) -> bool:
@@ -371,6 +372,8 @@ class TriageRow:
     exposure: str = ""  # open | controlled | small
     exposure_source: str = ""  # declared | rule | <scanner> | assumed (external-scan from v0.11.2)
     zone: str = ""
+    first_seen: str = ""  # first observation of the finding, start of the BOD timeline
+    seen_by: dict[str, str] = field(default_factory=dict)  # source -> latest observation
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -386,3 +389,4 @@ class TriageRun:
     errors: list[dict[str, str]] = field(default_factory=list)
     llm_model: str | None = None
     ignored: list[dict[str, str]] = field(default_factory=list)  # rejected CVE ids cited by a source
+    exposure_gaps: list[dict[str, str]] = field(default_factory=list)  # from the assets stage (v0.11.4)

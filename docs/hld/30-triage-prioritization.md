@@ -7,7 +7,7 @@ pillar 3.
 | Item | Value |
 | --- | --- |
 | Package and command | `verdict` (modules `verdict.assets` and the decision) |
-| Status | In development (v0.11.2) |
+| Status | In development (v0.11.4) |
 | LLD | [../lld/triage-prioritization.md](../lld/triage-prioritization.md) |
 
 ## 1. Responsibility
@@ -85,7 +85,7 @@ client CMDB, when available, is the reference for context.
 
 | Item | Content |
 | --- | --- |
-| In place | v0.9.0: SSVC decision with BOD 26-04 timelines, exposure model with source and zone; v0.11.2: external detection pulled by the tenant project and joined through `published` endpoints (exposure `open`, source `external-scan`) |
-| Planned | v0.11.3: reporting dataset for the client portal; v0.11.4: exposure gap |
+| In place | v0.9.0: SSVC decision with BOD 26-04 timelines, exposure model with source and zone; v0.11.2: external detection pulled by the tenant project and joined through `published` endpoints (exposure `open`, source `external-scan`); v0.11.3: reporting dataset `reporting.json` for the client portal; v0.11.4: exposure gaps (hosts the external scan reaches that the profile does not describe) at the top of the report |
+| Planned | The client portal VM; alert on a new exposure gap |
 | Risks | Incomplete asset data from clients (safe defaults when criticality or exposure is unknown); AI proposes a wrong decision point (flagged, analyst validation) |
 | Open points | Exposure gap: immediate alert through the watch (pillar 1), or a section of the daily report |

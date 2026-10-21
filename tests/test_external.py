@@ -207,3 +207,55 @@ def test_pull_end_to_end(tmp_path):
     assert not result.problems and result.detection is not None
     assert len(result.detection.findings) == 3
     assert json.loads(payload)["client_id"] == "acme-external"
+
+
+def test_project_token_finds_the_latest_job_whatever_the_pipeline(tmp_path):
+    content = _zip({"work/detect/acme-external/openvas.json": "{}"})
+    asked = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        asked.append((request.url.path, request.headers.get("PRIVATE-TOKEN"), request.headers.get("JOB-TOKEN")))
+        if request.url.path.endswith("/jobs"):
+            return httpx.Response(200, json=[
+                {"id": 9, "name": "watch", "ref": "main", "artifacts_file": {"filename": "a.zip"}},
+                {"id": 8, "name": "collect", "ref": "other", "artifacts_file": {"filename": "a.zip"}},
+                {"id": 7, "name": "collect", "ref": "main", "artifacts_file": {"filename": "a.zip"}},
+            ])  # fmt: skip
+        return httpx.Response(200, content=content)
+
+    env = {**ENV, "A2VM_GITLAB_TOKEN": "project-token"}
+    files = download_artifacts("p", "collect", "work/detect/acme-external", tmp_path, environ=env,
+                               transport=httpx.MockTransport(handler))  # fmt: skip
+    assert [f.name for f in files] == ["openvas.json"]
+    assert asked[-1][0].endswith("/projects/p/jobs/7/artifacts")
+    assert {a[1] for a in asked} == {"project-token"} and {a[2] for a in asked} == {None}  # the token wins
+
+
+def test_project_token_without_such_job_is_not_found(tmp_path):
+    env = {**ENV, "A2VM_GITLAB_TOKEN": "t"}
+    transport = httpx.MockTransport(lambda r: httpx.Response(200, json=[{"id": 1, "name": "watch", "ref": "main"}]))
+    with pytest.raises(ArtifactNotFound, match="no successful job 'triage'"):
+        download_artifacts("p", "triage", "work", tmp_path, environ=env, transport=transport)
+
+
+def test_exposure_gaps_reach_the_report_and_the_reporting_dataset(tmp_path):
+    from verdict.assets.gaps import read_gaps, write_gaps
+
+    profile = _profile(tmp_path)
+    external = as_internal(profile, [_external()], now=NOW).detection
+    inv = build_inventory(profile, [_internal(), external])
+    gaps = {(g["kind"], g["name"]) for g in inv.exposure_gaps}
+    # rproxy01 and app01: `controlled` by a rule, reached from the internet; 198.51.100.7: no entry.
+    assert gaps == {("declared-not-open", "rproxy01"), ("declared-not-open", "app01"), ("unlisted", "198.51.100.7")}
+    rproxy = next(g for g in inv.exposure_gaps if g["name"] == "rproxy01")
+    assert rproxy["declared"] == "controlled" and "www.example.org:443" in rproxy["detail"]
+    assert all("_before" not in a.attributes for a in inv.assets)
+
+    write_gaps(tmp_path / "exposure_gaps.json", "acme", inv.exposure_gaps)
+    assert read_gaps(tmp_path / "exposure_gaps.json", "acme") == inv.exposure_gaps
+    assert read_gaps(tmp_path / "absent.json", "acme") == []
+    with pytest.raises(ValueError):
+        read_gaps(tmp_path / "exposure_gaps.json", "other")
+
+    # Without an external scan, no gap.
+    assert build_inventory(profile, [_internal()]).exposure_gaps == []

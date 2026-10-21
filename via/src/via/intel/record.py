@@ -93,12 +93,18 @@ def parse_record(record: dict[str, Any]) -> CveFacts:
             description = d.get("value", "")
 
     cwes: list[str] = []
+    cwe_names: dict[str, str] = {}
     for container in [cna, *adps]:
         for pt in container.get("problemTypes", []) or []:
             for d in pt.get("descriptions", []) or []:
                 cwe = d.get("cweId")
                 if cwe and cwe not in cwes:
                     cwes.append(cwe)
+                name = (d.get("description") or "").strip()
+                if cwe and name and cwe not in cwe_names:
+                    name = name[len(cwe) :].lstrip(" :-") if name.startswith(cwe) else name
+                    if name and name != cwe:
+                        cwe_names[cwe] = name
 
     cvss, ssvc, kev = _metrics(cna, "cna")
     affected = _affected(cna, "cna")
@@ -118,6 +124,7 @@ def parse_record(record: dict[str, Any]) -> CveFacts:
         published=meta.get("datePublished"),
         description=description.strip(),
         cwes=cwes,
+        cwe_names=cwe_names,
         cvss=cvss,
         affected=affected,
         adp_ssvc=ssvc,

@@ -3,7 +3,7 @@
 | Item | Value |
 | --- | --- |
 | Building block | Pillar 3 package `verdict` (command `verdict`): Decision (`verdict run`) and Asset context (`verdict.assets`, `verdict assets build`) |
-| Status | v0.11.2 as built (decision logic unchanged since v0.9.0); later changes marked **Planned (v0.11.3)** or **Planned (v0.11.4)** |
+| Status | v0.11.4 as built (decision logic unchanged since v0.9.0) |
 | Place in the set | C4 level 3 of pillar 3 of the HLD ([`../hld/30-triage-prioritization.md`](../hld/30-triage-prioritization.md)); this version covers its Decision block (`verdict run`), the Asset context block (`verdict.assets`) is to be added. Goals, constraints and contracts: HLD. Servers, zones and flows: DAT |
 | Code | `verdict/src/verdict/`, shared model in `a2vm/src/a2vm/models.py` |
 
@@ -70,7 +70,7 @@ Written to `<out>/<client id>/<YYYY-MM-DD>/`:
 | `triage.csv` | One row per CVE and asset, `;`-separated: decision, CVE, asset, owner, exposed, KEV, EPSS, CVSS, SSVC outcome, BOD timeline, exploitation, version status, affected versions, needs review, rationale | Analysts, spreadsheets |
 | `report.md` | French report: counts, work per asset, ACT detail, ATTEND table (200 CVEs at most; rationales when 30 CVEs or fewer), not-affected assets, errors | Analysts, client after review |
 | `dashboard.html` | Self-contained French dashboard | Analysts, client after review |
-| `reporting.json` — **Planned (v0.11.3)** | Reporting dataset of the run, the only file the client portal reads (section 12); also copied to `<out>/<client id>/reporting.json` so that its path never changes | Client portal (Grafana) |
+| `reporting.json` (v0.11.3) | Reporting dataset of the run, the only file the client portal reads (section 12); also copied to `<out>/<client id>/reporting.json` so that its path never changes | Client portal (Grafana) |
 
 Rows are sorted ACT, ATTEND, TRACK, then by decreasing EPSS, CVE id and asset.
 
@@ -157,7 +157,7 @@ assessment, not an equivalent.
 
 The asset attributes are set by the assets stage, first source wins: the profile declares it, a
 profile rule matches the host name, FQDN or address, a scanner reported it, or the default
-assumption (the profile's `defaults`, else the built-in worst case: `internet`, `essential`,
+assumption (the profile's `defaults`, else the built-in worst case: `open`, `essential`,
 `minimal` well-being, owner unknown). A default is named in `assumptions` and flags the row.
 
 ### 4.3 SSVC tables
@@ -246,9 +246,12 @@ stage:
 
 1. The internal client project names the external project in a CI/CD variable,
    `A2VM_EXTERNAL_PROJECT`. After its own collection, the `collect` job runs
-   `detect external`, which downloads `work/detect/<external.client>/` from the latest successful
-   `collect` artifacts of that project's `main` branch with its job token (the external project
-   allows the internal one in Settings > CI/CD > Job token permissions). Code:
+   `detect external`, which downloads `work/detect/<external.client>/` from the artifacts of the
+   latest successful `collect` job of that project's `main` branch. With `A2VM_GITLAB_TOKEN` (a
+   project access token of the external project, Reporter, `read_api`; v0.11.3, required on GitLab
+   CE) the job is looked up among the project's jobs; without it, the job token reads the
+   `collect` job of the latest successful pipeline of `main` only (the external project allows
+   the internal one in Settings > CI/CD > Job token permissions). Code:
    `a2vm/src/a2vm/gitlab.py` (download, zip entries outside the prefix ignored, 200 MB limit),
    `detect/src/detect/external.py`.
 2. The detection is accepted when its client id is the one the profile declares in
@@ -279,18 +282,27 @@ stage:
    the internal ones on the same asset and CVE (one finding, observations from both sources), so
    verdict sees one row per asset and CVE.
 4. An external host that matches no `published` entry becomes its own asset, `exposure: open`
-   (source `external-scan`); listing it as an exposure gap comes with section 5.4.
+   (source `external-scan`), listed as an exposure gap (section 5.4).
 
 First iteration: a finding on an endpoint goes to `asset`. Attributing it to an asset in `behind`
 when the scanner identifies that asset's product (version banner) is left for a later version.
 
-### 5.4 Exposure gap — **Planned (v0.11.4)**
+### 5.4 Exposure gap (v0.11.4)
 
-A gap is an external host that `published` does not list, or an asset declared `controlled` or
-`small` that the external scan reaches. The assets stage writes the gaps to
-`work/assets/<client>/exposure_gaps.json`; verdict lists them at the top of the report. The
-immediate alert through the watch job, validated by the analyst like any alert, belongs to the
-alert stage and is an open point of the DAT.
+An exposure the client profile does not describe:
+
+| Kind | When |
+| --- | --- |
+| `unlisted` | A host the external scan reached that no `published` entry names |
+| `declared-not-open` | An asset whose exposure, declared or set by a rule, is `controlled` or `small`, and that the external scan reaches (directly or behind a published endpoint) |
+
+The assets stage (`verdict.assets.build.exposure_gap`) writes them to
+`work/assets/<client>/exposure_gaps.json` (`a2vm.exposure_gaps/1`: kind, asset id and name, value
+declared, detail) and prints one `WARN` line each. `verdict run` reads the file when present and
+lists the gaps at the top of the report ("Écarts d'exposition"), in `triage.json` and in
+`reporting.json` (`exposure_gaps`). The decision itself already uses `open` (section 5.2). The
+immediate alert through the watch job, validated by the analyst like any alert, remains an open
+point (section 10).
 
 ## 6. Configuration
 
@@ -349,10 +361,13 @@ keep the template and `rationale_source` says why. The run never fails because o
 | `tests/test_pipeline.py` | End-to-end run on fixtures: records, assets, findings to reports |
 | `tests/test_detection_assets.py` | Asset reconciliation and attribute precedence feeding verdict; former exposure values and their warnings; zone and exposure source carried to the decision |
 | `tests/test_gti.py` | GTI view to Exploitation, unconfirmed reports |
+| `tests/test_pipeline.py::test_reporting_dataset_follows_the_decisions` (v0.11.3) | Reporting dataset: schema, stable path, totals equal to the rows, due date and overdue count, deterministic |
 | `tests/test_external.py` (v0.11.2) | External detection rewritten for the internal client; another client id or too old refused with a warning; `published` endpoint joins its internal asset, `behind` assets set `open`, a rule zone wins over the published one, one finding per asset and CVE with both sources, unmatched host kept as its own open asset; no change without external scan; artifact download (prefix, zip-slip, URL, job token, 404, 403, no credentials) |
 
-**Planned (v0.11.3, v0.11.4):** exposure gaps listed; the BOD timeline changes when an asset
-moves from `controlled` to `open`; reporting dataset (section 12.4).
+`tests/test_external.py::test_exposure_gaps_reach_the_report_and_the_reporting_dataset` and
+`tests/test_pipeline.py::test_exposure_gaps_open_the_report` (v0.11.4) cover the gaps.
+
+**Planned:** a test that the BOD timeline changes when an asset moves from `controlled` to `open`.
 
 ## 10. Open points
 
@@ -376,7 +391,7 @@ Agreed for the next versions; each moves into the sections above when built.
 | Finding lifecycle | Stable identity (asset, CVE, component) and states: open, reclassified, remediation claimed, remediation verified, reopened, risk accepted. A finding closes only when a new observation confirms the absence | P1 (history database) |
 | Downgrade alert | An exit from ACT without verified remediation, or a drop of exposure or criticality on an asset carrying exploited findings, raises a security event; the decision journal is append-only and hash-chained | P1 |
 
-## 12. Reporting dataset — **Planned (v0.11.3)**
+## 12. Reporting dataset (v0.11.3)
 
 `reporting.json` is the contract between the platform and any restitution tool, starting with the
 client portal (Grafana, HLD strategy §4). The portal reads this file and nothing else: not the
@@ -397,11 +412,11 @@ never breaks the portal; changing this file does, and follows the rules below.
 
 | Section | Fields |
 | --- | --- |
-| `run` | Tenant id and name, generation time, A2VM version, policy version, pipeline id and URL, sources used with their status and observation date (internal scans, external scan and its age, intel sources) |
-| `totals` | Findings and assets counted by level (ACT, ATTEND, TRACK), rows flagged for review, decisions resting on an assumed input, not-affected assets, errors |
-| `by_exposure` | Same counts per exposure (open, controlled, small) and per zone |
-| `deadlines` | ACT and ATTEND findings by BOD 26-04 timeline, with the due date computed from the first observation; overdue and due within 7 days |
-| `decisions` | One entry per decision: finding id, asset, zone, exposure and its source, CVE, short title, level, SSVC outcome, BOD timeline and due date, KEV, EPSS, review flag, short rationale |
+| `run` | Tenant id and name, A2VM version, hash of the decision policy (`policy_hash`, until policies carry a version), pipeline id and URL, CVE count, and the detection sources of the run: for each (`trivy`, `dnf-updateinfo`, `openvas`, `external-scan`…), the findings it observed and its latest observation |
+| `totals` | Findings by level (ACT, ATTEND, TRACK), assets carrying at least one finding of each level, rows flagged for review, decisions resting on an assumed input, not-affected assets, errors |
+| `by_exposure`, `by_zone` | Same counts per exposure (open, controlled, small) and per zone |
+| `deadlines` | ACT and ATTEND findings by BOD 26-04 timeline; due date = first observation of the finding + the timeline's days (none for "fix on system upgrade"); counts overdue and due within 7 days of the run |
+| `decisions` | One entry per decision: finding id, asset id and name, zone, exposure and its source, CVE, short title (the record's description, 140 characters), level, SSVC outcome, BOD timeline, first observation and due date, KEV, EPSS, review flag, short rationale (400 characters) |
 | `assets` | One entry per asset: id, zone, exposure, owner, counts by level |
 
 ### 12.3 Rules
@@ -411,7 +426,7 @@ never breaks the portal; changing this file does, and follows the rules below.
 - Per tenant only: no data of another tenant, no licensed prose (Google Threat Intelligence), no
   LLM prompt, no secret.
 - JSON Schema in the common contract (`a2vm/src/a2vm/schemas/reporting.schema.json`), checked on
-  write and in CI. Within `/1`, fields are only added; a field removed or changed in meaning
+  write (`a2vm.io.write_reporting`) and in CI. Built by `verdict/src/verdict/reporting.py`. Within `/1`, fields are only added; a field removed or changed in meaning
   makes `/2`, and both versions are written during one release so that the portal can follow.
 - Deterministic: the same run gives the same file, except the generation time.
 

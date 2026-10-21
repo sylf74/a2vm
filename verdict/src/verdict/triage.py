@@ -280,6 +280,8 @@ class Triage:
             exposure_source=exposure_source(exposure),
             zone=zone.value if zone else "",
             fixes=sorted({f"{o.package} {o.fixed_version}" for o in finding.observations if o.fixed_version}),
+            first_seen=min((o.observed_at for o in finding.observations), default=""),
+            seen_by=_seen_by(finding),
         )
         row.rationale = template_rationale(row)
         return row
@@ -344,3 +346,12 @@ class Triage:
         self.llm_errors_in_row += 1
         if self.llm_errors_in_row >= self.settings.llm.max_consecutive_errors:
             self.llm_stopped = f"LLM down after {self.llm_errors_in_row} errors: {exc}"
+
+
+def _seen_by(finding) -> dict[str, str]:
+    """Latest observation of the finding per source."""
+    out: dict[str, str] = {}
+    for o in finding.observations:
+        if o.observed_at > out.get(o.source, ""):
+            out[o.source] = o.observed_at
+    return dict(sorted(out.items()))

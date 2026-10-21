@@ -17,6 +17,7 @@ Without A2VM_SMTP_HOST (smtp) nothing is sent: the message is written as a .eml 
 
 from __future__ import annotations
 
+import base64
 import smtplib
 import ssl
 from email.message import EmailMessage
@@ -32,7 +33,20 @@ class MailError(RuntimeError):
     pass
 
 
-def message(subject: str, html: str, text: str, to: list[str], sender: str | None = None) -> EmailMessage:
+TYPES = {
+    ".docx": ("application", "vnd.openxmlformats-officedocument.wordprocessingml.document"),
+    ".pdf": ("application", "pdf"),
+}
+
+
+def message(
+    subject: str,
+    html: str,
+    text: str,
+    to: list[str],
+    sender: str | None = None,
+    attachments: list[Path] | None = None,
+) -> EmailMessage:
     msg = EmailMessage()
     msg["Subject"] = subject
     msg["From"] = sender or env("MAIL_FROM", "a2vm@localhost")
@@ -40,6 +54,9 @@ def message(subject: str, html: str, text: str, to: list[str], sender: str | Non
     msg["Message-ID"] = make_msgid(domain=msg["From"].split("@")[-1].strip("> "))
     msg.set_content(text)
     msg.add_alternative(f"<!doctype html><html><body>{html}</body></html>", subtype="html")
+    for path in attachments or []:
+        maintype, subtype = TYPES.get(path.suffix, ("application", "octet-stream"))
+        msg.add_attachment(path.read_bytes(), maintype=maintype, subtype=subtype, filename=path.name)
     return msg
 
 
@@ -61,6 +78,15 @@ def _graph_send(msg: EmailMessage, transport: httpx.BaseTransport | None = None)
             "subject": str(msg["Subject"]),
             "body": {"contentType": "HTML" if html_part else "Text", "content": body},
             "toRecipients": recipients,
+            "attachments": [
+                {
+                    "@odata.type": "#microsoft.graph.fileAttachment",
+                    "name": part.get_filename(),
+                    "contentType": part.get_content_type(),
+                    "contentBytes": base64.b64encode(part.get_content()).decode(),
+                }
+                for part in msg.iter_attachments()
+            ],
         },
         "saveToSentItems": True,
     }

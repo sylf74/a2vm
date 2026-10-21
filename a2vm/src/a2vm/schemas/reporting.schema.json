@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "a2vm.reporting/1",
+  "title": "Reporting dataset of a triage run (the client portal reads this file only)",
+  "description": "One tenant per file. Within /1 fields are only added; a field removed or changed in meaning makes /2.",
+  "type": "object",
+  "required": ["schema", "generated_at", "run", "totals", "by_exposure", "by_zone", "deadlines", "decisions", "assets"],
+  "properties": {
+    "schema": {"const": "a2vm.reporting/1"},
+    "generated_at": {"type": "string"},
+    "run": {
+      "type": "object",
+      "required": ["tenant", "a2vm_version", "policy_hash", "pipeline", "sources", "cve_count"],
+      "properties": {
+        "tenant": {
+          "type": "object",
+          "required": ["id", "name"],
+          "properties": {"id": {"type": "string"}, "name": {"type": "string"}}
+        },
+        "a2vm_version": {"type": "string"},
+        "policy_hash": {"type": "string", "description": "Hash of the decision policy in force"},
+        "pipeline": {
+          "type": "object",
+          "properties": {"id": {"type": "string"}, "url": {"type": "string"}}
+        },
+        "sources": {
+          "type": "array",
+          "description": "Detection sources of the run: findings they observed and their latest observation (external-scan when the external scan was joined)",
+          "items": {
+            "type": "object",
+            "required": ["name", "findings", "last_observation"],
+            "properties": {
+              "name": {"type": "string"},
+              "findings": {"type": "integer", "minimum": 0},
+              "last_observation": {"type": "string"}
+            }
+          }
+        },
+        "cve_count": {"type": "integer", "minimum": 0}
+      }
+    },
+    "totals": {
+      "type": "object",
+      "required": ["findings", "assets", "needs_review", "assumed_inputs", "not_affected", "errors"],
+      "properties": {
+        "findings": {"$ref": "#/$defs/counts"},
+        "assets": {"$ref": "#/$defs/counts", "description": "Assets carrying at least one finding of each level"},
+        "needs_review": {"type": "integer", "minimum": 0},
+        "assumed_inputs": {"type": "integer", "minimum": 0},
+        "not_affected": {"type": "integer", "minimum": 0},
+        "errors": {"type": "integer", "minimum": 0}
+      }
+    },
+    "by_exposure": {
+      "type": "object",
+      "required": ["open", "controlled", "small"],
+      "additionalProperties": {"$ref": "#/$defs/counts"}
+    },
+    "by_zone": {"type": "object", "additionalProperties": {"$ref": "#/$defs/counts"}},
+    "deadlines": {
+      "type": "object",
+      "required": ["overdue", "due_soon", "by_timeline"],
+      "description": "ACT and ATTEND findings; due date = first observation + BOD 26-04 delay",
+      "properties": {
+        "overdue": {"type": "integer", "minimum": 0},
+        "due_soon": {"type": "integer", "minimum": 0, "description": "Due within 7 days"},
+        "by_timeline": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}}
+      }
+    },
+    "decisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["finding_id", "asset", "cve", "level", "ssvc", "bod_timeline", "kev", "needs_review"],
+        "properties": {
+          "finding_id": {"type": "string"},
+          "asset": {"type": "string"},
+          "asset_name": {"type": "string"},
+          "zone": {"type": "string"},
+          "exposure": {"type": "string"},
+          "exposure_source": {"type": "string"},
+          "cve": {"type": "string", "pattern": "^CVE-\\d{4}-\\d{4,}$"},
+          "title": {"type": "string"},
+          "level": {"enum": ["ACT", "ATTEND", "TRACK"]},
+          "ssvc": {"type": "string"},
+          "bod_timeline": {"type": "string"},
+          "first_seen": {"type": ["string", "null"]},
+          "due_date": {"type": ["string", "null"]},
+          "kev": {"type": "boolean"},
+          "epss": {"type": ["number", "null"]},
+          "needs_review": {"type": "boolean"},
+          "rationale": {"type": "string"}
+        }
+      }
+    },
+    "exposure_gaps": {
+      "type": "array",
+      "description": "Exposures the client profile does not describe (since v0.11.4)",
+      "items": {
+        "type": "object",
+        "required": ["kind", "asset"],
+        "properties": {
+          "kind": {"enum": ["unlisted", "declared-not-open"]},
+          "asset": {"type": "string"},
+          "name": {"type": "string"},
+          "declared": {"type": "string"},
+          "detail": {"type": "string"}
+        }
+      }
+    },
+    "assets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "counts"],
+        "properties": {
+          "id": {"type": "string"},
+          "name": {"type": "string"},
+          "zone": {"type": "string"},
+          "exposure": {"type": "string"},
+          "owner": {"type": "string"},
+          "counts": {"$ref": "#/$defs/counts"}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "counts": {
+      "type": "object",
+      "required": ["ACT", "ATTEND", "TRACK"],
+      "properties": {
+        "ACT": {"type": "integer", "minimum": 0},
+        "ATTEND": {"type": "integer", "minimum": 0},
+        "TRACK": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    }
+  }
+}

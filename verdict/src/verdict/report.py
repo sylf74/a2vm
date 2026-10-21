@@ -8,8 +8,10 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 
+from a2vm.io import write_reporting
 from a2vm.models import TriageRow, TriageRun
 
+from . import reporting
 from .dashboard import render_dashboard
 from .rationale import BOD_FR, EXPLOITATION_FR
 
@@ -61,6 +63,7 @@ def write_json(run: TriageRun, path: Path) -> None:
         "not_affected": [asdict(n) for n in run.not_affected],
         "errors": run.errors,
         "ignored": run.ignored,
+        "exposure_gaps": run.exposure_gaps,
     }
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -159,6 +162,22 @@ def render_markdown(run: TriageRun) -> str:
         "Un constat est une CVE sur un actif. Le détail de chaque constat est dans `triage.csv`.",
         "",
     ]
+    if run.exposure_gaps:
+        lines += [
+            "## Écarts d'exposition",
+            "",
+            "Le scan externe atteint des actifs que le profil client ne décrit pas comme exposés. "
+            "Mettre à jour `published` ou l'exposition déclarée dans `client.yaml`, ou fermer l'accès.",
+            "",
+            "| Actif | Écart | Détail |",
+            "|---|---|---|",
+        ]
+        kinds = {"unlisted": "hôte public non déclaré", "declared-not-open": "déclaré non exposé, vu d'Internet"}
+        for g in run.exposure_gaps:
+            lines.append(
+                f"| {_md_escape(g['name'])} | {kinds.get(g['kind'], g['kind'])} | {_md_escape(g.get('detail', ''))} |"
+            )
+        lines.append("")
 
     # Per asset: where the work is.
     assets: dict[str, dict[str, object]] = {}
@@ -245,10 +264,13 @@ def render_markdown(run: TriageRun) -> str:
     return "\n".join(lines) + "\n"
 
 
-def write_all(run: TriageRun, out_dir: Path) -> Path:
+def write_all(run: TriageRun, out_dir: Path, policy: dict | None = None) -> Path:
     stamp = run.generated_at[:10]
     target = out_dir / run.client.id / stamp
     target.mkdir(parents=True, exist_ok=True)
+    dataset = reporting.build(run, policy)
+    write_reporting(target / "reporting.json", dataset)
+    write_reporting(out_dir / run.client.id / "reporting.json", dataset)  # stable path for the portal
     write_json(run, target / "triage.json")
     write_csv(run, target / "triage.csv")
     (target / "report.md").write_text(render_markdown(run), encoding="utf-8")
