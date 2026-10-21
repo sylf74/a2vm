@@ -19,6 +19,7 @@ import argparse
 import json
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 from a2vm.config import describe_llm, env, load_settings
@@ -30,12 +31,31 @@ from via.intel.sources import Sources
 from .contacts import ContactsError, load_contacts, recipients
 from .feeds import load_catalogue
 from .fiche import build
+from .inventory import Inventory, fetch, load
 from .mail import MailError, message, send
 from .watch import State, discover, relevant
 
 
 def _recipients(value: str) -> list[str]:
     return [a.strip() for a in value.replace(";", ",").split(",") if a.strip()]
+
+
+def _inventory(how: str, client_id: str) -> Inventory | None:
+    """The last daily inventory: `none`, a directory, or `auto` (the client project's last triage job)."""
+    if how == "none":
+        return None
+    if how != "auto":
+        inv = load(how, client_id)
+        print(f"inventory: {how}: " + (f"{len(inv.assets)} assets of {inv.as_of[:10]}" if inv else "none"))
+        return inv
+    project = os.environ.get("CI_PROJECT_ID")
+    if not project:
+        print("inventory: not in a pipeline: declared assets only")
+        return None
+    with tempfile.TemporaryDirectory() as tmp:  # read into memory: nothing lands in the alerts artifacts
+        inv, note = fetch(project, client_id, tmp, ref=os.environ.get("CI_DEFAULT_BRANCH", "main"))
+    print(f"inventory: {note}")
+    return inv
 
 
 def cmd_watch(args: argparse.Namespace) -> int:
@@ -71,7 +91,8 @@ def cmd_watch(args: argparse.Namespace) -> int:
         except ExtensionMissing as exc:
             print(exc, file=sys.stderr)
             return 2
-        alerts = relevant(items, profile, sources, settings, matcher, state, catalogue)
+        inventory = _inventory(args.inventory, profile.id)
+        alerts = relevant(items, profile, sources, settings, matcher, state, catalogue, inventory)
         index = []
         for alert in alerts:
             fiche = build(alert, settings, llm)
@@ -234,6 +255,11 @@ def main(argv: list[str] | None = None) -> int:
         "--sources",
         default="config/watch-sources.yaml",
         help="catalogue of watch sources (default without the file: CERT-FR, KEV, cvelistV5)",
+    )
+    w.add_argument(
+        "--inventory",
+        default="auto",
+        help="last daily inventory: auto (artifacts of the project's triage job), none, or a directory",
     )
     w.set_defaults(func=cmd_watch)
     s = sub.add_parser("send", help="mail the alerts of a watch run to the client")

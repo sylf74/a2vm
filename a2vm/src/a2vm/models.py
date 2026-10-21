@@ -123,6 +123,41 @@ class AttributeRule:
 
 
 @dataclass
+class ExternalScan:
+    """The client's external scan (collection-only project) whose detection joins the internal run."""
+
+    client: str  # client id written by the external collection
+    max_age_days: int = 8
+
+
+@dataclass
+class PublishedEndpoint:
+    """A public endpoint and the internal assets that answer behind it (profile section `published`)."""
+
+    endpoint: str  # host or address, optional :port
+    asset: str  # declared asset id, or host name / FQDN of a scanned host
+    behind: list[str] = field(default_factory=list)
+    zone: str | None = None
+    description: str = ""
+
+    @property
+    def host(self) -> str:
+        host = self.endpoint.strip().lower()
+        if host.startswith("["):  # [IPv6]:port
+            return host[1:].split("]", 1)[0]
+        if host.count(":") == 1:
+            return host.split(":", 1)[0]
+        return host
+
+    @property
+    def port(self) -> int | None:
+        tail = self.endpoint.strip().rsplit(":", 1)
+        if len(tail) == 2 and tail[1].isdigit() and (self.endpoint.count(":") == 1 or "]" in self.endpoint):
+            return int(tail[1])
+        return None
+
+
+@dataclass
 class ClientProfile:
     id: str
     name: str
@@ -133,6 +168,8 @@ class ClientProfile:
     source_path: str = ""
     alerts: dict[str, Any] = field(default_factory=dict)  # recipients, level, watchlist (watch mode)
     warnings: list[str] = field(default_factory=list)  # e.g. deprecated values read in a newer form
+    external: ExternalScan | None = None
+    published: list[PublishedEndpoint] = field(default_factory=list)
 
     def declared(self, asset_id: str) -> DeclaredAsset:
         for a in self.assets:

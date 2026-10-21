@@ -64,11 +64,15 @@ class InventoryScanner:
                 out = adjudicate_match(self.llm, record, am.entries[0], am.asset)
             except LlmError as exc:
                 return am.match, [f"correspondance produit approximative, LLM indisponible : {exc}"]
-            if not out["same_product"]:
-                return None, []
+            # The LLM proposes, it never decides: the candidate is kept either way and goes to review
+            # with the proposal, so that a wrong "no" cannot hide a vulnerability.
             m = am.match
+            if not out["same_product"]:
+                return m, [
+                    f"correspondance produit approximative ; proposition du LLM : peu probable — {out['justification']}"
+                ]
             return Match("llm", m.vendor, m.product, m.score, out["justification"]), [
-                "correspondance produit confirmée par LLM uniquement"
+                "correspondance produit approximative ; proposition du LLM : probable — à confirmer"
             ]
         if self.fuzzy_without_llm == "drop":
             return None, []

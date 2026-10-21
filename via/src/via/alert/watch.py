@@ -30,12 +30,13 @@ from typing import Any
 from a2vm.config import Settings
 from a2vm.extensions import AssetMatcher
 from a2vm.gti import ssvc_exploitation
-from a2vm.models import ClientProfile, DeclaredAsset, Finding, VulnRecord, exposure_value
+from a2vm.models import Asset, ClientProfile, DeclaredAsset, Finding, VulnRecord, exposure_value
 from via.intel.collect import collect
 from via.intel.sources import SourceError, Sources
 
 from .certfr import Publication, parse_feed, parse_publication
 from .feeds import MAX_NEW_PER_RUN, Source, parse_generic_feed, read_csaf
+from .inventory import Inventory
 
 STATE_VERSION = 2
 SEEN_KEEP = 3000  # ids remembered per source
@@ -119,6 +120,8 @@ class Alert:
     product_matches: list[str]  # assets or watchlist entries matched by product name
     assets: dict[str, DeclaredAsset]
     reasons: list[str] = field(default_factory=list)
+    detected: list[tuple[Asset, Finding]] = field(default_factory=list)  # from the last daily inventory
+    inventory_as_of: str = ""
 
 
 # -- discovery --------------------------------------------------------------------------------
@@ -285,6 +288,10 @@ def _critical(record: VulnRecord) -> bool:
     return record.in_kev or exploited or bool(metric and metric.score and metric.score >= 9.0)
 
 
+def _open(asset: Asset) -> bool:
+    return exposure_value(asset.attributes["exposure"].value) == "open"
+
+
 def relevant(
     items: list[Item],
     profile: ClientProfile,
@@ -293,6 +300,7 @@ def relevant(
     scanner: AssetMatcher,
     state: State | None = None,
     catalogue: list[Source] | None = None,
+    inventory: Inventory | None = None,
 ) -> list[Alert]:
     wanted = sorted({c for it in items for c in it.cves})
     records: dict[str, VulnRecord] = {}
@@ -311,7 +319,14 @@ def relevant(
         detection = scanner.scan(profile, recs) if recs else None
         findings = list(detection.findings) if detection else []
         by_name = product_matches(item_texts(it, recs), profile)
-        if not findings and not by_name:
+        detected = []
+        if inventory is not None:
+            for cve in it.cves:
+                for f in inventory.findings_by_cve.get(cve, []):
+                    asset = inventory.assets.get(f.asset_ref)
+                    if asset is not None:
+                        detected.append((asset, f))
+        if not findings and not by_name and not detected:
             continue
         if it.origin == "cve":
             label = cna_label(recs, catalogue or [])
@@ -327,6 +342,7 @@ def relevant(
         if any((r.adp_ssvc or {}).get("exploitation") in {"poc", "active"} for r in recs):
             reasons.append("exploitation ou preuve de concept signalée par la CISA")
         exposed = [f.asset_ref for f in findings if exposure(profile, assets.get(f.asset_ref)) == "open"]
+        exposed += [a.id for a, _ in detected if "exposure" in a.attributes and _open(a)]
         if exposed and any(_critical(r) for r in recs):
             reasons.append("vulnérabilité critique sur un actif exposé à Internet")
         level = "urgent" if reasons else "info"
@@ -343,6 +359,8 @@ def relevant(
                 product_matches=by_name,
                 assets=assets,
                 reasons=reasons,
+                detected=detected,
+                inventory_as_of=inventory.as_of if inventory else "",
             )
         )
     if state:

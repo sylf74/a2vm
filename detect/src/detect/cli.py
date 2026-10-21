@@ -7,6 +7,8 @@
   import     import scanner output files produced elsewhere (Trivy JSON, dnf updateinfo text,
              OpenVAS XML report)
   inventory  match a records file against the assets declared in client profiles
+  external   bring the latest detection of the client's external project (A2VM_EXTERNAL_PROJECT)
+             into this run, as source external-scan
 
 Output: <out>/<client>/<source>.json (default work/detect).
 """
@@ -23,6 +25,7 @@ from a2vm.llm import LlmClient
 from a2vm.profile import ProfileError, load_profile
 
 from .collect import collect, load_targets, plan
+from .external import pull as pull_external
 from .inventory import InventoryScanner
 from .openvas import load_openvas_file
 from .scanners import load_dnf_file, load_trivy_file, merge
@@ -78,6 +81,32 @@ def cmd_collect(args: argparse.Namespace) -> int:
         elif errors and status == 0:
             status = 3
     return status
+
+
+def cmd_external(args: argparse.Namespace) -> int:
+    """Exit 0 when the external detection was added, 3 when it was left out (warning), 2 on configuration error."""
+    try:
+        profile = load_profile(args.profile)
+    except ProfileError as exc:
+        print(exc, file=sys.stderr)
+        return 2
+    if profile.external is None:
+        print(f"{profile.id}: no `external` section in {args.profile}: external scan not used", file=sys.stderr)
+        return 3
+    print(
+        f"{profile.id}: external detection of {profile.external.client} from {args.project} ({args.job} on {args.ref})",
+        flush=True,
+    )
+    result = pull_external(profile, args.project, ref=args.ref, job=args.job)
+    for note in result.notes:
+        print(f"  {note}")
+    for problem in result.problems:
+        print(f"  WARN  {problem}", file=sys.stderr)
+    if result.detection is None:
+        print(f"{profile.id}: run goes on without the external scan", file=sys.stderr)
+        return 3
+    _write(args.out, result.detection)
+    return 3 if result.problems else 0
 
 
 def cmd_plan(args: argparse.Namespace) -> int:
@@ -137,6 +166,13 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--no-ssh", action="store_true", help="skip the SSH targets (OpenVAS only)")
     c.set_defaults(func=cmd_collect)
 
+    e = sub.add_parser("external", help="add the latest detection of the client's external project")
+    e.add_argument("profile", help="client.yaml (its `external` section names the external client)")
+    e.add_argument("--project", required=True, help="external GitLab project, path or id (A2VM_EXTERNAL_PROJECT)")
+    e.add_argument("--ref", default="main")
+    e.add_argument("--job", default="collect", help="job of the external project that keeps work/detect/")
+    e.add_argument("--out", default="work/detect")
+    e.set_defaults(func=cmd_external)
     m = sub.add_parser("import", help="import scanner output files (one file per host or image)")
     m.add_argument("--client", required=True)
     m.add_argument("--source", required=True, choices=["trivy", "dnf-updateinfo", "openvas"])

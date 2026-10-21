@@ -21,6 +21,11 @@ def main(argv: list[str] | None = None) -> int:
         try:
             profile = load_profile(path)
             print(f"OK    {path} ({profile.id}, {len(profile.assets)} assets)")
+            if profile.external:
+                print(
+                    f"      external scan: {profile.external.client} (max {profile.external.max_age_days} days), "
+                    f"{len(profile.published)} published endpoint(s)"
+                )
             for warning in profile.warnings:
                 print(f"WARN  {path}: {warning}")
         except (ProfileError, OSError) as exc:

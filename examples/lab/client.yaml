@@ -10,6 +10,17 @@ client:
   name: Lab
   updated: 2026-10-11
 
+# External scan (optional): its collection-only project is named by A2VM_EXTERNAL_PROJECT; its
+# hosts join the internal assets below and make them `open` (docs/openvas.md, section 6).
+# external:
+#   client: lab-external
+#   max_age_days: 8
+# published:
+#   - endpoint: "www.lab.example:443"
+#     asset: edge01
+#     behind: [node08]
+#     zone: dmz
+
 alerts:
   recipients: [admin@lab.example]
   level: urgent

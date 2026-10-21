@@ -160,6 +160,39 @@ triage with the LLM) stay on the internal runner and get the detection through t
 The scanner host then holds a runner token and, while a job runs, a job token: register it on
 this project only, and keep client projects with internal data on internal runners.
 
+## 6. Joining the external scan to the internal run (v0.11.2)
+
+The external scan usually lives in its own collection-only project (`<client>-external`), so that
+the internal project, which holds the client's internal data, never runs on the cloud scanner. The
+internal pipeline then brings the external detection in, and one decision is taken per asset and
+CVE (LLD triage, section 5.3).
+
+1. **External project** (`vulnops/clients/<client>-external`): Settings > CI/CD > **Job token
+   permissions**, add the internal project (or the group `vulnops/clients`) to the allowlist. Its
+   daily `collect` job keeps `work/detect/` as artifacts; the internal project reads the latest one.
+2. **Internal project**: CI/CD variable (or `.gitlab-ci.yml` variable)
+   `A2VM_EXTERNAL_PROJECT: vulnops/clients/<client>-external`.
+3. **Internal profile** (`client.yaml`): name the external client and map the public endpoints to
+   the internal assets that answer behind them:
+
+   ```yaml
+   external:
+     client: <client>-external        # the client id of the external targets.yaml
+     max_age_days: 8                  # an older external scan is left out, with a warning
+   published:
+     - endpoint: "www.example.org:443"   # public name or address, optional port
+       asset: rproxy01                   # declared asset id, or host name / FQDN of a scanned host
+       behind: [gitlab01, app01]         # assets reached through it
+       zone: dmz
+   ```
+
+4. **Schedules**: run the external collection before the internal daily pipeline.
+
+In the internal `collect` job, `detect external` prints what it took (hosts, findings, scan
+date) or why it left the external scan out (none yet, too old, another client, no access): the
+job then ends in warning and the run goes on without it. In the report, the exposure of the
+assets the external scan reached reads "ouverte (Internet), scan externe".
+
 ## How results are read
 
 - One asset per scanned host (IP, host name, OS when the scanner found them); it merges with the

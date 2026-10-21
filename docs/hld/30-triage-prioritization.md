@@ -7,7 +7,7 @@ pillar 3.
 | Item | Value |
 | --- | --- |
 | Package and command | `verdict` (modules `verdict.assets` and the decision) |
-| Status | In development (v0.11.0) |
+| Status | In development (v0.11.2) |
 | LLD | [../lld/triage-prioritization.md](../lld/triage-prioritization.md) |
 
 ## 1. Responsibility
@@ -30,6 +30,7 @@ Pillar 3 holds the asset context and takes the only decision of the platform.
 | In | Tenant context: declarations, rules, `published` mapping, policy, exceptions | Strategy §7 |
 | Out | Assets (read only for pillars 1, 4, 5) | Strategy §6 |
 | Out | Decisions; reports, `triage.json`, `triage.csv`, run page | Strategy §6 |
+| Out | Reporting dataset `reporting.json`, read by the client portal (Grafana) | Strategy §6; LLD §12 |
 
 ## 3. Building blocks
 
@@ -78,12 +79,13 @@ client CMDB, when available, is the reference for context.
 | Policy as code | The decision policy is versioned, changed by merge request with a second reviewer, its combinations leading to ACT tested in CI; each decision carries the policy version, and a new version comes with a report of the priorities it changes |
 | Risk acceptance | An accepted risk has a justification, an approver and an expiry date, kept in the tenant project and changed by merge request; at expiry the finding comes back |
 | Determinism | Same records, assets, findings and policy version give the same decisions |
+| Reporting contract | Pillar 3 publishes one reporting dataset per tenant and run (`reporting.json`, versioned schema); the client portal reads it and nothing else, so internal changes never break the portal |
 
 ## 8. Status, risks and open points
 
 | Item | Content |
 | --- | --- |
-| In place | v0.9.0: SSVC decision with BOD 26-04 timelines, exposure model with source and zone |
-| Planned | v0.11.2: `published` endpoints and external detection pulled by the tenant project; v0.11.3: exposure gap |
+| In place | v0.9.0: SSVC decision with BOD 26-04 timelines, exposure model with source and zone; v0.11.2: external detection pulled by the tenant project and joined through `published` endpoints (exposure `open`, source `external-scan`) |
+| Planned | v0.11.3: reporting dataset for the client portal; v0.11.4: exposure gap |
 | Risks | Incomplete asset data from clients (safe defaults when criticality or exposure is unknown); AI proposes a wrong decision point (flagged, analyst validation) |
 | Open points | Exposure gap: immediate alert through the watch (pillar 1), or a section of the daily report |

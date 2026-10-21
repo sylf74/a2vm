@@ -69,13 +69,41 @@ class Fiche:
         out = [f"<h2>{html.escape(self.title)}</h2>"]
         for heading, body in self.sections:
             out.append(f"<h3>{html.escape(heading)}</h3>")
-            bullets = [b[2:] for b in body if b.startswith("- ")]
-            paras = [b for b in body if not b.startswith("- ")]
-            out += [f"<p>{_inline(p)}</p>" for p in paras if p.strip()]
-            if bullets:
-                out.append("<ul>" + "".join(f"<li>{_inline(b)}</li>" for b in bullets) + "</ul>")
+            out += _blocks_html(body)
         style = "font-family:Segoe UI,Arial,sans-serif;font-size:14px;line-height:1.45;color:#1a1a1a"
         return f'<div style="{style}">' + "\n".join(out) + "</div>"
+
+
+def _blocks_html(body: list[str]) -> list[str]:
+    """Paragraphs, bullet lists and Markdown tables, in their order."""
+    out: list[str] = []
+    i = 0
+    while i < len(body):
+        line = body[i]
+        if line.startswith("|"):
+            rows = []
+            while i < len(body) and body[i].startswith("|"):
+                cells = [c.strip() for c in body[i].strip().strip("|").split("|")]
+                if not all(set(c) <= set("-: ") for c in cells):
+                    rows.append(cells)
+                i += 1
+            cell = "border:1px solid #d0d0d0;padding:4px 8px;text-align:left;vertical-align:top"
+            head = "".join(f'<th style="{cell};background:#f2f2f2">{_inline(c)}</th>' for c in rows[0])
+            rest = "".join(
+                "<tr>" + "".join(f'<td style="{cell}">{_inline(c)}</td>' for c in r) + "</tr>" for r in rows[1:]
+            )
+            out.append(f'<table style="border-collapse:collapse"><tr>{head}</tr>{rest}</table>')
+        elif line.startswith("- "):
+            items = []
+            while i < len(body) and body[i].startswith("- "):
+                items.append(f"<li>{_inline(body[i][2:])}</li>")
+                i += 1
+            out.append("<ul>" + "".join(items) + "</ul>")
+        else:
+            if line.strip():
+                out.append(f"<p>{_inline(line)}</p>")
+            i += 1
+    return out
 
 
 def _inline(text: str) -> str:
@@ -127,23 +155,8 @@ def build(alert: Alert, settings: Settings, llm: LlmClient | None = None) -> Fic
     if item.source:
         why.append(f"- Source : {item.source} ({CATEGORY_FR.get(item.category, item.category)})")
     fiche.sections.append(("Pourquoi cette alerte", why))
-    concerned = []
-    worst_exposed = False
-    for f in alert.findings:
-        a = alert.assets.get(f.asset_ref)
-        exp = exposure_label(alert, f.asset_ref)
-        worst_exposed |= exp.startswith("exposé")
-        versions = f" — versions concernées : {', '.join(f.affected_versions)}" if f.affected_versions else ""
-        concerned.append(f"- **{a.description if a else f.asset_ref}** ({exp}){versions}")
-    for m in alert.product_matches:
-        if m.startswith("watchlist: "):
-            concerned.append(f"- {m[11:]} (produit de votre liste de surveillance)")
-        elif not any(f.asset_ref == m for f in alert.findings):
-            a = alert.assets.get(m)
-            concerned.append(
-                f"- **{a.description if a else m}** (produit cité par {pub.source if pub else 'la source'})"
-            )
-    fiche.sections.append(("Vos actifs concernés", concerned or ["- Aucun actif identifié avec certitude."]))
+    concerned, worst_exposed = _concerned(alert, pub.source if pub else "la source")
+    fiche.sections.append(("Vos actifs concernés", concerned))
 
     # CVE / product / type / CVSS.
     fiche.sections.append(("CVE", [", ".join(item.cves) if item.cves else "Aucune CVE attribuée à ce stade."]))
@@ -270,6 +283,116 @@ def _fix_status(alert: Alert) -> str:
     if alert.item.category == "vendor" and pub:
         return "voir l'avis de l'éditeur en lien"
     return "aucun correctif identifié à ce jour dans les sources"
+
+
+EXPOSURE_FR = {"open": "ouverte (Internet)", "controlled": "contrôlée", "small": "restreinte"}
+EXPOSURE_SOURCE_FR = {
+    "external-scan": "scan externe",
+    "declared": "déclarée",
+    "rule": "règle",
+    "default": "supposée",
+    "published": "publiée",
+}
+SOURCE_FR = {
+    "trivy": "scan des paquets",
+    "dnf-updateinfo": "mises à jour dnf",
+    "openvas": "scan réseau",
+    "external-scan": "scan externe",
+    "inventory": "déclaré",
+}
+TABLE_HEADER = [
+    "| Actif | Zone | Exposition | Version installée | Version corrigée | Responsable | Source |",
+    "| --- | --- | --- | --- | --- | --- | --- |",
+]
+
+
+def _cell(text: str) -> str:
+    return (text or "—").replace("|", "/").replace("\n", " ")
+
+
+def _row(*cells: str, source: str = "") -> str:
+    padded = list(cells) + [""] * (6 - len(cells)) + [source]
+    return "| " + " | ".join(_cell(c) for c in padded) + " |"
+
+
+def _concerned(alert: Alert, cited_by: str) -> tuple[list[str], bool]:
+    """The table of the client's assets concerned, and whether one of them is exposed to the internet."""
+    rows: list[str] = []
+    exposed = False
+    seen: set[str] = set()
+    for asset, f in alert.detected:  # what the daily pipeline found installed
+        exp = asset.attributes.get("exposure")
+        value = exposure_value(exp.value) if exp else ""
+        exposed |= value == "open"
+        how = EXPOSURE_FR.get(value, value)
+        if exp:
+            how += f", {EXPOSURE_SOURCE_FR.get(exp.source, exp.source)}"
+        zone = asset.attributes.get("zone")
+        owner = asset.attributes.get("owner")
+        installed = sorted(
+            {f"{o.package} {o.installed_version}".strip() for o in f.observations if o.installed_version}
+        )
+        fixed = sorted({o.fixed_version for o in f.observations if o.fixed_version})
+        sources = sorted({SOURCE_FR.get(o.source, o.source) for o in f.observations})
+        rows.append(
+            "| "
+            + " | ".join(
+                _cell(x)
+                for x in (
+                    f"**{asset.name}**",
+                    zone.value if zone else "",
+                    how,
+                    ", ".join(installed),
+                    ", ".join(fixed),
+                    owner.value if owner and owner.source != "default" else "",
+                    "détecté (" + ", ".join(sources) + ")",
+                )
+            )
+            + " |"
+        )
+        seen.add(asset.id)
+    for f in alert.findings:  # declared assets matched by product
+        if f"declared:{f.asset_ref}" in seen:
+            continue
+        a = alert.assets.get(f.asset_ref)
+        exp = exposure_label(alert, f.asset_ref)
+        exposed |= exp.startswith("exposé")
+        versions = ", ".join(f.affected_versions)
+        rows.append(
+            "| "
+            + " | ".join(
+                _cell(x)
+                for x in (
+                    f"**{a.description if a else f.asset_ref}**",
+                    (a.zone or "") if a else "",
+                    exp,
+                    versions,
+                    "",
+                    (a.owner or "") if a else "",
+                    "déclaré",
+                )
+            )
+            + " |"
+        )
+    for m in alert.product_matches:
+        if m.startswith("watchlist: "):
+            rows.append(
+                "| " + " | ".join(_cell(x) for x in (m[11:], "", "", "", "", "", "liste de surveillance")) + " |"
+            )
+        elif not any(f.asset_ref == m for f in alert.findings):
+            a = alert.assets.get(m)
+            name = a.description if a else m
+            rows.append(
+                "| "
+                + " | ".join(_cell(x) for x in (f"**{name}**", "", "", "", "", "", f"produit cité par {cited_by}"))
+                + " |"
+            )
+    if not rows:
+        return ["- Aucun actif identifié avec certitude."], exposed
+    lines = TABLE_HEADER + rows
+    if alert.inventory_as_of:
+        lines.append(f"Inventaire du {alert.inventory_as_of[:10]} (dernier traitement quotidien).")
+    return lines, exposed
 
 
 def exposure_label(alert: Alert, asset_ref: str) -> str:
