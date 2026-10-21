@@ -14,11 +14,12 @@ every 10 min   the sources of config/watch-sources.yaml, in three categories:
       v        does it concern this client?
                - a CVE matches a declared asset (vendor / product / CPE / versions), or
                - the publication (or the CVE record) names a declared product or a watchlist entry
+               - the client's last daily inventory found the CVE on one of its hosts
                - a CVE already alerted in the last 14 days is skipped, unless it becomes KEV
       v
-               alert sheet (French, team layout): why now and from which source, assets concerned,
-               CVE, product, type, CVSS, main impact, exploitation status, fixes, description,
-               delay, links
+               alert sheet (French, team layout): why now and from which source, table of the
+               assets concerned, CVE, product, type, CVSS, main impact, exploitation status, fixes,
+               description, delay, links
       v
                mail to the analysts (A2VM_ANALYST_TO), naming the recipients, with a link
       v
@@ -49,6 +50,34 @@ Levels:
 | --- | --- | --- |
 | `urgent` | KEV, CERT-FR alert, exploitation or proof of concept reported by CISA, or a critical CVE on an Internet-exposed asset | every client |
 | `info` | CERT-FR advisory on a product of the client, without the above | clients with `alerts.level: all` |
+
+## Assets concerned and the daily inventory (v0.11.2)
+
+The watch reads the client's last daily inventory: `work/assets/<client>/assets.json` and
+`findings.json` from the artifacts of the latest successful `triage` job of the project's default
+branch (job token, same project: nothing to allow). An alert then also covers a CVE the daily
+pipeline found on a host, even when no declared asset or watchlist entry names the product, and a
+critical CVE on a host the external scan reaches is urgent.
+
+The sheet lists the assets concerned in a table:
+
+| Column | From |
+| --- | --- |
+| Actif | Asset name (detected), description (declared), product (watchlist) |
+| Zone | Declared asset or profile rule |
+| Exposition | Exposure and its source (external scan, declared, rule, assumed) |
+| Version installée / corrigée | Package and versions observed by the scanners |
+| Responsable | Owner, when declared or set by a rule |
+| Source | Detected (package scan, dnf updates, network scan, external scan), declared, watchlist, product cited by the publication |
+
+Under the table: "Inventaire du JJ/MM/AAAA", the date of the inventory used. The job log says
+which inventory was read; older than 8 days it is flagged `WARN`, and without one (no daily run
+yet, artifacts expired after 30 days) the watch goes on with the declared assets only.
+`via watch --inventory none` disables it, `--inventory <dir>` reads a local copy.
+
+Limit: a detected host is named only for a CVE already in the last daily findings. A CVE
+published since the last daily run is matched against declared assets and the watchlist only,
+until the full package list of each host is collected.
 
 Facts in the sheet (identifiers, scores, versions, dates, links, assets) are written by code from
 the sources. The local LLM only writes "impact principal" and "description" from those facts and
@@ -128,7 +157,7 @@ cache (`.watch/state.json`); if the cache is cleared, the next run records a new
 - The alert cannot be edited before sending: correct `client.yaml` or wait for the next one.
 - Without on-call duty, alerts found at night wait for the first analyst in the morning: the gain
   is that they are drafted, matched and one click away when the analyst arrives.
-- Scanned hosts (Trivy, dnf) are not used for matching yet, only declared assets and the
-  watchlist: OS package vulnerabilities rarely make CERT-FR alerts, and they are in the daily triage.
+- Scanned hosts are used through the last daily findings only (see above): a brand-new CVE is not
+  matched against the packages installed on the hosts yet.
 - The CERT-FR JSON view is read defensively: a missing field degrades the sheet (fewer details),
   it does not stop the watch.

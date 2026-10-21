@@ -163,12 +163,12 @@ flowchart LR
 | Client internal hosts | In | Package inventories; internal network scan | Read-only SSH; network vulnerability scanner | In place |
 | Client public endpoints | In | External network scan | Network vulnerability scanner run from the cloud | In place |
 | Other scanners (Tenable, Qualys, Cyberwatch), client SIEMs and asset exports | In | Findings, assets | API, report import, SIEM queries | Planned |
-| Client project (profile, targets, contacts, `published`) | In | Declared assets, attribute rules, scan targets, alert recipients | Files in the tenant's GitLab project | In place; `published` in v0.11.2 |
+| Client project (profile, targets, contacts, `published`) | In | Declared assets, attribute rules, scan targets, alert recipients | Files in the tenant's GitLab project | In place; `published` since v0.11.2 |
 | LLM endpoint approved for the tenant | Out and back | Facts of one CVE and asset, kept in memory only; proposals and texts back (§8) | OpenAI-compatible HTTPS API: vLLM or Ollama on premises, Azure OpenAI (Azure AI Foundry), or the client's own LLM; chosen per deployment and recorded in its DAT | In place (on premises), optional |
 | OpenCTI, SOC | In and out | CTI linked to CVEs; per-client STIX bundles | STIX 2.1, TAXII | Planned |
 | Analysts | In and out | Review, alert validation, reports | GitLab interface, job artifacts | In place |
 | Client contacts | Out | Validated alert mails, reports | SMTP relay, after analyst validation | In place |
-| Client portal (Grafana) | Out | Reporting dataset of each tenant (`reporting.json`) | GitLab API, one read-only token per tenant; one Grafana organisation per tenant | Planned (dataset in v0.11.2, portal VM next) |
+| Client portal (Grafana) | Out | Reporting dataset of each tenant (`reporting.json`) | GitLab API, one read-only token per tenant; one Grafana organisation per tenant | Planned (dataset in v0.11.3, portal VM next) |
 | SIEM of the platform | Out | Platform logs | Syslog | Target |
 
 ## 5. Structuring decisions
@@ -198,7 +198,7 @@ deterministic rules and people decide. Decisions that concern one pillar only ar
 
 - Each tenant project includes the pipeline template at a pinned A2VM tag: `validate` on every push; `collect → via → detect → assets → triage` on the daily schedule; `watch`, then the manual `send-alerts` (the analyst's validation), on a 10-minute schedule.
 - Jobs fetch the A2VM code at that tag with their job token; the tenant project holds only its own data.
-- A client with an internet exposure also has a collection-only external project, run by the cloud scanner; from v0.11.2 the internal pipeline pulls its latest detection and reconciles it, so one decision is taken per asset and CVE.
+- A client with an internet exposure also has a collection-only external project, run by the cloud scanner; since v0.11.2 the internal pipeline pulls its latest detection and joins it to the internal assets, so one decision is taken per asset and CVE.
 - Target: pillar 1 becomes a long-running service on the container runtime (record API, collection and watch as scheduled tasks), read by the per-tenant jobs; the per-tenant jobs themselves can run on the same runtime through GitLab's Kubernetes executor. The current implementation (v0.9.x) runs everything as GitLab pipelines.
 
 ## 6. Contracts between pillars
@@ -263,7 +263,7 @@ pillar.
 | Pillar | Use cases | Status |
 | --- | --- | --- |
 | 1. Intelligence | CVE sheet prose; translation into the tenant's reporting language | In development; translation not started |
-| 2. Detection | Product match proposal | In development; proposal-only from v0.11.2 |
+| 2. Detection | Product match proposal | Proposal only since v0.11.2 |
 | 3. Triage & Prioritization | Missing SSVC inputs; rationale | In development |
 | 4. Dispatch & Capitalization | Ideas: remediation instructions or tickets, capitalisation summaries | Not started |
 | 5. Emergency Actions | Idea: crisis communications | Not started |
@@ -335,10 +335,12 @@ release.
 
 | Step | Content | Pillars |
 | --- | --- | --- |
-| v0.11.1 (current) | CI/CD variables renamed `VULNOPS_*` → `A2VM_*` (the old names are still read, with a warning, until a later version); client alert mails titled `[CERT Alert]` | All |
+| v0.11.2 (current) | External detection pulled by the tenant project and joined through the profile's `published` endpoints (exposure `open`, source `external-scan`); the watch reads the last daily inventory and the alert sheet lists the client's assets concerned (zone, exposure, installed and fixed versions, owner, source, inventory date); fuzzy product match by the LLM is a proposal only, never a drop | 1, 2, 3 |
+| v0.11.1 | CI/CD variables renamed `VULNOPS_*` → `A2VM_*` (the old names are still read, with a warning, until a later version); client alert mails titled `[CERT Alert]` | All |
 | v0.11.0 | Project renamed A2VM: GitLab project `vulnops/a2vm`, common contract package and command `a2vm`; GitLab group, CI/CD variables (then `VULNOPS_*`), exchange-file identifiers and scan accounts unchanged | All |
 | v0.10.0 | Repository organised by pillar: `vulnops` (common contract), `via`, `detect`, `verdict`, each with its own command; no functional change | All |
-| v0.11.2, v0.11.3 | One global SSVC decision per client with internal and external detections reconciled: published endpoints, external detection pulled by the tenant project, product match as proposal only, reporting dataset for the client portal (v0.11.2); exposure gap (v0.11.3). The exposure model was released in v0.9.0 | 2, 3 |
+| v0.11.3 | Reporting dataset for the client portal (`reporting.json`); analysts choose which alerts are sent (`A2VM_SEND_ONLY`), alert id in the analysts' mail, trace of sent alerts; mail test job; validate checks the include ref against `A2VM_REF`; a source fails only after several consecutive failures | 1, 3, 4 |
+| v0.11.4 | Exposure gap: one global SSVC decision per client with internal and external views reconciled. The exposure model was released in v0.9.0 | 2, 3 |
 | Next (to confirm) | Client portal VM (Grafana); history database and finding lifecycle; pillar 1 as a service on the container runtime | 1, 3, 4 |
 | Then (to confirm) | Dispatch & Capitalization; Emergency Actions | 4, 5 |
 

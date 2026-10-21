@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 """detect's LLM task: is the product named in a vulnerability record the client's asset?
 
-Only called for fuzzy (name-similarity) candidates; a confirmed match is always flagged for
-review, a rejected one is dropped. Vendor text is untrusted and passed as data.
+Only called for fuzzy (name-similarity) candidates. The answer is a proposal: the candidate is
+kept either way and flagged for review with it, so the analyst decides. Vendor text is untrusted and
+passed as data.
 """
 
 from __future__ import annotations

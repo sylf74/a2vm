@@ -43,7 +43,7 @@ def test_first_run_records_a_baseline_then_alerts_on_news(tmp_path, monkeypatch)
     for heading in ("## CVE", "## Produit concerné", "## Type de vulnérabilité", "## CVSS", "## Impact principal",
                     "## État d'exploitation", "## Description", "## Liens"):  # fmt: skip
         assert heading in md
-    assert "Internet-facing firewalls" in md and "(exposé à Internet)" in md
+    assert "| **Internet-facing firewalls with GlobalProtect VPN portal** |" in md and "| exposé à Internet |" in md
     assert "oui — catalogue KEV de la CISA" in md and "10 (critique)" in md
     assert "Exécution de code arbitraire à distance" in md
     assert "https://www.cert.ssi.gouv.fr/alerte/CERTFR-2024-ALE-006/" in md
@@ -153,3 +153,94 @@ def test_contacts_by_level_and_role(tmp_path, capsys):
     bad = tmp_path / "contacts.yaml"
     bad.write_text("schema_version: 1\ncontacts:\n  - {name: X, email: not-an-address}\n")
     assert main(["contacts", str(lab / "client.yaml"), "--contacts", str(bad)]) == 2
+
+
+def _inventory(directory, client_id, cve, seen):
+    from a2vm.io import write_assets, write_findings
+    from a2vm.models import Asset, Attribute, Finding, FindingObservation, Match
+
+    asset = Asset(
+        "host:web01.lan.example", client_id, "host", "web01", "web01", {"hostname": "web01"},
+        {
+            "exposure": Attribute("open", "external-scan", "seen from the internet at www.example.org:443"),
+            "zone": Attribute("dmz", "rule"),
+            "owner": Attribute("web-team", "declared"),
+            "mission_prevalence": Attribute("support", "default"),
+            "public_wellbeing_impact": Attribute("minimal", "default"),
+        },
+        ["trivy", "external-scan"], seen, seen,
+    )  # fmt: skip
+    obs = FindingObservation("trivy", seen, Match("scanner", "", "httpd", 1.0), "httpd", "2.4.57", "2.4.62")
+    finding = Finding(
+        Finding.make_id(client_id, asset.id, cve), client_id, asset.id, cve, "affected", ["2.4.57"], [obs]
+    )
+    base = directory / client_id
+    write_assets(base / "assets.json", client_id, [asset])
+    write_findings(base / "findings.json", client_id, [finding], [])
+
+
+def _second_run(work, *extra):
+    assert _watch(work, *extra) == 0  # baseline
+    state = State.load(work / "state.json")
+    state.certfr.discard("CERTFR-2024-ALE-006")
+    state.save()
+    _watch(work, *extra)
+    return {a["id"]: a for a in json.loads((work / "alerts" / "index.json").read_text())}
+
+
+def test_watch_names_the_assets_of_the_last_daily_inventory(tmp_path, monkeypatch):
+    import datetime as dt
+
+    from a2vm.profile import load_profile
+
+    monkeypatch.delenv("A2VM_ANALYST_TO", raising=False)
+    client_id = load_profile(PROFILE).id
+    seen = dt.datetime.now(dt.UTC).replace(microsecond=0).isoformat()
+    _inventory(tmp_path / "inv", client_id, "CVE-2099-10001", seen)
+
+    without = _second_run(tmp_path / "a", "--inventory", "none")
+    assert not any("CVE-2099-10001" in i for i in without)  # the profile alone does not match it
+
+    found = _second_run(tmp_path / "b", "--inventory", str(tmp_path / "inv"))
+    alert = next(i for i in found if "CVE-2099-10001" in i)
+    md = (tmp_path / "b" / "alerts" / f"{alert}.md").read_text()
+    row = "| **web01** | dmz | ouverte (Internet), scan externe | httpd 2.4.57 | 2.4.62 | web-team "
+    row += "| détecté (scan des paquets) |"
+    assert row in md
+    assert f"Inventaire du {seen[:10]}" in md
+    html = (tmp_path / "b" / "alerts" / f"{alert}.html").read_text()
+    assert "<table" in html and "<td" in html and "web-team" in html
+    assert "- Vulnérabilité critique sur un actif exposé à Internet" in md
+
+
+def test_inventory_fetch_reads_the_triage_artifacts_and_flags_an_old_one(tmp_path):
+    import io
+    import zipfile
+
+    import httpx
+
+    from via.alert.inventory import fetch
+
+    _inventory(tmp_path / "work" / "assets", "acme", "CVE-2099-10001", "2026-01-02T05:00:00+00:00")
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        for f in (tmp_path / "work").rglob("*.json"):
+            z.write(f, f.relative_to(tmp_path).as_posix())
+    asked = {}
+
+    def handler(request):
+        asked["url"] = str(request.url)
+        return httpx.Response(200, content=buf.getvalue())
+
+    env = {"CI_API_V4_URL": "https://gitlab.example/api/v4", "CI_JOB_TOKEN": "t"}
+    inv, note = fetch(42, "acme", tmp_path / "dl", environ=env, transport=httpx.MockTransport(handler))
+    assert asked["url"].endswith("/projects/42/jobs/artifacts/main/download?job=triage")
+    assert inv is not None and list(inv.findings_by_cve) == ["CVE-2099-10001"]
+    assert "inventory of 2026-01-02: 1 assets, 1 findings" in note and "WARN" in note
+
+    missing, note = fetch(42, "other", tmp_path / "dl2", environ=env, transport=httpx.MockTransport(handler))
+    assert missing is None and "declared assets only" in note
+    gone, note = fetch(
+        42, "acme", tmp_path / "dl3", environ=env, transport=httpx.MockTransport(lambda r: httpx.Response(404))
+    )
+    assert gone is None and "declared assets only" in note

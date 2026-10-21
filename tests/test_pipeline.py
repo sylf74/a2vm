@@ -112,7 +112,10 @@ def test_llm_run(settings, sources, profile):
     llm = LlmClient(settings.llm, transport=transport)
     rows = _by_cve(_run(settings, sources, profile, llm))
 
-    assert "CVE-2099-10004" not in rows  # fuzzy match rejected by the LLM
+    # The LLM proposes "unlikely" for the fuzzy match: the candidate stays, flagged with the proposal.
+    fuzzy = rows["CVE-2099-10004"]
+    assert fuzzy.needs_review
+    assert any("proposition du LLM : peu probable" in r for r in fuzzy.review_reasons)
     build = rows["CVE-2099-10005"]
     assert (build.automatable.value, build.automatable.source) == ("no", "llm")
     assert build.ssvc_decision == "track" and build.needs_review

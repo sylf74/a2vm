@@ -223,6 +223,65 @@
           "description": "Products the client uses but does not declare as assets, as 'vendor product' (e.g. 'Fortinet FortiOS')."
         }
       }
+    },
+    "external": {
+      "description": "External scan of this client, run in its collection-only external project (A2VM_EXTERNAL_PROJECT); its detection joins the internal run.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "client"
+      ],
+      "properties": {
+        "client": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$",
+          "description": "Client id written by the external project's collection (its targets.yaml)."
+        },
+        "max_age_days": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 8,
+          "description": "An older external detection is ignored, with a warning."
+        }
+      }
+    },
+    "published": {
+      "description": "Public endpoints and the internal assets that answer behind them. An external host matching an endpoint joins its asset; the asset and those behind it become exposure open, source external-scan.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "endpoint",
+          "asset"
+        ],
+        "properties": {
+          "endpoint": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Public host name or address, optional :port (e.g. 'www.example.org:443', '203.0.113.10')."
+          },
+          "asset": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Internal asset answering on the internet: declared asset id, or host name / FQDN of a scanned host."
+          },
+          "behind": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Assets reached through it (declared ids, host names or FQDNs)."
+          },
+          "zone": {
+            "$ref": "#/$defs/zone"
+          },
+          "description": {
+            "type": "string"
+          }
+        }
+      }
     }
   },
   "allOf": [

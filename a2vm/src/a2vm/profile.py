@@ -11,7 +11,15 @@ import jsonschema
 import yaml
 
 from .io import load_schema
-from .models import LEGACY_EXPOSURE, AttributeRule, ClientProfile, DeclaredAsset, exposure_value
+from .models import (
+    LEGACY_EXPOSURE,
+    AttributeRule,
+    ClientProfile,
+    DeclaredAsset,
+    ExternalScan,
+    PublishedEndpoint,
+    exposure_value,
+)
 
 
 class ProfileError(ValueError):
@@ -71,6 +79,8 @@ def load_profile(path: str | Path) -> ClientProfile:
         source_path=str(path),
         alerts=dict(data.get("alerts", {})),
         warnings=warnings,
+        external=ExternalScan(**data["external"]) if data.get("external") else None,
+        published=[PublishedEndpoint(**p) for p in data.get("published", [])],
     )
 
 

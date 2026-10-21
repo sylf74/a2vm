@@ -11,10 +11,10 @@
 #
 #     include:
 #       - project: vulnops/a2vm
-#         ref: v0.11.1
+#         ref: v0.11.2
 #         file: templates/client-pipeline.yml
 #     variables:
-#       A2VM_REF: v0.11.1        # same version as the include
+#       A2VM_REF: v0.11.2        # same version as the include
 #
 # Jobs:
 #   push to the default branch     validate (profile and targets)
@@ -50,6 +50,7 @@ variables:
   DEBIAN_FRONTEND: noninteractive
   PIP_ROOT_USER_ACTION: ignore
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PYTHONUNBUFFERED: "1"   # messages reach the job log as they are written
   A2VM_RUNNER_TAG: llm-lan
   A2VM_COLLECT_TAG: llm-lan
 
@@ -124,26 +125,31 @@ collect:
   script:
     - mkdir -p work/detect
     - |
-      if [ ! -f "$A2VM_TARGETS" ]; then
-        echo "No $A2VM_TARGETS: no scanner collection, declared inventory only"; exit 0
-      fi
-      NO_SSH=""
-      if [ -z "${A2VM_SSH_KEY:-}" ]; then
-        echo "No A2VM_SSH_KEY: SSH targets skipped (OpenVAS scan only, if configured)"; NO_SSH="--no-ssh"
-      else
-        # Normalise the key pasted in GitLab: no CR, a final newline (OpenSSH rejects the key otherwise).
-        mkdir -p ~/.ssh && umask 077
-        tr -d '\r' < "$A2VM_SSH_KEY" | sed -e '$a\' > ~/.ssh/vulnops_scan
-        if ! ssh-keygen -y -f ~/.ssh/vulnops_scan > /dev/null 2>&1; then
-          echo "A2VM_SSH_KEY is not a usable private key: paste the whole file, from the BEGIN line to the END line"
-          exit 3
-        fi
-        echo "scan key: $(ssh-keygen -l -f ~/.ssh/vulnops_scan)"
-      fi
       rc=0
-      detect collect "$A2VM_TARGETS" $NO_SSH --raw work/scans --out work/detect || rc=$?
-      # Raw outputs are not kept: Trivy JSON runs to hundreds of MB; what matters is in work/detect.
-      rm -rf work/scans
+      if [ ! -f "$A2VM_TARGETS" ]; then
+        echo "No $A2VM_TARGETS: no scanner collection, declared inventory only"
+      else
+        NO_SSH=""
+        if [ -z "${A2VM_SSH_KEY:-}" ]; then
+          echo "No A2VM_SSH_KEY: SSH targets skipped (OpenVAS scan only, if configured)"; NO_SSH="--no-ssh"
+        else
+          # Normalise the key pasted in GitLab: no CR, a final newline (OpenSSH rejects the key otherwise).
+          mkdir -p ~/.ssh && umask 077
+          tr -d '\r' < "$A2VM_SSH_KEY" | sed -e '$a\' > ~/.ssh/vulnops_scan
+          if ! ssh-keygen -y -f ~/.ssh/vulnops_scan > /dev/null 2>&1; then
+            echo "A2VM_SSH_KEY is not a usable private key: paste the whole file, from the BEGIN line to the END line"
+            exit 3
+          fi
+          echo "scan key: $(ssh-keygen -l -f ~/.ssh/vulnops_scan)"
+        fi
+        detect collect "$A2VM_TARGETS" $NO_SSH --raw work/scans --out work/detect || rc=$?
+        # Raw outputs are not kept: Trivy JSON runs to hundreds of MB; what matters is in work/detect.
+        rm -rf work/scans
+      fi
+      # The client's external scan (its collection-only project), when this project names it.
+      if [ -n "${A2VM_EXTERNAL_PROJECT:-}" ]; then
+        detect external "$A2VM_PROFILE" --project "$A2VM_EXTERNAL_PROJECT" --out work/detect || rc=$?
+      fi
       du -sh work/* 2>/dev/null || true
       if [ "$rc" -ne 0 ]; then exit 3; fi
 
