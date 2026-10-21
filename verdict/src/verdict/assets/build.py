@@ -57,6 +57,7 @@ class Inventory:
     assets: list[Asset] = field(default_factory=list)
     findings: list[Finding] = field(default_factory=list)
     not_affected: list[NotAffected] = field(default_factory=list)
+    exposure_gaps: list[dict[str, str]] = field(default_factory=list)  # see exposure_gap()
 
 
 class _UnionFind:
@@ -168,9 +169,6 @@ def _attributes(
     out: dict[str, Attribute] = {}
     defaults = {**WORST_CASE, **profile.defaults}
     for name in ATTRIBUTES:
-        if name == "exposure" and reached:
-            out[name] = Attribute("open", EXTERNAL, reached)
-            continue
         declared = next((o for o in group if o.kind == "declared" and name in o.attributes), None)
         if declared:
             out[name] = Attribute(declared.attributes[name], "declared")
@@ -189,6 +187,9 @@ def _attributes(
         origin = "client default" if name in profile.defaults else "worst case"
         out[name] = Attribute(defaults[name], "default", origin)
     out["exposure"].value = exposure_value(out["exposure"].value)
+    if reached:  # the external scan comes first, and only ever raises the exposure to open
+        out["_before"] = out["exposure"]
+        out["exposure"] = Attribute("open", EXTERNAL, reached)
     zone = _zone(profile, group, ids, kind)
     if zone is None and published_zone:
         zone = Attribute(published_zone, "published")
@@ -205,6 +206,38 @@ def _zone(profile: ClientProfile, group: list[AssetObservation], ids: dict, kind
         rule = next((r for r in profile.rules if "zone" in r.set and _rule_matches(r, ids)), None)
         if rule:
             return Attribute(rule.set["zone"], "rule", rule.description or rule.hostname or rule.fqdn or rule.ip or "")
+    return None
+
+
+def exposure_gap(
+    asset: Asset,
+    before: Attribute | None,
+    internal: list[AssetObservation],
+    external: list[AssetObservation],
+    profile: ClientProfile,
+) -> dict[str, str] | None:
+    """An exposure the client did not describe (LLD triage §5.4):
+
+    - `unlisted`: a host the external scan reached that no `published` entry names;
+    - `declared-not-open`: an asset declared (or set by a rule) `controlled` or `small` that the
+      external scan reaches, directly or behind a published endpoint.
+    """
+    if external and not internal and not any(_endpoint_of(o, profile.published) for o in external):
+        where = ", ".join(sorted({ip for o in external for ip in o.identifiers.get("ips", [])})) or asset.name
+        return {
+            "kind": "unlisted",
+            "asset": asset.id,
+            "name": asset.name,
+            "detail": f"reached from the internet at {where}, named by no `published` entry",
+        }
+    if before is not None and before.source in ("declared", "rule") and before.value in ("controlled", "small"):
+        return {
+            "kind": "declared-not-open",
+            "asset": asset.id,
+            "name": asset.name,
+            "declared": before.value,
+            "detail": f"{before.source} {before.value}, but {asset.attributes['exposure'].note}",
+        }
     return None
 
 
@@ -289,6 +322,10 @@ def build_inventory(profile: ClientProfile, detections: list[Detection]) -> Inve
             last_seen=seen[-1],
             os=os_name,
         )
+        before = asset.attributes.pop("_before", None)
+        gap = exposure_gap(asset, before, internal, external, profile)
+        if gap:
+            inv.exposure_gaps.append(gap)
         inv.assets.append(asset)
         for o in group:
             asset_of[(o.source, o.ref)] = asset

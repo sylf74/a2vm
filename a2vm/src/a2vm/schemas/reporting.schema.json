@@ -93,6 +93,21 @@
         }
       }
     },
+    "exposure_gaps": {
+      "type": "array",
+      "description": "Exposures the client profile does not describe (since v0.11.4)",
+      "items": {
+        "type": "object",
+        "required": ["kind", "asset"],
+        "properties": {
+          "kind": {"enum": ["unlisted", "declared-not-open"]},
+          "asset": {"type": "string"},
+          "name": {"type": "string"},
+          "declared": {"type": "string"},
+          "detail": {"type": "string"}
+        }
+      }
+    },
     "assets": {
       "type": "array",
       "items": {

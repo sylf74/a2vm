@@ -11,10 +11,10 @@
 #
 #     include:
 #       - project: vulnops/a2vm
-#         ref: v0.11.3
+#         ref: v0.11.4
 #         file: templates/client-pipeline.yml
 #     variables:
-#       A2VM_REF: v0.11.3        # same version as the include
+#       A2VM_REF: v0.11.4        # same version as the include
 #
 # Jobs:
 #   push to the default branch     validate (profile and targets)
@@ -108,6 +108,7 @@ validate:
     - a2vm validate "$A2VM_PROFILE"
     - if [ -f "$A2VM_TARGETS" ]; then detect plan "$A2VM_TARGETS" --profile "$A2VM_PROFILE"; fi
     - if [ -f contacts.yaml ]; then via contacts "$A2VM_PROFILE" --contacts contacts.yaml; fi
+    - if [ -f templates/alert.docx ]; then via check-template templates/alert.docx; fi
 
 # Exit code 3 = collection incomplete: the job shows as a warning and the pipeline goes on with
 # what was collected (plus the declared inventory).
@@ -235,7 +236,14 @@ send-alerts:
     - {key: pip, paths: [.pip-cache/]}
     - {key: watch-state, paths: [.watch/], when: always}
   script:
-    - via send "$A2VM_PROFILE" --alerts alerts --journal .watch/alerts-log.jsonl
+    # The analysts' edits are committed after this pipeline started: read them from the branch head.
+    - |
+      if git fetch -q --depth 1 origin "$CI_DEFAULT_BRANCH" && git checkout -q FETCH_HEAD -- edits 2>/dev/null; then
+        echo "edits/ read from $CI_DEFAULT_BRANCH ($(git rev-parse --short FETCH_HEAD)): $(ls edits | wc -l) file(s)"
+      else
+        echo "no edits/ on $CI_DEFAULT_BRANCH: the sheets are sent as drafted"
+      fi
+    - via send "$A2VM_PROFILE" --alerts alerts --journal .watch/alerts-log.jsonl --edits edits
   artifacts:
     when: always
     paths: [alerts/sent.json, alerts/alerts-log.jsonl]

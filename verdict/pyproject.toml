@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "verdict"
-version = "0.11.3"
+version = "0.11.4"
 description = "Pillar 3 (Triage & Prioritization): asset context and deterministic SSVC decisions, LLM-written rationale."
 requires-python = ">=3.11"
 license = {text = "LicenseRef-a2vm-proprietary"}

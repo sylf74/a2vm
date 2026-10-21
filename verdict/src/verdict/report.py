@@ -63,6 +63,7 @@ def write_json(run: TriageRun, path: Path) -> None:
         "not_affected": [asdict(n) for n in run.not_affected],
         "errors": run.errors,
         "ignored": run.ignored,
+        "exposure_gaps": run.exposure_gaps,
     }
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -161,6 +162,22 @@ def render_markdown(run: TriageRun) -> str:
         "Un constat est une CVE sur un actif. Le détail de chaque constat est dans `triage.csv`.",
         "",
     ]
+    if run.exposure_gaps:
+        lines += [
+            "## Écarts d'exposition",
+            "",
+            "Le scan externe atteint des actifs que le profil client ne décrit pas comme exposés. "
+            "Mettre à jour `published` ou l'exposition déclarée dans `client.yaml`, ou fermer l'accès.",
+            "",
+            "| Actif | Écart | Détail |",
+            "|---|---|---|",
+        ]
+        kinds = {"unlisted": "hôte public non déclaré", "declared-not-open": "déclaré non exposé, vu d'Internet"}
+        for g in run.exposure_gaps:
+            lines.append(
+                f"| {_md_escape(g['name'])} | {kinds.get(g['kind'], g['kind'])} | {_md_escape(g.get('detail', ''))} |"
+            )
+        lines.append("")
 
     # Per asset: where the work is.
     assets: dict[str, dict[str, object]] = {}

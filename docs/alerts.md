@@ -101,6 +101,16 @@ What happened is kept in three places:
 To find an alert or a mail, open the artifacts of the latest `watch` job and read
 `alerts/alerts-log.jsonl` (one JSON line per event, with the pipeline link).
 
+**Editing a sheet before sending (v0.11.4):** put the corrected text in `edits/<alert id>.md`
+(and, for the Word file, `edits/<alert id>.docx`) of the client project, on the default branch,
+then ▶ on `send-alerts`. The links in the analysts' mail lead to the text and the Word file to
+start from. An edited sheet that cites a CVE the alert does not is refused. See
+`docs/alert-word.md`.
+
+**Word file (v0.11.4):** with `alerts.attach: [docx]` in `client.yaml`, every alert also comes as
+a Word file, filled from the client's template (`templates/alert.docx`) or the neutral one, and
+attached to the analysts' and the client's mails (`docs/alert-word.md`).
+
 **Checking the mail settings:** run a pipeline (Build > Pipelines > New pipeline, or ▶ on a
 schedule), then ▶ on the manual job `test-mail`. It sends one message to `A2VM_ANALYST_TO`, or to
 the addresses set as `A2VM_TEST_TO` in its form, and prints the sender and the transport.
@@ -188,7 +198,8 @@ cache (`.watch/state.json`); if the cache is cleared, the next run records a new
 
 ## Limits (to address with the PostgreSQL storage)
 
-- The alert cannot be edited before sending: correct `client.yaml` or wait for the next one.
+- An edited sheet is plain Markdown: tables and lists as the watch writes them; the mail
+  renders headings, paragraphs, lists and tables only.
 - The journal is a file in the runner cache: clearing the cache empties it (the artifacts of past
   jobs keep their copies until they expire).
 - Without on-call duty, alerts found at night wait for the first analyst in the morning: the gain

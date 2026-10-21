@@ -140,4 +140,7 @@ def build(run: TriageRun, policy: dict[str, Any] | None = None, today: dt.date |
         "deadlines": deadlines,
         "decisions": decisions,
         "assets": assets,
+        "exposure_gaps": [
+            {k: g.get(k, "") for k in ("kind", "asset", "name", "declared", "detail")} for g in run.exposure_gaps
+        ],
     }

@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -28,10 +29,10 @@ from a2vm.llm import LlmClient
 from a2vm.profile import ProfileError, load_profile
 from via.intel.sources import Sources
 
-from . import journal
+from . import journal, word
 from .contacts import ContactsError, load_contacts, recipients
 from .feeds import load_catalogue
-from .fiche import build
+from .fiche import build, markdown_html
 from .inventory import Inventory, describe, fetch, load
 from .mail import MailError, message, send
 from .watch import State, discover, relevant
@@ -65,6 +66,45 @@ def _inventory(how: str, client_id: str) -> Inventory | None:
     return inv
 
 
+def _edit_help(a: dict) -> str:
+    """How to change the sheet before sending: a file named after the alert in edits/ of the project."""
+    project, job = os.environ.get("CI_PROJECT_URL", ""), os.environ.get("CI_JOB_URL", "")
+    branch = os.environ.get("CI_DEFAULT_BRANCH", "main")
+    if not project or not job:
+        return ""
+    text = f"{job}/artifacts/raw/alerts/{a['id']}.md"
+    new = f"{project}/-/new/{branch}?file_name=edits/{a['id']}.md"
+    out = (
+        f'<br>Pour la modifier avant envoi : copier <a href="{text}">le texte de la fiche</a>, le coller dans '
+        f'<a href="{new}">edits/{a["id"]}.md</a>, le corriger, valider (commit sur {branch}), puis lancer send-alerts.'
+    )
+    if a.get("docx"):
+        docx = f"{job}/artifacts/raw/alerts/{a['docx']}"
+        out += (
+            f' Pour le Word : corriger <a href="{docx}">{a["docx"]}</a> et le déposer sous '
+            f"<code>edits/{a['docx']}</code> du projet."
+        )
+    return out
+
+
+def _today() -> str:
+    import datetime as dt
+
+    return dt.date.today().strftime("%d/%m/%Y")
+
+
+def _word_template(profile, profile_path: str) -> Path | None:
+    """The Word template when the client wants the sheet attached (`alerts.attach: [docx]`)."""
+    if "docx" not in (profile.alerts.get("attach") or []):
+        return None
+    base = Path(profile_path).resolve().parent
+    named = profile.alerts.get("word_template")
+    if named:
+        return base / named
+    own = base / "templates" / "alert.docx"
+    return own if own.exists() else word.default_template()
+
+
 def cmd_watch(args: argparse.Namespace) -> int:
     settings = load_settings(args.settings)
     settings.sources.feed_cache_hours = min(settings.sources.feed_cache_hours, 0.1)
@@ -77,6 +117,7 @@ def cmd_watch(args: argparse.Namespace) -> int:
         return 2
     print(describe_llm(settings))
     state = State.load(args.state)
+    sheet_errors: list[str] = []  # errors of this run, not of a source: reported at once
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     llm = LlmClient(settings.llm) if settings.llm.enabled else None
@@ -101,25 +142,32 @@ def cmd_watch(args: argparse.Namespace) -> int:
         inventory = _inventory(args.inventory, profile.id)
         alerts = relevant(items, profile, sources, settings, matcher, state, catalogue, inventory)
         index = []
+        template = _word_template(profile, args.profile)
         for alert in alerts:
             fiche = build(alert, settings, llm)
             (out / f"{alert.id}.md").write_text(fiche.markdown(), encoding="utf-8")
             (out / f"{alert.id}.html").write_text(fiche.html(), encoding="utf-8")
-            index.append(
-                {
-                    "id": alert.id,
-                    "level": alert.level,
-                    "title": fiche.title,
-                    "prose": fiche.prose_source,
-                    "cves": list(alert.item.cves),
-                }
-            )
+            entry = {
+                "id": alert.id,
+                "level": alert.level,
+                "title": fiche.title,
+                "prose": fiche.prose_source,
+                "cves": list(alert.item.cves),
+            }
+            if template:
+                try:
+                    path = word.render(template, word.context(fiche, today=_today()), out / word.filename(alert.id))
+                    entry["docx"] = path.name
+                except Exception as exc:  # a broken template must not stop the watch: mail without the file
+                    sheet_errors.append(f"Word sheet of {alert.id} ({template}): {exc}")
+            index.append(entry)
         (out / "index.json").write_text(json.dumps(index, ensure_ascii=False, indent=1), encoding="utf-8")
     finally:
         sources.close()
         if llm:
             llm.close()
     errors, warnings = state.count_failures(errors, int(env("SOURCE_FAILURES", "3") or 3))
+    errors += sheet_errors
     state.save()
     print(f"{profile.id}: {len(items)} new items, {len(index)} alerts -> {out}")
     for w in warnings:
@@ -153,13 +201,15 @@ def cmd_watch(args: argparse.Namespace) -> int:
         note = (
             f'<p style="background:#fff4d6;padding:8px"><b>À valider avant envoi à {profile.name}</b> '
             f"(destinataires : {to}).<br>Alerte n° {number} sur {len(index)} de ce pipeline, "
-            f"identifiant <code>{a['id']}</code>.<br>{how}</p>"
+            f"identifiant <code>{a['id']}</code>.<br>{how}{_edit_help(a)}</p>"
         )
+        attachments = [out / a["docx"]] if a.get("docx") else []
         msg = message(
             f"[CERT Alert][{profile.id}] À valider — {a['title']}",
             note + fiche_html,
             (out / f"{a['id']}.md").read_text(encoding="utf-8"),
             analysts,
+            attachments=attachments,
         )
         try:
             result = send(msg, out / "outbox")
@@ -211,21 +261,25 @@ def cmd_send(args: argparse.Namespace) -> int:
             failed += 1
             events.append(journal.event("send-failed", a, error="no recipient"))
             continue
-        msg = message(
-            f"[CERT Alert] {a['title']}",
-            (out / f"{a['id']}.html").read_text(encoding="utf-8"),
-            (out / f"{a['id']}.md").read_text(encoding="utf-8"),
-            [c.email for c in to],
-        )
+        try:
+            html_body, text_body, files, edited = _final_content(a, out, Path(args.edits) if args.edits else None)
+        except ValueError as exc:
+            print(f"{a['id']}: ERROR {exc}", file=sys.stderr)
+            failed += 1
+            events.append(journal.event("send-failed", a, error=str(exc)))
+            continue
+        if edited:
+            print(f"{a['id']}: edited by the analyst ({', '.join(edited)})")
+        msg = message(f"[CERT Alert] {a['title']}", html_body, text_body, [c.email for c in to], attachments=files)
         emails = [c.email for c in to]
         try:
             result = send(msg, out / "outbox")
             print(f"{a['id']}: {result} — {', '.join(c.label() for c in to)}")
-            entry = journal.event("sent", a, to=emails, result=result)
+            entry = journal.event("sent", a, to=emails, result=result, edited=edited)
         except MailError as exc:
             print(f"{a['id']}: ERROR {exc}", file=sys.stderr)
             failed += 1
-            entry = journal.event("send-failed", a, to=emails, error=str(exc))
+            entry = journal.event("send-failed", a, to=emails, error=str(exc), edited=edited)
         events.append(entry)
         sent.append({k: entry[k] for k in entry if k != "pipeline"})
     sent_path.write_text(json.dumps(sent, ensure_ascii=False, indent=1), encoding="utf-8")
@@ -233,6 +287,31 @@ def cmd_send(args: argparse.Namespace) -> int:
         journal.append(args.journal, events)
         journal.publish(args.journal, out)
     return 1 if failed else 0
+
+
+CVE_RE = re.compile(r"CVE-\d{4}-\d{4,}")
+
+
+def _final_content(a: dict, out: Path, edits: Path | None) -> tuple[str, str, list[Path], list[str]]:
+    """Mail body (HTML, text), attachments and what the analyst edited: `edits/<id>.md` replaces the
+    sheet, `edits/<id>.docx` the Word file. An edited sheet may not cite a CVE the alert does not."""
+    text = (out / f"{a['id']}.md").read_text(encoding="utf-8")
+    html_body = (out / f"{a['id']}.html").read_text(encoding="utf-8")
+    files = [out / a["docx"]] if a.get("docx") else []
+    edited = []
+    if edits and (edits / f"{a['id']}.md").exists():
+        new = (edits / f"{a['id']}.md").read_text(encoding="utf-8")
+        foreign = sorted(set(CVE_RE.findall(new)) - set(CVE_RE.findall(text)) - set(a.get("cves", [])))
+        if foreign:
+            raise ValueError(f"edits/{a['id']}.md cites {', '.join(foreign)}, which this alert does not: not sent")
+        if not new.strip():
+            raise ValueError(f"edits/{a['id']}.md is empty: not sent")
+        text, html_body = new, markdown_html(new)
+        edited.append("text")
+    if edits and a.get("docx") and (edits / a["docx"]).exists():
+        files = [edits / a["docx"]]
+        edited.append("docx")
+    return html_body, text, files, edited
 
 
 def select(index: list[dict], wanted: list[str]) -> tuple[list[dict], list[str]]:
@@ -248,6 +327,15 @@ def select(index: list[dict], wanted: list[str]) -> tuple[list[dict], list[str]]
         elif hits[0] not in chosen:
             chosen.append(hits[0])
     return chosen, unknown
+
+
+def cmd_check_template(args: argparse.Namespace) -> int:
+    problems = word.check_template(args.template)
+    for p in problems:
+        print(f"FAIL  {p}", file=sys.stderr)
+    if not problems:
+        print(f"OK    {args.template} (Word template of the alert sheet)")
+    return 1 if problems else 0
 
 
 def cmd_test_mail(args: argparse.Namespace) -> int:
@@ -359,8 +447,13 @@ def main(argv: list[str] | None = None) -> int:
         help="alerts to send, by number in this pipeline (1, 2…) or id (default: A2VM_SEND_ONLY, else all)",
     )
     s.add_argument("--journal", help="alerts journal to append to (e.g. .watch/alerts-log.jsonl)")
+    s.add_argument("--edits", help="directory of the analysts' edited sheets (edits/<alert id>.md or .docx)")
     s.add_argument("--contacts", default="contacts.yaml", help="client contacts (optional file)")
     s.set_defaults(func=cmd_send)
+
+    t = sub.add_parser("check-template", help="check a Word template of the alert sheet (tags A2VM fills)")
+    t.add_argument("template", nargs="?", default="templates/alert.docx")
+    t.set_defaults(func=cmd_check_template)
 
     m = sub.add_parser("test-mail", help="send one test message with this project's mail settings")
     m.add_argument("--to", nargs="*", help="recipients (default: A2VM_ANALYST_TO)")

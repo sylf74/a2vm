@@ -3,7 +3,7 @@
 | Item | Value |
 | --- | --- |
 | Building block | Pillar 3 package `verdict` (command `verdict`): Decision (`verdict run`) and Asset context (`verdict.assets`, `verdict assets build`) |
-| Status | v0.11.3 as built (decision logic unchanged since v0.9.0); later changes marked **Planned (v0.11.4)** |
+| Status | v0.11.4 as built (decision logic unchanged since v0.9.0) |
 | Place in the set | C4 level 3 of pillar 3 of the HLD ([`../hld/30-triage-prioritization.md`](../hld/30-triage-prioritization.md)); this version covers its Decision block (`verdict run`), the Asset context block (`verdict.assets`) is to be added. Goals, constraints and contracts: HLD. Servers, zones and flows: DAT |
 | Code | `verdict/src/verdict/`, shared model in `a2vm/src/a2vm/models.py` |
 
@@ -282,18 +282,27 @@ stage:
    the internal ones on the same asset and CVE (one finding, observations from both sources), so
    verdict sees one row per asset and CVE.
 4. An external host that matches no `published` entry becomes its own asset, `exposure: open`
-   (source `external-scan`); listing it as an exposure gap comes with section 5.4.
+   (source `external-scan`), listed as an exposure gap (section 5.4).
 
 First iteration: a finding on an endpoint goes to `asset`. Attributing it to an asset in `behind`
 when the scanner identifies that asset's product (version banner) is left for a later version.
 
-### 5.4 Exposure gap — **Planned (v0.11.4)**
+### 5.4 Exposure gap (v0.11.4)
 
-A gap is an external host that `published` does not list, or an asset declared `controlled` or
-`small` that the external scan reaches. The assets stage writes the gaps to
-`work/assets/<client>/exposure_gaps.json`; verdict lists them at the top of the report. The
-immediate alert through the watch job, validated by the analyst like any alert, belongs to the
-alert stage and is an open point of the DAT.
+An exposure the client profile does not describe:
+
+| Kind | When |
+| --- | --- |
+| `unlisted` | A host the external scan reached that no `published` entry names |
+| `declared-not-open` | An asset whose exposure, declared or set by a rule, is `controlled` or `small`, and that the external scan reaches (directly or behind a published endpoint) |
+
+The assets stage (`verdict.assets.build.exposure_gap`) writes them to
+`work/assets/<client>/exposure_gaps.json` (`a2vm.exposure_gaps/1`: kind, asset id and name, value
+declared, detail) and prints one `WARN` line each. `verdict run` reads the file when present and
+lists the gaps at the top of the report ("Écarts d'exposition"), in `triage.json` and in
+`reporting.json` (`exposure_gaps`). The decision itself already uses `open` (section 5.2). The
+immediate alert through the watch job, validated by the analyst like any alert, remains an open
+point (section 10).
 
 ## 6. Configuration
 
@@ -355,8 +364,10 @@ keep the template and `rationale_source` says why. The run never fails because o
 | `tests/test_pipeline.py::test_reporting_dataset_follows_the_decisions` (v0.11.3) | Reporting dataset: schema, stable path, totals equal to the rows, due date and overdue count, deterministic |
 | `tests/test_external.py` (v0.11.2) | External detection rewritten for the internal client; another client id or too old refused with a warning; `published` endpoint joins its internal asset, `behind` assets set `open`, a rule zone wins over the published one, one finding per asset and CVE with both sources, unmatched host kept as its own open asset; no change without external scan; artifact download (prefix, zip-slip, URL, job token, 404, 403, no credentials) |
 
-**Planned (v0.11.3, v0.11.4):** exposure gaps listed; the BOD timeline changes when an asset
-moves from `controlled` to `open`.
+`tests/test_external.py::test_exposure_gaps_reach_the_report_and_the_reporting_dataset` and
+`tests/test_pipeline.py::test_exposure_gaps_open_the_report` (v0.11.4) cover the gaps.
+
+**Planned:** a test that the BOD timeline changes when an asset moves from `controlled` to `open`.
 
 ## 10. Open points
 

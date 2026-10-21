@@ -298,3 +298,18 @@ def test_reporting_dataset_follows_the_decisions(settings, sources, profile, tmp
 
     # Deterministic: the same run gives the same dataset.
     assert reporting.build(run, settings.policy) == reporting.build(run, settings.policy)
+
+
+def test_exposure_gaps_open_the_report(settings, sources, profile, tmp_path):
+    from a2vm.io import read_reporting
+
+    run = _run(settings, sources, profile, tmp=tmp_path)
+    detail = "reached from the internet at 203.0.113.9, named by no `published` entry"
+    run.exposure_gaps = [{"kind": "unlisted", "asset": "host:203.0.113.9", "name": "203.0.113.9", "detail": detail}]
+    target = write_all(run, tmp_path, settings.policy)
+    report = (target / "report.md").read_text()
+    assert "## Écarts d'exposition" in report and "hôte public non déclaré" in report
+    assert report.index("## Écarts d'exposition") < report.index("## Par actif")
+    data = read_reporting(tmp_path / profile.id / "reporting.json")
+    assert data["exposure_gaps"][0]["kind"] == "unlisted"
+    assert json.loads((target / "triage.json").read_text())["exposure_gaps"] == run.exposure_gaps

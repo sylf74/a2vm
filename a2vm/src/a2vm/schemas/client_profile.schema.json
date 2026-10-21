@@ -207,6 +207,16 @@
           },
           "description": "Client addresses that receive validated alerts."
         },
+        "attach": {
+          "type": "array",
+          "items": {"enum": ["docx"]},
+          "uniqueItems": true,
+          "description": "Files attached to the alert mails: docx = the alert sheet in Word (since v0.11.4)."
+        },
+        "word_template": {
+          "type": "string",
+          "description": "Word template of the alert sheet, relative to the client project (default: templates/alert.docx when present, else the neutral A2VM template)."
+        },
         "level": {
           "enum": [
             "urgent",

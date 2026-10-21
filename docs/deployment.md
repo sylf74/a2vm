@@ -80,10 +80,10 @@ The code project's own pipeline only runs lint, tests and the offline examples.
 ```yaml
 include:
   - project: vulnops/a2vm
-    ref: v0.11.3
+    ref: v0.11.4
     file: templates/client-pipeline.yml
 variables:
-  A2VM_REF: v0.11.3
+  A2VM_REF: v0.11.4
 ```
 
 3. If `targets.yaml` is used: scan key and target accounts as in `docs/scanning.md`, then the

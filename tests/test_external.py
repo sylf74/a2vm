@@ -236,3 +236,26 @@ def test_project_token_without_such_job_is_not_found(tmp_path):
     transport = httpx.MockTransport(lambda r: httpx.Response(200, json=[{"id": 1, "name": "watch", "ref": "main"}]))
     with pytest.raises(ArtifactNotFound, match="no successful job 'triage'"):
         download_artifacts("p", "triage", "work", tmp_path, environ=env, transport=transport)
+
+
+def test_exposure_gaps_reach_the_report_and_the_reporting_dataset(tmp_path):
+    from verdict.assets.gaps import read_gaps, write_gaps
+
+    profile = _profile(tmp_path)
+    external = as_internal(profile, [_external()], now=NOW).detection
+    inv = build_inventory(profile, [_internal(), external])
+    gaps = {(g["kind"], g["name"]) for g in inv.exposure_gaps}
+    # rproxy01 and app01: `controlled` by a rule, reached from the internet; 198.51.100.7: no entry.
+    assert gaps == {("declared-not-open", "rproxy01"), ("declared-not-open", "app01"), ("unlisted", "198.51.100.7")}
+    rproxy = next(g for g in inv.exposure_gaps if g["name"] == "rproxy01")
+    assert rproxy["declared"] == "controlled" and "www.example.org:443" in rproxy["detail"]
+    assert all("_before" not in a.attributes for a in inv.assets)
+
+    write_gaps(tmp_path / "exposure_gaps.json", "acme", inv.exposure_gaps)
+    assert read_gaps(tmp_path / "exposure_gaps.json", "acme") == inv.exposure_gaps
+    assert read_gaps(tmp_path / "absent.json", "acme") == []
+    with pytest.raises(ValueError):
+        read_gaps(tmp_path / "exposure_gaps.json", "other")
+
+    # Without an external scan, no gap.
+    assert build_inventory(profile, [_internal()]).exposure_gaps == []
