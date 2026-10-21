@@ -94,8 +94,8 @@ def _today() -> str:
 
 
 def _word_template(profile, profile_path: str) -> Path | None:
-    """The Word template when the client wants the sheet attached (`alerts.attach: [docx]`)."""
-    if "docx" not in (profile.alerts.get("attach") or []):
+    """The Word template when the client wants the sheet attached (`alerts.attach`: docx and/or pdf)."""
+    if not {"docx", "pdf"} & set(profile.alerts.get("attach") or []):
         return None
     base = Path(profile_path).resolve().parent
     named = profile.alerts.get("word_template")
@@ -262,7 +262,9 @@ def cmd_send(args: argparse.Namespace) -> int:
             events.append(journal.event("send-failed", a, error="no recipient"))
             continue
         try:
-            html_body, text_body, files, edited = _final_content(a, out, Path(args.edits) if args.edits else None)
+            html_body, text_body, files, edited = _final_content(
+                a, out, Path(args.edits) if args.edits else None, profile.alerts.get("attach")
+            )
         except ValueError as exc:
             print(f"{a['id']}: ERROR {exc}", file=sys.stderr)
             failed += 1
@@ -275,7 +277,7 @@ def cmd_send(args: argparse.Namespace) -> int:
         try:
             result = send(msg, out / "outbox")
             print(f"{a['id']}: {result} — {', '.join(c.label() for c in to)}")
-            entry = journal.event("sent", a, to=emails, result=result, edited=edited)
+            entry = journal.event("sent", a, to=emails, result=result, edited=edited, files=[f.name for f in files])
         except MailError as exc:
             print(f"{a['id']}: ERROR {exc}", file=sys.stderr)
             failed += 1
@@ -292,12 +294,16 @@ def cmd_send(args: argparse.Namespace) -> int:
 CVE_RE = re.compile(r"CVE-\d{4}-\d{4,}")
 
 
-def _final_content(a: dict, out: Path, edits: Path | None) -> tuple[str, str, list[Path], list[str]]:
+def _final_content(
+    a: dict, out: Path, edits: Path | None, attach: list[str] | None = None
+) -> tuple[str, str, list[Path], list[str]]:
     """Mail body (HTML, text), attachments and what the analyst edited: `edits/<id>.md` replaces the
-    sheet, `edits/<id>.docx` the Word file. An edited sheet may not cite a CVE the alert does not."""
+    sheet, `edits/<id>.docx` the Word file. An edited sheet may not cite a CVE the alert does not.
+    The client gets the Word file (`docx`) and/or a PDF made from it now (`pdf`)."""
+    attach = list(attach if attach is not None else ["docx"])
     text = (out / f"{a['id']}.md").read_text(encoding="utf-8")
     html_body = (out / f"{a['id']}.html").read_text(encoding="utf-8")
-    files = [out / a["docx"]] if a.get("docx") else []
+    sheet = out / a["docx"] if a.get("docx") else None
     edited = []
     if edits and (edits / f"{a['id']}.md").exists():
         new = (edits / f"{a['id']}.md").read_text(encoding="utf-8")
@@ -308,9 +314,17 @@ def _final_content(a: dict, out: Path, edits: Path | None) -> tuple[str, str, li
             raise ValueError(f"edits/{a['id']}.md is empty: not sent")
         text, html_body = new, markdown_html(new)
         edited.append("text")
-    if edits and a.get("docx") and (edits / a["docx"]).exists():
-        files = [edits / a["docx"]]
+    if edits and sheet and (edits / sheet.name).exists():
+        sheet = edits / sheet.name
         edited.append("docx")
+    files = []
+    if sheet and "docx" in attach:
+        files.append(sheet)
+    if sheet and "pdf" in attach:
+        try:
+            files.append(word.to_pdf(sheet, out / "pdf"))
+        except word.ConversionError as exc:
+            raise ValueError(f"PDF of {sheet.name}: {exc}: not sent") from exc
     return html_body, text, files, edited
 
 

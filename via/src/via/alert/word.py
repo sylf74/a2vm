@@ -198,3 +198,32 @@ SAFE = re.compile(r"[^A-Za-z0-9._-]+")
 
 def filename(alert_id: str) -> str:
     return SAFE.sub("-", alert_id) + ".docx"
+
+
+class ConversionError(RuntimeError):
+    """The Word sheet could not be turned into a PDF."""
+
+
+def to_pdf(docx: str | Path, out_dir: str | Path, timeout: int = 120) -> Path:
+    """PDF of `docx` by LibreOffice (headless): the layout of the Word sheet, fonts included when the
+    runner has them (Calibri is replaced by the metric-compatible Carlito)."""
+    import shutil
+    import subprocess
+    import tempfile
+
+    office = shutil.which("soffice") or shutil.which("libreoffice")
+    if not office:
+        raise ConversionError("LibreOffice is not installed in the job (needed for alerts.attach: [pdf])")
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory() as profile:  # a private LibreOffice profile: jobs never share one
+        cmd = [office, f"-env:UserInstallation=file://{profile}", "--headless", "--convert-to", "pdf",
+               "--outdir", str(out_dir), str(docx)]  # fmt: skip
+        try:
+            run = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)
+        except subprocess.TimeoutExpired as exc:
+            raise ConversionError(f"LibreOffice did not finish in {timeout} s") from exc
+    pdf = out_dir / (Path(docx).stem + ".pdf")
+    if run.returncode != 0 or not pdf.exists():
+        raise ConversionError(f"LibreOffice failed ({run.returncode}): {(run.stderr or run.stdout)[-300:]}")
+    return pdf

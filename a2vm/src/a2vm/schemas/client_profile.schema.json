@@ -209,9 +209,9 @@
         },
         "attach": {
           "type": "array",
-          "items": {"enum": ["docx"]},
+          "items": {"enum": ["docx", "pdf"]},
           "uniqueItems": true,
-          "description": "Files attached to the alert mails: docx = the alert sheet in Word (since v0.11.4)."
+          "description": "Files attached to the client's alert mail: docx = the alert sheet in Word, pdf = the same sheet as a PDF made from the Word file at sending time (since v0.11.4). The analysts always receive the Word file, which they may edit."
         },
         "word_template": {
           "type": "string",

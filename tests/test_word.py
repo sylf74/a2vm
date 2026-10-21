@@ -116,3 +116,39 @@ def test_client_template_next_to_the_profile_wins(tmp_path):
     data["alerts"].pop("attach", None)
     plain.write_text(yaml.safe_dump(data, allow_unicode=True))
     assert _word_template(load_profile(plain), str(plain)) is None
+
+
+def test_client_gets_a_pdf_made_from_the_word_sheet(tmp_path, monkeypatch):
+    import shutil
+
+    import pytest
+
+    if not (shutil.which("soffice") or shutil.which("libreoffice")):
+        pytest.skip("LibreOffice not installed")
+    monkeypatch.delenv("A2VM_ANALYST_TO", raising=False)
+    for v in ("A2VM_SMTP_HOST", "A2VM_MAIL_TRANSPORT"):
+        monkeypatch.delenv(v, raising=False)
+    profile = _profile(tmp_path, attach=["pdf"])
+
+    import tests.test_alert as ta
+
+    monkeypatch.setattr(ta, "PROFILE", str(profile))
+    _second_run(tmp_path)
+    index = json.loads((tmp_path / "alerts" / "index.json").read_text())
+    assert all(a.get("docx") for a in index)  # the Word sheet is always made: analysts edit it
+    pan = next(a for a in index if "CERTFR-2024-ALE-006" in a["id"])
+    monkeypatch.setenv("A2VM_SEND_ONLY", str(index.index(pan) + 1))
+    assert main(["send", str(profile), "--alerts", str(tmp_path / "alerts")]) == 0
+    sent = email.message_from_bytes(next((tmp_path / "alerts" / "outbox").glob("*.eml")).read_bytes(),
+                                    policy=policy.default)  # fmt: skip
+    files = list(sent.iter_attachments())
+    assert [f.get_filename() for f in files] == [Path(pan["docx"]).with_suffix(".pdf").name]
+    assert files[0].get_content_type() == "application/pdf" and files[0].get_content()[:5] == b"%PDF-"
+
+
+def test_without_libreoffice_the_alert_is_not_sent(tmp_path, monkeypatch):
+    monkeypatch.setattr("shutil.which", lambda name: None)
+    import pytest
+
+    with pytest.raises(word.ConversionError, match="LibreOffice is not installed"):
+        word.to_pdf(word.default_template(), tmp_path)

@@ -1,8 +1,9 @@
-# The alert sheet in Word (v0.11.4)
+# The alert sheet in Word and PDF (v0.11.4)
 
-The watch can attach the alert sheet as a Word file to the analysts' mail and to the client's mail.
-The file is filled from a template with tags ([docxtpl](https://docxtpl.readthedocs.io/)): the
-client's own layout, A2VM's facts.
+The watch can make the alert sheet as a Word file, filled from a template with tags
+([docxtpl](https://docxtpl.readthedocs.io/)): the client's own layout, A2VM's facts. The analysts
+receive the Word file with the mail to validate, since it is the file they may correct; the client
+receives the Word file, or a PDF made from it when the alert is sent, or both.
 
 ## Setting it up for a client
 
@@ -10,9 +11,15 @@ client's own layout, A2VM's facts.
 
    ```yaml
    alerts:
-     attach: [docx]
+     attach: [pdf]          # the client gets a PDF of the sheet; [docx]: the Word file; [docx, pdf]: both
      # word_template: templates/alert.docx   # default: this file when present, else the neutral one
    ```
+
+   The PDF is made by LibreOffice in the `send-alerts` job, from the final Word file (the analyst's
+   corrected one when there is one), so that what leaves is what was validated. The job installs
+   LibreOffice and fonts metric-compatible with Calibri, Cambria, Arial and Times when `pdf` is
+   asked for (about a minute, in this manual job only); the PDFs sent are kept in its artifacts
+   (`alerts/pdf/`, 90 days). A sheet whose PDF cannot be made is not sent: the job says why.
 
 2. Optional: the client's template in its project, `templates/alert.docx`. Start from a sheet the
    team already sends to that client and replace its content with the tags below, keeping its
@@ -76,7 +83,7 @@ The analysts' mail says how. In short, in the client project, on the default bra
 - `edits/<alert id>.md`: the sheet's text, corrected (copy it from the link in the mail). It
   replaces the mail body. It may not cite a CVE the alert does not: such a sheet is not sent.
 - `edits/<alert id>.docx`: the Word file, corrected (download it from the link in the mail,
-  change it, upload it). It replaces the attachment.
+  change it, upload it). It replaces the attachment, and the PDF is made from it.
 
 Then ▶ on `send-alerts`: the job reads `edits/` from the head of the branch, sends, and records
 in the journal which parts the analyst changed. The edited files stay in the project's history.

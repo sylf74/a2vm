@@ -33,7 +33,10 @@ class MailError(RuntimeError):
     pass
 
 
-DOCX = ("application", "vnd.openxmlformats-officedocument.wordprocessingml.document")
+TYPES = {
+    ".docx": ("application", "vnd.openxmlformats-officedocument.wordprocessingml.document"),
+    ".pdf": ("application", "pdf"),
+}
 
 
 def message(
@@ -52,7 +55,7 @@ def message(
     msg.set_content(text)
     msg.add_alternative(f"<!doctype html><html><body>{html}</body></html>", subtype="html")
     for path in attachments or []:
-        maintype, subtype = DOCX if path.suffix == ".docx" else ("application", "octet-stream")
+        maintype, subtype = TYPES.get(path.suffix, ("application", "octet-stream"))
         msg.add_attachment(path.read_bytes(), maintype=maintype, subtype=subtype, filename=path.name)
     return msg
 

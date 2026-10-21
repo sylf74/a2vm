@@ -243,10 +243,17 @@ send-alerts:
       else
         echo "no edits/ on $CI_DEFAULT_BRANCH: the sheets are sent as drafted"
       fi
+    # alerts.attach: [pdf] -> the PDF is made from the Word sheet now: LibreOffice and fonts metric-
+    # compatible with Calibri, Cambria, Arial and Times (installed in this manual job only).
+    - |
+      if python3 -c "import sys, yaml; a = (yaml.safe_load(open(sys.argv[1])) or {}).get('alerts') or {}; sys.exit(0 if 'pdf' in (a.get('attach') or []) else 1)" "$A2VM_PROFILE"; then
+        echo "alerts.attach: pdf -> installing LibreOffice"
+        apt-get install -y -qq --no-install-recommends libreoffice-writer-nogui fonts-crosextra-carlito fonts-crosextra-caladea fonts-liberation >/dev/null
+      fi
     - via send "$A2VM_PROFILE" --alerts alerts --journal .watch/alerts-log.jsonl --edits edits
   artifacts:
     when: always
-    paths: [alerts/sent.json, alerts/alerts-log.jsonl]
+    paths: [alerts/sent.json, alerts/alerts-log.jsonl, alerts/pdf/]
     expire_in: 90 days
 
 # Checks the mail settings (A2VM_MAIL_FROM, SMTP or Graph, A2VM_ANALYST_TO): Build > Pipelines >

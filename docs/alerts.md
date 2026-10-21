@@ -107,9 +107,10 @@ then ▶ on `send-alerts`. The links in the analysts' mail lead to the text and 
 start from. An edited sheet that cites a CVE the alert does not is refused. See
 `docs/alert-word.md`.
 
-**Word file (v0.11.4):** with `alerts.attach: [docx]` in `client.yaml`, every alert also comes as
-a Word file, filled from the client's template (`templates/alert.docx`) or the neutral one, and
-attached to the analysts' and the client's mails (`docs/alert-word.md`).
+**Word and PDF (v0.11.4):** with `alerts.attach` in `client.yaml`, every alert also comes as a
+Word file, filled from the client's template (`templates/alert.docx`) or the neutral one. The
+analysts receive the Word file; the client receives it (`docx`), or a PDF made from it at sending
+time (`pdf`), or both (`docs/alert-word.md`).
 
 **Checking the mail settings:** run a pipeline (Build > Pipelines > New pipeline, or ▶ on a
 schedule), then ▶ on the manual job `test-mail`. It sends one message to `A2VM_ANALYST_TO`, or to
