@@ -70,7 +70,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"{base}: files of {a_client!r}/{f_client!r}, expected {profile.id!r}", file=sys.stderr)
                 return 2
             run = triage.run(profile, records, assets, findings, not_affected, len(requested), errors)
-            target = write_all(run, Path(args.out))
+            target = write_all(run, Path(args.out), settings.policy)
             counts = {d: sum(r.delivery_decision == d for r in run.rows) for d in ("ACT", "ATTEND", "TRACK")}
             llm_failures = [r for r in run.rows if r.rationale_source.startswith("template (LLM")]
             print(

@@ -1,8 +1,8 @@
 # Client project pipeline: everything comes from the A2VM code project (vulnops/a2vm), at a fixed version.
 include:
   - project: vulnops/a2vm
-    ref: v0.11.2
+    ref: v0.11.3
     file: templates/client-pipeline.yml
 
 variables:
-  A2VM_REF: v0.11.2   # keep equal to the include ref
+  A2VM_REF: v0.11.3   # keep equal to the include ref

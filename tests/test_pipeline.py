@@ -269,3 +269,32 @@ def test_rejected_cves_are_ignored_not_errors(settings, sources, profile):
     assert [e["cve"] for e in run.errors] == ["CVE-2099-99999"]
     md = render_markdown(run)
     assert "## Ignorées" in md and "CVE-2026-105391" in md.split("## Ignorées")[1].split("##")[0]
+
+
+def test_reporting_dataset_follows_the_decisions(settings, sources, profile, tmp_path):
+    import datetime as dt
+
+    from a2vm.io import read_reporting
+    from verdict import reporting
+
+    run = _run(settings, sources, profile, tmp=tmp_path)
+    write_all(run, tmp_path, settings.policy)
+    data = read_reporting(tmp_path / profile.id / "reporting.json")  # stable path, schema checked
+    assert data["schema"] == "a2vm.reporting/1" and data["run"]["tenant"]["id"] == profile.id
+    assert len(data["decisions"]) == len(run.rows)
+    assert sum(data["totals"]["findings"].values()) == len(run.rows)
+    for level in ("ACT", "ATTEND", "TRACK"):
+        assert data["totals"]["findings"][level] == sum(r.delivery_decision == level for r in run.rows)
+    assert sum(sum(c.values()) for c in data["by_exposure"].values()) <= len(run.rows)
+    assert data["run"]["sources"] and data["run"]["policy_hash"] == reporting.policy_hash(settings.policy)
+    assert all(d["first_seen"] for d in data["decisions"])
+    assert "client_id" not in json.dumps(data)  # one tenant, no internal model dump
+
+    pan = next(d for d in data["decisions"] if d["cve"] == "CVE-2024-3400")
+    start = dt.date.fromisoformat(pan["first_seen"])
+    assert pan["due_date"] == (start + dt.timedelta(days=3)).isoformat()
+    later = reporting.build(run, settings.policy, today=start + dt.timedelta(days=10))
+    assert later["deadlines"]["overdue"] >= 1
+
+    # Deterministic: the same run gives the same dataset.
+    assert reporting.build(run, settings.policy) == reporting.build(run, settings.policy)

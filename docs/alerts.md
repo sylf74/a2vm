@@ -54,8 +54,11 @@ Levels:
 ## Assets concerned and the daily inventory (v0.11.2)
 
 The watch reads the client's last daily inventory: `work/assets/<client>/assets.json` and
-`findings.json` from the artifacts of the latest successful `triage` job of the project's default
-branch (job token, same project: nothing to allow). An alert then also covers a CVE the daily
+`findings.json`, which the daily `triage` job leaves in the runner cache (key `inventory`, since
+v0.11.3). Without that copy (first run, cache cleared, another runner), the watch asks GitLab for
+the artifacts of the last `triage` job; GitLab only serves the latest successful pipeline of the
+branch, which is nearly always a watch, unless `A2VM_GITLAB_TOKEN` is set. With several runners,
+give them a shared cache (S3, MinIO) so that the watch finds the copy. An alert then also covers a CVE the daily
 pipeline found on a host, even when no declared asset or watchlist entry names the product, and a
 critical CVE on a host the external scan reaches is urgent.
 
@@ -78,6 +81,37 @@ yet, artifacts expired after 30 days) the watch goes on with the declared assets
 Limit: a detected host is named only for a CVE already in the last daily findings. A CVE
 published since the last daily run is matched against declared assets and the watchlist only,
 until the full package list of each host is collected.
+
+## Validation and sending (v0.11.3)
+
+The analysts' mail gives the alert's number in its pipeline ("Alerte n° 2 sur 3") and its id. In
+the pipeline the mail links to, ▶ on `send-alerts` sends every alert of that pipeline. To send only
+some of them, open the job's form (the arrow next to ▶) and set the variable `A2VM_SEND_ONLY` to
+their numbers or ids, e.g. `1 3`. An unknown number or id sends nothing: the job fails and says
+which; correct it and run the job again.
+
+What happened is kept in three places:
+
+| File | Where | Content |
+| --- | --- | --- |
+| `alerts/index.json`, `*.md`, `*.html` | `watch` job artifacts (14 days) | The alerts of that run |
+| `alerts/sent.json` | `send-alerts` job artifacts (90 days) | The mails sent to the client by that job: alert, recipients, result |
+| `alerts-log.jsonl` | Runner cache `.watch/`, copied into the artifacts of every `watch` and `send-alerts` job | Journal of every alert: drafted, mailed to the analysts (or failed), sent to the client (or failed); the last 5,000 events |
+
+To find an alert or a mail, open the artifacts of the latest `watch` job and read
+`alerts/alerts-log.jsonl` (one JSON line per event, with the pipeline link).
+
+**Checking the mail settings:** run a pipeline (Build > Pipelines > New pipeline, or ▶ on a
+schedule), then ▶ on the manual job `test-mail`. It sends one message to `A2VM_ANALYST_TO`, or to
+the addresses set as `A2VM_TEST_TO` in its form, and prints the sender and the transport.
+
+**Source failures:** a source that fails once (a vendor site down for a few minutes) is a `WARN`
+line in the log; it becomes an error, and the job a warning (orange), after 3 failed runs in a row
+(`A2VM_SOURCE_FAILURES`). One successful run resets the count.
+
+**CISA advisories:** read as CSAF from CISA's repository on GitHub (`cisagov/CSAF`, ICS and IT
+advisories, products and fixes included), since the RSS feed of cisa.gov answers 403 to the
+runners (v0.11.3).
 
 Facts in the sheet (identifiers, scores, versions, dates, links, assets) are written by code from
 the sources. The local LLM only writes "impact principal" and "description" from those facts and
@@ -155,6 +189,8 @@ cache (`.watch/state.json`); if the cache is cleared, the next run records a new
 ## Limits (to address with the PostgreSQL storage)
 
 - The alert cannot be edited before sending: correct `client.yaml` or wait for the next one.
+- The journal is a file in the runner cache: clearing the cache empties it (the artifacts of past
+  jobs keep their copies until they expire).
 - Without on-call duty, alerts found at night wait for the first analyst in the morning: the gain
   is that they are drafted, matched and one click away when the analyst arrives.
 - Scanned hosts are used through the last daily findings only (see above): a brand-new CVE is not

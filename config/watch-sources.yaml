@@ -5,7 +5,7 @@
 #             kev      CISA Known Exploited Vulnerabilities
 #             cvelist  new CVE records (cvelistV5), matched against the client's assets and watchlist
 #             rss      any RSS 2.0 / Atom / RDF feed
-#             csaf     CSAF provider (url = provider-metadata.json): products and fixes, structured
+#             csaf     CSAF provider (url = provider-metadata.json, or its changes.csv): products and fixes
 #             cna      no feed: the vendor publishes its CVEs as a CNA; its records arrive through
 #                      cvelist and are labelled with the vendor's name (vendors = names in the records)
 #   urgent    every publication of the source is urgent (otherwise: urgent when exploited, KEV, or
@@ -26,9 +26,17 @@ sources:
      name: "CISA — KEV"}
   - {id: cvelist, category: institutional, kind: cvelist,
      name: "CVE (cvelistV5)"}
-  - {id: cisa-advisories, category: institutional, kind: rss,
+  # CISA advisories as CSAF, from CISA's repository on GitHub (cisagov/CSAF): its RSS feed on
+  # cisa.gov answers 403 to the runners, and its provider metadata sits on the same site.
+  - {id: cisa-ics, category: institutional, kind: csaf,
+     url: "https://raw.githubusercontent.com/cisagov/CSAF/develop/csaf_files/OT/white/changes.csv",
+     name: "CISA — avis ICS"}
+  - {id: cisa-it, category: institutional, kind: csaf,
+     url: "https://raw.githubusercontent.com/cisagov/CSAF/develop/csaf_files/IT/white/changes.csv",
+     name: "CISA — avis IT"}
+  - {id: cisa-advisories, category: institutional, kind: rss, enabled: false,
      url: "https://www.cisa.gov/cybersecurity-advisories/all.xml",
-     name: "CISA — avis"}
+     name: "CISA — avis (RSS, 403 from the runners)"}
   - {id: cert-eu, category: institutional, kind: rss,
      url: "https://cert.europa.eu/publications/security-advisories-rss",
      name: "CERT-EU — avis"}

@@ -127,6 +127,14 @@ def csaf_index_url(metadata: dict[str, Any]) -> tuple[str, str]:
     raise SourceError("no CSAF distribution in provider metadata")
 
 
+def csaf_index(sources: Sources, url: str) -> tuple[str, str]:
+    """Index of a CSAF source: its `changes.csv` when the URL names one (a provider whose metadata
+    cannot be read, e.g. CISA's copy on GitHub), else what the provider metadata points to."""
+    if url.endswith(".csv"):
+        return "changes", url
+    return csaf_index_url(sources.fetch_json(url) or {})
+
+
 def csaf_entries(kind: str, url: str, text: str) -> list[tuple[str, str]]:
     """(document URL, timestamp) of an index, newest first."""
     out = []
@@ -199,8 +207,7 @@ def parse_csaf(doc: dict[str, Any], url: str, source: Source) -> Publication:
 
 def read_csaf(sources: Sources, source: Source, since: str) -> tuple[list[Publication], str]:
     """Documents changed after `since` (empty: none, baseline), and the newest timestamp seen."""
-    metadata = sources.fetch_json(source.url)
-    kind, index_url = csaf_index_url(metadata or {})
+    kind, index_url = csaf_index(sources, source.url)
     entries = csaf_entries(kind, index_url, sources.fetch_text(index_url))
     newest = entries[0][1] if entries else since
     if not since:

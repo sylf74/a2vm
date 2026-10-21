@@ -8,8 +8,10 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 
+from a2vm.io import write_reporting
 from a2vm.models import TriageRow, TriageRun
 
+from . import reporting
 from .dashboard import render_dashboard
 from .rationale import BOD_FR, EXPLOITATION_FR
 
@@ -245,10 +247,13 @@ def render_markdown(run: TriageRun) -> str:
     return "\n".join(lines) + "\n"
 
 
-def write_all(run: TriageRun, out_dir: Path) -> Path:
+def write_all(run: TriageRun, out_dir: Path, policy: dict | None = None) -> Path:
     stamp = run.generated_at[:10]
     target = out_dir / run.client.id / stamp
     target.mkdir(parents=True, exist_ok=True)
+    dataset = reporting.build(run, policy)
+    write_reporting(target / "reporting.json", dataset)
+    write_reporting(out_dir / run.client.id / "reporting.json", dataset)  # stable path for the portal
     write_json(run, target / "triage.json")
     write_csv(run, target / "triage.csv")
     (target / "report.md").write_text(render_markdown(run), encoding="utf-8")

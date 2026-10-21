@@ -371,6 +371,8 @@ class TriageRow:
     exposure: str = ""  # open | controlled | small
     exposure_source: str = ""  # declared | rule | <scanner> | assumed (external-scan from v0.11.2)
     zone: str = ""
+    first_seen: str = ""  # first observation of the finding, start of the BOD timeline
+    seen_by: dict[str, str] = field(default_factory=dict)  # source -> latest observation
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

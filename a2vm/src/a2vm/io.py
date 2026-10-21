@@ -24,12 +24,14 @@ RECORDS = "vulnops.records/1"
 DETECTION = "vulnops.detection/1"
 ASSETS = "vulnops.assets/1"
 FINDINGS = "vulnops.findings/2"
+REPORTING = "a2vm.reporting/1"
 
 _SCHEMA_FILES = {
     RECORDS: "vulnerability_records",
     DETECTION: "detection",
     ASSETS: "assets",
     FINDINGS: "findings",
+    REPORTING: "reporting",
 }
 
 
@@ -160,3 +162,12 @@ def read_findings(path: str | Path) -> tuple[str, list[Finding], list[NotAffecte
     findings = [Finding.from_dict(f) for f in data["findings"]]
     not_affected = [NotAffected(**n) for n in data["not_affected"]]
     return data["client_id"], findings, not_affected
+
+
+def write_reporting(path: str | Path, data: dict[str, Any]) -> Path:
+    """The reporting dataset of a run (`a2vm.reporting/1`), the only file the client portal reads."""
+    return _write(Path(path), REPORTING, data)
+
+
+def read_reporting(path: str | Path) -> dict[str, Any]:
+    return _read(Path(path), REPORTING)

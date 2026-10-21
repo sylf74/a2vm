@@ -3,9 +3,10 @@
 
 The watch runs every 10 minutes and only knows what the profile declares; the daily pipeline
 knows what is actually installed and where (assets.json, findings.json of verdict assets). The
-watch reads the latest of them from the artifacts of the client project's daily `triage` job, so
-that an alert on a CVE already found on the client's machines names those machines, with the
-installed and fixed versions, the exposure and the owner. Only the exchange files of the common
+daily `triage` job leaves a copy in the runner cache (key `inventory`), which the watch restores;
+without it, the watch reads the artifacts of the project's last `triage` job. So an alert on a
+CVE already found on the client's machines names those machines, with the installed and fixed
+versions, the exposure and the owner. Only the exchange files of the common
 contract are read: VIA imports no other pillar.
 """
 
@@ -73,9 +74,14 @@ def fetch(
         return None, f"inventory not available ({exc}): declared assets only"
     if inv is None:
         return None, f"no inventory of {client_id} in the last {job!r} artifacts: declared assets only"
+    return inv, describe(inv)
+
+
+def describe(inv: Inventory) -> str:
+    """One line for the job log: date, size, and a warning when the inventory is old."""
     age = inv.age_days()
     count = sum(map(len, inv.findings_by_cve.values()))
     note = f"inventory of {inv.as_of[:10]}: {len(inv.assets)} assets, {count} findings"
     if age is not None and age > MAX_AGE_DAYS:
         note += f" (WARN {age:.0f} days old)"
-    return inv, note
+    return note

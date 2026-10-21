@@ -11,10 +11,10 @@
 #
 #     include:
 #       - project: vulnops/a2vm
-#         ref: v0.11.2
+#         ref: v0.11.3
 #         file: templates/client-pipeline.yml
 #     variables:
-#       A2VM_REF: v0.11.2        # same version as the include
+#       A2VM_REF: v0.11.3        # same version as the include
 #
 # Jobs:
 #   push to the default branch     validate (profile and targets)
@@ -84,7 +84,7 @@ stages: [validate, collect, via, detect, assets, triage, watch, send]
         "${BASE%%://*}://gitlab-ci-token:${CI_JOB_TOKEN}@${BASE#*://}/${A2VM_PROJECT}.git" .a2vm
     - pip install --quiet .a2vm/a2vm .a2vm/via ".a2vm/detect[openvas]" .a2vm/verdict
     - if [ -f settings.yaml ]; then export SETTINGS=settings.yaml; else export SETTINGS=.a2vm/config/settings.yaml; fi
-    - echo "A2VM $A2VM_REF ($(git -C .a2vm rev-parse --short HEAD)), client $CI_PROJECT_PATH, settings $SETTINGS"
+    - echo "A2VM $A2VM_REF ($(git -C .a2vm rev-parse --short HEAD)), client $CI_PROJECT_PATH, mode ${A2VM_JOB:-${VULNOPS_JOB:-daily}}, settings $SETTINGS"
 
 .data:
   extends: .a2vm
@@ -182,6 +182,12 @@ triage:
   extends: .data
   stage: triage
   needs: [assets]
+  # The inventory is also left in the runner cache, where the watch (every 10 minutes) reads it:
+  # the artifacts API only answers for the latest pipeline, which is nearly always a watch.
+  cache:
+    - {key: pip, paths: [.pip-cache/]}
+    - {key: sources, paths: [.cache/]}
+    - {key: inventory, paths: [work/assets/], policy: push}
   script:
     - verdict run "$A2VM_PROFILE" --settings "$SETTINGS" --records work/records.json --assets work/assets --out output
   artifacts:
@@ -202,6 +208,7 @@ watch:
     - {key: pip, paths: [.pip-cache/]}
     - {key: sources, paths: [.cache/]}  # CVE records and GTI answers, shared with the daily run
     - {key: watch-state, paths: [.watch/], when: always}
+    - {key: inventory, paths: [work/assets/], policy: pull}  # left by the daily triage job
   allow_failure:
     exit_codes: [3]
   script:
@@ -212,7 +219,9 @@ watch:
     paths: [alerts/]
     expire_in: 14 days
 
-# The analyst's validation: running this job mails the alerts of this pipeline to the client.
+# The analyst's validation: running this job mails the alerts of this pipeline to the client. To send
+# only some of them, set A2VM_SEND_ONLY in the job's form before ▶: their numbers in the analysts'
+# mail (1 3) or their ids. The job writes alerts/sent.json and adds its events to the alerts journal.
 send-alerts:
   extends: .a2vm
   stage: send
@@ -221,6 +230,28 @@ send-alerts:
     - if: ($A2VM_JOB == "watch" || $VULNOPS_JOB == "watch") && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
       when: manual
       allow_failure: true
-  cache: []
+  resource_group: watch   # one writer of the alerts journal at a time
+  cache:
+    - {key: pip, paths: [.pip-cache/]}
+    - {key: watch-state, paths: [.watch/], when: always}
   script:
-    - via send "$A2VM_PROFILE" --alerts alerts
+    - via send "$A2VM_PROFILE" --alerts alerts --journal .watch/alerts-log.jsonl
+  artifacts:
+    when: always
+    paths: [alerts/sent.json, alerts/alerts-log.jsonl]
+    expire_in: 90 days
+
+# Checks the mail settings (A2VM_MAIL_FROM, SMTP or Graph, A2VM_ANALYST_TO): Build > Pipelines >
+# New pipeline (or ▶ on a schedule), then ▶ on this job. To another address: A2VM_TEST_TO in its form.
+test-mail:
+  extends: .a2vm
+  stage: send
+  needs: []
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "schedule"
+      when: manual
+      allow_failure: true
+  cache:
+    - {key: pip, paths: [.pip-cache/]}
+  script:
+    - via test-mail ${A2VM_TEST_TO:+--to $A2VM_TEST_TO}

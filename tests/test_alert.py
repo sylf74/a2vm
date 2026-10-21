@@ -244,3 +244,84 @@ def test_inventory_fetch_reads_the_triage_artifacts_and_flags_an_old_one(tmp_pat
         42, "acme", tmp_path / "dl3", environ=env, transport=httpx.MockTransport(lambda r: httpx.Response(404))
     )
     assert gone is None and "declared assets only" in note
+
+
+def test_watch_reads_the_inventory_left_in_the_runner_cache(tmp_path, monkeypatch):
+    import datetime as dt
+
+    from a2vm.profile import load_profile
+
+    monkeypatch.delenv("A2VM_ANALYST_TO", raising=False)
+    monkeypatch.chdir(tmp_path)  # the pipeline restores the cache into work/assets of the job
+    seen = dt.datetime.now(dt.UTC).replace(microsecond=0).isoformat()
+    _inventory(tmp_path / "work" / "assets", load_profile(PROFILE).id, "CVE-2099-10001", seen)
+    found = _second_run(tmp_path / "c")  # --inventory auto (default)
+    assert any("CVE-2099-10001" in i for i in found)
+
+
+def test_analysts_mail_numbers_the_alerts_and_the_journal_keeps_every_event(tmp_path, monkeypatch, capsys):
+    from via.alert import journal
+
+    monkeypatch.setenv("A2VM_ANALYST_TO", "soc@example.org")
+    monkeypatch.delenv("A2VM_SMTP_HOST", raising=False)
+    monkeypatch.delenv("A2VM_MAIL_TRANSPORT", raising=False)
+    monkeypatch.delenv("A2VM_SEND_ONLY", raising=False)
+    monkeypatch.setenv("CI_PIPELINE_URL", "https://gitlab.example/acme/-/pipelines/1")
+    found = _second_run(tmp_path)
+    assert len(found) == 2
+    outbox = sorted((tmp_path / "alerts" / "outbox").glob("*.eml"))
+    import email
+    from email import policy
+
+    first = email.message_from_bytes(outbox[0].read_bytes(), policy=policy.default)
+    html = first.get_body(("html",)).get_content()
+    assert "A2VM_SEND_ONLY" in html and "sur 2 de ce pipeline" in html
+
+    log = journal.read(tmp_path / "alerts-log.jsonl")  # next to --state
+    assert [e["event"] for e in log].count("drafted") == 2
+    assert [e["event"] for e in log].count("analysts") == 2
+    assert (tmp_path / "alerts" / "alerts-log.jsonl").exists()  # published with the artifacts
+    drafted = next(e for e in log if e["event"] == "drafted" and "CVE-2099-10002" in e["alert"])
+    assert drafted["cves"] == ["CVE-2099-10002"]
+
+    # Send only the second alert, by its number; the choice and the result are traced.
+    index = json.loads((tmp_path / "alerts" / "index.json").read_text())
+    import yaml
+
+    data = yaml.safe_load(Path(PROFILE).read_text())
+    data.setdefault("alerts", {})["recipients"] = ["it@example.org"]
+    profile = tmp_path / "client.yaml"
+    profile.write_text(yaml.safe_dump(data, allow_unicode=True))
+    monkeypatch.setenv("A2VM_SEND_ONLY", "2")
+    args = ["send", str(profile), "--alerts", str(tmp_path / "alerts"), "--journal", str(tmp_path / "alerts-log.jsonl")]
+    assert main(args) == 0
+    sent = json.loads((tmp_path / "alerts" / "sent.json").read_text())
+    assert [s["alert"] for s in sent] == [index[1]["id"]] and sent[0]["event"] == "sent"
+    assert journal.read(tmp_path / "alerts-log.jsonl")[-1]["event"] == "sent"
+
+    # An unknown choice sends nothing.
+    monkeypatch.setenv("A2VM_SEND_ONLY", "7")
+    assert main(args) == 1
+    assert len(json.loads((tmp_path / "alerts" / "sent.json").read_text())) == 1
+
+
+def test_select_by_number_id_or_suffix():
+    from via.alert.cli import select
+
+    index = [{"id": "acme-CERTFR-2024-ALE-006"}, {"id": "acme-CVE-CVE-2099-10002"}]
+    assert select(index, ["2"]) == ([index[1]], [])
+    assert select(index, ["CERTFR-2024-ALE-006", "acme-CVE-CVE-2099-10002"]) == (index, [])
+    assert select(index, ["3", "nothing"]) == ([], ["3", "nothing"])
+
+
+def test_test_mail_without_smtp_writes_the_message(tmp_path, monkeypatch):
+    monkeypatch.delenv("A2VM_SMTP_HOST", raising=False)
+    monkeypatch.delenv("A2VM_MAIL_TRANSPORT", raising=False)
+    monkeypatch.delenv("A2VM_ANALYST_TO", raising=False)
+    assert main(["test-mail"]) == 2  # nobody to write to
+    assert main(["test-mail", "--to", "soc@example.org", "--out", str(tmp_path)]) == 0
+    import email
+    from email import policy
+
+    msg = email.message_from_bytes(next(tmp_path.glob("*.eml")).read_bytes(), policy=policy.default)
+    assert "Test d'envoi" in msg["Subject"]

@@ -53,6 +53,7 @@ class State:
     seen: dict[str, list[str]] = field(default_factory=dict)  # rss sources: ids already seen
     marks: dict[str, str] = field(default_factory=dict)  # csaf sources: newest timestamp seen
     alerted: dict[str, str] = field(default_factory=dict)  # CVE -> date of the last alert
+    failures: dict[str, int] = field(default_factory=dict)  # source -> consecutive failed runs
 
     @classmethod
     def load(cls, path: str | Path) -> State:
@@ -68,6 +69,7 @@ class State:
             seen=data.get("seen", {}),
             marks=data.get("marks", {}),
             alerted=data.get("alerted", {}),
+            failures=data.get("failures", {}),
         )
 
     def save(self) -> None:
@@ -82,8 +84,27 @@ class State:
             "seen": {k: v[-SEEN_KEEP:] for k, v in self.seen.items()},
             "marks": self.marks,
             "alerted": {c: d for c, d in self.alerted.items() if d >= cutoff},
+            "failures": self.failures,
         }
         self.path.write_text(json.dumps(data, indent=1), encoding="utf-8")
+
+    def count_failures(self, errors: list[str], threshold: int) -> tuple[list[str], list[str]]:
+        """Split this run's source errors into (errors, warnings): a source is in error only after
+        `threshold` failed runs in a row; one success resets its count. A feed down for a few
+        minutes, common on vendor sites, then never turns the job orange."""
+        counts: dict[str, int] = {}
+        for e in errors:
+            name = e.split(": ", 1)[0]
+            counts[name] = self.failures.get(name, 0) + 1
+        self.failures = counts  # sources without an error this run are reset
+        hard, soft = [], []
+        for e in errors:
+            n = counts[e.split(": ", 1)[0]]
+            if n >= threshold:
+                hard.append(f"{e} ({n} runs in a row)")
+            else:
+                soft.append(f"{e} (failure {n}/{threshold}, error from {threshold} in a row)")
+        return hard, soft
 
     def recently_alerted(self, cve: str, today: dt.date | None = None) -> bool:
         when = self.alerted.get(cve)
