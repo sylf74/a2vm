@@ -3,7 +3,20 @@
 # Caddy (HTTPS, Let's Encrypt). Configured at first boot by cloud-init (cloud-init.yaml.tftpl);
 # secrets are generated on the instance and never pass through Terraform, its state or GitLab.
 
-resource "scaleway_instance_ip" "portal" {}
+# A flexible IP kept from an earlier instance (its DNS record stays valid), or a new one.
+data "scaleway_instance_ip" "kept" {
+  count   = var.ip_address == "" ? 0 : 1
+  address = var.ip_address
+}
+
+resource "scaleway_instance_ip" "portal" {
+  count = var.ip_address == "" ? 1 : 0
+}
+
+locals {
+  ip_id      = var.ip_address == "" ? scaleway_instance_ip.portal[0].id : data.scaleway_instance_ip.kept[0].id
+  ip_address = var.ip_address == "" ? scaleway_instance_ip.portal[0].address : var.ip_address
+}
 
 resource "scaleway_instance_security_group" "portal" {
   name                    = "${var.name}-sg"
@@ -44,7 +57,7 @@ resource "scaleway_instance_server" "portal" {
   name              = var.name
   type              = var.instance_type
   image             = var.image
-  ip_id             = scaleway_instance_ip.portal.id
+  ip_id             = local.ip_id
   security_group_id = scaleway_instance_security_group.portal.id
   tags              = ["a2vm", "portal"]
 
