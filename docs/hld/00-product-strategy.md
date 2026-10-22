@@ -119,7 +119,7 @@ client has approved, and on premises by default, LLM inference included.
 | Network | The corporate proxy blocks some RSS and CSAF feeds, and possibly NVD | Intel collection runs from a DMZ host with its own outbound access |
 | Network | Internet-facing scans must originate outside the corporate network | External scanning runs from a cloud host acting as a GitLab runner |
 | Organisation | No interactive access to client CMDBs | Asset inventory is rebuilt from scanners, client exports and SIEM data |
-| Platform | GitLab is the control plane (code, projects per tenant, changes reviewed by merge request) and orchestrates the per-tenant jobs | Long-running services (pillar 1 first, then pillars 4 and 5) need a container runtime; Kubernetes is the candidate, still to be validated |
+| Platform | In production, GitLab holds code and configuration (code, tenant configuration, infrastructure as code, changes reviewed by merge request) and deploys them; it neither runs the per-tenant work nor stores its results | Every job and service runs on a container runtime (Kubernetes is the candidate, still to be validated); results go to the platform's databases |
 | Data | Internal model is business-oriented; STIX only at interfaces | STIX mapping is confined to OpenCTI / SOC connectors |
 | Legal | Proprietary for now; earlier versions were published under AGPL-3.0 | No distribution outside the authorised people until the licence is decided; copies of earlier versions keep their AGPL rights; ownership to be settled in writing with the employer before the merge |
 | Cost | Google Threat Intelligence billed per request, Vulners per API call | Quotas and caching on paid sources |
@@ -185,7 +185,7 @@ deterministic rules and people decide. Decisions that concern one pillar only ar
 | --- | --- | --- |
 | D1 | Single repository (`vulnops/a2vm`) for the common contract and all pillars | Shared data model and tooling; pillars evolve together |
 | D2 | Projects per tenant, configuration outside the code repository | Tenant isolation, code reusable |
-| D3 | Two execution models: per-tenant batch jobs (pillars 2 and 3) orchestrated by GitLab; tenant-independent or event-driven work (pillar 1, later 4 and 5) as long-running services on a container runtime. GitLab stays the control plane for both | Batch per tenant keeps GitLab traceability and merge-request review; a service fits continuous collection, shared state (records, cache, quotas) and an API consumed by the other pillars |
+| D3 | In production, GitLab holds code and configuration and deploys them, nothing more: per-tenant batch jobs (pillars 2 and 3) and long-running services (pillar 1, later 4 and 5) run on a container runtime, scheduled there, and write their results to the platform's databases (reporting database first, history database next). In development and in the homelab, GitLab pipelines still run the jobs and keep their outputs as artifacts | Changes stay reviewed and traceable in GitLab while execution, scheduling and data leave it: GitLab is not sized nor secured as a data store, client data never sit in CI artifacts, and the runtime can be placed per deployment mode (MSSP datacenter, company cloud, client's private cloud) |
 | D4 | SSVC decision points come from evidence (KEV, GTI, CISA ADP, CVSS, asset context); AI only proposes a missing one, flagged for review; a deterministic tree decides | Explainable, reproducible decisions; AI errors are visible inputs |
 | D5 | Three delivery levels, ACT / ATTEND / TRACK, from the CISA Coordinator tree, the BOD 26-04 timelines and a policy configurable per client | Clients differ in the asset criticality and exposure data they provide |
 | D6 | One global decision per client, internal and external detections reconciled | External scan collects only; the tenant project maps public endpoints to internal assets |
@@ -203,7 +203,7 @@ deterministic rules and people decide. Decisions that concern one pillar only ar
 - Each tenant project includes the pipeline template at a pinned A2VM tag: `validate` on every push; `collect → via → detect → assets → triage` on the daily schedule; `watch`, then the manual `send-alerts` (the analyst's validation), on a 10-minute schedule.
 - Jobs fetch the A2VM code at that tag with their job token; the tenant project holds only its own data.
 - A client with an internet exposure also has a collection-only external project, run by the cloud scanner; since v0.11.2 the internal pipeline pulls its latest detection and joins it to the internal assets, so one decision is taken per asset and CVE.
-- Target: pillar 1 becomes a long-running service on the container runtime (record API, collection and watch as scheduled tasks), read by the per-tenant jobs; the per-tenant jobs themselves can run on the same runtime through GitLab's Kubernetes executor. The current implementation (v0.9.x) runs everything as GitLab pipelines.
+- Target (D3): GitLab deploys code and configuration to the container runtime; pillar 1 becomes a long-running service there (record API, collection and watch as scheduled tasks); the per-tenant jobs run there on their schedules and write to the reporting database. Today everything runs as GitLab pipelines, the mode kept for development and the homelab.
 
 ## 6. Contracts between pillars
 
@@ -327,7 +327,7 @@ pillar implements them.
 | Traceability | Every decision stores each input with its source, the SSVC outcome, the BOD 26-04 timeline, the policy steps and where its rationale comes from; results kept as job artifacts (30 days), history database planned |
 | Observability | Pipeline status and duration, source availability, LLM latency and error rate |
 | Interoperability | STIX 2.1 export to OpenCTI and the SOC; dashboards and reporting tools fed by restitution connectors from the reporting dataset only (Grafana for the client portal; Qlik Sense for the company's indicators) |
-| Backup | GitLab backup covers code, tenant configuration and results |
+| Backup | GitLab backup covers code and configuration; the platform's databases (reporting, then history) have their own backups; until production, job artifacts hold the results |
 | Confidentiality of the repository | No real infrastructure names or client identifiers in the code repository or its history |
 | External lookups | Only deduplicated keys free of client data leave towards an external source (CVE ids; product and version pairs at most), never a per-asset inventory; since the source address can identify the client, this residual risk is accepted explicitly per source |
 | Roles | Reader, remediator, context qualifier, risk approver, policy maintainer (proposes, never applies alone), administrator without access to client data, auditor; approver and maintainer are never the same person. Mapped onto GitLab roles, protected branches and CODEOWNERS in the DAT |
@@ -361,7 +361,7 @@ release.
 | Incomplete asset data from clients | Per-client decision tree with safe defaults when criticality or exposure is unknown |
 | Feed outages or blocking | Multi-source collection, source health monitoring |
 | Cost drift on paid APIs | Quotas, caching, per-client usage reporting |
-| GitLab as single execution backbone | GitLab backup and restore tested; runners rebuildable from code |
+| GitLab as single execution backbone (until production) | GitLab backup and restore tested; runners rebuildable from code; D3 moves execution and data to the runtime and the databases |
 | Cross-tenant data leak | Project isolation, scoped tokens and endpoints, review of shared artefacts |
 
 ### Open points
@@ -370,7 +370,7 @@ release.
 - Container runtime for the services: Kubernetes is the candidate, to be validated
 - Client portal: publication per client (internal only, through the reverse proxy, at the client) and how clients authenticate
 - Qlik Sense connector: interface specifications (file or API, format, frequency, authentication, who operates the load); some perimeters have no Qlik Sense instance, where the Grafana portal remains the only restitution
-- GitLab in production holds code and configuration only: where the per-tenant jobs run then (container runtime, D3) and how results reach the reporting database without GitLab artifacts
+- Production execution (D3): scheduler of the per-tenant jobs on the runtime (Kubernetes CronJobs or another), how tenant configuration is deployed to it, and the move of the alert journal and the analysts' validation out of GitLab
 - Points on hold from the review of another internal architecture document, to settle with its team
 
 Open points of a single pillar are in its chapter.
