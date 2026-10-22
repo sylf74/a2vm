@@ -65,7 +65,7 @@ release:
   script:
     - |
       want="${CI_COMMIT_TAG#v}"
-      for p in a2vm via detect verdict dispatch; do
+      for p in a2vm via detect verdict; do
         got=$(sed -n 's/^version = "\(.*\)"/\1/p' $p/pyproject.toml)
         [ "$got" = "$want" ] || { echo "$p/pyproject.toml has version $got, tag says $want"; exit 1; }
       done

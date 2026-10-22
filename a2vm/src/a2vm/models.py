@@ -374,6 +374,8 @@ class TriageRow:
     zone: str = ""
     first_seen: str = ""  # first observation of the finding, start of the BOD timeline
     seen_by: dict[str, str] = field(default_factory=dict)  # source -> latest observation
+    product_type: str = ""  # application | os | hardware (CPE part of the product), "" when unknown (v0.11.6)
+    fix_available: bool = False  # a fixed version or a patch is known (scanner, CVE record) (v0.11.6)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

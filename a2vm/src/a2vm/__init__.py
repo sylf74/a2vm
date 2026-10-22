@@ -2,4 +2,4 @@
 """a2vm: the common contract of the platform — data model, exchange files and their schemas, settings,
 client profiles, LLM client and the extension points between pillars (a2vm.extensions)."""
 
-__version__ = "0.11.5"
+__version__ = "0.11.6"

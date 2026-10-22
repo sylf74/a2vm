@@ -18,6 +18,7 @@ The SSVC tables and the policy make the decision; the LLM never does.
 
 from __future__ import annotations
 
+import re
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
@@ -282,6 +283,8 @@ class Triage:
             fixes=sorted({f"{o.package} {o.fixed_version}" for o in finding.observations if o.fixed_version}),
             first_seen=min((o.observed_at for o in finding.observations), default=""),
             seen_by=_seen_by(finding),
+            product_type=product_type(record, finding.match.vendor, finding.match.product, asset),
+            fix_available=fix_available(record, finding),
         )
         row.rationale = template_rationale(row)
         return row
@@ -346,6 +349,45 @@ class Triage:
         self.llm_errors_in_row += 1
         if self.llm_errors_in_row >= self.settings.llm.max_consecutive_errors:
             self.llm_stopped = f"LLM down after {self.llm_errors_in_row} errors: {exc}"
+
+
+CPE_PARTS = {"a": "application", "o": "os", "h": "hardware"}
+
+
+def _norm(text: str) -> str:
+    return "".join(ch for ch in (text or "").lower() if ch.isalnum())
+
+
+def product_type(record: VulnRecord, vendor: str, product: str, asset: Asset) -> str:
+    """Kind of the vulnerable product, from the CPE part of the record's entries for that product
+    (all entries when none names it); else `os` for the asset's own OS or a product named "… OS",
+    `application` for a container image; "" when nothing tells."""
+    want = _norm(product)
+    entries = [e for e in record.affected if want and _norm(e.product) == want] or record.affected
+    parts = [c.split(":")[2] for e in entries for c in e.cpes if c.startswith("cpe:2.3:") and c.count(":") >= 4]
+    if parts:
+        part = max(sorted(set(parts)), key=parts.count)
+        if part in CPE_PARTS:
+            return CPE_PARTS[part]
+    if want and asset.os and want in _norm(asset.os):
+        return "os"
+    if "os" in re.split(r"[^a-z0-9]+", (product or "").lower()):  # PAN-OS, SecureGate OS
+        return "os"
+    if asset.kind == "image":
+        return "application"
+    return ""
+
+
+def fix_available(record: VulnRecord, finding: Finding) -> bool:
+    """A fix is known: a fixed version reported by a scanner, a fixed version in the CVE record
+    (an affected range closed by `lessThan`), or a reference tagged as a patch."""
+    if any(o.fixed_version for o in finding.observations):
+        return True
+    for e in record.affected:
+        for v in e.versions:
+            if v.get("status", "affected") == "affected" and v.get("lessThan") not in (None, "", "*"):
+                return True
+    return any("patch" in (r.get("tags") or []) for r in record.references)
 
 
 def _seen_by(finding) -> dict[str, str]:

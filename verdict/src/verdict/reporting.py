@@ -4,7 +4,8 @@
 The portal (Grafana) reads this file and nothing else, so that renaming a job or changing an
 internal file never breaks it. Everything here is computed from the decisions of the run; the
 portal recomputes no metric. One tenant per file; no licensed prose, no prompt, no secret.
-Within `/1` fields are only added (LLD triage-prioritization §12).
+Within `/1` fields are only added (LLD triage-prioritization §12); v0.11.6 added to each decision
+the CVSS score and rating, the fix availability, the product and its kind, and the sources.
 """
 
 from __future__ import annotations
@@ -39,6 +40,25 @@ def due_date(row: TriageRow) -> str | None:
         return None
     start = dt.date.fromisoformat(row.first_seen[:10])
     return (start + dt.timedelta(days=int(m.group(1)))).isoformat()
+
+
+SEVERITIES = ("Critical", "High", "Medium", "Low", "Unknown")
+
+
+def severity(row: TriageRow) -> str:
+    """CVSS qualitative rating of the metric the decision used (CNA first): Critical 9.0+, High 7.0+,
+    Medium 4.0+, Low below (None counted as Low); Unknown without a score."""
+    m = row.cvss
+    if m is None or m.score is None:
+        return "Unknown"
+    s = m.score
+    return "Critical" if s >= 9 else "High" if s >= 7 else "Medium" if s >= 4 else "Low"
+
+
+def _sources(row: TriageRow) -> list[str]:
+    if row.seen_by:
+        return sorted(row.seen_by)
+    return sorted({s.strip() for s in (row.finding_source or "").split(",") if s.strip()}) or ["unknown"]
 
 
 def _counts(rows: list[TriageRow]) -> dict[str, int]:
@@ -84,6 +104,14 @@ def build(run: TriageRun, policy: dict[str, Any] | None = None, today: dt.date |
                 "epss": r.epss,
                 "needs_review": r.needs_review,
                 "rationale": _short(r.rationale, RATIONALE_MAX),
+                "cvss_score": r.cvss.score if r.cvss else None,
+                "cvss_version": r.cvss.version if r.cvss else "",
+                "severity": severity(r),
+                "fix_available": r.fix_available,
+                "vendor": r.match.vendor,
+                "product": r.match.product,
+                "product_type": r.product_type or "unknown",
+                "sources": _sources(r),
             }
         )
 

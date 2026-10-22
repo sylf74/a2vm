@@ -80,10 +80,10 @@ The code project's own pipeline only runs lint, tests and the offline examples.
 ```yaml
 include:
   - project: vulnops/a2vm
-    ref: v0.11.5
+    ref: v0.11.6
     file: templates/client-pipeline.yml
 variables:
-  A2VM_REF: v0.11.5
+  A2VM_REF: v0.11.6
 ```
 
 3. If `targets.yaml` is used: scan key and target accounts as in `docs/scanning.md`, then the
@@ -96,7 +96,8 @@ The push pipeline runs `validate` only (profile schema, targets file, client id,
 v0.11.3 the include `ref:` against `A2VM_REF`: two different versions fail the job). Schedules and
 manual runs run `collect` → `intel` → `detect` → `assets` → `triage`; the report, the asset
 inventory and the reporting dataset (`output/<client>/reporting.json`) are in the `triage` job
-artifacts (30 days). The first line of every job names the A2VM version and the mode (`daily` or
+artifacts (30 days); with the reporting variables below, the `publish` job then loads the dataset
+into the reporting database (`docs/reporting.md`). The first line of every job names the A2VM version and the mode (`daily` or
 `watch`).
 
 Optional client project variables:
@@ -107,11 +108,14 @@ Optional client project variables:
 | `A2VM_GITLAB_TOKEN` | Project access token of the external project (Reporter, `read_api`), required on GitLab CE | Masked, protected |
 | `A2VM_ANALYST_TO` | Analysts who validate the alerts (`docs/alerts.md`) | Visible |
 | `A2VM_SOURCE_FAILURES` | Failed runs in a row before a watch source is an error (default 3) | Visible |
+| `A2VM_REPORTING_DSN` | Reporting database, writer role: `postgresql://a2vm_writer:…@host/a2vm` (`docs/reporting.md`) | Masked and hidden, protected |
+| `A2VM_REPORTING_CA` | Certificate of the reporting database | File, protected |
 | `A2VM_SEND_ONLY`, `A2VM_TEST_TO` | Set in the form of the manual jobs `send-alerts` and `test-mail`, not as project variables | — |
 
 ## 6. Releasing a new version
 
-1. Bump `version` in the six `pyproject.toml`, merge, tag `vX.Y.Z` on `main`, push the tag: the
+1. Bump `version` in the four package `pyproject.toml` (`a2vm`, `via`, `detect`, `verdict`) and the
+   `__version__` of `a2vm` and `via`, merge, tag `vX.Y.Z` on `main`, push the tag: the
    `release` job checks that the tag and the package versions agree.
 2. In each client project, change `ref` and `A2VM_REF` in `.gitlab-ci.yml`, one client at a
    time if needed.

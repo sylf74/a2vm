@@ -59,8 +59,9 @@ Targets are set on the pilot client; until then the scenarios fix what is measur
 ## 2. Value chain
 
 Five pillars, one chain: intelligence and detections converge on the asset context, Triage &
-Prioritization decides, Dispatch & Capitalization acts and follows up; Emergency Actions short-cut
-the chain in a crisis.
+Prioritization decides and restitutes its decisions (reporting database, dashboards), Dispatch &
+Capitalization dispatches the resulting actions to the clients and follows them up; Emergency
+Actions short-cut the chain in a crisis.
 
 ```mermaid
 flowchart LR
@@ -74,9 +75,10 @@ flowchart LR
   subgraph P3["3. Triage & Prioritization"]
     assets["Asset context (verdict assets):<br/>exposure, criticality, zone,<br/>each with its source"]
     decision["Decision (verdict run):<br/>SSVC tree, BOD 26-04, policy:<br/>ACT / ATTEND / TRACK"]
+    restitution["Restitution (verdict publish):<br/>reporting database,<br/>dashboards per asset and per CVE"]
   end
   subgraph P4["4. Dispatch & Capitalization (not started)"]
-    dispatch["actions to remediation teams,<br/>follow-up to verified closure"]
+    dispatch["dispatch to clients and their remediation teams:<br/>tickets, notifications,<br/>follow-up to verified closure"]
   end
   subgraph P5["5. Emergency Actions (not started)"]
     emergency["off-cadence: exploited 0-day,<br/>emergency measures"]
@@ -85,6 +87,7 @@ flowchart LR
   intel -- records --> detect
   detect -- "observations, findings" --> assets
   assets --> decision
+  decision --> restitution
   intel -- records --> decision
   decision -- decisions --> dispatch
   alert -. alerts .-> emergency
@@ -100,8 +103,8 @@ flowchart LR
 | --- | --- | --- | --- | --- |
 | 1. Vulnerability Intelligence | `via` (`via.intel`, `via.alert`) | Knows every CVE and its exploitation; watches the estate | In development | [10-vulnerability-intelligence.md](10-vulnerability-intelligence.md) |
 | 2. Vulnerability Detection | `detect` | States what is installed and exposed, without judging it | In development | [20-vulnerability-detection.md](20-vulnerability-detection.md) |
-| 3. Triage & Prioritization | `verdict` (`verdict.assets`) | Holds the asset context and takes the only decision | In development (v0.11.0) | [30-triage-prioritization.md](30-triage-prioritization.md) |
-| 4. Dispatch & Capitalization | — | Turns decisions into actions and follows them to closure | Not started | [40-dispatch-capitalization.md](40-dispatch-capitalization.md) |
+| 3. Triage & Prioritization | `verdict` (`verdict.assets`, `verdict.restitution`) | Holds the asset context, takes the only decision and restitutes it: reporting database, dashboards | In development | [30-triage-prioritization.md](30-triage-prioritization.md) |
+| 4. Dispatch & Capitalization | — | Dispatches the actions to the clients and their remediation teams (tickets, notifications) and follows them to verified closure | Not started | [40-dispatch-capitalization.md](40-dispatch-capitalization.md) |
 | 5. Emergency Actions | — | Acts outside the normal cadence in a crisis | Not started | [50-emergency-actions.md](50-emergency-actions.md) |
 
 Status scale used throughout: Not started → In development → Pilot → In service.
@@ -170,7 +173,7 @@ flowchart LR
 | OpenCTI, SOC | In and out | CTI linked to CVEs; per-client STIX bundles | STIX 2.1, TAXII | Planned |
 | Analysts | In and out | Review, alert validation, reports | GitLab interface, job artifacts | In place |
 | Client contacts | Out | Validated alert mails, reports | SMTP relay, after analyst validation | In place |
-| Client portal (Grafana) | Out | Reporting database: decisions, assets, deadlines, exposure gaps and totals of every run, per tenant | PostgreSQL, one read-only role per tenant; one Grafana organisation per tenant; never GitLab | In place (v0.11.5): reporting database and Grafana dashboard; portal deployed by `deploy/portal` |
+| Client portal (Grafana) | Out | Reporting database: decisions, assets, deadlines, exposure gaps and totals of every run, per tenant | PostgreSQL, one read-only role per tenant; one Grafana organisation per tenant; never GitLab | In place: reporting database, overview dashboard and portal deployed by `deploy/portal` (v0.11.5); dashboards per asset and per CVE comparing snapshots (v0.11.6) |
 | Company reporting tool (Qlik Sense) | Out | Same reporting database, for the company's service indicators | To specify: interface specifications not available yet (native PostgreSQL connection, or files delivered by a connector) | Planned, waiting for the interface specifications |
 | SIEM of the platform | Out | Platform logs | Syslog | Target |
 
@@ -196,7 +199,7 @@ deterministic rules and people decide. Decisions that concern one pillar only ar
 | D11 | AI proposes, never decides: every AI output is a proposal or a text, with a deterministic fallback, shown with its source and reviewed | Accountability stays with rules and people; the platform works without an LLM |
 | D12 | Pillars are independent packages, each with its own command (`via`, `detect`, `verdict`); they depend only on the common contract (package `a2vm`) and never import one another; a capability needed across pillars is offered through an a2vm extension point | Each pillar can evolve, be owned and later be deployed on its own; a test enforces the rule |
 | D13 | Client restitution through a Grafana portal that reads the reporting database only, with a read-only role per tenant; the portal runs on its own VM, always on, internal by default, its publication to the client decided per client | Clients get a readable view without access to GitLab; dashboards depend on a stable schema, not on the pipeline internals nor on GitLab; isolation per tenant is kept |
-| D14 | Restitution is modular and independent of GitLab: each run publishes its reporting dataset (`reporting.json`) into a reporting database (PostgreSQL), one row set per run, so history and trends come for free; dashboarding and reporting tools read that database (Grafana first, Qlik Sense next), or receive files a connector derives from it | The dataset stays the single contract; a new tool means a new reader or connector, never a change of the pipeline; GitLab, which in production holds code and configuration only, is never on the restitution path |
+| D14 | Restitution is modular and independent of GitLab: each run publishes its reporting dataset (`reporting.json`) into a reporting database (PostgreSQL), one row set per run, so history and trends come for free; dashboarding and reporting tools read that database (Grafana first, Qlik Sense next), or receive files a connector derives from it. Restitution belongs to pillar 3, which takes the decisions it shows (`verdict.restitution`, since v0.11.6) | The dataset stays the single contract; a new tool means a new reader or connector, never a change of the pipeline; GitLab, which in production holds code and configuration only, is never on the restitution path; the pillar that decides answers for what the dashboards show |
 
 ### Execution
 
@@ -232,9 +235,9 @@ owner of every pillar that produces or consumes it.
 | `core` | Common model, JSON schemas, settings, LLM client and its output guard | In development |
 | Tenant projects | Per-tenant data: profile, targets, contacts, `published` mapping, LLM endpoint; results as job artifacts | In development |
 | Connectors | STIX 2.1 to OpenCTI and SOCs | Not started |
-| Reporting database | PostgreSQL: one schema of tables (runs, decisions, assets, deadlines, exposure gaps) filled from each run's `reporting.json`, kept across runs; a read-only role per tenant, row-level security on the tenant | In place (v0.11.5, package `dispatch`, pillar 4) |
+| Reporting database | PostgreSQL: one schema of tables (runs, decisions, assets, deadlines, exposure gaps) filled from each run's `reporting.json`, kept across runs; a read-only role per tenant, row-level security on the tenant | In place (v0.11.5); pillar 3 (`verdict.restitution`) and schema version 2 since v0.11.6 |
 | Portal deployment | Infrastructure as code: Terraform creates the portal instance and its security group (Scaleway first, a module per cloud provider); cloud-init installs PostgreSQL, Grafana and the HTTPS proxy in containers; secrets generated on the instance (`deploy/portal/`) | In place (v0.11.5) |
-| Restitution | Grafana dashboards shipped with A2VM, reading the reporting database; Qlik Sense through its PostgreSQL connection or a file connector, once specified | Grafana dashboard in place (v0.11.5); Qlik Sense waiting for its interface specifications |
+| Restitution | Grafana dashboards shipped with A2VM, reading the reporting database: overview of a client, which assets to fix first, which CVEs to fix first (snapshots compared, filters); Qlik Sense through its PostgreSQL connection or a file connector, once specified | Overview (v0.11.5), per asset and per CVE (v0.11.6); Qlik Sense waiting for its interface specifications |
 | Client portal | Grafana, one organisation per tenant, reading the reporting database | Demo in place (v0.11.5) |
 
 ## 7. Tenant and client context
@@ -346,9 +349,10 @@ release.
 | v0.11.1 | CI/CD variables renamed `VULNOPS_*` → `A2VM_*` (the old names are still read, with a warning, until a later version); client alert mails titled `[CERT Alert]` | All |
 | v0.11.0 | Project renamed A2VM: GitLab project `vulnops/a2vm`, common contract package and command `a2vm`; GitLab group, CI/CD variables (then `VULNOPS_*`), exchange-file identifiers and scan accounts unchanged | All |
 | v0.10.0 | Repository organised by pillar: `vulnops` (common contract), `via`, `detect`, `verdict`, each with its own command; no functional change | All |
-| v0.11.3 | Reporting dataset for the client portal (`reporting.json`); analysts choose which alerts are sent (`A2VM_SEND_ONLY`), alert number and id in the analysts' mail, journal of the alerts and trace of the mails sent; mail test job; validate checks the include ref against `A2VM_REF`; a watch source is in error only after several failed runs in a row; CISA advisories read as CSAF; the watch reads the daily inventory from the runner cache; external detection read with a project access token (GitLab CE) | 1, 3, 4 |
+| v0.11.3 | Reporting dataset for the client portal (`reporting.json`); analysts choose which alerts are sent (`A2VM_SEND_ONLY`), alert number and id in the analysts' mail, journal of the alerts and trace of the mails sent; mail test job; validate checks the include ref against `A2VM_REF`; a watch source is in error only after several failed runs in a row; CISA advisories read as CSAF; the watch reads the daily inventory from the runner cache; external detection read with a project access token (GitLab CE) | 1, 3 |
 | v0.11.4 | Exposure gaps listed in the report and the reporting dataset; alert sheet as a Word file from a template per client (tags), sent to the client as Word or as a PDF made from it; analysts edit a sheet (text or Word) in the client project before sending | 1, 3 |
-| v0.11.5 (current) | Restitution (D14): reporting database (PostgreSQL) filled by a `publish` job from each run's dataset, with history and a reading role per tenant; Grafana dashboard; portal deployed as code (Terraform, cloud-init); D3: in production GitLab holds and deploys code and configuration only | 3, 4 |
+| v0.11.5 | Restitution (D14): reporting database (PostgreSQL) filled by a `publish` job from each run's dataset, with history and a reading role per tenant; Grafana dashboard; portal deployed as code (Terraform, cloud-init); D3: in production GitLab holds and deploys code and configuration only | 3 |
+| v0.11.6 (current) | Restitution moved to pillar 3 (`verdict publish`, `verdict db`, `verdict grafana`; package `dispatch` removed, the name kept for pillar 4); Grafana dashboards "which assets to fix first" and "which CVEs to fix first": filters, a snapshot compared with an earlier one, decision × severity matrix with KEV; each decision carries its CVSS rating, fix availability, product type and detection sources (database schema version 2); reporting connection as a maskable URI; LLDs of pillars 1 and 2 | 1, 2, 3 |
 | Next (to confirm) | Client portal VM (Grafana) in service; history database and finding lifecycle; pillar 1 as a service on the container runtime | 1, 3, 4 |
 | Then (to confirm) | Dispatch & Capitalization; Emergency Actions | 4, 5 |
 
@@ -398,6 +402,8 @@ Open points of a single pillar are in its chapter.
 | TLP | Traffic Light Protocol — sharing restrictions (RED, AMBER, GREEN, CLEAR) |
 | DICT | Availability, Integrity, Confidentiality, Traceability |
 | `published` | Tenant-project section mapping public endpoints to internal assets |
+| Snapshot | The state shown by the dashboards for a day: for each client chosen, its latest run on or before that day; two snapshots are compared to show the change |
+| Exposure (dashboards) | One CVE on one asset, i.e. one finding; the per-asset dashboard counts exposures, the per-CVE dashboard distinct CVEs |
 | Exposure | SSVC System Exposure of an asset: open (reachable from the internet, "publicly exposed" for BOD 26-04), controlled, small; recorded with its source (declared, rule, scanner, external scan, assumed) |
 | BOD 26-04 | CISA directive whose SSVC table gives remediation timelines (3, 14 or 60 days, or at the next upgrade) from KEV listing, public exposure, automatability and technical impact |
 | Finding | One asset affected by one CVE, merged across the sources that saw it |

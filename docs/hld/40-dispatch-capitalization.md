@@ -7,16 +7,16 @@ pillar 4.
 | Item | Value |
 | --- | --- |
 | Package and command | — |
-| Status | In development: the reporting database (v0.11.5) |
+| Status | Not started |
 | LLD | — |
 
 ## 1. Responsibility
 
 | Pillar 4 does | Pillar 4 does not |
 | --- | --- |
-| Turn decisions into actions for the teams that remediate: patches, mitigations, workarounds, tickets | Change a decision or the asset context (pillar 3) |
+| Dispatch the decisions to the clients and the teams that remediate, as actions: patches, mitigations, workarounds, tickets, notifications | Change a decision or the asset context (pillar 3) |
 | Follow each finding to verified closure | Close a finding without a new observation confirming the absence |
-| Capitalise: finding history, lessons, indicators | |
+| Capitalise: finding history, lessons, indicators | Restitute the decisions: the reporting database and its dashboards belong to pillar 3 (`verdict.restitution`, since v0.11.6) |
 
 ## 2. Inputs and outputs
 
@@ -51,5 +51,5 @@ verified closure.
 
 | Item | Content |
 | --- | --- |
-| Status | In place: the reporting database (package `dispatch`, v0.11.5): every run's reporting dataset kept in PostgreSQL with a reading role per tenant, read by the Grafana dashboard (`docs/reporting.md`). Not started: ticketing, finding lifecycle |
-| Open points | Ticketing integration; Qlik Sense connection (interface specifications pending); indicators beyond the dashboard |
+| Status | Not started. v0.11.5 had put the reporting database in a package named `dispatch`; v0.11.6 moved it to pillar 3, which restitutes its own decisions, and removed the package: the name stays for this pillar |
+| Open points | Dispatch channels per client (ticketing tool, mail, API); finding lifecycle with the history database; indicators of remediation (time to fix, reopened findings) |

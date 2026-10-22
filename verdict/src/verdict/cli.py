@@ -3,6 +3,9 @@
 
 verdict assets build …   consolidate the detection files of each client into its asset inventory
 verdict run …            decide on the findings of each client, from the records and the asset inventory
+verdict publish …        load reporting datasets into the reporting database (restitution)
+verdict db …             administer the reporting database: `verdict db -h`
+verdict grafana …        Grafana dashboards reading the reporting database: `verdict grafana -h`
 """
 
 from __future__ import annotations
@@ -20,6 +23,8 @@ from .assets.gaps import read_gaps
 from .report import write_all
 from .triage import Triage
 
+RESTITUTION = {"publish", "db", "grafana"}
+
 
 def main(argv: list[str] | None = None) -> int:
     args_in = list(sys.argv[1:] if argv is None else argv)
@@ -27,11 +32,21 @@ def main(argv: list[str] | None = None) -> int:
         from .assets.cli import main as assets_main
 
         return assets_main(args_in[1:])
+    if args_in[:1] and args_in[0] in RESTITUTION:
+        from .restitution.cli import main as restitution_main
+
+        return restitution_main(args_in)
     parser = argparse.ArgumentParser(
         prog="verdict", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("assets", help="asset inventory: `verdict assets build -h`", add_help=False)
+    for name, text in (
+        ("publish", "load reporting datasets into the reporting database"),
+        ("db", "administer the reporting database"),
+        ("grafana", "Grafana dashboards"),
+    ):
+        sub.add_parser(name, help=f"{text}: `verdict {name} -h`", add_help=False)  # fmt: skip
     r = sub.add_parser("run", help="triage the findings of one or more clients")
     r.add_argument("profiles", nargs="+", help="client profile YAML files")
     r.add_argument("--settings", default="config/settings.yaml")

@@ -1,0 +1,1117 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_A2VM",
+      "label": "A2VM reporting database",
+      "description": "PostgreSQL data source of the reporting database",
+      "type": "datasource",
+      "pluginId": "grafana-postgresql-datasource",
+      "pluginName": "PostgreSQL"
+    }
+  ],
+  "__requires": [
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "11.0.0"
+    },
+    {
+      "type": "datasource",
+      "id": "grafana-postgresql-datasource",
+      "name": "PostgreSQL",
+      "version": "1.0.0"
+    },
+    {
+      "type": "panel",
+      "id": "text",
+      "name": "text",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "stat",
+      "name": "stat",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "table",
+      "name": "table",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "timeseries",
+      "name": "timeseries",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "barchart",
+      "name": "barchart",
+      "version": ""
+    }
+  ],
+  "title": "A2VM — which CVEs to fix first",
+  "uid": "a2vm-cves",
+  "tags": [
+    "a2vm"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "graphTooltip": 1,
+  "time": {
+    "from": "now-90d",
+    "to": "now"
+  },
+  "refresh": "",
+  "links": [
+    {
+      "type": "dashboards",
+      "tags": [
+        "a2vm"
+      ],
+      "asDropdown": false,
+      "includeVars": true,
+      "keepTime": true,
+      "title": "A2VM"
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "tenant",
+        "label": "Client",
+        "description": "",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "${DS_A2VM}"
+        },
+        "query": "SELECT tenant AS __value, tenant_name AS __text FROM a2vm.latest_runs ORDER BY tenant_name",
+        "definition": "SELECT tenant AS __value, tenant_name AS __text FROM a2vm.latest_runs ORDER BY tenant_name",
+        "refresh": 1,
+        "sort": 0,
+        "multi": true,
+        "includeAll": true,
+        "current": {}
+      },
+      {
+        "name": "snapshot",
+        "label": "Snapshot",
+        "description": "Each client's latest run on or before this day",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "${DS_A2VM}"
+        },
+        "query": "SELECT to_char(d, 'DD Mon YYYY') || ' · W' || to_char(d, 'IW') AS __text, d::text AS __value FROM (SELECT DISTINCT generated_at::date AS d FROM a2vm.runs WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[])) s ORDER BY d DESC",
+        "definition": "SELECT to_char(d, 'DD Mon YYYY') || ' · W' || to_char(d, 'IW') AS __text, d::text AS __value FROM (SELECT DISTINCT generated_at::date AS d FROM a2vm.runs WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[])) s ORDER BY d DESC",
+        "refresh": 1,
+        "sort": 0,
+        "multi": false,
+        "includeAll": false,
+        "current": {}
+      },
+      {
+        "name": "compare",
+        "label": "Compared with",
+        "description": "Earlier snapshot the counters are compared with",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "${DS_A2VM}"
+        },
+        "query": "SELECT __text, __value FROM (SELECT to_char(d, 'DD Mon YYYY') || ' · W' || to_char(d, 'IW') AS __text, d::text AS __value FROM (SELECT DISTINCT generated_at::date AS d FROM a2vm.runs WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[])) s WHERE d < '${snapshot}'::date UNION ALL SELECT 'none', '') v ORDER BY __value = '', __value DESC",
+        "definition": "SELECT __text, __value FROM (SELECT to_char(d, 'DD Mon YYYY') || ' · W' || to_char(d, 'IW') AS __text, d::text AS __value FROM (SELECT DISTINCT generated_at::date AS d FROM a2vm.runs WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[])) s WHERE d < '${snapshot}'::date UNION ALL SELECT 'none', '') v ORDER BY __value = '', __value DESC",
+        "refresh": 1,
+        "sort": 0,
+        "multi": false,
+        "includeAll": false,
+        "current": {}
+      },
+      {
+        "name": "scanner",
+        "label": "Scanner",
+        "description": "Detection sources that observed the finding",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "${DS_A2VM}"
+        },
+        "query": "SELECT DISTINCT unnest(sources) FROM a2vm.decision_facts WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) ORDER BY 1",
+        "definition": "SELECT DISTINCT unnest(sources) FROM a2vm.decision_facts WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) ORDER BY 1",
+        "refresh": 1,
+        "sort": 0,
+        "multi": true,
+        "includeAll": true,
+        "current": {}
+      },
+      {
+        "name": "kev",
+        "label": "Known exploited (KEV)",
+        "description": "",
+        "type": "custom",
+        "query": "Yes,No",
+        "multi": true,
+        "includeAll": true,
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": []
+      },
+      {
+        "name": "decision",
+        "label": "SSVC decision",
+        "description": "",
+        "type": "custom",
+        "query": "ACT,ATTEND,TRACK",
+        "multi": true,
+        "includeAll": true,
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": []
+      },
+      {
+        "name": "severity",
+        "label": "Severity (CVSS)",
+        "description": "",
+        "type": "custom",
+        "query": "Critical,High,Medium,Low,Unknown",
+        "multi": true,
+        "includeAll": true,
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": []
+      },
+      {
+        "name": "epss",
+        "label": "EPSS band",
+        "description": "",
+        "type": "custom",
+        "query": "EPSS >= 50%,EPSS 10-50%,EPSS < 10%,N/A",
+        "multi": true,
+        "includeAll": true,
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": []
+      },
+      {
+        "name": "ptype",
+        "label": "Product type",
+        "description": "CPE part of the vulnerable product: application, os, hardware",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "${DS_A2VM}"
+        },
+        "query": "SELECT DISTINCT product_type FROM a2vm.decision_facts WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) ORDER BY 1",
+        "definition": "SELECT DISTINCT product_type FROM a2vm.decision_facts WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) ORDER BY 1",
+        "refresh": 1,
+        "sort": 0,
+        "multi": true,
+        "includeAll": true,
+        "current": {}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "text",
+      "title": "",
+      "transparent": true,
+      "options": {
+        "mode": "markdown",
+        "content": "## Threats: which CVEs to fix first?\nSnapshot **${snapshot:text}**, compared with **${compare:text}** — clients: ${tenant:text}. Counted in **distinct CVEs**; a CVE takes the most urgent decision among its findings."
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 3
+      },
+      "id": 1
+    },
+    {
+      "type": "stat",
+      "title": "Distinct CVEs",
+      "description": "Distinct vulnerabilities of the snapshot. Arrow: change since the compared snapshot.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_A2VM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "WITH snap (ord, snap_day) AS (VALUES (1, NULLIF('${compare}', '')::date), (2, '${snapshot}'::date)),\nf AS (SELECT s.ord, s.snap_day, x.* FROM snap s\n  CROSS JOIN LATERAL a2vm.snapshot_runs(ARRAY[${tenant:sqlstring}]::text[], s.snap_day) r\n  JOIN a2vm.decision_facts x ON x.run_id = r.run_id\n  WHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label IN (${kev:sqlstring}) AND x.severity IN (${severity:sqlstring}) AND x.epss_band IN (${epss:sqlstring}) AND x.product_type IN (${ptype:sqlstring}))\n,\nc0 AS (SELECT f.ord, f.cve, min(f.level_rank) AS rank, bool_or(f.kev) AS kev, max(f.epss) AS epss,\n  max(f.cvss_score) AS cvss, min(f.severity_rank) AS sev_rank, bool_or(f.fix_available) AS fix,\n  count(DISTINCT f.asset) AS assets, count(*) AS exposures, min(f.title) AS title,\n  string_agg(DISTINCT nullif(concat_ws(' ', f.vendor, f.product), ''), ', ') AS products\n  FROM f GROUP BY f.ord, f.cve),\nc AS (SELECT c0.*, (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] AS level,\n  (ARRAY['Critical', 'High', 'Medium', 'Low', 'Unknown'])[c0.sev_rank] AS severity\n  FROM c0 WHERE (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] IN (${decision:sqlstring}))\nSELECT s.snap_day::timestamptz AS time, count(c.cve) AS value\nFROM snap s LEFT JOIN c ON c.ord = s.ord\nWHERE s.snap_day IS NOT NULL GROUP BY s.ord, s.snap_day ORDER BY s.ord"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "none",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "showPercentChange": true,
+        "percentChangeColorMode": "inverted"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 3,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_A2VM}"
+      },
+      "id": 2
+    },
+    {
+      "type": "stat",
+      "title": "KEV CVEs",
+      "description": "CVEs listed in CISA KEV. Arrow: change since the compared snapshot.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_A2VM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "WITH snap (ord, snap_day) AS (VALUES (1, NULLIF('${compare}', '')::date), (2, '${snapshot}'::date)),\nf AS (SELECT s.ord, s.snap_day, x.* FROM snap s\n  CROSS JOIN LATERAL a2vm.snapshot_runs(ARRAY[${tenant:sqlstring}]::text[], s.snap_day) r\n  JOIN a2vm.decision_facts x ON x.run_id = r.run_id\n  WHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label IN (${kev:sqlstring}) AND x.severity IN (${severity:sqlstring}) AND x.epss_band IN (${epss:sqlstring}) AND x.product_type IN (${ptype:sqlstring}))\n,\nc0 AS (SELECT f.ord, f.cve, min(f.level_rank) AS rank, bool_or(f.kev) AS kev, max(f.epss) AS epss,\n  max(f.cvss_score) AS cvss, min(f.severity_rank) AS sev_rank, bool_or(f.fix_available) AS fix,\n  count(DISTINCT f.asset) AS assets, count(*) AS exposures, min(f.title) AS title,\n  string_agg(DISTINCT nullif(concat_ws(' ', f.vendor, f.product), ''), ', ') AS products\n  FROM f GROUP BY f.ord, f.cve),\nc AS (SELECT c0.*, (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] AS level,\n  (ARRAY['Critical', 'High', 'Medium', 'Low', 'Unknown'])[c0.sev_rank] AS severity\n  FROM c0 WHERE (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] IN (${decision:sqlstring}))\nSELECT s.snap_day::timestamptz AS time, count(c.cve) FILTER (WHERE c.kev) AS value\nFROM snap s LEFT JOIN c ON c.ord = s.ord\nWHERE s.snap_day IS NOT NULL GROUP BY s.ord, s.snap_day ORDER BY s.ord"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "none",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "showPercentChange": true,
+        "percentChangeColorMode": "inverted"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 4,
+        "y": 3,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_A2VM}"
+      },
+      "id": 3
+    },
+    {
+      "type": "stat",
+      "title": "KEV exposures",
+      "description": "Findings (asset × CVE) of the KEV CVEs. Arrow: change since the compared snapshot.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_A2VM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "WITH snap (ord, snap_day) AS (VALUES (1, NULLIF('${compare}', '')::date), (2, '${snapshot}'::date)),\nf AS (SELECT s.ord, s.snap_day, x.* FROM snap s\n  CROSS JOIN LATERAL a2vm.snapshot_runs(ARRAY[${tenant:sqlstring}]::text[], s.snap_day) r\n  JOIN a2vm.decision_facts x ON x.run_id = r.run_id\n  WHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label IN (${kev:sqlstring}) AND x.severity IN (${severity:sqlstring}) AND x.epss_band IN (${epss:sqlstring}) AND x.product_type IN (${ptype:sqlstring}))\n,\nc0 AS (SELECT f.ord, f.cve, min(f.level_rank) AS rank, bool_or(f.kev) AS kev, max(f.epss) AS epss,\n  max(f.cvss_score) AS cvss, min(f.severity_rank) AS sev_rank, bool_or(f.fix_available) AS fix,\n  count(DISTINCT f.asset) AS assets, count(*) AS exposures, min(f.title) AS title,\n  string_agg(DISTINCT nullif(concat_ws(' ', f.vendor, f.product), ''), ', ') AS products\n  FROM f GROUP BY f.ord, f.cve),\nc AS (SELECT c0.*, (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] AS level,\n  (ARRAY['Critical', 'High', 'Medium', 'Low', 'Unknown'])[c0.sev_rank] AS severity\n  FROM c0 WHERE (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] IN (${decision:sqlstring}))\nSELECT s.snap_day::timestamptz AS time, coalesce(sum(c.exposures) FILTER (WHERE c.kev), 0) AS value\nFROM snap s LEFT JOIN c ON c.ord = s.ord\nWHERE s.snap_day IS NOT NULL GROUP BY s.ord, s.snap_day ORDER BY s.ord"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "none",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "showPercentChange": true,
+        "percentChangeColorMode": "inverted"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 3,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_A2VM}"
+      },
+      "id": 4
+    },
+    {
+      "type": "stat",
+      "title": "CVEs decided ACT",
+      "description": "CVEs to fix now somewhere. Arrow: change since the compared snapshot.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_A2VM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "WITH snap (ord, snap_day) AS (VALUES (1, NULLIF('${compare}', '')::date), (2, '${snapshot}'::date)),\nf AS (SELECT s.ord, s.snap_day, x.* FROM snap s\n  CROSS JOIN LATERAL a2vm.snapshot_runs(ARRAY[${tenant:sqlstring}]::text[], s.snap_day) r\n  JOIN a2vm.decision_facts x ON x.run_id = r.run_id\n  WHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label IN (${kev:sqlstring}) AND x.severity IN (${severity:sqlstring}) AND x.epss_band IN (${epss:sqlstring}) AND x.product_type IN (${ptype:sqlstring}))\n,\nc0 AS (SELECT f.ord, f.cve, min(f.level_rank) AS rank, bool_or(f.kev) AS kev, max(f.epss) AS epss,\n  max(f.cvss_score) AS cvss, min(f.severity_rank) AS sev_rank, bool_or(f.fix_available) AS fix,\n  count(DISTINCT f.asset) AS assets, count(*) AS exposures, min(f.title) AS title,\n  string_agg(DISTINCT nullif(concat_ws(' ', f.vendor, f.product), ''), ', ') AS products\n  FROM f GROUP BY f.ord, f.cve),\nc AS (SELECT c0.*, (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] AS level,\n  (ARRAY['Critical', 'High', 'Medium', 'Low', 'Unknown'])[c0.sev_rank] AS severity\n  FROM c0 WHERE (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] IN (${decision:sqlstring}))\nSELECT s.snap_day::timestamptz AS time, count(c.cve) FILTER (WHERE c.level = 'ACT') AS value\nFROM snap s LEFT JOIN c ON c.ord = s.ord\nWHERE s.snap_day IS NOT NULL GROUP BY s.ord, s.snap_day ORDER BY s.ord"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "none",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "showPercentChange": true,
+        "percentChangeColorMode": "inverted"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 3,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_A2VM}"
+      },
+      "id": 5
+    },
+    {
+      "type": "stat",
+      "title": "Fix available",
+      "description": "Share of CVEs for which a fixed version or a patch is known. Arrow: change since the compared snapshot.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_A2VM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "WITH snap (ord, snap_day) AS (VALUES (1, NULLIF('${compare}', '')::date), (2, '${snapshot}'::date)),\nf AS (SELECT s.ord, s.snap_day, x.* FROM snap s\n  CROSS JOIN LATERAL a2vm.snapshot_runs(ARRAY[${tenant:sqlstring}]::text[], s.snap_day) r\n  JOIN a2vm.decision_facts x ON x.run_id = r.run_id\n  WHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label IN (${kev:sqlstring}) AND x.severity IN (${severity:sqlstring}) AND x.epss_band IN (${epss:sqlstring}) AND x.product_type IN (${ptype:sqlstring}))\n,\nc0 AS (SELECT f.ord, f.cve, min(f.level_rank) AS rank, bool_or(f.kev) AS kev, max(f.epss) AS epss,\n  max(f.cvss_score) AS cvss, min(f.severity_rank) AS sev_rank, bool_or(f.fix_available) AS fix,\n  count(DISTINCT f.asset) AS assets, count(*) AS exposures, min(f.title) AS title,\n  string_agg(DISTINCT nullif(concat_ws(' ', f.vendor, f.product), ''), ', ') AS products\n  FROM f GROUP BY f.ord, f.cve),\nc AS (SELECT c0.*, (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] AS level,\n  (ARRAY['Critical', 'High', 'Medium', 'Low', 'Unknown'])[c0.sev_rank] AS severity\n  FROM c0 WHERE (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] IN (${decision:sqlstring}))\nSELECT s.snap_day::timestamptz AS time, round(100.0 * count(c.cve) FILTER (WHERE c.fix) / NULLIF(count(c.cve), 0), 1) AS value\nFROM snap s LEFT JOIN c ON c.ord = s.ord\nWHERE s.snap_day IS NOT NULL GROUP BY s.ord, s.snap_day ORDER BY s.ord"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "none",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "showPercentChange": true,
+        "percentChangeColorMode": "standard"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 3,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_A2VM}"
+      },
+      "id": 6
+    },
+    {
+      "type": "stat",
+      "title": "EPSS ≥ 10 %",
+      "description": "CVEs with an exploitation probability of 10 % or more (EPSS, 30 days). Arrow: change since the compared snapshot.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_A2VM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "WITH snap (ord, snap_day) AS (VALUES (1, NULLIF('${compare}', '')::date), (2, '${snapshot}'::date)),\nf AS (SELECT s.ord, s.snap_day, x.* FROM snap s\n  CROSS JOIN LATERAL a2vm.snapshot_runs(ARRAY[${tenant:sqlstring}]::text[], s.snap_day) r\n  JOIN a2vm.decision_facts x ON x.run_id = r.run_id\n  WHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label IN (${kev:sqlstring}) AND x.severity IN (${severity:sqlstring}) AND x.epss_band IN (${epss:sqlstring}) AND x.product_type IN (${ptype:sqlstring}))\n,\nc0 AS (SELECT f.ord, f.cve, min(f.level_rank) AS rank, bool_or(f.kev) AS kev, max(f.epss) AS epss,\n  max(f.cvss_score) AS cvss, min(f.severity_rank) AS sev_rank, bool_or(f.fix_available) AS fix,\n  count(DISTINCT f.asset) AS assets, count(*) AS exposures, min(f.title) AS title,\n  string_agg(DISTINCT nullif(concat_ws(' ', f.vendor, f.product), ''), ', ') AS products\n  FROM f GROUP BY f.ord, f.cve),\nc AS (SELECT c0.*, (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] AS level,\n  (ARRAY['Critical', 'High', 'Medium', 'Low', 'Unknown'])[c0.sev_rank] AS severity\n  FROM c0 WHERE (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] IN (${decision:sqlstring}))\nSELECT s.snap_day::timestamptz AS time, count(c.cve) FILTER (WHERE c.epss >= 0.1) AS value\nFROM snap s LEFT JOIN c ON c.ord = s.ord\nWHERE s.snap_day IS NOT NULL GROUP BY s.ord, s.snap_day ORDER BY s.ord"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "none",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "showPercentChange": true,
+        "percentChangeColorMode": "inverted"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 20,
+        "y": 3,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_A2VM}"
+      },
+      "id": 7
+    },
+    {
+      "type": "table",
+      "title": "SSVC decision × severity — CVEs",
+      "description": "Distinct CVEs of the snapshot per decision (most urgent finding) and CVSS rating.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_A2VM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "WITH snap (ord, snap_day) AS (VALUES (2, '${snapshot}'::date)),\nf AS (SELECT s.ord, s.snap_day, x.* FROM snap s\n  CROSS JOIN LATERAL a2vm.snapshot_runs(ARRAY[${tenant:sqlstring}]::text[], s.snap_day) r\n  JOIN a2vm.decision_facts x ON x.run_id = r.run_id\n  WHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label IN (${kev:sqlstring}) AND x.severity IN (${severity:sqlstring}) AND x.epss_band IN (${epss:sqlstring}) AND x.product_type IN (${ptype:sqlstring}))\n,\nc0 AS (SELECT f.ord, f.cve, min(f.level_rank) AS rank, bool_or(f.kev) AS kev, max(f.epss) AS epss,\n  max(f.cvss_score) AS cvss, min(f.severity_rank) AS sev_rank, bool_or(f.fix_available) AS fix,\n  count(DISTINCT f.asset) AS assets, count(*) AS exposures, min(f.title) AS title,\n  string_agg(DISTINCT nullif(concat_ws(' ', f.vendor, f.product), ''), ', ') AS products\n  FROM f GROUP BY f.ord, f.cve),\nc AS (SELECT c0.*, (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] AS level,\n  (ARRAY['Critical', 'High', 'Medium', 'Low', 'Unknown'])[c0.sev_rank] AS severity\n  FROM c0 WHERE (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] IN (${decision:sqlstring}))\nSELECT l.level AS \"SSVC decision\",\n  count(c.cve) FILTER (WHERE c.severity = 'Critical') AS \"Critical\",\n  count(c.cve) FILTER (WHERE c.severity = 'High') AS \"High\",\n  count(c.cve) FILTER (WHERE c.severity = 'Medium') AS \"Medium\",\n  count(c.cve) FILTER (WHERE c.severity = 'Low') AS \"Low\",\n  count(c.cve) FILTER (WHERE c.severity = 'Unknown') AS \"Unknown\"\nFROM (VALUES ('ACT', 1), ('ATTEND', 2), ('TRACK', 3)) l (level, o)\nLEFT JOIN c ON c.level = l.level AND c.ord = 2\nWHERE l.level IN (${decision:sqlstring})\nGROUP BY l.level, l.o ORDER BY l.o"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "lg",
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "center",
+            "cellOptions": {
+              "type": "color-background",
+              "mode": "basic"
+            }
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              },
+              {
+                "color": "#F6DDE2",
+                "value": 1
+              },
+              {
+                "color": "#E8A6B3",
+                "value": 10
+              },
+              {
+                "color": "#C9566E",
+                "value": 100
+              },
+              {
+                "color": "#A12843",
+                "value": 1000
+              },
+              {
+                "color": "#6E1428",
+                "value": 10000
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "SSVC decision"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "auto"
+                }
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.width",
+                "value": 130
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 7,
+        "w": 12,
+        "h": 6
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_A2VM}"
+      },
+      "id": 8
+    },
+    {
+      "type": "table",
+      "title": "… of which known exploited (KEV)",
+      "description": "The same CVEs, limited to those listed in CISA KEV.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_A2VM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "WITH snap (ord, snap_day) AS (VALUES (2, '${snapshot}'::date)),\nf AS (SELECT s.ord, s.snap_day, x.* FROM snap s\n  CROSS JOIN LATERAL a2vm.snapshot_runs(ARRAY[${tenant:sqlstring}]::text[], s.snap_day) r\n  JOIN a2vm.decision_facts x ON x.run_id = r.run_id\n  WHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label IN (${kev:sqlstring}) AND x.severity IN (${severity:sqlstring}) AND x.epss_band IN (${epss:sqlstring}) AND x.product_type IN (${ptype:sqlstring}))\n,\nc0 AS (SELECT f.ord, f.cve, min(f.level_rank) AS rank, bool_or(f.kev) AS kev, max(f.epss) AS epss,\n  max(f.cvss_score) AS cvss, min(f.severity_rank) AS sev_rank, bool_or(f.fix_available) AS fix,\n  count(DISTINCT f.asset) AS assets, count(*) AS exposures, min(f.title) AS title,\n  string_agg(DISTINCT nullif(concat_ws(' ', f.vendor, f.product), ''), ', ') AS products\n  FROM f GROUP BY f.ord, f.cve),\nc AS (SELECT c0.*, (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] AS level,\n  (ARRAY['Critical', 'High', 'Medium', 'Low', 'Unknown'])[c0.sev_rank] AS severity\n  FROM c0 WHERE (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] IN (${decision:sqlstring}))\nSELECT l.level AS \"SSVC decision\",\n  count(c.cve) FILTER (WHERE c.severity = 'Critical' AND c.kev) AS \"Critical\",\n  count(c.cve) FILTER (WHERE c.severity = 'High' AND c.kev) AS \"High\",\n  count(c.cve) FILTER (WHERE c.severity = 'Medium' AND c.kev) AS \"Medium\",\n  count(c.cve) FILTER (WHERE c.severity = 'Low' AND c.kev) AS \"Low\",\n  count(c.cve) FILTER (WHERE c.severity = 'Unknown' AND c.kev) AS \"Unknown\"\nFROM (VALUES ('ACT', 1), ('ATTEND', 2), ('TRACK', 3)) l (level, o)\nLEFT JOIN c ON c.level = l.level AND c.ord = 2\nWHERE l.level IN (${decision:sqlstring})\nGROUP BY l.level, l.o ORDER BY l.o"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "lg",
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "center",
+            "cellOptions": {
+              "type": "color-background",
+              "mode": "basic"
+            }
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              },
+              {
+                "color": "#F6DDE2",
+                "value": 1
+              },
+              {
+                "color": "#E8A6B3",
+                "value": 10
+              },
+              {
+                "color": "#C9566E",
+                "value": 100
+              },
+              {
+                "color": "#A12843",
+                "value": 1000
+              },
+              {
+                "color": "#6E1428",
+                "value": 10000
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "SSVC decision"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "auto"
+                }
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.width",
+                "value": 130
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 7,
+        "w": 12,
+        "h": 6
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_A2VM}"
+      },
+      "id": 9
+    },
+    {
+      "type": "table",
+      "title": "CVEs to fix first",
+      "description": "Distinct CVEs of the snapshot, most urgent first: decision, known exploitation, EPSS, CVSS. Since: new since the compared snapshot, or the decision it had then.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_A2VM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "WITH snap (ord, snap_day) AS (VALUES (1, NULLIF('${compare}', '')::date), (2, '${snapshot}'::date)),\nf AS (SELECT s.ord, s.snap_day, x.* FROM snap s\n  CROSS JOIN LATERAL a2vm.snapshot_runs(ARRAY[${tenant:sqlstring}]::text[], s.snap_day) r\n  JOIN a2vm.decision_facts x ON x.run_id = r.run_id\n  WHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label IN (${kev:sqlstring}) AND x.severity IN (${severity:sqlstring}) AND x.epss_band IN (${epss:sqlstring}) AND x.product_type IN (${ptype:sqlstring}))\n,\nc0 AS (SELECT f.ord, f.cve, min(f.level_rank) AS rank, bool_or(f.kev) AS kev, max(f.epss) AS epss,\n  max(f.cvss_score) AS cvss, min(f.severity_rank) AS sev_rank, bool_or(f.fix_available) AS fix,\n  count(DISTINCT f.asset) AS assets, count(*) AS exposures, min(f.title) AS title,\n  string_agg(DISTINCT nullif(concat_ws(' ', f.vendor, f.product), ''), ', ') AS products\n  FROM f GROUP BY f.ord, f.cve),\nc AS (SELECT c0.*, (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] AS level,\n  (ARRAY['Critical', 'High', 'Medium', 'Low', 'Unknown'])[c0.sev_rank] AS severity\n  FROM c0 WHERE (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] IN (${decision:sqlstring}))\nSELECT cur.cve AS \"CVE\", cur.level AS \"Decision\", cur.severity AS \"Severity\",\n  round(cur.cvss::numeric, 1) AS \"CVSS\", round(cur.epss::numeric, 3) AS \"EPSS\",\n  CASE WHEN cur.kev THEN 'yes' ELSE '' END AS \"KEV\", CASE WHEN cur.fix THEN 'yes' ELSE '' END AS \"Fix\",\n  cur.assets AS \"Assets\", cur.exposures AS \"Exposures\",\n  CASE WHEN NULLIF('${compare}', '') IS NULL THEN NULL WHEN prev.cve IS NULL THEN 'new' WHEN prev.level <> cur.level THEN 'was ' || prev.level ELSE '' END AS \"Since\",\n  cur.products AS \"Product\", cur.title AS \"Vulnerability\"\nFROM c cur LEFT JOIN c prev ON prev.cve = cur.cve AND prev.ord = 1\nWHERE cur.ord = 2\nORDER BY cur.rank, cur.kev DESC, cur.epss DESC NULLS LAST, cur.cvss DESC NULLS LAST,\n  cur.assets DESC, cur.cve\nLIMIT 500"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Decision"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "ACT": {
+                        "color": "red",
+                        "index": 0
+                      },
+                      "ATTEND": {
+                        "color": "orange",
+                        "index": 1
+                      },
+                      "TRACK": {
+                        "color": "blue",
+                        "index": 2
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "KEV"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "dark-red",
+                      "value": null
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "CVE"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "CVE record",
+                    "url": "https://www.cve.org/CVERecord?id=${__value.text}",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Vulnerability"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 420
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 24,
+        "h": 11
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_A2VM}"
+      },
+      "id": 10
+    },
+    {
+      "type": "timeseries",
+      "title": "Distinct CVEs per decision, day after day",
+      "description": "Each day: the CVEs of each client's latest run that day (dashboard time range).",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_A2VM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "time_series",
+          "rawSql": "SELECT day::timestamptz AS time, count(DISTINCT x.cve) FILTER (WHERE x.cve_level = 'ACT') AS \"ACT\", count(DISTINCT x.cve) FILTER (WHERE x.cve_level = 'ATTEND') AS \"ATTEND\", count(DISTINCT x.cve) FILTER (WHERE x.cve_level = 'TRACK') AS \"TRACK\"\nFROM (SELECT x.day, x.cve, (ARRAY['ACT', 'ATTEND', 'TRACK'])[min(x.level_rank)] AS cve_level\n  FROM (SELECT DISTINCT ON (tenant, generated_at::date) run_id FROM a2vm.runs\n  WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND $__timeFilter(generated_at)\n  ORDER BY tenant, generated_at::date, generated_at DESC) r\n  JOIN a2vm.decision_facts x ON x.run_id = r.run_id\n  WHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label IN (${kev:sqlstring}) AND x.severity IN (${severity:sqlstring}) AND x.epss_band IN (${epss:sqlstring}) AND x.product_type IN (${ptype:sqlstring}) GROUP BY x.day, x.cve) x\nWHERE x.cve_level IN (${decision:sqlstring})\nGROUP BY day ORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "always"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ACT"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ATTEND"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "TRACK"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "blue"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_A2VM}"
+      },
+      "id": 11
+    },
+    {
+      "type": "barchart",
+      "title": "Products with the most CVEs",
+      "description": "Distinct CVEs of the snapshot per vulnerable product, most urgent first.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_A2VM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "WITH snap (ord, snap_day) AS (VALUES (2, '${snapshot}'::date)),\nf AS (SELECT s.ord, s.snap_day, x.* FROM snap s\n  CROSS JOIN LATERAL a2vm.snapshot_runs(ARRAY[${tenant:sqlstring}]::text[], s.snap_day) r\n  JOIN a2vm.decision_facts x ON x.run_id = r.run_id\n  WHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label IN (${kev:sqlstring}) AND x.severity IN (${severity:sqlstring}) AND x.epss_band IN (${epss:sqlstring}) AND x.product_type IN (${ptype:sqlstring}))\n,\nc0 AS (SELECT f.ord, f.cve, min(f.level_rank) AS rank, bool_or(f.kev) AS kev, max(f.epss) AS epss,\n  max(f.cvss_score) AS cvss, min(f.severity_rank) AS sev_rank, bool_or(f.fix_available) AS fix,\n  count(DISTINCT f.asset) AS assets, count(*) AS exposures, min(f.title) AS title,\n  string_agg(DISTINCT nullif(concat_ws(' ', f.vendor, f.product), ''), ', ') AS products\n  FROM f GROUP BY f.ord, f.cve),\nc AS (SELECT c0.*, (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] AS level,\n  (ARRAY['Critical', 'High', 'Medium', 'Low', 'Unknown'])[c0.sev_rank] AS severity\n  FROM c0 WHERE (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] IN (${decision:sqlstring}))\nSELECT coalesce(c.products, 'unknown product') AS \"Product\",\ncount(*) FILTER (WHERE c.level = 'ACT') AS \"ACT\", count(*) FILTER (WHERE c.level = 'ATTEND') AS \"ATTEND\", count(*) FILTER (WHERE c.level = 'TRACK') AS \"TRACK\"\nFROM c WHERE c.ord = 2 GROUP BY 1\nORDER BY count(*) FILTER (WHERE c.level = 'ACT') DESC, count(*) DESC LIMIT 15"
+        }
+      ],
+      "options": {
+        "stacking": "normal",
+        "orientation": "horizontal",
+        "xField": "Product",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        }
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ACT"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ATTEND"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "TRACK"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "blue"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_A2VM}"
+      },
+      "id": 12
+    }
+  ]
+}

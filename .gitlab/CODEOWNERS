@@ -13,6 +13,8 @@
 /docs/hld/50-emergency-actions.md           @po-emergency
 
 # Low-level designs
+/docs/lld/vulnerability-intelligence.md     @po-intelligence
+/docs/lld/vulnerability-detection.md        @po-detection
 /docs/lld/triage-prioritization.md          @po-triage
 
 # Common contract: model, exchange-file schemas, settings, profiles, LLM client, extension points
@@ -22,6 +24,7 @@
 /via/                                       @po-intelligence
 /docs/alerts.md                             @po-intelligence
 /docs/gti.md                                @po-intelligence
+/docs/alert-word.md                         @po-intelligence
 
 # Pillar 2 — Vulnerability Detection
 /detect/                                    @po-detection
@@ -30,6 +33,8 @@
 
 # Pillar 3 — Triage & Prioritization
 /verdict/                                   @po-triage
+/docs/reporting.md                          @po-triage
+/scripts/make_grafana_dashboards.py         @po-triage
 
 # Pillar 4 — Dispatch & Capitalization
 /remediate/                                 @po-dispatch

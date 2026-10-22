@@ -88,7 +88,7 @@ write_files:
     content: |
       #!/bin/bash
       # First start of PostgreSQL only: the database and the role the A2VM jobs write with.
-      # Tables, the Grafana reader and the per-tenant roles: `dispatch db init` (A2VM).
+      # Tables, the Grafana reader and the per-tenant roles: `verdict db init` (A2VM).
       set -e
       psql -v ON_ERROR_STOP=1 -U postgres <<SQL
       CREATE DATABASE a2vm;

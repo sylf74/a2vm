@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: LicenseRef-a2vm-proprietary
-"""`dispatch`: pillar 4 commands.
+"""Restitution commands of verdict (pillar 3): the reporting database and its dashboards.
 
-  dispatch publish reporting.json …     load a run's reporting dataset into the reporting database (jobs)
-  dispatch db init --dsn …              create or update the schema (administrator, once per version)
-  dispatch db grant ROLE TENANT… --dsn …  reading role for a tool (Grafana, Qlik Sense), limited to tenants
-  dispatch grafana dashboard            print the A2VM Grafana dashboard (JSON, to import)
+  verdict publish reporting.json …          load a run's reporting dataset into the reporting database (jobs)
+  verdict db init --dsn …                   create or update the schema (administrator, once per version)
+  verdict db grant ROLE TENANT… --dsn …     reading role for a tool (Grafana, Qlik Sense), limited to tenants
+  verdict grafana dashboard NAME            print a Grafana dashboard (JSON, to import): overview, assets, cves
 
 The jobs read the connection from A2VM_REPORTING_DSN and the server's certificate from
 A2VM_REPORTING_CA. Exit codes: 0 done, 2 bad input, 3 database unreachable or refused (warning).
@@ -57,7 +57,7 @@ def cmd_db_init(args: argparse.Namespace) -> int:
 
 def cmd_db_grant(args: argparse.Namespace) -> int:
     try:
-        password = db.grant(db.dsn(args.dsn), args.role, args.tenants)
+        password = db.grant(db.dsn(args.dsn), args.role, args.tenants, rotate=args.rotate)
     except db.DatabaseError as exc:
         print(exc, file=sys.stderr)
         return 3
@@ -68,14 +68,21 @@ def cmd_db_grant(args: argparse.Namespace) -> int:
     return 0
 
 
+DASHBOARDS = ("overview", "assets", "cves")
+
+
+def dashboard(name: str) -> str:
+    return resources.files("verdict.restitution").joinpath("grafana", f"{name}.json").read_text(encoding="utf-8")
+
+
 def cmd_grafana(args: argparse.Namespace) -> int:
-    sys.stdout.write(resources.files("dispatch").joinpath("grafana", "a2vm-dashboard.json").read_text(encoding="utf-8"))
+    sys.stdout.write(dashboard(args.name))
     return 0
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="dispatch", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+        prog="verdict", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -94,10 +101,13 @@ def main(argv: list[str] | None = None) -> int:
     g.add_argument("role")
     g.add_argument("tenants", nargs="+", help="tenant ids, or * for all")
     g.add_argument("--dsn", help="administrator connection string")
+    g.add_argument("--rotate", action="store_true", help="give an existing role a new password (printed once)")
     g.set_defaults(func=cmd_db_grant)
 
     gr = sub.add_parser("grafana", help="Grafana resources")
     gr.add_argument("what", choices=["dashboard"])
+    gr.add_argument("name", nargs="?", default="overview", choices=DASHBOARDS,
+                    help="overview (default), assets (per asset), cves (per CVE)")  # fmt: skip
     gr.set_defaults(func=cmd_grafana)
 
     args = parser.parse_args(argv)
