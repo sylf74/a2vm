@@ -6,13 +6,14 @@ pillar 3.
 
 | Item | Value |
 | --- | --- |
-| Package and command | `verdict` (modules `verdict.assets` and the decision) |
-| Status | In development (v0.11.4) |
+| Package and command | `verdict` (modules `verdict.assets`, the decision, `verdict.restitution`) |
+| Status | In development (v0.11.6) |
 | LLD | [../lld/triage-prioritization.md](../lld/triage-prioritization.md) |
 
 ## 1. Responsibility
 
-Pillar 3 holds the asset context and takes the only decision of the platform.
+Pillar 3 holds the asset context, takes the only decision of the platform and restitutes it: the
+reporting database and the dashboards that read it show its decisions and nothing it did not decide.
 
 | Pillar 3 does | Pillar 3 does not |
 | --- | --- |
@@ -20,6 +21,7 @@ Pillar 3 holds the asset context and takes the only decision of the platform.
 | Reconcile declared and observed assets, internal and external | Dispatch actions or follow remediation (pillar 4) |
 | Take one SSVC decision per finding (ACT, ATTEND or TRACK) with its BOD 26-04 timeline, reasons, review flags and rationale | Let AI decide (strategy D11) |
 | Apply accepted risks | Send anything to the client without analyst validation |
+| Publish each run's decisions into the reporting database and ship the dashboards that read it (overview, per asset, per CVE) | Compute in a dashboard a rule the decision did not apply |
 
 ## 2. Inputs and outputs
 
@@ -30,14 +32,15 @@ Pillar 3 holds the asset context and takes the only decision of the platform.
 | In | Tenant context: declarations, rules, `published` mapping, policy, exceptions | Strategy §7 |
 | Out | Assets (read only for pillars 1, 4, 5) | Strategy §6 |
 | Out | Decisions; reports, `triage.json`, `triage.csv`, run page | Strategy §6 |
-| Out | Reporting dataset `reporting.json`, published into the reporting database read by the Grafana client portal (Qlik Sense planned) | Strategy §6, D14; LLD §12 |
+| Out | Reporting dataset `reporting.json`, published into the reporting database read by the Grafana client portal (Qlik Sense planned) | Strategy §6, D14; LLD §12, §13 |
 
 ## 3. Building blocks
 
 | Block | Responsibility | Reads → writes |
 | --- | --- | --- |
 | Asset context (`verdict assets build`) | Consolidates observations into one inventory per tenant and sets each attribute with its source (exposure as SSVC value, zone, mission, well-being, owner); reconciles declared and observed assets, internal and external | Detections → `assets.json`, `findings.json` |
-| Decision (`verdict run`) | One SSVC decision per finding, BOD 26-04 timeline, reasons, review flags, rationale; risk acceptance | Records, assets, findings → `triage.json`, `triage.csv`, report, run page |
+| Decision (`verdict run`) | One SSVC decision per finding, BOD 26-04 timeline, reasons, review flags, rationale; risk acceptance | Records, assets, findings → `triage.json`, `triage.csv`, report, run page, `reporting.json` |
+| Restitution (`verdict publish`, `verdict db`, `verdict grafana`) | Loads each run's reporting dataset into the reporting database (history kept, a reading role per tenant); ships the Grafana dashboards: overview of a client, which assets to fix first, which CVEs to fix first | `reporting.json` → PostgreSQL schema `a2vm`; dashboards (JSON) |
 
 ## 4. Asset context
 
@@ -64,6 +67,7 @@ client CMDB, when available, is the reference for context.
 1. Asset context consolidates the observations, pulls the external report and reconciles it through the `published` section (public endpoint → internal asset).
 2. Decision takes each finding with its asset's exposure and mission, and the CVE's exploitation, automatability and technical impact from the evidence (AI only proposes a missing value, flagged for review); the CISA Coordinator tree, the BOD 26-04 timelines and the policy then give ACT, ATTEND or TRACK with a rationale.
 3. Results are published as reports, client bulletins and dashboard data; analysts validate before delivery.
+4. Restitution loads the run's reporting dataset into the reporting database (job `publish`); the dashboards show a snapshot (each client's latest run on or before a day) compared with an earlier one, counted in exposures (asset × CVE) or in distinct CVEs.
 
 ## 6. AI use cases
 
@@ -85,7 +89,7 @@ client CMDB, when available, is the reference for context.
 
 | Item | Content |
 | --- | --- |
-| In place | v0.9.0: SSVC decision with BOD 26-04 timelines, exposure model with source and zone; v0.11.2: external detection pulled by the tenant project and joined through `published` endpoints (exposure `open`, source `external-scan`); v0.11.3: reporting dataset `reporting.json` for the client portal; v0.11.4: exposure gaps (hosts the external scan reaches that the profile does not describe) at the top of the report |
-| Planned | The client portal VM; alert on a new exposure gap |
+| In place | v0.9.0: SSVC decision with BOD 26-04 timelines, exposure model with source and zone; v0.11.2: external detection pulled by the tenant project and joined through `published` endpoints (exposure `open`, source `external-scan`); v0.11.3: reporting dataset `reporting.json` for the client portal; v0.11.4: exposure gaps (hosts the external scan reaches that the profile does not describe) at the top of the report; v0.11.5: reporting database and overview dashboard; v0.11.6: restitution in this pillar, dashboards per asset and per CVE, decisions carry CVSS rating, fix availability, product type and sources |
+| Planned | The client portal in service; alert on a new exposure gap; Qlik Sense connector once specified |
 | Risks | Incomplete asset data from clients (safe defaults when criticality or exposure is unknown); AI proposes a wrong decision point (flagged, analyst validation) |
 | Open points | Exposure gap: immediate alert through the watch (pillar 1), or a section of the daily report |

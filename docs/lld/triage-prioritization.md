@@ -2,9 +2,9 @@
 
 | Item | Value |
 | --- | --- |
-| Building block | Pillar 3 package `verdict` (command `verdict`): Decision (`verdict run`) and Asset context (`verdict.assets`, `verdict assets build`) |
-| Status | v0.11.4 as built (decision logic unchanged since v0.9.0) |
-| Place in the set | C4 level 3 of pillar 3 of the HLD ([`../hld/30-triage-prioritization.md`](../hld/30-triage-prioritization.md)); this version covers its Decision block (`verdict run`), the Asset context block (`verdict.assets`) is to be added. Goals, constraints and contracts: HLD. Servers, zones and flows: DAT |
+| Building block | Pillar 3 package `verdict` (command `verdict`): Asset context (`verdict.assets`, `verdict assets build`), Decision (`verdict run`) and Restitution (`verdict.restitution`: `verdict publish`, `verdict db`, `verdict grafana`) |
+| Status | v0.11.6 as built (decision logic unchanged since v0.9.0) |
+| Place in the set | C4 level 3 of pillar 3 of the HLD ([`../hld/30-triage-prioritization.md`](../hld/30-triage-prioritization.md)): Decision (sections 1 to 12), Restitution (section 13), Asset context (section 14). Goals, constraints and contracts: HLD. Servers, zones and flows: DAT |
 | Code | `verdict/src/verdict/`, shared model in `a2vm/src/a2vm/models.py` |
 
 This document says how verdict turns findings into decisions: its inputs and outputs, the rules
@@ -23,7 +23,8 @@ the assets stage.
 | Read the asset attributes (exposure, mission, well-being, owner) set by the assets stage | Reconcile asset observations or set attributes (assets) |
 | Apply the CISA Coordinator table, the BOD 26-04 table and the delivery policy | Match products or versions to CVEs (detect) |
 | Flag rows that rest on an assumption or an estimate for analyst review | Send anything to the client (alert, after validation) |
-| Write a rationale per decision, by template or by the local LLM | Keep a history between runs (planned with the history database, roadmap P1) |
+| Write a rationale per decision, by template or by the local LLM | Keep a history of findings between runs (planned with the history database, roadmap P1) |
+| Publish each run's reporting dataset into the reporting database and ship the dashboards that read it (section 13) | Compute in a dashboard a rule the decision did not apply |
 
 The decision is deterministic: the same records, assets, findings and settings give the same
 decisions. The LLM never decides (section 7).
@@ -90,6 +91,8 @@ Rows are sorted ACT, ATTEND, TRACK, then by decreasing EPSS, CVE id and asset.
 | `fixes` | `<package> <fixed version>` | Scanner observations |
 | `rationale`, `rationale_source` | text; `template`, `llm (<model>)` or `template (<why>)` | Section 7 |
 | `exposure`, `exposure_source`, `zone` | `open`, `controlled`, `small`; where it comes from; free label | Section 5 |
+| `product_type` (v0.11.6) | `application`, `os`, `hardware`, `""` | CPE part of the record's entries for the matched product (all entries when none names it); else `os` when the product is the asset's OS or is named "… OS", `application` for a container image |
+| `fix_available` (v0.11.6) | bool | A scanner reported a fixed version, an affected range of the record is closed by `lessThan` (not `*`), or a reference is tagged `patch` |
 
 `publicly_exposed` is kept, derived from `exposure`. `triage.csv` carries `exposure`,
 `exposure_source` and `zone`; the report's per-asset table shows them, e.g. "dmz · ouverte
@@ -364,6 +367,12 @@ keep the template and `rationale_source` says why. The run never fails because o
 | `tests/test_pipeline.py::test_reporting_dataset_follows_the_decisions` (v0.11.3) | Reporting dataset: schema, stable path, totals equal to the rows, due date and overdue count, deterministic |
 | `tests/test_external.py` (v0.11.2) | External detection rewritten for the internal client; another client id or too old refused with a warning; `published` endpoint joins its internal asset, `behind` assets set `open`, a rule zone wins over the published one, one finding per asset and CVE with both sources, unmatched host kept as its own open asset; no change without external scan; artifact download (prefix, zip-slip, URL, job token, 404, 403, no credentials) |
 
+| `tests/test_restitution.py` (v0.11.5, v0.11.6) | Connection string (key=value, URI, file; certificate as file or text; errors that never quote the string); publish twice gives one run; row-level security per tenant; snapshot function; password rotation; upgrade of a version 1 database in place; every panel and variable query of the dashboards run as a reading role on two clients and two days, counters equal to the dataset |
+| `tests/test_v0116.py` | CVSS rating, product type, fix availability |
+
+The database tests need a disposable PostgreSQL 16 or later (`A2VM_TEST_DSN`, set in the CI test
+job); they are skipped without it.
+
 `tests/test_external.py::test_exposure_gaps_reach_the_report_and_the_reporting_dataset` and
 `tests/test_pipeline.py::test_exposure_gaps_open_the_report` (v0.11.4) cover the gaps.
 
@@ -374,8 +383,8 @@ keep the template and `rationale_source` says why. The run never fails because o
 - Exposure gap: immediate alert through the watch job (proposed) or a section of the daily report
   only (DAT).
 - `behind` attribution by product identification: after the first iteration.
-- Reporting history: until the history database exists, the portal only sees the runs whose
-  artifacts GitLab still keeps (30 days); trends over longer periods come with it.
+- Reporting history: the reporting database keeps every run published since v0.11.5; the history
+  of findings (lifecycle, reopened findings) comes with the history database.
 - Whether `controlled` assets reached from a partner network should count as publicly exposed for
   BOD 26-04: no for now (only `open` counts).
 
@@ -402,11 +411,9 @@ never breaks the portal; changing this file does, and follows the rules below.
 
 - Written by `verdict run` next to the other outputs, and copied to
   `<out>/<client id>/reporting.json` (stable path).
-- The portal fetches it from the last successful daily pipeline of the tenant project, through the
-  GitLab API: `GET /projects/:id/jobs/artifacts/main/raw/output/<client id>/reporting.json?job=triage`.
-- Credentials: one GitLab access token per tenant (group or project token, scope `read_api`, role
-  Reporter, expiry date set), stored in the portal, never in the tenant project. A token reads one
-  tenant only.
+- Since v0.11.5 the `publish` job loads it into the reporting database (section 13); the tools
+  read the database, never GitLab (HLD strategy D14). The first design (v0.11.3), where the portal
+  fetched the file through the GitLab API with a token per tenant, is abandoned.
 
 ### 12.2 Content (schema `a2vm.reporting/1`)
 
@@ -416,7 +423,8 @@ never breaks the portal; changing this file does, and follows the rules below.
 | `totals` | Findings by level (ACT, ATTEND, TRACK), assets carrying at least one finding of each level, rows flagged for review, decisions resting on an assumed input, not-affected assets, errors |
 | `by_exposure`, `by_zone` | Same counts per exposure (open, controlled, small) and per zone |
 | `deadlines` | ACT and ATTEND findings by BOD 26-04 timeline; due date = first observation of the finding + the timeline's days (none for "fix on system upgrade"); counts overdue and due within 7 days of the run |
-| `decisions` | One entry per decision: finding id, asset id and name, zone, exposure and its source, CVE, short title (the record's description, 140 characters), level, SSVC outcome, BOD timeline, first observation and due date, KEV, EPSS, review flag, short rationale (400 characters) |
+| `decisions` | One entry per decision: finding id, asset id and name, zone, exposure and its source, CVE, short title (the record's description, 140 characters), level, SSVC outcome, BOD timeline, first observation and due date, KEV, EPSS, review flag, short rationale (400 characters); since v0.11.6, CVSS score and version of the metric used, severity (Critical 9.0+, High 7.0+, Medium 4.0+, Low, Unknown without a score), fix available, vendor and product matched, product type (`unknown` when not known), detection sources |
+| `exposure_gaps` (v0.11.4) | Kind, asset id and name, value declared, detail |
 | `assets` | One entry per asset: id, zone, exposure, owner, counts by level |
 
 ### 12.3 Rules
@@ -434,3 +442,138 @@ never breaks the portal; changing this file does, and follows the rules below.
 
 Schema validation of the file produced on the fixtures; counts in `totals` equal to the rows of
 `triage.json`; no field of another tenant; stable path written.
+
+## 13. Restitution: reporting database and dashboards (v0.11.5, v0.11.6)
+
+Operating guide: [`docs/reporting.md`](../reporting.md). Code: `verdict/src/verdict/restitution/`
+(`db.py`, `cli.py`, `sql/schema.sql`, `grafana/*.json`), dashboards built by
+`scripts/make_grafana_dashboards.py`. Restitution reads the reporting dataset only (section 12):
+it never reads `triage.json`, the records or the assets, and computes no rule.
+
+### 13.1 Commands
+
+```text
+verdict publish <reporting.json>... [--dsn …]       (job publish; writer role)
+verdict db init [--dsn …] [--writer a2vm_writer]   (administrator, once per schema version)
+verdict db grant ROLE TENANT... [--dsn …] [--rotate]  (administrator; TENANT * = all)
+verdict grafana dashboard [overview|assets|cves]
+```
+
+| Exit code | Meaning |
+| --- | --- |
+| 0 | Done |
+| 2 | Bad input: no connection string, invalid string, dataset unreadable or not of schema `a2vm.reporting/1` |
+| 3 | Database unreachable, refused, or at an older schema version (the job is allowed to fail with 3: a warning, the next run publishes again) |
+
+Connection: `--dsn`, else `A2VM_REPORTING_DSN`, a libpq string (`host=… user=…`), a URI
+(`postgresql://user:password@host/db`, maskable by GitLab) or the path of a file holding one. With
+`A2VM_REPORTING_CA` (the server's certificate, a File variable or the text pasted, written then to
+a private temporary file) the server is verified (`sslmode=verify-full`); without, `require`.
+An invalid string is reported without quoting it.
+
+### 13.2 Schema `a2vm` (version 2)
+
+| Object | Content |
+| --- | --- |
+| `schema_version` | Versions applied (1, 2) |
+| `runs` | One row per tenant and run (unique on tenant and generation time): totals of section 12 |
+| `decisions`, `assets`, `exposure_gaps`, `sources` | Rows of a run (`run_id`, deleted with it) |
+| `latest_runs`, `latest_decisions`, `latest_assets`, `latest_exposure_gaps` | Views: latest run of each tenant |
+| `decision_facts` | View: each decision with its run's day and the labels the dashboards filter on (`severity` with `Unknown` for runs published before version 2, `kev_label` Yes/No, `epss_band` `EPSS < 10%`, `EPSS 10-50%`, `EPSS >= 50%`, `N/A`, `product_type` with `unknown`, `sources` with `unknown`, `level_rank`, `severity_rank`) |
+| `snapshot_runs(tenants, day)` | Function: for each tenant, its latest run on or before the day; none for a NULL day |
+| `tenant_roles` | Reading role → tenants (`*` = all) |
+
+Rules:
+
+- The writer role owns every object (`db init` runs the script as the administrator with `SET
+  ROLE writer`); the jobs write with it, and it is not subject to row-level security.
+- Reading roles get `SELECT`; every table has the policy `tenant_read` (a row is visible when
+  `tenant_roles` grants its tenant, or `*`, to the current user); the views and the function run
+  with the caller's rights (`security_invoker`, SQL function), so they inherit it.
+- The script is idempotent and only adds: `db init` on a version 1 database adds the columns of
+  version 2, the view and the function, keeps the data, and re-grants every role of
+  `tenant_roles`. `publish` checks the version first and refuses an older schema (exit 3) with
+  the command to run.
+- Publishing a run deletes the run of the same tenant and generation time, then inserts it, in
+  one transaction.
+
+### 13.3 Dashboards
+
+| Dashboard (uid) | Unit | Panels |
+| --- | --- | --- |
+| Overview of a client (`a2vm-decisions`) | Findings of the latest run of one tenant | Totals per level, overdue, due within 7 days, to review, exposure gaps, last run; trend run after run; findings per exposure; exposure gaps; decisions to act on; assets; detection sources |
+| Which assets to fix first (`a2vm-assets`) | Exposure = finding (asset × CVE) | Counters (exposures, assets concerned, KEV exposures, ACT exposures, assets with ACT, overdue on the snapshot day, share with a fix, EPSS ≥ 10 %); decision × severity matrix and its KEV part; assets ranked by ACT, KEV, overdue, critical, ATTEND, with the change of ACT; exposures per decision per day; exposures per zone and exposure |
+| Which CVEs to fix first (`a2vm-cves`) | Distinct CVE; its decision is the most urgent of its findings, its KEV, EPSS, CVSS, fix the strongest among them | Counters (distinct CVEs, KEV CVEs, KEV exposures, CVEs decided ACT, share with a fix, EPSS ≥ 10 %); matrix and its KEV part; CVEs ranked by decision, KEV, EPSS, CVSS, assets, with "new" or the decision at the compared snapshot; distinct CVEs per decision per day; products with the most CVEs |
+
+Variables of the per-asset and per-CVE dashboards: `tenant` (multi), `snapshot` (days that have a
+run, latest first), `compare` (earlier days, the previous one first, or `none`), and the filters
+`scanner`, `kev`, `decision`, `severity`, `epss`, `ptype` (multi, all by default). Every query has
+the same shape: the two snapshots (`compare`, `snapshot`) → `snapshot_runs` → `decision_facts`
+filtered; a counter returns one row per snapshot, oldest first, and the stat panel shows the
+percent change between them (red when a count of problems rises, green when the share with a fix
+rises). On the per-CVE dashboard the decision filter applies to the CVE's decision, the other
+filters to its findings. The matrix colours are steps by order of magnitude (1, 10, 100, 1 000,
+10 000), the same for every column and every client size. The per-day trends take, for each
+client and day in the dashboard's time range, its latest run that day.
+
+## 14. Asset context (`verdict.assets`)
+
+Code: `verdict/src/verdict/assets/` (`build.py`, `cli.py`, `gaps.py`). Exposure precedence and the
+external scan: section 5.
+
+### 14.1 Command
+
+```text
+verdict assets build <client.yaml>... [--detect work/detect] [--out work/assets]
+```
+
+Reads every detection file of the client (`<detect>/<client>/*.json`, `a2vm.detection/1`, one per
+source: inventory, trivy, dnf-updateinfo, openvas, external-scan…), writes
+`<out>/<client>/assets.json`, `findings.json` and `exposure_gaps.json`, and prints one line per
+client (assets, sources, findings, attributes taken from a default) and one `WARN` line per
+exposure gap. Exit 2 when a profile or a detection file is unreadable, of another client, or when a
+client has no detection file. The inventory is rebuilt at each run from that run's observations;
+nothing is kept between runs yet (history database, P1).
+
+### 14.2 Reconciliation
+
+Observations are grouped with a union-find on their keys; two observations sharing one key are the
+same asset.
+
+| Observation kind | Keys |
+| --- | --- |
+| Declared (profile) | Its declared id (it may describe a product family rather than a machine) |
+| Image | The image reference |
+| Host | FQDN, short host name, each address; the source reference when none |
+| External host named by a `published` entry | The internal asset of that entry only (its public name or address never names the asset) |
+| Any observation whose name is the asset of a `published` entry | That entry's asset, in addition to its own keys |
+
+Asset id: `declared:<id>`, `image:<reference>` or `host:<first FQDN, else host name, else
+address>`; name: the declared name, else the first host name. Identifiers merged from the internal
+observations; the public names and addresses of an asset also reached from outside are kept apart
+(`public`) and never feed the rules. Operating system and description: the first observation that
+gives one.
+
+### 14.3 Attributes
+
+For `exposure`, `mission_prevalence`, `public_wellbeing_impact` and `owner`, the first source wins:
+declared on the asset, then a profile rule matching a host name, an FQDN (globs) and an address
+range (all the conditions it sets), then a source that reported it, then the client's default
+assumption, else the built-in worst case (`open`, `essential`, `minimal`, `inconnu`), flagged as
+assumed in every report. The external scan then sets `open` (source `external-scan`) on an asset
+it reached, directly or `behind` a published endpoint; it only ever raises the exposure. `zone` is
+set by a declaration, a rule, or the zone of the published entry, never by default.
+
+### 14.4 Findings
+
+Each finding of a detection file is re-keyed to its consolidated asset: one finding per asset and
+CVE (`<client>:<asset id>:<CVE>`), with the observations of every source, the versions and review
+reasons merged; `affected` wins over `under_investigation`. A finding whose asset is unknown is a
+defect of the detection file (the run fails). Declared assets found not affected are kept with
+their versions for the report.
+
+### 14.5 Tests
+
+`tests/test_detection_assets.py` (reconciliation, attribute precedence, former exposure values,
+zone and exposure source), `tests/test_external.py` (external scan, `published`, `behind`, gaps).
+
