@@ -11,10 +11,10 @@
 #
 #     include:
 #       - project: vulnops/a2vm
-#         ref: v0.11.5
+#         ref: v0.11.6
 #         file: templates/client-pipeline.yml
 #     variables:
-#       A2VM_REF: v0.11.5        # same version as the include
+#       A2VM_REF: v0.11.6        # same version as the include
 #
 # Jobs:
 #   push to the default branch     validate (profile and targets)
@@ -82,7 +82,7 @@ stages: [validate, collect, via, detect, assets, triage, publish, watch, send]
     - BASE="${A2VM_SERVER_URL:-${VULNOPS_SERVER_URL:-${CI_SERVER_PROTOCOL}://${CI_SERVER_HOST}:${CI_SERVER_PORT}}}"
     - git -c advice.detachedHead=false clone -q --depth 1 --branch "$A2VM_REF"
         "${BASE%%://*}://gitlab-ci-token:${CI_JOB_TOKEN}@${BASE#*://}/${A2VM_PROJECT}.git" .a2vm
-    - pip install --quiet .a2vm/a2vm .a2vm/via ".a2vm/detect[openvas]" .a2vm/verdict .a2vm/dispatch
+    - pip install --quiet .a2vm/a2vm .a2vm/via ".a2vm/detect[openvas]" .a2vm/verdict
     - if [ -f settings.yaml ]; then export SETTINGS=settings.yaml; else export SETTINGS=.a2vm/config/settings.yaml; fi
     - echo "A2VM $A2VM_REF ($(git -C .a2vm rev-parse --short HEAD)), client $CI_PROJECT_PATH, mode ${A2VM_JOB:-${VULNOPS_JOB:-daily}}, settings $SETTINGS"
 
@@ -197,7 +197,8 @@ triage:
     expire_in: 30 days
 
 # The run's reporting dataset into the reporting database (dashboards read it, never GitLab), when
-# the project has A2VM_REPORTING_DSN (masked) and, to verify the server, A2VM_REPORTING_CA (File).
+# the project has A2VM_REPORTING_DSN (a postgresql:// URI, masked; or a File variable) and, to verify
+# the server, A2VM_REPORTING_CA (the server's certificate, File variable or pasted text).
 # Exit code 3: database unreachable or refused (warning; the next run publishes again).
 publish:
   extends: .a2vm
@@ -210,7 +211,7 @@ publish:
   allow_failure:
     exit_codes: [3]
   script:
-    - dispatch publish output/*/reporting.json
+    - verdict publish output/*/reporting.json
 
 # -- Watch mode: schedule every 10 minutes with the variable A2VM_JOB=watch -------------------
 # The state (what was already seen) lives in the GitLab cache; without it, a run only records the

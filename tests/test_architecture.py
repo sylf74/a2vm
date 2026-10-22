@@ -15,9 +15,8 @@ PACKAGES = {
     "via": ROOT / "via/src/via",
     "detect": ROOT / "detect/src/detect",
     "verdict": ROOT / "verdict/src/verdict",
-    "dispatch": ROOT / "dispatch/src/dispatch",
 }
-PILLARS = {"via", "detect", "verdict", "dispatch"}
+PILLARS = {"via", "detect", "verdict"}
 
 
 def imported_roots(path: Path) -> set[str]:

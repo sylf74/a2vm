@@ -4,8 +4,8 @@
 Two kinds of access:
 
 - the operator (database administrator, from a workstation) creates the schema and the reading
-  roles: `dispatch db init`, `dispatch db grant`;
-- the A2VM jobs write with the writer role, which owns the tables: `dispatch publish`.
+  roles: `verdict db init`, `verdict db grant`;
+- the A2VM jobs write with the writer role, which owns the tables: `verdict publish`.
 """
 
 from __future__ import annotations
@@ -13,37 +13,61 @@ from __future__ import annotations
 import json
 import os
 import secrets
+import tempfile
 from importlib import resources
 from pathlib import Path
 from typing import Any
 
 from a2vm.config import env
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+PEM = "-----BEGIN CERTIFICATE-----"
 
 
 class DatabaseError(RuntimeError):
     """The reporting database could not be reached or refused the operation."""
 
 
+def _ca_file(ca: str) -> str:
+    """Path of the server's certificate: A2VM_REPORTING_CA is a File variable (a path), or the
+    certificate pasted into a plain variable, written here to a private file."""
+    if ca.lstrip().startswith(PEM):
+        folder = tempfile.mkdtemp(prefix="a2vm-ca-")
+        path = Path(folder) / "server.crt"
+        path.write_text(ca.strip() + "\n", encoding="utf-8")
+        return str(path)
+    if not Path(ca).is_file():
+        raise DatabaseError("A2VM_REPORTING_CA is neither a file nor a PEM certificate")
+    return ca
+
+
 def dsn(given: str | None = None, environ=None) -> str:
-    """Connection string: `given`, else A2VM_REPORTING_DSN (a libpq string or a file holding one).
-    With A2VM_REPORTING_CA (the server's certificate), the server is verified (verify-full);
-    without, the connection is encrypted (require). Never in clear text."""
+    """Connection string: `given`, else A2VM_REPORTING_DSN, a libpq string (`host=… user=…`) or a
+    URI (`postgresql://user:password@host/a2vm`, which GitLab can mask), or a file holding one.
+    With A2VM_REPORTING_CA (the server's certificate, file or text), the server is verified
+    (verify-full); without, the connection is encrypted (require). Never in clear text. Errors
+    never quote the string: it holds a password."""
+    from psycopg import conninfo
+
     environ = os.environ if environ is None else environ
-    value = given or env("REPORTING_DSN", "", environ=environ)
-    if value and Path(value).is_file():
+    value = (given or env("REPORTING_DSN", "", environ=environ)).strip()
+    if value and "=" not in value and "://" not in value and Path(value).is_file():
         value = Path(value).read_text(encoding="utf-8").strip()
     if not value:
         raise DatabaseError("no reporting database: --dsn or the CI/CD variable A2VM_REPORTING_DSN")
+    try:
+        params = conninfo.conninfo_to_dict(value)
+    except Exception:  # the message would quote the string, password included
+        raise DatabaseError(
+            "the reporting database connection string is not valid: key=value pairs "
+            "(host=… dbname=… user=… password=…) or a URI (postgresql://user:password@host/dbname)"
+        ) from None
     ca = env("REPORTING_CA", "", environ=environ)
-    if ca and "sslrootcert" not in value:
-        value += f" sslrootcert={ca}"
-        if "sslmode" not in value:
-            value += " sslmode=verify-full"
-    if "sslmode" not in value:
-        value += " sslmode=require"
-    return value
+    if ca and "sslrootcert" not in params:
+        params["sslrootcert"] = _ca_file(ca)
+        params.setdefault("sslmode", "verify-full")
+    params.setdefault("sslmode", "require")
+    return conninfo.make_conninfo(**params)
 
 
 def connect(conninfo: str):
@@ -56,7 +80,7 @@ def connect(conninfo: str):
 
 
 def _sql(name: str) -> str:
-    return resources.files("dispatch").joinpath("sql", name).read_text(encoding="utf-8")
+    return resources.files("verdict.restitution").joinpath("sql", name).read_text(encoding="utf-8")
 
 
 def init(admin_dsn: str, writer: str = "a2vm_writer") -> str:
@@ -75,9 +99,11 @@ def init(admin_dsn: str, writer: str = "a2vm_writer") -> str:
     return f"schema a2vm version {version}, owned by {writer}"
 
 
-def grant(admin_dsn: str, role: str, tenants: list[str], password: str | None = None) -> str | None:
+def grant(
+    admin_dsn: str, role: str, tenants: list[str], password: str | None = None, rotate: bool = False
+) -> str | None:
     """Create (or update) a reading role limited to `tenants` ('*' = all); returns the password
-    when one was generated, to give once to the tool that reads (Grafana, Qlik Sense)."""
+    when one was generated (new role, or `rotate`), to give once to the tool that reads."""
     import psycopg
     from psycopg import sql
 
@@ -85,11 +111,10 @@ def grant(admin_dsn: str, role: str, tenants: list[str], password: str | None = 
     with connect(admin_dsn) as conn:
         try:
             exists = conn.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (role,)).fetchone()
-            if not exists:
+            if not exists or rotate:
                 generated = password or secrets.token_urlsafe(24)
-                conn.execute(
-                    sql.SQL("CREATE ROLE {} LOGIN PASSWORD {}").format(sql.Identifier(role), sql.Literal(generated))
-                )
+                verb = "ALTER ROLE {} PASSWORD {}" if exists else "CREATE ROLE {} LOGIN PASSWORD {}"
+                conn.execute(sql.SQL(verb).format(sql.Identifier(role), sql.Literal(generated)))
             dbname = conn.info.dbname
             r = sql.Identifier(role)
             conn.execute(sql.SQL("GRANT CONNECT ON DATABASE {} TO {}").format(sql.Identifier(dbname), r))
@@ -111,6 +136,7 @@ RUN_COLUMNS = (
 DECISION_COLUMNS = (
     "finding_id", "asset", "asset_name", "zone", "exposure", "exposure_source", "cve", "title", "level", "ssvc",
     "bod_timeline", "first_seen", "due_date", "kev", "epss", "needs_review", "rationale",
+    "cvss_score", "cvss_version", "severity", "fix_available", "vendor", "product", "product_type", "sources",
 )  # fmt: skip
 
 
@@ -150,6 +176,15 @@ def publish(conninfo: str, data: dict[str, Any]) -> tuple[int, dict[str, int]]:
     tenant = row["tenant"]
     counts: dict[str, int] = {}
     with connect(conninfo) as conn:
+        try:
+            version = conn.execute("SELECT max(version) FROM a2vm.schema_version").fetchone()[0]
+        except psycopg.Error as exc:
+            raise DatabaseError(f"publish {tenant}: no A2VM schema, run `verdict db init` ({exc})".strip()) from exc
+        if (version or 0) < SCHEMA_VERSION:
+            raise DatabaseError(
+                f"publish {tenant}: the reporting database is at schema version {version}, this A2VM needs "
+                f"{SCHEMA_VERSION}: an administrator runs `verdict db init` once (docs/reporting.md)"
+            )
         try:
             with conn.transaction():
                 conn.execute(

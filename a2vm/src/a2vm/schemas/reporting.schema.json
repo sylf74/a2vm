@@ -89,7 +89,15 @@
           "kev": {"type": "boolean"},
           "epss": {"type": ["number", "null"]},
           "needs_review": {"type": "boolean"},
-          "rationale": {"type": "string"}
+          "rationale": {"type": "string"},
+          "cvss_score": {"type": ["number", "null"], "description": "Base score of the CVSS metric used (since v0.11.6)"},
+          "cvss_version": {"type": "string"},
+          "severity": {"enum": ["Critical", "High", "Medium", "Low", "Unknown"], "description": "CVSS qualitative rating; Unknown without a score"},
+          "fix_available": {"type": "boolean", "description": "A fixed version or a patch is known (scanner or CVE record)"},
+          "vendor": {"type": "string"},
+          "product": {"type": "string"},
+          "product_type": {"enum": ["application", "os", "hardware", "unknown"], "description": "CPE part of the vulnerable product"},
+          "sources": {"type": "array", "items": {"type": "string"}, "description": "Detection sources that observed the finding"}
         }
       }
     },

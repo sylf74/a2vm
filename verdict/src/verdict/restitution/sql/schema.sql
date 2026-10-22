@@ -1,0 +1,185 @@
+-- SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+-- Reporting database of A2VM (schema a2vm, version 2): the reporting datasets of every run and
+-- tenant, read by dashboarding and reporting tools. Idempotent: run again on every init; an
+-- upgrade only adds (columns, views, functions), so a database of an earlier version is kept.
+-- Objects are owned by the writer role (the A2VM jobs); readers get SELECT, limited to their
+-- tenants by row-level security (a2vm.tenant_roles).
+
+CREATE SCHEMA IF NOT EXISTS a2vm;
+
+CREATE TABLE IF NOT EXISTS a2vm.schema_version (version integer PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now());
+INSERT INTO a2vm.schema_version (version) VALUES (1), (2) ON CONFLICT DO NOTHING;
+
+-- Which tenants a reading role may see; tenant '*' = all of them (the Grafana of the MSSP).
+CREATE TABLE IF NOT EXISTS a2vm.tenant_roles (
+    role   name NOT NULL,
+    tenant text NOT NULL,
+    PRIMARY KEY (role, tenant)
+);
+
+CREATE TABLE IF NOT EXISTS a2vm.runs (
+    run_id          bigserial PRIMARY KEY,
+    tenant          text NOT NULL,
+    tenant_name     text NOT NULL,
+    generated_at    timestamptz NOT NULL,
+    published_at    timestamptz NOT NULL DEFAULT now(),
+    a2vm_version    text NOT NULL,
+    policy_hash     text NOT NULL,
+    pipeline_id     text,
+    pipeline_url    text,
+    cve_count       integer NOT NULL,
+    act             integer NOT NULL,
+    attend          integer NOT NULL,
+    track           integer NOT NULL,
+    assets_act      integer NOT NULL,
+    assets_attend   integer NOT NULL,
+    assets_track    integer NOT NULL,
+    needs_review    integer NOT NULL,
+    assumed_inputs  integer NOT NULL,
+    not_affected    integer NOT NULL,
+    errors          integer NOT NULL,
+    overdue         integer NOT NULL,
+    due_soon        integer NOT NULL,
+    exposure_gaps   integer NOT NULL,
+    UNIQUE (tenant, generated_at)
+);
+
+CREATE TABLE IF NOT EXISTS a2vm.decisions (
+    run_id          bigint NOT NULL REFERENCES a2vm.runs ON DELETE CASCADE,
+    tenant          text NOT NULL,
+    finding_id      text NOT NULL,
+    asset           text NOT NULL,
+    asset_name      text,
+    zone            text,
+    exposure        text,
+    exposure_source text,
+    cve             text NOT NULL,
+    title           text,
+    level           text NOT NULL CHECK (level IN ('ACT', 'ATTEND', 'TRACK')),
+    ssvc            text,
+    bod_timeline    text,
+    first_seen      date,
+    due_date        date,
+    kev             boolean NOT NULL,
+    epss            real,
+    needs_review    boolean NOT NULL,
+    rationale       text
+);
+CREATE INDEX IF NOT EXISTS decisions_run ON a2vm.decisions (run_id);
+-- Version 2 (v0.11.6): what the per-asset and per-CVE dashboards filter on. Empty for runs
+-- published before.
+ALTER TABLE a2vm.decisions
+    ADD COLUMN IF NOT EXISTS cvss_score    real,
+    ADD COLUMN IF NOT EXISTS cvss_version  text,
+    ADD COLUMN IF NOT EXISTS severity      text,
+    ADD COLUMN IF NOT EXISTS fix_available boolean,
+    ADD COLUMN IF NOT EXISTS vendor        text,
+    ADD COLUMN IF NOT EXISTS product       text,
+    ADD COLUMN IF NOT EXISTS product_type  text,
+    ADD COLUMN IF NOT EXISTS sources       text[];
+
+CREATE TABLE IF NOT EXISTS a2vm.assets (
+    run_id   bigint NOT NULL REFERENCES a2vm.runs ON DELETE CASCADE,
+    tenant   text NOT NULL,
+    asset    text NOT NULL,
+    name     text,
+    zone     text,
+    exposure text,
+    owner    text,
+    act      integer NOT NULL,
+    attend   integer NOT NULL,
+    track    integer NOT NULL
+);
+CREATE INDEX IF NOT EXISTS assets_run ON a2vm.assets (run_id);
+
+CREATE TABLE IF NOT EXISTS a2vm.exposure_gaps (
+    run_id   bigint NOT NULL REFERENCES a2vm.runs ON DELETE CASCADE,
+    tenant   text NOT NULL,
+    kind     text NOT NULL,
+    asset    text NOT NULL,
+    name     text,
+    declared text,
+    detail   text
+);
+
+CREATE TABLE IF NOT EXISTS a2vm.sources (
+    run_id           bigint NOT NULL REFERENCES a2vm.runs ON DELETE CASCADE,
+    tenant           text NOT NULL,
+    name             text NOT NULL,
+    findings         integer NOT NULL,
+    last_observation timestamptz
+);
+
+ALTER TABLE a2vm.tenant_roles ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS own_rows ON a2vm.tenant_roles;
+CREATE POLICY own_rows ON a2vm.tenant_roles FOR SELECT USING (role = current_user);
+
+-- The latest run of each tenant, and its rows: what most panels show.
+CREATE OR REPLACE VIEW a2vm.latest_runs AS
+    SELECT DISTINCT ON (tenant) * FROM a2vm.runs ORDER BY tenant, generated_at DESC;
+CREATE OR REPLACE VIEW a2vm.latest_decisions AS
+    SELECT d.* FROM a2vm.decisions d JOIN a2vm.latest_runs r USING (run_id);
+CREATE OR REPLACE VIEW a2vm.latest_assets AS
+    SELECT a.* FROM a2vm.assets a JOIN a2vm.latest_runs r USING (run_id);
+CREATE OR REPLACE VIEW a2vm.latest_exposure_gaps AS
+    SELECT g.* FROM a2vm.exposure_gaps g JOIN a2vm.latest_runs r USING (run_id);
+
+-- Row-level security: a reader sees the tenants a2vm.tenant_roles grants it; the owner (writer)
+-- is not subject to it. The views run with the caller's rights (security_invoker).
+ALTER VIEW a2vm.latest_runs SET (security_invoker = true);
+ALTER VIEW a2vm.latest_decisions SET (security_invoker = true);
+ALTER VIEW a2vm.latest_assets SET (security_invoker = true);
+ALTER VIEW a2vm.latest_exposure_gaps SET (security_invoker = true);
+
+-- Every decision with its run's date and the labels the dashboards filter on (version 2): the
+-- dashboards group and filter, they compute no rule of their own.
+CREATE OR REPLACE VIEW a2vm.decision_facts AS
+    SELECT d.run_id, d.tenant, r.tenant_name, r.generated_at, r.generated_at::date AS day,
+           d.finding_id, d.asset, coalesce(d.asset_name, d.asset) AS asset_name, d.zone, d.exposure,
+           d.cve, d.title, d.level,
+           CASE d.level WHEN 'ACT' THEN 1 WHEN 'ATTEND' THEN 2 ELSE 3 END AS level_rank,
+           d.ssvc, d.bod_timeline, d.first_seen, d.due_date, d.kev, d.epss, d.needs_review,
+           d.cvss_score, coalesce(d.severity, 'Unknown') AS severity,
+           CASE coalesce(d.severity, 'Unknown') WHEN 'Critical' THEN 1 WHEN 'High' THEN 2
+                WHEN 'Medium' THEN 3 WHEN 'Low' THEN 4 ELSE 5 END AS severity_rank,
+           CASE WHEN d.kev THEN 'Yes' ELSE 'No' END AS kev_label,
+           CASE WHEN d.epss IS NULL THEN 'N/A' WHEN d.epss < 0.1 THEN 'EPSS < 10%'
+                WHEN d.epss < 0.5 THEN 'EPSS 10-50%' ELSE 'EPSS >= 50%' END AS epss_band,
+           coalesce(d.fix_available, false) AS fix_available,
+           d.vendor, d.product, coalesce(nullif(d.product_type, ''), 'unknown') AS product_type,
+           coalesce(nullif(d.sources, '{}'), ARRAY['unknown']) AS sources
+    FROM a2vm.decisions d JOIN a2vm.runs r USING (run_id);
+ALTER VIEW a2vm.decision_facts SET (security_invoker = true);
+
+-- A snapshot: for each tenant asked, its latest run on or before a day. The dashboards compare
+-- two snapshots; a NULL day gives none. Runs with the caller's rights (row-level security).
+CREATE OR REPLACE FUNCTION a2vm.snapshot_runs(tenants text[], snapshot_day date)
+RETURNS TABLE (run_id bigint) LANGUAGE sql STABLE AS $$
+    SELECT DISTINCT ON (r.tenant) r.run_id
+    FROM a2vm.runs r
+    WHERE r.tenant = ANY (tenants) AND r.generated_at::date <= snapshot_day
+    ORDER BY r.tenant, r.generated_at DESC
+$$;
+
+DO $$
+DECLARE t text;
+BEGIN
+    FOREACH t IN ARRAY ARRAY['runs', 'decisions', 'assets', 'exposure_gaps', 'sources'] LOOP
+        EXECUTE format('ALTER TABLE a2vm.%I ENABLE ROW LEVEL SECURITY', t);
+        EXECUTE format('DROP POLICY IF EXISTS tenant_read ON a2vm.%I', t);
+        EXECUTE format(
+            'CREATE POLICY tenant_read ON a2vm.%I FOR SELECT USING (EXISTS ('
+            'SELECT 1 FROM a2vm.tenant_roles g WHERE g.role = current_user '
+            'AND (g.tenant = %I.tenant OR g.tenant = ''*'')))', t, t);
+    END LOOP;
+END $$;
+
+-- Reading roles granted before an upgrade read the new views too.
+DO $$
+DECLARE r name;
+BEGIN
+    FOR r IN SELECT DISTINCT g.role FROM a2vm.tenant_roles g JOIN pg_roles p ON p.rolname = g.role LOOP
+        EXECUTE format('GRANT USAGE ON SCHEMA a2vm TO %I', r);
+        EXECUTE format('GRANT SELECT ON ALL TABLES IN SCHEMA a2vm TO %I', r);
+    END LOOP;
+END $$;
