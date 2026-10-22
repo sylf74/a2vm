@@ -19,6 +19,12 @@ variable "admin_ips" {
   }
 }
 
+variable "project_id" {
+  description = "Scaleway project (Project settings > Project ID); empty: SCW_DEFAULT_PROJECT_ID."
+  type        = string
+  default     = ""
+}
+
 variable "ip_address" {
   description = "Flexible IP to reuse (kept from an earlier instance, already in the DNS); empty: a new one is created. It is never deleted by terraform destroy when given here."
   type        = string

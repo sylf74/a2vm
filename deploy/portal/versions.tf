@@ -10,8 +10,10 @@ terraform {
   # State: local by default. In GitLab CI, use the GitLab-managed state (HTTP backend), see README.md.
 }
 
-# Credentials from the environment: SCW_ACCESS_KEY, SCW_SECRET_KEY, SCW_DEFAULT_PROJECT_ID.
+# Credentials from the environment: SCW_ACCESS_KEY, SCW_SECRET_KEY. The project: var.project_id,
+# else SCW_DEFAULT_PROJECT_ID.
 provider "scaleway" {
-  zone   = var.zone
-  region = substr(var.zone, 0, length(var.zone) - 2)
+  zone       = var.zone
+  region     = substr(var.zone, 0, length(var.zone) - 2)
+  project_id = var.project_id == "" ? null : var.project_id
 }
