@@ -30,6 +30,13 @@ lint:
 
 test:
   stage: test
+  # A disposable PostgreSQL for the reporting-database tests (pillar 4).
+  services:
+    - name: docker.io/library/postgres:17
+      alias: postgres
+  variables:
+    POSTGRES_PASSWORD: test-only
+    A2VM_TEST_DSN: "host=postgres dbname=postgres user=postgres password=test-only sslmode=disable"
   script:
     - *install
     - pytest -q --junitxml=junit.xml
@@ -58,7 +65,7 @@ release:
   script:
     - |
       want="${CI_COMMIT_TAG#v}"
-      for p in a2vm via detect verdict; do
+      for p in a2vm via detect verdict dispatch; do
         got=$(sed -n 's/^version = "\(.*\)"/\1/p' $p/pyproject.toml)
         [ "$got" = "$want" ] || { echo "$p/pyproject.toml has version $got, tag says $want"; exit 1; }
       done

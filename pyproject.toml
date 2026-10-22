@@ -1,4 +1,4 @@
-# Repository-wide tooling only. a2vm/ is the common contract; each pillar is its own package: via/, detect/, verdict/.
+# Repository-wide tooling only. a2vm/ is the common contract; each pillar is its own package: via/, detect/, verdict/, dispatch/.
 # Development install: pip install -r requirements-dev.txt
 
 [tool.ruff]
@@ -9,7 +9,7 @@ target-version = "py311"
 select = ["E", "F", "I", "B", "UP", "SIM"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["a2vm", "via", "detect", "verdict"]
+known-first-party = ["a2vm", "via", "detect", "verdict", "dispatch"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

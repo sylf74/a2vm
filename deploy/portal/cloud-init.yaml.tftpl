@@ -61,6 +61,11 @@ write_files:
     permissions: "0644"
     content: |
       ${domain} {
+      	tls {
+      		issuer acme {
+      			disable_http_challenge
+      		}
+      	}
       	@admin remote_ip ${join(" ", admin_ips)}
       	handle @admin {
       		reverse_proxy grafana:3000

@@ -11,10 +11,10 @@
 #
 #     include:
 #       - project: vulnops/a2vm
-#         ref: v0.11.4
+#         ref: v0.11.5
 #         file: templates/client-pipeline.yml
 #     variables:
-#       A2VM_REF: v0.11.4        # same version as the include
+#       A2VM_REF: v0.11.5        # same version as the include
 #
 # Jobs:
 #   push to the default branch     validate (profile and targets)
@@ -54,7 +54,7 @@ variables:
   A2VM_RUNNER_TAG: llm-lan
   A2VM_COLLECT_TAG: llm-lan
 
-stages: [validate, collect, via, detect, assets, triage, watch, send]
+stages: [validate, collect, via, detect, assets, triage, publish, watch, send]
 
 .a2vm:
   image: python:3.12-slim
@@ -82,7 +82,7 @@ stages: [validate, collect, via, detect, assets, triage, watch, send]
     - BASE="${A2VM_SERVER_URL:-${VULNOPS_SERVER_URL:-${CI_SERVER_PROTOCOL}://${CI_SERVER_HOST}:${CI_SERVER_PORT}}}"
     - git -c advice.detachedHead=false clone -q --depth 1 --branch "$A2VM_REF"
         "${BASE%%://*}://gitlab-ci-token:${CI_JOB_TOKEN}@${BASE#*://}/${A2VM_PROJECT}.git" .a2vm
-    - pip install --quiet .a2vm/a2vm .a2vm/via ".a2vm/detect[openvas]" .a2vm/verdict
+    - pip install --quiet .a2vm/a2vm .a2vm/via ".a2vm/detect[openvas]" .a2vm/verdict .a2vm/dispatch
     - if [ -f settings.yaml ]; then export SETTINGS=settings.yaml; else export SETTINGS=.a2vm/config/settings.yaml; fi
     - echo "A2VM $A2VM_REF ($(git -C .a2vm rev-parse --short HEAD)), client $CI_PROJECT_PATH, mode ${A2VM_JOB:-${VULNOPS_JOB:-daily}}, settings $SETTINGS"
 
@@ -195,6 +195,22 @@ triage:
     name: "triage-$CI_PROJECT_NAME-$CI_PIPELINE_ID"
     paths: [output/, work/assets/]
     expire_in: 30 days
+
+# The run's reporting dataset into the reporting database (dashboards read it, never GitLab), when
+# the project has A2VM_REPORTING_DSN (masked) and, to verify the server, A2VM_REPORTING_CA (File).
+# Exit code 3: database unreachable or refused (warning; the next run publishes again).
+publish:
+  extends: .a2vm
+  stage: publish
+  needs: [triage]
+  rules:
+    - if: $A2VM_JOB == "watch" || $VULNOPS_JOB == "watch"
+      when: never
+    - if: $A2VM_REPORTING_DSN && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
+  allow_failure:
+    exit_codes: [3]
+  script:
+    - dispatch publish output/*/reporting.json
 
 # -- Watch mode: schedule every 10 minutes with the variable A2VM_JOB=watch -------------------
 # The state (what was already seen) lives in the GitLab cache; without it, a run only records the

@@ -170,7 +170,7 @@ flowchart LR
 | OpenCTI, SOC | In and out | CTI linked to CVEs; per-client STIX bundles | STIX 2.1, TAXII | Planned |
 | Analysts | In and out | Review, alert validation, reports | GitLab interface, job artifacts | In place |
 | Client contacts | Out | Validated alert mails, reports | SMTP relay, after analyst validation | In place |
-| Client portal (Grafana) | Out | Reporting database: decisions, assets, deadlines, exposure gaps and totals of every run, per tenant | PostgreSQL, one read-only role per tenant; one Grafana organisation per tenant; never GitLab | Planned (dataset since v0.11.3, reporting database and Grafana dashboards v0.11.5) |
+| Client portal (Grafana) | Out | Reporting database: decisions, assets, deadlines, exposure gaps and totals of every run, per tenant | PostgreSQL, one read-only role per tenant; one Grafana organisation per tenant; never GitLab | In place (v0.11.5): reporting database and Grafana dashboard; portal deployed by `deploy/portal` |
 | Company reporting tool (Qlik Sense) | Out | Same reporting database, for the company's service indicators | To specify: interface specifications not available yet (native PostgreSQL connection, or files delivered by a connector) | Planned, waiting for the interface specifications |
 | SIEM of the platform | Out | Platform logs | Syslog | Target |
 
@@ -232,10 +232,10 @@ owner of every pillar that produces or consumes it.
 | `core` | Common model, JSON schemas, settings, LLM client and its output guard | In development |
 | Tenant projects | Per-tenant data: profile, targets, contacts, `published` mapping, LLM endpoint; results as job artifacts | In development |
 | Connectors | STIX 2.1 to OpenCTI and SOCs | Not started |
-| Reporting database | PostgreSQL: one schema of tables (runs, decisions, assets, deadlines, exposure gaps) filled from each run's `reporting.json`, kept across runs; a read-only role per tenant, row-level security on the tenant | Planned v0.11.5 |
-| Portal deployment | Infrastructure as code: Terraform creates the portal instance and its security group (Scaleway first, a module per cloud provider); cloud-init installs PostgreSQL, Grafana and the HTTPS proxy in containers; secrets generated on the instance (`deploy/portal/`) | In development (v0.11.5) |
-| Restitution | Grafana dashboards shipped with A2VM, reading the reporting database; Qlik Sense through its PostgreSQL connection or a file connector, once specified | Grafana planned v0.11.5; Qlik Sense waiting for its interface specifications |
-| Client portal | Grafana, one organisation per tenant, reading the reporting database | Planned (v0.11.5 for the demo) |
+| Reporting database | PostgreSQL: one schema of tables (runs, decisions, assets, deadlines, exposure gaps) filled from each run's `reporting.json`, kept across runs; a read-only role per tenant, row-level security on the tenant | In place (v0.11.5, package `dispatch`, pillar 4) |
+| Portal deployment | Infrastructure as code: Terraform creates the portal instance and its security group (Scaleway first, a module per cloud provider); cloud-init installs PostgreSQL, Grafana and the HTTPS proxy in containers; secrets generated on the instance (`deploy/portal/`) | In place (v0.11.5) |
+| Restitution | Grafana dashboards shipped with A2VM, reading the reporting database; Qlik Sense through its PostgreSQL connection or a file connector, once specified | Grafana dashboard in place (v0.11.5); Qlik Sense waiting for its interface specifications |
+| Client portal | Grafana, one organisation per tenant, reading the reporting database | Demo in place (v0.11.5) |
 
 ## 7. Tenant and client context
 
@@ -347,8 +347,8 @@ release.
 | v0.11.0 | Project renamed A2VM: GitLab project `vulnops/a2vm`, common contract package and command `a2vm`; GitLab group, CI/CD variables (then `VULNOPS_*`), exchange-file identifiers and scan accounts unchanged | All |
 | v0.10.0 | Repository organised by pillar: `vulnops` (common contract), `via`, `detect`, `verdict`, each with its own command; no functional change | All |
 | v0.11.3 | Reporting dataset for the client portal (`reporting.json`); analysts choose which alerts are sent (`A2VM_SEND_ONLY`), alert number and id in the analysts' mail, journal of the alerts and trace of the mails sent; mail test job; validate checks the include ref against `A2VM_REF`; a watch source is in error only after several failed runs in a row; CISA advisories read as CSAF; the watch reads the daily inventory from the runner cache; external detection read with a project access token (GitLab CE) | 1, 3, 4 |
-| v0.11.4 (current) | Exposure gaps listed in the report and the reporting dataset; alert sheet as a Word file from a template per client (tags), sent to the client as Word or as a PDF made from it; analysts edit a sheet (text or Word) in the client project before sending | 1, 3 |
-| v0.11.5 (planned) | Restitution (D14): reporting database (PostgreSQL) filled from each run's dataset, with history; Grafana dashboards for the demo client portal; Qlik Sense once its interface is specified | 3, 4 |
+| v0.11.4 | Exposure gaps listed in the report and the reporting dataset; alert sheet as a Word file from a template per client (tags), sent to the client as Word or as a PDF made from it; analysts edit a sheet (text or Word) in the client project before sending | 1, 3 |
+| v0.11.5 (current) | Restitution (D14): reporting database (PostgreSQL) filled by a `publish` job from each run's dataset, with history and a reading role per tenant; Grafana dashboard; portal deployed as code (Terraform, cloud-init); D3: in production GitLab holds and deploys code and configuration only | 3, 4 |
 | Next (to confirm) | Client portal VM (Grafana) in service; history database and finding lifecycle; pillar 1 as a service on the container runtime | 1, 3, 4 |
 | Then (to confirm) | Dispatch & Capitalization; Emergency Actions | 4, 5 |
 
