@@ -30,7 +30,7 @@ Pillar 3 holds the asset context and takes the only decision of the platform.
 | In | Tenant context: declarations, rules, `published` mapping, policy, exceptions | Strategy §7 |
 | Out | Assets (read only for pillars 1, 4, 5) | Strategy §6 |
 | Out | Decisions; reports, `triage.json`, `triage.csv`, run page | Strategy §6 |
-| Out | Reporting dataset `reporting.json`, read by the client portal (Grafana) | Strategy §6; LLD §12 |
+| Out | Reporting dataset `reporting.json`, published into the reporting database read by the Grafana client portal (Qlik Sense planned) | Strategy §6, D14; LLD §12 |
 
 ## 3. Building blocks
 
@@ -79,7 +79,7 @@ client CMDB, when available, is the reference for context.
 | Policy as code | The decision policy is versioned, changed by merge request with a second reviewer, its combinations leading to ACT tested in CI; each decision carries the policy version, and a new version comes with a report of the priorities it changes |
 | Risk acceptance | An accepted risk has a justification, an approver and an expiry date, kept in the tenant project and changed by merge request; at expiry the finding comes back |
 | Determinism | Same records, assets, findings and policy version give the same decisions |
-| Reporting contract | Pillar 3 publishes one reporting dataset per tenant and run (`reporting.json`, versioned schema); the client portal reads it and nothing else, so internal changes never break the portal |
+| Reporting contract | Pillar 3 publishes one reporting dataset per tenant and run (`reporting.json`, versioned schema); it fills the reporting database that dashboards read, so internal changes never break a dashboard |
 
 ## 8. Status, risks and open points
 

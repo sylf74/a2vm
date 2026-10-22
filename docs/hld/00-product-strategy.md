@@ -140,7 +140,8 @@ flowchart LR
   analysts["Analysts<br/>review and validate decisions<br/>and alerts before delivery"]
   clients["Clients<br/>prioritised actions, validated<br/>alerts, reports"]
   cti["OpenCTI and SOC<br/>STIX 2.1 exchanges (planned)"]
-  dash["Client portal (Grafana)<br/>per-tenant dashboards,<br/>reporting dataset via GitLab API"]
+  dash["Client portal (Grafana)<br/>per-tenant dashboards"]
+  qlik["Company reporting (Qlik Sense)<br/>service indicators<br/>(interface to specify)"]
   llm["LLM endpoint<br/>OpenAI-compatible, per tenant<br/>proposals and texts only"]
 
   feeds --> platform
@@ -150,7 +151,8 @@ flowchart LR
   platform <--> analysts
   platform --> clients
   platform <--> cti
-  platform --> dash
+  platform -- "reporting database" --> dash
+  platform -. "reporting database" .-> qlik
   platform <--> llm
 ```
 
@@ -168,7 +170,8 @@ flowchart LR
 | OpenCTI, SOC | In and out | CTI linked to CVEs; per-client STIX bundles | STIX 2.1, TAXII | Planned |
 | Analysts | In and out | Review, alert validation, reports | GitLab interface, job artifacts | In place |
 | Client contacts | Out | Validated alert mails, reports | SMTP relay, after analyst validation | In place |
-| Client portal (Grafana) | Out | Reporting dataset of each tenant (`reporting.json`) | GitLab API, one read-only token per tenant; one Grafana organisation per tenant | Planned (dataset since v0.11.3, portal VM next) |
+| Client portal (Grafana) | Out | Reporting database: decisions, assets, deadlines, exposure gaps and totals of every run, per tenant | PostgreSQL, one read-only role per tenant; one Grafana organisation per tenant; never GitLab | Planned (dataset since v0.11.3, reporting database and Grafana dashboards v0.11.5) |
+| Company reporting tool (Qlik Sense) | Out | Same reporting database, for the company's service indicators | To specify: interface specifications not available yet (native PostgreSQL connection, or files delivered by a connector) | Planned, waiting for the interface specifications |
 | SIEM of the platform | Out | Platform logs | Syslog | Target |
 
 ## 5. Structuring decisions
@@ -192,7 +195,8 @@ deterministic rules and people decide. Decisions that concern one pillar only ar
 | D10 | Asset context belongs to Triage & Prioritization: Detection supplies observations, Triage turns them into context (exposure, criticality, zone, each with its source) | The pillar that defines the model owns it; detection stays factual |
 | D11 | AI proposes, never decides: every AI output is a proposal or a text, with a deterministic fallback, shown with its source and reviewed | Accountability stays with rules and people; the platform works without an LLM |
 | D12 | Pillars are independent packages, each with its own command (`via`, `detect`, `verdict`); they depend only on the common contract (package `a2vm`) and never import one another; a capability needed across pillars is offered through an a2vm extension point | Each pillar can evolve, be owned and later be deployed on its own; a test enforces the rule |
-| D13 | Client restitution through a Grafana portal that reads only the reporting dataset of each tenant, fetched from GitLab with a read-only token per tenant; the portal runs on its own VM, always on, internal by default, its publication to the client decided per client | Clients get a readable view without access to GitLab; the portal depends on one versioned file, not on the pipeline internals; isolation per tenant is kept |
+| D13 | Client restitution through a Grafana portal that reads the reporting database only, with a read-only role per tenant; the portal runs on its own VM, always on, internal by default, its publication to the client decided per client | Clients get a readable view without access to GitLab; dashboards depend on a stable schema, not on the pipeline internals nor on GitLab; isolation per tenant is kept |
+| D14 | Restitution is modular and independent of GitLab: each run publishes its reporting dataset (`reporting.json`) into a reporting database (PostgreSQL), one row set per run, so history and trends come for free; dashboarding and reporting tools read that database (Grafana first, Qlik Sense next), or receive files a connector derives from it | The dataset stays the single contract; a new tool means a new reader or connector, never a change of the pipeline; GitLab, which in production holds code and configuration only, is never on the restitution path |
 
 ### Execution
 
@@ -228,7 +232,9 @@ owner of every pillar that produces or consumes it.
 | `core` | Common model, JSON schemas, settings, LLM client and its output guard | In development |
 | Tenant projects | Per-tenant data: profile, targets, contacts, `published` mapping, LLM endpoint; results as job artifacts | In development |
 | Connectors | STIX 2.1 to OpenCTI and SOCs | Not started |
-| Client portal | Grafana, one organisation per tenant, reading the tenant's `reporting.json` through the GitLab API | Planned |
+| Reporting database | PostgreSQL: one schema of tables (runs, decisions, assets, deadlines, exposure gaps) filled from each run's `reporting.json`, kept across runs; a read-only role per tenant, row-level security on the tenant | Planned v0.11.5 |
+| Restitution | Grafana dashboards shipped with A2VM, reading the reporting database; Qlik Sense through its PostgreSQL connection or a file connector, once specified | Grafana planned v0.11.5; Qlik Sense waiting for its interface specifications |
+| Client portal | Grafana, one organisation per tenant, reading the reporting database | Planned (v0.11.5 for the demo) |
 
 ## 7. Tenant and client context
 
@@ -301,7 +307,7 @@ external scanning in the cloud.
 | --- | --- | --- |
 | Public DMZ | Intel VM (fetches, mirrors and signs public data; read by the internal runner); reverse proxy publishing GitLab with a client certificate | Direct outbound access to feeds blocked by the corporate proxy; cloud runners reach GitLab only through the proxy |
 | Internal zone | GitLab (code + tenant projects), internal runner(s) | Client data stays on premises |
-| Internal zone — portal | Client portal VM (Grafana), always on, reading GitLab through its API | Internal by default for cost; per client, published through the reverse proxy, or hosted at the client in self-hosted mode — the client decides |
+| Internal zone — portal | Client portal VM (Grafana) and the reporting database (PostgreSQL), always on; the jobs write to the database, Grafana and the company's reporting tool read it; nothing reads GitLab | Internal by default for cost; per client, published through the reverse proxy, or hosted at the client in self-hosted mode — the client decides |
 | AI inference | Default LLM endpoint (OpenAI-compatible API) on GPU capacity operated by the service, on premises or in the cloud; reached only by the internal runner | Hardware and hosting chosen in the DAT on cost and confidentiality |
 | Cloud | Development and qualification VMs; external scanner host acting as a GitLab runner | Internet-facing scans originate outside the corporate network |
 
@@ -319,12 +325,12 @@ pillar implements them.
 | AI governance | The invariants of §8 |
 | Traceability | Every decision stores each input with its source, the SSVC outcome, the BOD 26-04 timeline, the policy steps and where its rationale comes from; results kept as job artifacts (30 days), history database planned |
 | Observability | Pipeline status and duration, source availability, LLM latency and error rate |
-| Interoperability | STIX 2.1 export to OpenCTI and the SOC; dashboards fed from pipeline outputs (Power BI at work; Grafana under consideration) |
+| Interoperability | STIX 2.1 export to OpenCTI and the SOC; dashboards and reporting tools fed by restitution connectors from the reporting dataset only (Grafana for the client portal; Qlik Sense for the company's indicators) |
 | Backup | GitLab backup covers code, tenant configuration and results |
 | Confidentiality of the repository | No real infrastructure names or client identifiers in the code repository or its history |
 | External lookups | Only deduplicated keys free of client data leave towards an external source (CVE ids; product and version pairs at most), never a per-asset inventory; since the source address can identify the client, this residual risk is accepted explicitly per source |
 | Roles | Reader, remediator, context qualifier, risk approver, policy maintainer (proposes, never applies alone), administrator without access to client data, auditor; approver and maintainer are never the same person. Mapped onto GitLab roles, protected branches and CODEOWNERS in the DAT |
-| Reporting | Self-hosted dashboards only (the Grafana client portal, one organisation per tenant); aggregates by default, detail only for the entity concerned; the tool reads a dedicated read-only reporting dataset and recomputes no metric; public sharing disabled |
+| Reporting | Self-hosted dashboards only (the Grafana client portal, one organisation per tenant; the company's Qlik Sense for internal indicators); aggregates by default, detail only for the entity concerned; tools read the reporting database through read-only roles, one per tenant, and recompute no metric; public sharing disabled; a tenant's data goes only to a tool approved for that tenant |
 
 ## 11. Roadmap, risks and open points
 
@@ -341,7 +347,8 @@ release.
 | v0.10.0 | Repository organised by pillar: `vulnops` (common contract), `via`, `detect`, `verdict`, each with its own command; no functional change | All |
 | v0.11.3 | Reporting dataset for the client portal (`reporting.json`); analysts choose which alerts are sent (`A2VM_SEND_ONLY`), alert number and id in the analysts' mail, journal of the alerts and trace of the mails sent; mail test job; validate checks the include ref against `A2VM_REF`; a watch source is in error only after several failed runs in a row; CISA advisories read as CSAF; the watch reads the daily inventory from the runner cache; external detection read with a project access token (GitLab CE) | 1, 3, 4 |
 | v0.11.4 (current) | Exposure gaps listed in the report and the reporting dataset; alert sheet as a Word file from a template per client (tags), sent to the client as Word or as a PDF made from it; analysts edit a sheet (text or Word) in the client project before sending | 1, 3 |
-| Next (to confirm) | Client portal VM (Grafana); history database and finding lifecycle; pillar 1 as a service on the container runtime | 1, 3, 4 |
+| v0.11.5 (planned) | Restitution (D14): reporting database (PostgreSQL) filled from each run's dataset, with history; Grafana dashboards for the demo client portal; Qlik Sense once its interface is specified | 3, 4 |
+| Next (to confirm) | Client portal VM (Grafana) in service; history database and finding lifecycle; pillar 1 as a service on the container runtime | 1, 3, 4 |
 | Then (to confirm) | Dispatch & Capitalization; Emergency Actions | 4, 5 |
 
 ### Risks
@@ -361,6 +368,8 @@ release.
 - Hosting option per client within the MSSP mode: MSSP datacenter or company cloud zone
 - Container runtime for the services: Kubernetes is the candidate, to be validated
 - Client portal: publication per client (internal only, through the reverse proxy, at the client) and how clients authenticate
+- Qlik Sense connector: interface specifications (file or API, format, frequency, authentication, who operates the load); some perimeters have no Qlik Sense instance, where the Grafana portal remains the only restitution
+- GitLab in production holds code and configuration only: where the per-tenant jobs run then (container runtime, D3) and how results reach the reporting database without GitLab artifacts
 - Points on hold from the review of another internal architecture document, to settle with its team
 
 Open points of a single pillar are in its chapter.
@@ -395,3 +404,4 @@ Open points of a single pillar are in its chapter.
 | LLM endpoint | An OpenAI-compatible API serving a language model, approved per tenant |
 | Client portal | Grafana instance showing each client its own dashboards, fed only by the reporting dataset |
 | Reporting dataset | `reporting.json`: the versioned file of one tenant and run that restitution tools read (LLD triage §12) |
+| Reporting database | PostgreSQL store of the reporting datasets of every run and tenant, read by the dashboarding and reporting tools (Grafana, Qlik Sense) through read-only roles |
