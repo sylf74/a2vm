@@ -1,0 +1,6 @@
+# Copy to terraform.tfvars (kept out of git) and set your own values.
+domain    = "portal.example.org"
+admin_ips = ["203.0.113.10/32"] # office and runner public addresses
+# zone          = "fr-par-1"
+# instance_type = "PLAY2-NANO"
+# image         = "rockylinux_10"

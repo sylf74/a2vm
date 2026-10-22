@@ -233,6 +233,7 @@ owner of every pillar that produces or consumes it.
 | Tenant projects | Per-tenant data: profile, targets, contacts, `published` mapping, LLM endpoint; results as job artifacts | In development |
 | Connectors | STIX 2.1 to OpenCTI and SOCs | Not started |
 | Reporting database | PostgreSQL: one schema of tables (runs, decisions, assets, deadlines, exposure gaps) filled from each run's `reporting.json`, kept across runs; a read-only role per tenant, row-level security on the tenant | Planned v0.11.5 |
+| Portal deployment | Infrastructure as code: Terraform creates the portal instance and its security group (Scaleway first, a module per cloud provider); cloud-init installs PostgreSQL, Grafana and the HTTPS proxy in containers; secrets generated on the instance (`deploy/portal/`) | In development (v0.11.5) |
 | Restitution | Grafana dashboards shipped with A2VM, reading the reporting database; Qlik Sense through its PostgreSQL connection or a file connector, once specified | Grafana planned v0.11.5; Qlik Sense waiting for its interface specifications |
 | Client portal | Grafana, one organisation per tenant, reading the reporting database | Planned (v0.11.5 for the demo) |
 
