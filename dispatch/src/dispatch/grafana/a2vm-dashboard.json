@@ -1,0 +1,759 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_A2VM",
+      "label": "A2VM reporting database",
+      "description": "PostgreSQL data source of the reporting database",
+      "type": "datasource",
+      "pluginId": "grafana-postgresql-datasource",
+      "pluginName": "PostgreSQL"
+    }
+  ],
+  "__requires": [
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "11.0.0"
+    },
+    {
+      "type": "datasource",
+      "id": "grafana-postgresql-datasource",
+      "name": "PostgreSQL",
+      "version": "1.0.0"
+    }
+  ],
+  "title": "A2VM — vulnerability decisions",
+  "uid": "a2vm-decisions",
+  "tags": [
+    "a2vm"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "refresh": "1h",
+  "templating": {
+    "list": [
+      {
+        "name": "tenant",
+        "label": "Client",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "${DS_A2VM}"
+        },
+        "query": "SELECT tenant AS __value, tenant_name AS __text FROM a2vm.latest_runs ORDER BY tenant_name",
+        "definition": "SELECT tenant AS __value, tenant_name AS __text FROM a2vm.latest_runs ORDER BY tenant_name",
+        "refresh": 1,
+        "includeAll": false,
+        "multi": false
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "stat",
+      "title": "ACT",
+      "description": "Findings to fix now (latest run)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_A2VM}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_A2VM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT act AS value FROM a2vm.latest_runs WHERE tenant = '${tenant}'"
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "red"
+          }
+        },
+        "overrides": []
+      },
+      "id": 1
+    },
+    {
+      "type": "stat",
+      "title": "ATTEND",
+      "description": "Findings to fix soon",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_A2VM}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 3,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_A2VM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT attend AS value FROM a2vm.latest_runs WHERE tenant = '${tenant}'"
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "orange"
+          }
+        },
+        "overrides": []
+      },
+      "id": 2
+    },
+    {
+      "type": "stat",
+      "title": "TRACK",
+      "description": "Findings to follow",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_A2VM}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 6,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_A2VM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT track AS value FROM a2vm.latest_runs WHERE tenant = '${tenant}'"
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
+      "id": 3
+    },
+    {
+      "type": "stat",
+      "title": "Overdue",
+      "description": "ACT and ATTEND past their BOD 26-04 due date",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_A2VM}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 9,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_A2VM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT overdue AS value FROM a2vm.latest_runs WHERE tenant = '${tenant}'"
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "dark-red"
+          }
+        },
+        "overrides": []
+      },
+      "id": 4
+    },
+    {
+      "type": "stat",
+      "title": "Due within 7 days",
+      "description": "",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_A2VM}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 12,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_A2VM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT due_soon AS value FROM a2vm.latest_runs WHERE tenant = '${tenant}'"
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "yellow"
+          }
+        },
+        "overrides": []
+      },
+      "id": 5
+    },
+    {
+      "type": "stat",
+      "title": "To review",
+      "description": "Decisions resting on an input to confirm",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_A2VM}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 15,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_A2VM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT needs_review AS value FROM a2vm.latest_runs WHERE tenant = '${tenant}'"
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "purple"
+          }
+        },
+        "overrides": []
+      },
+      "id": 6
+    },
+    {
+      "type": "stat",
+      "title": "Exposure gaps",
+      "description": "Exposures the client profile does not describe",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_A2VM}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 18,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_A2VM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT exposure_gaps AS value FROM a2vm.latest_runs WHERE tenant = '${tenant}'"
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "dark-orange"
+          }
+        },
+        "overrides": []
+      },
+      "id": 7
+    },
+    {
+      "type": "stat",
+      "title": "Last run",
+      "description": "",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_A2VM}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 21,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_A2VM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT generated_at AS value FROM a2vm.latest_runs WHERE tenant = '${tenant}'"
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "dateTimeFromNow",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          }
+        },
+        "overrides": []
+      },
+      "id": 8
+    },
+    {
+      "type": "timeseries",
+      "title": "Findings per level, run after run",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_A2VM}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 14,
+        "x": 0,
+        "y": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_A2VM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "time_series",
+          "rawSql": "SELECT generated_at AS time, act AS \"ACT\", attend AS \"ATTEND\", track AS \"TRACK\" FROM a2vm.runs WHERE tenant = '${tenant}' AND $__timeFilter(generated_at) ORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "always"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ACT"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ATTEND"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "TRACK"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "blue"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "id": 9
+    },
+    {
+      "type": "barchart",
+      "title": "Findings per exposure (latest run)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_A2VM}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 10,
+        "x": 14,
+        "y": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_A2VM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT coalesce(exposure, 'unknown') AS exposure, count(*) FILTER (WHERE level = 'ACT') AS \"ACT\", count(*) FILTER (WHERE level = 'ATTEND') AS \"ATTEND\", count(*) FILTER (WHERE level = 'TRACK') AS \"TRACK\" FROM a2vm.latest_decisions WHERE tenant = '${tenant}' GROUP BY 1 ORDER BY 1"
+        }
+      ],
+      "options": {
+        "stacking": "normal",
+        "orientation": "horizontal",
+        "xField": "exposure"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ACT"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ATTEND"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "TRACK"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "blue"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "id": 10
+    },
+    {
+      "type": "table",
+      "title": "Exposure gaps",
+      "description": "Hosts the external scan reaches that the client profile does not describe",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_A2VM}"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 24,
+        "x": 0,
+        "y": 12
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_A2VM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT name AS \"Asset\", kind AS \"Gap\", declared AS \"Declared\", detail AS \"Detail\" FROM a2vm.latest_exposure_gaps WHERE tenant = '${tenant}' ORDER BY kind, name"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "id": 11
+    },
+    {
+      "type": "table",
+      "title": "Decisions to act on (ACT, ATTEND)",
+      "description": "",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_A2VM}"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 17
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_A2VM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT level AS \"Level\", cve AS \"CVE\", asset_name AS \"Asset\", zone AS \"Zone\", exposure AS \"Exposure\", bod_timeline AS \"BOD 26-04\", due_date AS \"Due\", kev AS \"KEV\", round(epss::numeric, 3) AS \"EPSS\", needs_review AS \"Review\", title AS \"Vulnerability\" FROM a2vm.latest_decisions WHERE tenant = '${tenant}' AND level IN ('ACT', 'ATTEND') ORDER BY CASE level WHEN 'ACT' THEN 0 ELSE 1 END, due_date NULLS LAST, cve"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "id": 12
+    },
+    {
+      "type": "table",
+      "title": "Assets",
+      "description": "",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_A2VM}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 14,
+        "x": 0,
+        "y": 27
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_A2VM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT name AS \"Asset\", zone AS \"Zone\", exposure AS \"Exposure\", owner AS \"Owner\", act AS \"ACT\", attend AS \"ATTEND\", track AS \"TRACK\" FROM a2vm.latest_assets WHERE tenant = '${tenant}' ORDER BY act DESC, attend DESC, name"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "id": 13
+    },
+    {
+      "type": "table",
+      "title": "Detection sources (latest run)",
+      "description": "",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_A2VM}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 10,
+        "x": 14,
+        "y": 27
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_A2VM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT s.name AS \"Source\", s.findings AS \"Findings\", s.last_observation AS \"Last observation\" FROM a2vm.sources s JOIN a2vm.latest_runs r USING (run_id) WHERE r.tenant = '${tenant}' ORDER BY 1"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "id": 14
+    }
+  ]
+}

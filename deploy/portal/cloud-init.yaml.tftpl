@@ -1,0 +1,129 @@
+#cloud-config
+# A2VM client portal, first boot (Rocky Linux 10): Podman, PostgreSQL (reporting database, TLS),
+# Grafana behind Caddy (HTTPS, Let's Encrypt). Rendered by Terraform templatefile(): a doubled
+# dollar sign is a shell variable, a single one a Terraform value.
+package_update: true
+package_upgrade: true
+packages:
+  - epel-release
+  - podman
+  - openssl
+
+write_files:
+  - path: /opt/a2vm-portal/compose.yaml
+    permissions: "0644"
+    content: |
+      services:
+        postgres:
+          image: ${postgres_image}
+          restart: always
+          env_file: .env
+          environment:
+            POSTGRES_USER: postgres
+          command: >
+            -c ssl=on -c ssl_cert_file=/certs/server.crt -c ssl_key_file=/certs/server.key
+            -c hba_file=/certs/pg_hba.conf -c password_encryption=scram-sha-256
+            -c log_connections=on
+          volumes:
+            - pgdata:/var/lib/postgresql/data
+            - ./pg/server.crt:/certs/server.crt:ro,Z
+            - ./pg/server.key:/certs/server.key:ro,Z
+            - ./pg/pg_hba.conf:/certs/pg_hba.conf:ro,Z
+            - ./pg/init.sh:/docker-entrypoint-initdb.d/10-a2vm.sh:ro,Z
+          ports:
+            - "5432:5432"
+        grafana:
+          image: ${grafana_image}
+          restart: always
+          env_file: .env
+          environment:
+            GF_SERVER_ROOT_URL: https://${domain}/
+            GF_USERS_ALLOW_SIGN_UP: "false"
+            GF_ANALYTICS_REPORTING_ENABLED: "false"
+            GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+            GF_SNAPSHOTS_EXTERNAL_ENABLED: "false"
+          volumes:
+            - grafana:/var/lib/grafana
+        caddy:
+          image: ${caddy_image}
+          restart: always
+          ports:
+            - "443:443"
+          volumes:
+            - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro,Z
+            - caddy:/data
+      volumes:
+        pgdata:
+        grafana:
+        caddy:
+
+  - path: /opt/a2vm-portal/caddy/Caddyfile
+    permissions: "0644"
+    content: |
+      ${domain} {
+      	tls {
+      		issuer acme {
+      			disable_http_challenge
+      		}
+      	}
+      	@admin remote_ip ${join(" ", admin_ips)}
+      	handle @admin {
+      		reverse_proxy grafana:3000
+      	}
+      	respond 403
+      }
+
+  - path: /opt/a2vm-portal/pg/pg_hba.conf
+    permissions: "0600"
+    content: |
+      # TLS only, from the admin addresses and from the containers' network (Grafana).
+      local   all  all                  trust
+%{ for ip in admin_ips ~}
+      hostssl all  all  ${ip}  scram-sha-256
+%{ endfor ~}
+      hostssl all  all  10.89.0.0/16    scram-sha-256
+
+  - path: /opt/a2vm-portal/pg/init.sh
+    permissions: "0755"
+    content: |
+      #!/bin/bash
+      # First start of PostgreSQL only: the database and the role the A2VM jobs write with.
+      # Tables, the Grafana reader and the per-tenant roles: `dispatch db init` (A2VM).
+      set -e
+      psql -v ON_ERROR_STOP=1 -U postgres <<SQL
+      CREATE DATABASE a2vm;
+      CREATE ROLE a2vm_writer LOGIN PASSWORD '$${WRITER_PASSWORD}';
+      GRANT CONNECT, CREATE ON DATABASE a2vm TO a2vm_writer;
+      SQL
+
+  - path: /opt/a2vm-portal/bootstrap.sh
+    permissions: "0700"
+    content: |
+      #!/bin/bash
+      # Secrets and certificate generated here, once: they never leave the instance.
+      set -euo pipefail
+      cd /opt/a2vm-portal
+      umask 077
+      mkdir -p secrets
+      for s in postgres writer grafana-admin; do
+        [ -s "secrets/$s.txt" ] || openssl rand -base64 24 | tr -d '/+=' > "secrets/$s.txt"
+      done
+      {
+        echo "POSTGRES_PASSWORD=$(cat secrets/postgres.txt)"
+        echo "WRITER_PASSWORD=$(cat secrets/writer.txt)"
+        echo "GF_SECURITY_ADMIN_PASSWORD=$(cat secrets/grafana-admin.txt)"
+      } > .env
+      if [ ! -s pg/server.key ]; then
+        openssl req -x509 -newkey rsa:3072 -nodes -days 825 -subj "/CN=${domain}" \
+          -addext "subjectAltName=DNS:${domain}" -keyout pg/server.key -out pg/server.crt
+      fi
+      chown 999:999 pg/server.key pg/server.crt pg/pg_hba.conf
+      chmod 600 pg/server.key pg/pg_hba.conf
+      chmod 644 pg/server.crt
+      dnf -y install podman-compose
+      systemctl enable --now podman-restart.service
+      podman-compose up -d
+      podman-compose ps
+
+runcmd:
+  - [/opt/a2vm-portal/bootstrap.sh]

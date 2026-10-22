@@ -3,5 +3,6 @@
 -e ./via
 -e ./detect[openvas]   # python-gvm and lxml: the OpenVAS tests need them
 -e ./verdict
+-e ./dispatch
 pytest>=8
 ruff>=0.6

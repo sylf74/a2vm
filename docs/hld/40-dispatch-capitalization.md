@@ -7,7 +7,7 @@ pillar 4.
 | Item | Value |
 | --- | --- |
 | Package and command | — |
-| Status | Not started |
+| Status | In development: the reporting database (v0.11.5) |
 | LLD | — |
 
 ## 1. Responsibility
@@ -51,5 +51,5 @@ verified closure.
 
 | Item | Content |
 | --- | --- |
-| Status | Not started; begins after v0.10.x |
-| Open points | Ticketing integration; indicators and dashboard |
+| Status | In place: the reporting database (package `dispatch`, v0.11.5): every run's reporting dataset kept in PostgreSQL with a reading role per tenant, read by the Grafana dashboard (`docs/reporting.md`). Not started: ticketing, finding lifecycle |
+| Open points | Ticketing integration; Qlik Sense connection (interface specifications pending); indicators beyond the dashboard |
