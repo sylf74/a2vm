@@ -126,6 +126,147 @@ flowchart LR
 
 ## 4. Decision model
 
+### 4.0 Decision chain at a glance
+
+Diagrams drawn from the SSVC tables by `scripts/make_decision_diagrams.py` (a test checks that they
+match the tables). Colours: the level delivered with the default policy (red ACT, orange ATTEND,
+blue TRACK); grey, a BOD timeline that raises nothing.
+
+```mermaid
+flowchart TD
+  F["Finding: one CVE on one asset"]
+  F --> CVE["Per-CVE inputs (vulnerability record)"]
+  F --> AST["Per-asset inputs (asset context, §14)"]
+  CVE --> E["Exploitation<br/>KEV, CISA ADP, GTI, exploit reference; else none"]
+  CVE --> A["Automatable<br/>CISA ADP, CVSS heuristic, LLM, policy default"]
+  CVE --> T["Technical Impact<br/>CISA ADP, CVSS heuristic, LLM, policy default"]
+  CVE --> K["In KEV"]
+  AST --> M["Mission and Well-Being<br/>mission_prevalence × public_wellbeing_impact"]
+  AST --> X["Publicly exposed<br/>exposure = open"]
+  E & A & T & M --> CO["CISA Coordinator table, 36 rows<br/>track, track*, attend, act"]
+  K & X & A & T --> BO["CISA BOD 26-04 table, 16 rows<br/>remediation timeline"]
+  CO --> P["Delivery policy §4.4<br/>map the outcome, then only raise:<br/>3 days → ACT · 14 days → ATTEND at least<br/>EPSS ≥ 0.1 → ATTEND at least"]
+  BO --> P
+  P --> L(["ACT · ATTEND · TRACK"])
+  class E,A,T,K,M,X input
+  classDef act fill:#c0392b,stroke:#922b21,color:#fff
+  classDef attend fill:#e67e22,stroke:#a04000,color:#fff
+  classDef track fill:#2e86c1,stroke:#1b4f72,color:#fff
+  classDef input fill:#f4f6f7,stroke:#839192,color:#1c2833
+  classDef none fill:#d5d8dc,stroke:#839192,color:#1c2833
+```
+
+CISA Coordinator (the outcome, then the level it maps to by default; `track*` maps to ATTEND):
+
+```mermaid
+flowchart LR
+  R["Exploitation"]
+  R -- none --> E_none["Automatable"]
+  E_none -- no --> A_none_no["Technical Impact"]
+  A_none_no -- partial --> T_none_no_partial["Mission & Well-Being"]
+  T_none_no_partial -- low --> T_none_no_partial_low["track · TRACK"]:::track
+  T_none_no_partial -- medium --> T_none_no_partial_medium["track · TRACK"]:::track
+  T_none_no_partial -- high --> T_none_no_partial_high["track · TRACK"]:::track
+  A_none_no -- total --> T_none_no_total["Mission & Well-Being"]
+  T_none_no_total -- low --> T_none_no_total_low["track · TRACK"]:::track
+  T_none_no_total -- medium --> T_none_no_total_medium["track · TRACK"]:::track
+  T_none_no_total -- high --> T_none_no_total_high["track* · ATTEND"]:::attend
+  E_none -- yes --> A_none_yes["Technical Impact"]
+  A_none_yes -- partial --> T_none_yes_partial["Mission & Well-Being"]
+  T_none_yes_partial -- low --> T_none_yes_partial_low["track · TRACK"]:::track
+  T_none_yes_partial -- medium --> T_none_yes_partial_medium["track · TRACK"]:::track
+  T_none_yes_partial -- high --> T_none_yes_partial_high["attend · ATTEND"]:::attend
+  A_none_yes -- total --> T_none_yes_total["Mission & Well-Being"]
+  T_none_yes_total -- low --> T_none_yes_total_low["track · TRACK"]:::track
+  T_none_yes_total -- medium --> T_none_yes_total_medium["track · TRACK"]:::track
+  T_none_yes_total -- high --> T_none_yes_total_high["attend · ATTEND"]:::attend
+  R -- poc --> E_poc["Automatable"]
+  E_poc -- no --> A_poc_no["Technical Impact"]
+  A_poc_no -- partial --> T_poc_no_partial["Mission & Well-Being"]
+  T_poc_no_partial -- low --> T_poc_no_partial_low["track · TRACK"]:::track
+  T_poc_no_partial -- medium --> T_poc_no_partial_medium["track · TRACK"]:::track
+  T_poc_no_partial -- high --> T_poc_no_partial_high["track* · ATTEND"]:::attend
+  A_poc_no -- total --> T_poc_no_total["Mission & Well-Being"]
+  T_poc_no_total -- low --> T_poc_no_total_low["track · TRACK"]:::track
+  T_poc_no_total -- medium --> T_poc_no_total_medium["track* · ATTEND"]:::attend
+  T_poc_no_total -- high --> T_poc_no_total_high["attend · ATTEND"]:::attend
+  E_poc -- yes --> A_poc_yes["Technical Impact"]
+  A_poc_yes -- partial --> T_poc_yes_partial["Mission & Well-Being"]
+  T_poc_yes_partial -- low --> T_poc_yes_partial_low["track · TRACK"]:::track
+  T_poc_yes_partial -- medium --> T_poc_yes_partial_medium["track · TRACK"]:::track
+  T_poc_yes_partial -- high --> T_poc_yes_partial_high["attend · ATTEND"]:::attend
+  A_poc_yes -- total --> T_poc_yes_total["Mission & Well-Being"]
+  T_poc_yes_total -- low --> T_poc_yes_total_low["track · TRACK"]:::track
+  T_poc_yes_total -- medium --> T_poc_yes_total_medium["track* · ATTEND"]:::attend
+  T_poc_yes_total -- high --> T_poc_yes_total_high["attend · ATTEND"]:::attend
+  R -- active --> E_active["Automatable"]
+  E_active -- no --> A_active_no["Technical Impact"]
+  A_active_no -- partial --> T_active_no_partial["Mission & Well-Being"]
+  T_active_no_partial -- low --> T_active_no_partial_low["track · TRACK"]:::track
+  T_active_no_partial -- medium --> T_active_no_partial_medium["track · TRACK"]:::track
+  T_active_no_partial -- high --> T_active_no_partial_high["attend · ATTEND"]:::attend
+  A_active_no -- total --> T_active_no_total["Mission & Well-Being"]
+  T_active_no_total -- low --> T_active_no_total_low["track · TRACK"]:::track
+  T_active_no_total -- medium --> T_active_no_total_medium["attend · ATTEND"]:::attend
+  T_active_no_total -- high --> T_active_no_total_high["act · ACT"]:::act
+  E_active -- yes --> A_active_yes["Technical Impact"]
+  A_active_yes -- partial --> T_active_yes_partial["Mission & Well-Being"]
+  T_active_yes_partial -- low --> T_active_yes_partial_low["attend · ATTEND"]:::attend
+  T_active_yes_partial -- medium --> T_active_yes_partial_medium["attend · ATTEND"]:::attend
+  T_active_yes_partial -- high --> T_active_yes_partial_high["act · ACT"]:::act
+  A_active_yes -- total --> T_active_yes_total["Mission & Well-Being"]
+  T_active_yes_total -- low --> T_active_yes_total_low["attend · ATTEND"]:::attend
+  T_active_yes_total -- medium --> T_active_yes_total_medium["act · ACT"]:::act
+  T_active_yes_total -- high --> T_active_yes_total_high["act · ACT"]:::act
+  classDef act fill:#c0392b,stroke:#922b21,color:#fff
+  classDef attend fill:#e67e22,stroke:#a04000,color:#fff
+  classDef track fill:#2e86c1,stroke:#1b4f72,color:#fff
+  classDef input fill:#f4f6f7,stroke:#839192,color:#1c2833
+  classDef none fill:#d5d8dc,stroke:#839192,color:#1c2833
+```
+
+CISA BOD 26-04 (the timeline, then the escalation it triggers, section 4.4):
+
+```mermaid
+flowchart LR
+  R["In KEV"]
+  R -- no --> K_no["Publicly exposed"]
+  K_no -- no --> P_no_no["Automatable"]
+  P_no_no -- no --> A_no_no_no["Technical Impact"]
+  A_no_no_no -- partial --> A_no_no_no_partial["fix on system upgrade"]:::none
+  A_no_no_no -- total --> A_no_no_no_total["fix on system upgrade"]:::none
+  P_no_no -- yes --> A_no_no_yes["Technical Impact"]
+  A_no_no_yes -- partial --> A_no_no_yes_partial["60 days"]:::none
+  A_no_no_yes -- total --> A_no_no_yes_total["60 days"]:::none
+  K_no -- yes --> P_no_yes["Automatable"]
+  P_no_yes -- no --> A_no_yes_no["Technical Impact"]
+  A_no_yes_no -- partial --> A_no_yes_no_partial["60 days"]:::none
+  A_no_yes_no -- total --> A_no_yes_no_total["14 days · ATTEND at least"]:::attend
+  P_no_yes -- yes --> A_no_yes_yes["Technical Impact"]
+  A_no_yes_yes -- partial --> A_no_yes_yes_partial["14 days · ATTEND at least"]:::attend
+  A_no_yes_yes -- total --> A_no_yes_yes_total["3 days · ACT"]:::act
+  R -- yes --> K_yes["Publicly exposed"]
+  K_yes -- no --> P_yes_no["Automatable"]
+  P_yes_no -- no --> A_yes_no_no["Technical Impact"]
+  A_yes_no_no -- partial --> A_yes_no_no_partial["14 days · ATTEND at least"]:::attend
+  A_yes_no_no -- total --> A_yes_no_no_total["14 days · ATTEND at least"]:::attend
+  P_yes_no -- yes --> A_yes_no_yes["Technical Impact"]
+  A_yes_no_yes -- partial --> A_yes_no_yes_partial["14 days · ATTEND at least"]:::attend
+  A_yes_no_yes -- total --> A_yes_no_yes_total["3 days & forensic investigation · ACT"]:::act
+  K_yes -- yes --> P_yes_yes["Automatable"]
+  P_yes_yes -- no --> A_yes_yes_no["Technical Impact"]
+  A_yes_yes_no -- partial --> A_yes_yes_no_partial["14 days · ATTEND at least"]:::attend
+  A_yes_yes_no -- total --> A_yes_yes_no_total["3 days & forensic investigation · ACT"]:::act
+  P_yes_yes -- yes --> A_yes_yes_yes["Technical Impact"]
+  A_yes_yes_yes -- partial --> A_yes_yes_yes_partial["3 days · ACT"]:::act
+  A_yes_yes_yes -- total --> A_yes_yes_yes_total["3 days & forensic investigation · ACT"]:::act
+  classDef act fill:#c0392b,stroke:#922b21,color:#fff
+  classDef attend fill:#e67e22,stroke:#a04000,color:#fff
+  classDef track fill:#2e86c1,stroke:#1b4f72,color:#fff
+  classDef input fill:#f4f6f7,stroke:#839192,color:#1c2833
+  classDef none fill:#d5d8dc,stroke:#839192,color:#1c2833
+```
+
 ### 4.1 Per-CVE decision points
 
 Computed once per CVE and reused for every asset and client of the run.
