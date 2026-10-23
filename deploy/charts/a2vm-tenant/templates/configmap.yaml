@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "a2vm-tenant.name" . }}-config
+  labels:
+    {{- include "a2vm-tenant.labels" . | nindent 4 }}
+data:
+  client.yaml: |
+    {{- required "files.profile is required (--set-file files.profile=client.yaml)" .Values.files.profile | nindent 4 }}
+  {{- if .Values.files.targets }}
+  targets.yaml: |
+    {{- .Values.files.targets | nindent 4 }}
+  {{- end }}
+  {{- if .Values.files.settings }}
+  settings.yaml: |
+    {{- .Values.files.settings | nindent 4 }}
+  {{- end }}

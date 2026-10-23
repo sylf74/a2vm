@@ -4,7 +4,7 @@ A2VM (AI-Assisted Vulnerability Management) turns vulnerability intelligence, sc
 each client's asset context into one prioritised decision per finding (ACT / ATTEND / TRACK),
 explained, reviewed by an analyst, and restituted in reports and dashboards.
 
-Read first: `docs/hld/00-product-strategy.md` (goals, decisions D1–D14, contracts), then the
+Read first: `docs/hld/00-product-strategy.md` (goals, decisions D1–D15, contracts), then the
 chapter and the LLD of the pillar you touch (`docs/hld/`, `docs/lld/`). Operating guides are the
 other files of `docs/`.
 
@@ -19,6 +19,8 @@ other files of `docs/`.
 | `templates/client-pipeline.yml` | The pipeline every tenant project includes at a version tag |
 | `examples/` | Fictitious tenants (`lab`, `demo-industrie`) |
 | `deploy/portal/` | Terraform and cloud-init of the reporting database and Grafana |
+| `deploy/charts/a2vm-tenant/` | Helm chart: a tenant's daily run as a Kubernetes CronJob (D15 step 1, `docs/kubernetes.md`) |
+| `images/` | Dockerfile of the pillar images (one per pillar, built by the `images` job on tags) |
 | `scripts/` | Generators of committed files: dashboards, decision diagrams, neutral Word template |
 
 Pillars import only `a2vm` and themselves, never another pillar (D12, `tests/test_architecture.py`);
@@ -64,10 +66,12 @@ job always runs them.
 
 ## Releasing
 
-1. Bump `version` in `a2vm/`, `via/`, `detect/`, `verdict/` `pyproject.toml` and `__version__` in
-   `a2vm` and `via`; set the new tag in `examples/*/.gitlab-ci.yml` and `docs/deployment.md`; add
-   the version to the roadmap table of the HLD (§11).
-2. Merge, then tag `vX.Y.Z` on the default branch: the `release` job checks the versions, and
-   `sync-product-docs` publishes `docs/` where configured (`docs/deployment.md` §7).
+1. Bump `version` in `a2vm/`, `via/`, `detect/`, `verdict/` `pyproject.toml`, `__version__` in
+   `a2vm` and `via`, and `version`/`appVersion` of `deploy/charts/a2vm-tenant/Chart.yaml`; set the
+   new tag in `examples/*/.gitlab-ci.yml` and `docs/deployment.md`; add the version to the roadmap
+   table of the HLD (§11).
+2. Merge, then tag `vX.Y.Z` on the default branch: the `release` job checks the versions, `images`
+   builds the pillar images where a registry exists, and `sync-product-docs` publishes `docs/`
+   where configured (`docs/deployment.md` §7).
 3. Tenants move by changing `ref` and `A2VM_REF` in their `.gitlab-ci.yml`; a database schema change
    needs `verdict db init` once (`docs/reporting.md`).

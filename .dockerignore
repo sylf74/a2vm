@@ -1,0 +1,15 @@
+.git
+**/__pycache__
+**/*.egg-info
+**/.pytest_cache
+.ruff_cache
+.pip-cache
+.cache
+output
+work
+build
+deploy
+docs
+examples
+tests
+scripts

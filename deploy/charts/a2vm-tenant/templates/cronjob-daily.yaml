@@ -1,0 +1,166 @@
+{{- /*
+The daily run: the same steps as the stages of templates/client-pipeline.yml, one container per
+step, each in the image of its pillar, chained as init containers (each starts when the previous
+one succeeded) on a shared working volume. Exit code 3 (partial collection, database unreachable)
+is a warning, as in the pipeline.
+*/ -}}
+
+{{- define "a2vm-tenant.step.collect" -}}
+mkdir -p /data/work
+rm -rf /data/work/detect && mkdir -p /data/work/detect
+if [ -f /secrets/gitlab-ca ]; then export CI_SERVER_TLS_CA_FILE=/secrets/gitlab-ca; fi
+rc=0
+if [ ! -f /config/targets.yaml ]; then
+  echo "No targets.yaml: no scanner collection, declared inventory only"
+else
+  NO_SSH=""
+  if [ -s /secrets/ssh-key ]; then
+    mkdir -p "$HOME/.ssh" && umask 077
+    tr -d '\r' < /secrets/ssh-key | sed -e '$a\' > "$HOME/.ssh/vulnops_scan"
+    if ssh-keygen -y -f "$HOME/.ssh/vulnops_scan" > /dev/null 2>&1; then
+      echo "scan key: $(ssh-keygen -l -f "$HOME/.ssh/vulnops_scan")"
+    else
+      echo "ssh-key is not a usable private key: SSH targets skipped"; NO_SSH="--no-ssh"; rc=3
+    fi
+  else
+    echo "No ssh-key: SSH targets skipped (OpenVAS scan only, if configured)"; NO_SSH="--no-ssh"
+  fi
+  detect collect /config/targets.yaml $NO_SSH --raw /tmp/scans --out /data/work/detect || rc=$?
+  rm -rf /tmp/scans
+fi
+if [ -n "${A2VM_EXTERNAL_PROJECT:-}" ]; then
+  detect external /config/client.yaml --project "$A2VM_EXTERNAL_PROJECT" --out /data/work/detect || rc=$?
+fi
+if [ "$rc" -ne 0 ] && [ "$rc" -ne 3 ]; then exit "$rc"; fi
+if [ "$rc" -eq 3 ]; then echo "WARN collection incomplete: going on with what was collected"; fi
+{{- end -}}
+
+{{- define "a2vm-tenant.step.via" -}}
+{{ include "a2vm-tenant.settings" . }}
+via collect --settings "$SETTINGS" --detect /data/work/detect --out /data/work/records.json --since "$A2VM_SINCE"
+{{- end -}}
+
+{{- define "a2vm-tenant.step.detect" -}}
+{{ include "a2vm-tenant.settings" . }}
+detect inventory /config/client.yaml --settings "$SETTINGS" --records /data/work/records.json --out /data/work/detect
+{{- end -}}
+
+{{- define "a2vm-tenant.step.assets" -}}
+rm -rf /data/work/assets.new
+verdict assets build /config/client.yaml --detect /data/work/detect --out /data/work/assets.new
+rm -rf /data/work/assets && mv /data/work/assets.new /data/work/assets
+{{- end -}}
+
+{{- define "a2vm-tenant.step.triage" -}}
+{{ include "a2vm-tenant.settings" . }}
+rm -rf /data/output
+verdict run /config/client.yaml --settings "$SETTINGS" --records /data/work/records.json --assets /data/work/assets --out /data/output
+{{- end -}}
+
+{{- define "a2vm-tenant.step.publish" -}}
+if [ -z "${A2VM_REPORTING_DSN:-}" ]; then echo "No reporting-dsn: nothing to publish"; exit 0; fi
+if [ -s /secrets/reporting-ca ]; then export A2VM_REPORTING_CA=/secrets/reporting-ca; fi
+rc=0
+verdict publish /data/output/*/reporting.json || rc=$?
+if [ "$rc" -eq 3 ]; then echo "WARN reporting database unreachable or refused: the next run publishes again"; exit 0; fi
+exit "$rc"
+{{- end -}}
+
+{{- define "a2vm-tenant.container" -}}
+{{- $root := .root -}}
+- name: {{ .name }}
+  image: {{ include "a2vm-tenant.image" (dict "root" $root "pillar" .pillar) }}
+  imagePullPolicy: {{ $root.Values.image.pullPolicy }}
+  command: ["/bin/sh", "-ec"]
+  args:
+    - |
+      echo "A2VM {{ $root.Chart.AppVersion }}, tenant {{ $root.Values.tenant }}, step {{ .name }}"
+      {{- include (printf "a2vm-tenant.step.%s" .name) $root | nindent 6 }}
+  env:
+    {{- include "a2vm-tenant.env" $root | nindent 4 }}
+  volumeMounts:
+    {{- include "a2vm-tenant.mounts" $root | nindent 4 }}
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: [ALL]
+  {{- with $root.Values.resources }}
+  resources:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end -}}
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "a2vm-tenant.name" . }}-daily
+  labels:
+    {{- include "a2vm-tenant.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.daily.schedule | quote }}
+  {{- if .Values.daily.timeZone }}
+  timeZone: {{ .Values.daily.timeZone | quote }}
+  {{- end }}
+  suspend: {{ .Values.daily.suspend }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: {{ .Values.daily.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.daily.failedJobsHistoryLimit }}
+  jobTemplate:
+    metadata:
+      labels:
+        {{- include "a2vm-tenant.labels" . | nindent 8 }}
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: {{ .Values.daily.activeDeadlineSeconds }}
+      template:
+        metadata:
+          labels:
+            {{- include "a2vm-tenant.labels" . | nindent 12 }}
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            fsGroup: 10001
+            seccompProfile:
+              type: RuntimeDefault
+          {{- if .Values.image.pullSecret }}
+          imagePullSecrets:
+            - name: {{ .Values.image.pullSecret }}
+          {{- end }}
+          {{- with .Values.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          initContainers:
+            {{- include "a2vm-tenant.container" (dict "root" . "name" "collect" "pillar" "detect") | nindent 12 }}
+            {{- include "a2vm-tenant.container" (dict "root" . "name" "via" "pillar" "via") | nindent 12 }}
+            {{- include "a2vm-tenant.container" (dict "root" . "name" "detect" "pillar" "detect") | nindent 12 }}
+            {{- include "a2vm-tenant.container" (dict "root" . "name" "assets" "pillar" "verdict") | nindent 12 }}
+            {{- include "a2vm-tenant.container" (dict "root" . "name" "triage" "pillar" "verdict") | nindent 12 }}
+          containers:
+            {{- include "a2vm-tenant.container" (dict "root" . "name" "publish" "pillar" "verdict") | nindent 12 }}
+          volumes:
+            - name: data
+              persistentVolumeClaim:
+                claimName: {{ include "a2vm-tenant.name" . }}-data
+            - name: config
+              configMap:
+                name: {{ include "a2vm-tenant.name" . }}-config
+            - name: home
+              emptyDir: {}
+            - name: tmp
+              emptyDir: {}
+            {{- if .Values.secret.name }}
+            - name: secrets
+              secret:
+                secretName: {{ .Values.secret.name }}
+                defaultMode: 0440   # readable by the run group (fsGroup)
+                optional: true
+            {{- end }}

@@ -5,7 +5,9 @@
 #
 #   lint, test       every push and merge request
 #   examples         the example profiles and targets are valid, and the offline demo runs
-#   release          on a tag vX.Y.Z: checks that the packages carry that version
+#   chart            the tenant chart renders (helm lint, helm template)
+#   release          on a tag vX.Y.Z: checks that the packages and the chart carry that version
+#   images           on a tag (or by hand): one image per pillar into this project's registry
 #   sync-product-docs on a tag (or by hand): copies docs/ into a product project, when configured
 
 stages: [lint, test, examples, release]
@@ -28,6 +30,15 @@ lint:
     - ruff check .
     - ruff format --check .
     - python -c "import yaml; [yaml.safe_load(open(f)) for f in ('templates/client-pipeline.yml', 'examples/lab/.gitlab-ci.yml', 'examples/demo-industrie/.gitlab-ci.yml')]"
+
+chart:
+  stage: lint
+  image: alpine:3.22
+  cache: []
+  script:
+    - apk add --no-cache -q helm
+    - helm lint deploy/charts/a2vm-tenant --strict --set tenant=lab --set image.registry=registry.example.org/vulnops/a2vm --set-file files.profile=examples/lab/client.yaml --set-file files.targets=examples/lab/targets.yaml --set secret.name=a2vm-tenant
+    - helm template a2vm deploy/charts/a2vm-tenant --set tenant=lab --set image.registry=registry.example.org/vulnops/a2vm --set-file files.profile=examples/lab/client.yaml --set secret.name=a2vm-tenant > /dev/null
 
 test:
   stage: test
@@ -70,7 +81,40 @@ release:
         got=$(sed -n 's/^version = "\(.*\)"/\1/p' $p/pyproject.toml)
         [ "$got" = "$want" ] || { echo "$p/pyproject.toml has version $got, tag says $want"; exit 1; }
       done
+      for k in version appVersion; do
+        got=$(sed -n "s/^$k: \"\{0,1\}\([^\"]*\)\"\{0,1\}$/\1/p" deploy/charts/a2vm-tenant/Chart.yaml)
+        [ "$got" = "$want" ] || { echo "Chart.yaml has $k $got, tag says $want"; exit 1; }
+      done
       echo "A2VM $CI_COMMIT_TAG: client projects can include templates/client-pipeline.yml at ref $CI_COMMIT_TAG"
+
+# One image per pillar (images/Dockerfile) into this project's container registry, tagged like the
+# release; the tenant chart takes them from there. Built with Buildah (no Docker daemon, no
+# privileged runner). Runs only when the instance has a container registry (CI_REGISTRY).
+images:
+  stage: release
+  image: quay.io/buildah/stable:latest
+  needs:
+    - {job: release, optional: true}
+  rules:
+    - if: $CI_REGISTRY && $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
+    - if: $CI_REGISTRY && $CI_PIPELINE_SOURCE == "web"
+      when: manual
+  variables:
+    STORAGE_DRIVER: vfs
+    BUILDAH_ISOLATION: chroot
+    BUILDAH_FORMAT: docker
+  cache: []
+  script:
+    # A registry behind a private CA: the runner hands its CA file to the job.
+    - if [ -n "${CI_SERVER_TLS_CA_FILE:-}" ]; then mkdir -p "/etc/containers/certs.d/$CI_REGISTRY" && cp "$CI_SERVER_TLS_CA_FILE" "/etc/containers/certs.d/$CI_REGISTRY/ca.crt"; fi
+    - echo "$CI_REGISTRY_PASSWORD" | buildah login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+    - TAG="${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}"
+    - |
+      for p in via detect verdict; do
+        buildah build --quiet -f images/Dockerfile --build-arg PILLAR=$p -t "$CI_REGISTRY_IMAGE/$p:$TAG" .
+        buildah push "$CI_REGISTRY_IMAGE/$p:$TAG"
+        echo "image $CI_REGISTRY_IMAGE/$p:$TAG"
+      done
 
 # The documentation published where the other teams read it (docs/deployment.md, section 7):
 # docs/ copied into PRODUCT_DOCS_PATH of the project PRODUCT_DOCS_REPO, one way, replacing what is

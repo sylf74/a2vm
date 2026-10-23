@@ -91,10 +91,10 @@ The code project's own pipeline only runs lint, tests and the offline examples.
 ```yaml
 include:
   - project: vulnops/a2vm
-    ref: v0.11.7
+    ref: v0.12.0
     file: templates/client-pipeline.yml
 variables:
-  A2VM_REF: v0.11.7
+  A2VM_REF: v0.12.0
 ```
 
 3. If `targets.yaml` is used: scan key and target accounts as in `docs/scanning.md`, then the
@@ -123,11 +123,18 @@ Optional client project variables:
 | `A2VM_REPORTING_CA` | Certificate of the reporting database | File, protected |
 | `A2VM_SEND_ONLY`, `A2VM_TEST_TO` | Set in the form of the manual jobs `send-alerts` and `test-mail`, not as project variables | — |
 
+### On Kubernetes (since v0.12.0)
+
+With the variable `A2VM_K8S_CONTEXT`, a push to the default branch also deploys the tenant's daily
+run as a Kubernetes CronJob (job `deploy-k8s`): prerequisites, variables and checks in
+`docs/kubernetes.md`.
+
 ## 6. Releasing a new version
 
-1. Bump `version` in the four package `pyproject.toml` (`a2vm`, `via`, `detect`, `verdict`) and the
-   `__version__` of `a2vm` and `via`, merge, tag `vX.Y.Z` on `main`, push the tag: the
-   `release` job checks that the tag and the package versions agree.
+1. Bump `version` in the four package `pyproject.toml` (`a2vm`, `via`, `detect`, `verdict`), the
+   `__version__` of `a2vm` and `via` and the chart's `Chart.yaml`, merge, tag `vX.Y.Z` on `main`,
+   push the tag: the `release` job checks that the tag, the package and the chart versions agree;
+   the `images` job then builds the pillar images (when the instance has a registry).
 2. In each client project, change `ref` and `A2VM_REF` in `.gitlab-ci.yml`, one client at a
    time if needed.
 
