@@ -1,0 +1,7 @@
+# Who receives the alerts of the fictitious client (invented names and addresses).
+schema_version: 1
+contacts:
+  - {name: Claire Dubois, role: RSSI, email: rssi@demo-industrie.example}
+  - {name: CERT Démo Industrie, role: CERT, email: cert@demo-industrie.example}
+  - {name: Marc Leroy, role: DSI, email: dsi@demo-industrie.example, receive: [urgent]}
+  - {role: Responsable automatisme, email: automatisme@demo-industrie.example, receive: [urgent]}

@@ -362,7 +362,7 @@ measures that reliably interrupt an attack; `small` — local service, or a high
 isolated network.
 
 Compatibility: the profile schema accepts the former values, read as `internet` → `open`,
-`internal` → `controlled`, `isolated` → `small` when the profile is loaded; `vulnops
+`internal` → `controlled`, `isolated` → `small` when the profile is loaded; `a2vm
 validate` (the `validate` job) prints one deprecation warning per former value. The assets stage
 and the alert stage apply the same reading to any value that bypasses the loader. The built-in
 default is `open`, source `assumed`.

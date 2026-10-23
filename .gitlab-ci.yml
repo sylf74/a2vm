@@ -6,6 +6,7 @@
 #   lint, test       every push and merge request
 #   examples         the example profiles and targets are valid, and the offline demo runs
 #   release          on a tag vX.Y.Z: checks that the packages carry that version
+#   sync-product-docs on a tag (or by hand): copies docs/ into a product project, when configured
 
 stages: [lint, test, examples, release]
 
@@ -26,11 +27,11 @@ lint:
     - *install
     - ruff check .
     - ruff format --check .
-    - python -c "import yaml; [yaml.safe_load(open(f)) for f in ('templates/client-pipeline.yml', 'examples/lab/.gitlab-ci.yml')]"
+    - python -c "import yaml; [yaml.safe_load(open(f)) for f in ('templates/client-pipeline.yml', 'examples/lab/.gitlab-ci.yml', 'examples/demo-industrie/.gitlab-ci.yml')]"
 
 test:
   stage: test
-  # A disposable PostgreSQL for the reporting-database tests (pillar 4).
+  # A disposable PostgreSQL for the reporting-database tests (restitution, pillar 3).
   services:
     - name: docker.io/library/postgres:17
       alias: postgres
@@ -70,3 +71,29 @@ release:
         [ "$got" = "$want" ] || { echo "$p/pyproject.toml has version $got, tag says $want"; exit 1; }
       done
       echo "A2VM $CI_COMMIT_TAG: client projects can include templates/client-pipeline.yml at ref $CI_COMMIT_TAG"
+
+# The documentation published where the other teams read it (docs/deployment.md, section 7):
+# docs/ copied into PRODUCT_DOCS_PATH of the project PRODUCT_DOCS_REPO, one way, replacing what is
+# there. Runs only when the code project has the three variables; the token (a project access
+# token of the product project, write_repository) is protected, so tags and protected branches only.
+sync-product-docs:
+  stage: release
+  needs:
+    - {job: release, optional: true}
+  rules:
+    - if: $PRODUCT_DOCS_REPO && $PRODUCT_DOCS_PATH && $PRODUCT_SYNC_TOKEN && $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
+    - if: $PRODUCT_DOCS_REPO && $PRODUCT_DOCS_PATH && $PRODUCT_SYNC_TOKEN && $CI_PIPELINE_SOURCE == "web"
+      when: manual
+  cache: []
+  script:
+    - apt-get update -qq && apt-get install -y -qq git rsync >/dev/null
+    - if [ -n "${CI_SERVER_TLS_CA_FILE:-}" ]; then export GIT_SSL_CAINFO="$CI_SERVER_TLS_CA_FILE"; fi
+    - git clone -q --depth 1 "${CI_SERVER_PROTOCOL}://oauth2:${PRODUCT_SYNC_TOKEN}@${CI_SERVER_HOST}:${CI_SERVER_PORT}/${PRODUCT_DOCS_REPO}.git" product
+    - mkdir -p "product/${PRODUCT_DOCS_PATH}"
+    - rsync -a --delete --exclude '.synced-from' docs/ "product/${PRODUCT_DOCS_PATH}/"
+    - echo "Generated from ${CI_PROJECT_PATH} ${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}. Edit the source, not this copy." > "product/${PRODUCT_DOCS_PATH}/.synced-from"
+    - cd product && git add -A
+    - if git diff --cached --quiet; then echo "documentation already up to date"; exit 0; fi
+    - 'git -c user.name="A2VM docs sync" -c user.email="a2vm-docs-sync@noreply.invalid" commit -q -m "docs: sync from ${CI_PROJECT_PATH} ${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}"'
+    - git push -q origin HEAD
+    - echo "documentation published to ${PRODUCT_DOCS_REPO}/${PRODUCT_DOCS_PATH}"

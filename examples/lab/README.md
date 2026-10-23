@@ -1,7 +1,8 @@
 # Client project template (example: a fictitious lab)
 
-Copy this directory into a new project of the `vulnops/clients` group, then replace the example
-data with the client's own:
+Copy this directory into a new tenant project (e.g. in the `vulnops/clients` group), then replace
+the example data with the client's own. `examples/demo-industrie` is a smaller start without any
+scanner:
 
 | File | Content |
 | --- | --- |
