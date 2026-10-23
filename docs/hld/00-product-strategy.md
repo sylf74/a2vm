@@ -200,6 +200,7 @@ deterministic rules and people decide. Decisions that concern one pillar only ar
 | D12 | Pillars are independent packages, each with its own command (`via`, `detect`, `verdict`); they depend only on the common contract (package `a2vm`) and never import one another; a capability needed across pillars is offered through an a2vm extension point | Each pillar can evolve, be owned and later be deployed on its own; a test enforces the rule |
 | D13 | Client restitution through a Grafana portal that reads the reporting database only, with a read-only role per tenant; the portal runs on its own VM, always on, internal by default, its publication to the client decided per client | Clients get a readable view without access to GitLab; dashboards depend on a stable schema, not on the pipeline internals nor on GitLab; isolation per tenant is kept |
 | D14 | Restitution is modular and independent of GitLab: each run publishes its reporting dataset (`reporting.json`) into a reporting database (PostgreSQL), one row set per run, so history and trends come for free; dashboarding and reporting tools read that database (Grafana first, Qlik Sense next), or receive files a connector derives from it. Restitution belongs to pillar 3, which takes the decisions it shows (`verdict.restitution`, since v0.11.6) | The dataset stays the single contract; a new tool means a new reader or connector, never a change of the pipeline; GitLab, which in production holds code and configuration only, is never on the restitution path; the pillar that decides answers for what the dashboards show |
+| D15 | **Under evaluation.** Target architecture: each pillar runs as its own service on Kubernetes and exposes versioned APIs to the others (records by pillar 1, detection intake by pillar 2, decisions and asset context by pillar 3, actions by pillar 4); questions go through synchronous APIs, changes propagate as events on a message bus; collectors stay close to the client networks and push their results to the detection API; every request and event carries the tenant; a shared cluster with logical separation for the clients who accept it, otherwise a cluster per client, run by the MSSP or by the client itself; secrets in Kubernetes first, an HSM later; GitLab builds and deploys (GitOps) and the GitLab pipelines remain the mode for development and the homelab. Details: Target architecture below | One team per pillar delivers and runs its own service against a published contract; one decision service answers the daily run, the watch and the alert review tool alike, so they never disagree; events keep a pillar's outage from blocking the others; execution and client data leave GitLab (D3); the same charts serve a shared and a dedicated cluster, so the isolation is a choice per client, not a separate product. Open: the platform that runs the cluster, the message bus, the service mesh |
 
 ### Execution
 
@@ -207,6 +208,103 @@ deterministic rules and people decide. Decisions that concern one pillar only ar
 - Jobs fetch the A2VM code at that tag with their job token; the tenant project holds only its own data.
 - A client with an internet exposure also has a collection-only external project, run by the cloud scanner; since v0.11.2 the internal pipeline pulls its latest detection and joins it to the internal assets, so one decision is taken per asset and CVE.
 - Target (D3): GitLab deploys code and configuration to the container runtime; pillar 1 becomes a long-running service there (record API, collection and watch as scheduled tasks); the per-tenant jobs run there on their schedules and write to the reporting database. Today everything runs as GitLab pipelines, the mode kept for development and the homelab.
+
+### Target architecture (under evaluation, D15)
+
+```mermaid
+flowchart LR
+  subgraph client["Client networks"]
+    col["Collectors near the networks<br/>SSH, OpenVAS, Cyberwatch,<br/>external scan"]
+  end
+  subgraph k8s["Kubernetes, internal zone"]
+    gw["API gateway<br/>service identity, mTLS, tenant scoping"]
+    via["Pillar 1 VIA<br/>records, watch,<br/>alert review"]
+    det["Pillar 2 Detection<br/>intake of observations"]
+    ver["Pillar 3 verdict<br/>asset context, decision,<br/>restitution"]
+    dis["Pillar 4 Dispatch<br/>tickets, follow-up"]
+    bus[("Event bus<br/>new CVE, asset exposed,<br/>decision changed")]
+    pg[("PostgreSQL<br/>reporting, history")]
+    agraph[("Asset graph")]
+    llm["LLM endpoint<br/>vLLM on GPU nodes"]
+  end
+  gitlab["GitLab<br/>code, configuration,<br/>images, GitOps"]
+  portal["Grafana, Qlik Sense"]
+
+  col -- "observations" --> det
+  det -- "detection received" --> bus
+  via -- "new CVE, new KEV" --> bus
+  bus --> ver
+  ver -- "records API" --> via
+  via -- "decision API" --> ver
+  ver -- "decision changed" --> bus
+  bus --> dis
+  ver --- pg
+  ver --- agraph
+  via -.- llm
+  ver -.- llm
+  pg --> portal
+  gitlab -. "deploys" .-> k8s
+```
+
+| Building block | Runs as | Exposes | Notes |
+| --- | --- | --- | --- |
+| Pillar 1 VIA (VIA team) | Service; collection and watch as CronJobs | Records API (CVE records, changes since a date), alerts | Replaces the reference `via` package; the record schema stays the contract (§6) |
+| Pillar 2 Detection | Intake service; per-tenant import jobs | Detection intake and read API | Collectors run where the networks are (internal runner, agents in client zones) and push; the cluster does not reach every client network |
+| Pillar 3 verdict | Decision and asset-context service; per-tenant daily re-evaluation as CronJob | Decision API (`decisions:evaluate`), assets, findings | One decision function serves the batch run and the API; the asset context needs the history database (and the asset graph) |
+| Pillar 4 Dispatch | Service | Actions, finding lifecycle | Not started |
+| Shared platform | Gateway, identity, secrets, PostgreSQL (e.g. CloudNativePG), graph database, event bus (e.g. NATS JetStream), observability, LLM endpoint | — | Operated by a platform team or provided by the company's Kubernetes offer; secrets are Kubernetes Secrets at first, kept in an HSM-backed store later (see Tenant isolation) |
+
+Rules of the target:
+
+- **Contracts first**: each API has an OpenAPI specification and each event a JSON schema, kept in the common contract (`a2vm`), versioned (`/v1`; fields only added within a version) and published to the product documentation; teams test against them in their own CI (contract tests).
+- **Synchronous for questions, asynchronous for propagation**: an API call answers a question (the decision for this asset, the record of this CVE); an event announces a change (new KEV, asset exposed, decision changed) to whoever subscribes.
+- **Tenant everywhere**: every request and event carries the tenant; each service checks that the caller may act for it; databases keep row-level security; a namespace per tenant only for what holds the tenant's own secrets (scan credentials).
+- **Client data stay in the internal zone**: requests to the decision and asset APIs carry client data; they never leave the cluster's internal zone, and only the LLM endpoint approved for the tenant receives them (§8).
+- **No more microservices than pillars**: one service per pillar, split further only for a measured reason.
+
+Tenant isolation, chosen per client:
+
+| Mode | For | Isolation | Run by |
+| --- | --- | --- | --- |
+| Shared cluster | Clients who accept a logical separation | A namespace per tenant for its jobs and secrets, network policies between namespaces, tenant checked by every service, row-level security in the databases | The MSSP |
+| Dedicated cluster | Clients who require a physical separation | A cluster for the client alone, with its own databases, bus and LLM endpoint | The MSSP in its datacenter, or the client in its own |
+
+Both modes deploy the same charts at the same version; only the values differ. A dedicated
+cluster at the client receives the images and the charts from the MSSP's GitLab (or a mirror)
+and never sends client data back; the restitution it serves stays at the client.
+
+Secrets (scan keys, database passwords, API tokens, LLM keys) are Kubernetes Secrets at first,
+created by the deployment from the GitLab CI/CD variables of the tenant, never committed. An
+HSM-backed store (key management service or a secrets manager backed by an HSM) comes later,
+first for the dedicated clusters that ask for it; the services read a secret by name, so the
+change of store does not touch them.
+
+Migration, each step usable on its own:
+
+1. **Same work, run by Kubernetes.** The CI of the code project builds one container image per
+   pillar at every tag and publishes it to the GitLab registry. A chart `a2vm-tenant` deploys a tenant: CronJobs that run
+   the same commands as the daily and watch pipelines, the tenant's profile and configuration from
+   its project, its secrets as above, its working files on a volume instead of job artifacts. The
+   chart is deployed by the GitLab agent from the tenant project. Run side by side with the
+   pipeline on one tenant, outputs compared, then the pipeline's schedule is switched off.
+   Execution leaves GitLab; the code does not change.
+2. **Shared platform.** PostgreSQL in the cluster (reporting database and the future history
+   database), the event bus, the observability stack; the reporting database may move from its
+   VM into the cluster.
+3. **The two APIs that unblock the most**: decisions (pillar 3, `a2vm.decision_request/1` →
+   `a2vm.decision/1`) and records (pillar 1, VIA team); the watch asks verdict for the decision of
+   each asset concerned instead of applying its own urgency rules; the daily run and the watch
+   call the same decision service.
+4. History database and asset graph; asset and finding APIs.
+5. Event bus in use: one shared intelligence service publishes new records and KEV changes for
+   every tenant; collectors near the client networks publish their observations; re-evaluation
+   and dispatch are driven by events.
+6. The GitLab pipeline mode stays for development and the homelab: same code, two ways to run it.
+
+The platform part was proven on a homelab cluster in October 2026: three control-plane nodes and
+one worker (RKE2), Ceph storage through Rook, a load balancer and an ingress controller, internal
+certificates by cert-manager, and a first deployment by a GitLab pipeline through the GitLab
+agent.
 
 ## 6. Contracts between pillars
 
@@ -354,8 +452,10 @@ release.
 | v0.11.5 | Restitution (D14): reporting database (PostgreSQL) filled by a `publish` job from each run's dataset, with history and a reading role per tenant; Grafana dashboard; portal deployed as code (Terraform, cloud-init); D3: in production GitLab holds and deploys code and configuration only | 3 |
 | v0.11.6 | Restitution moved to pillar 3 (`verdict publish`, `verdict db`, `verdict grafana`; package `dispatch` removed, the name kept for pillar 4); Grafana dashboards "which assets to fix first" and "which CVEs to fix first": filters, a snapshot compared with an earlier one, decision × severity matrix with KEV; each decision carries its CVSS rating, fix availability, product type and detection sources (database schema version 2); reporting connection as a maskable URI; LLDs of pillars 1 and 2 | 1, 2, 3 |
 | v0.11.7 (current) | Decision chain, CISA Coordinator and BOD 26-04 trees drawn in the triage LLD from the SSVC tables themselves; documentation published to a product project on every tag (`sync-product-docs`); code project path and runner tags as group variables for another GitLab layout; fictitious tenant `examples/demo-industrie`; `CLAUDE.md` for contributors | 3 |
-| Next (to confirm) | Client portal VM (Grafana) in service; history database and finding lifecycle; pillar 1 as a service on the container runtime | 1, 3, 4 |
+| v0.12.0 (to confirm) | D15 step 1: one container image per pillar built at every tag; chart `a2vm-tenant` running the daily and watch work as Kubernetes CronJobs, deployed by the GitLab agent; run side by side with the pipeline on the homelab tenant | All |
+| Next (to confirm) | Client portal VM (Grafana) in service; history database and finding lifecycle; decision API (D15 step 3) | 1, 3, 4 |
 | Then (to confirm) | Dispatch & Capitalization; Emergency Actions | 4, 5 |
+| v1.0 (target) | The architecture of D15 in production: each pillar a service on Kubernetes with its APIs and events, the decision service of pillar 3 shared by the daily run, the watch and the alert review, collectors near the client networks; the GitLab pipeline mode kept for development | All |
 
 ### Risks
 
@@ -372,10 +472,10 @@ release.
 ### Open points
 
 - Hosting option per client within the MSSP mode: MSSP datacenter or company cloud zone
-- Container runtime for the services: Kubernetes is the candidate, to be validated
+- Container runtime for the services: Kubernetes is the candidate (D15, under evaluation); settled: a shared cluster for the clients who accept a logical separation, a dedicated cluster (MSSP or client) otherwise; Kubernetes Secrets first, an HSM-backed store later; to settle: who runs the shared cluster (company platform or a team of the service), the message bus (e.g. NATS JetStream, Kafka, or PostgreSQL-based queues at first), the service mesh or network policies, the GitOps tool beyond the GitLab agent, how a dedicated cluster at a client receives updates
 - Client portal: publication per client (internal only, through the reverse proxy, at the client) and how clients authenticate
 - Qlik Sense connector: interface specifications (file or API, format, frequency, authentication, who operates the load); some perimeters have no Qlik Sense instance, where the Grafana portal remains the only restitution
-- Production execution (D3): scheduler of the per-tenant jobs on the runtime (Kubernetes CronJobs or another), how tenant configuration is deployed to it, and the move of the alert journal and the analysts' validation out of GitLab
+- Production execution (D3): the per-tenant jobs become Kubernetes CronJobs deployed from the tenant project by a chart (D15 step 1); still open: the move of the alert journal and the analysts' validation out of GitLab
 - Points on hold from the review of another internal architecture document, to settle with its team
 
 Open points of a single pillar are in its chapter.
