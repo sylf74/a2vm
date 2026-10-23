@@ -58,3 +58,13 @@ def test_a_fix_is_known_from_a_scanner_a_closed_range_or_a_patch_reference():
     assert not fix_available(open_, _finding())
     patched = _record(references=[{"url": "https://example.org/p", "tags": ["patch"]}])
     assert fix_available(patched, _finding())
+
+
+def test_decision_diagrams_of_the_lld_match_the_ssvc_tables():
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    script = Path(__file__).resolve().parents[1] / "scripts" / "make_decision_diagrams.py"
+    run = subprocess.run([sys.executable, str(script), "--check"], capture_output=True, text=True)
+    assert run.returncode == 0, run.stderr

@@ -49,6 +49,17 @@ detection files in `work/detect` carry what the later stages use.
 | `A2VM_LLM_MODEL` | `qwen3-14b` | Visible, not protected |
 | `LLM_API_KEY` | (only if the server requires one) | Masked, protected |
 
+In another GitLab layout (the code project elsewhere than `vulnops/a2vm`, runners with other tags),
+set on the same group:
+
+| Key | Example | Options |
+| --- | --- | --- |
+| `A2VM_PROJECT` | `<group>/<subgroup>/a2vm`: the path of the code project | Visible |
+| `A2VM_RUNNER_TAG`, `A2VM_COLLECT_TAG` | the tag of the runner that reaches the LLM and the targets | Visible |
+
+A group variable takes precedence over the defaults of the pipeline template; the `include:
+project:` of each client `.gitlab-ci.yml` names the same path (`examples/demo-industrie`).
+
 A client project can override any of them (e.g. another engine for a client that allows cloud).
 Optional Google Threat Intelligence enrichment: `A2VM_GTI_ENABLED` and `GTI_API_KEY` (masked,
 protected), see `docs/gti.md`.
@@ -80,10 +91,10 @@ The code project's own pipeline only runs lint, tests and the offline examples.
 ```yaml
 include:
   - project: vulnops/a2vm
-    ref: v0.11.6
+    ref: v0.11.7
     file: templates/client-pipeline.yml
 variables:
-  A2VM_REF: v0.11.6
+  A2VM_REF: v0.11.7
 ```
 
 3. If `targets.yaml` is used: scan key and target accounts as in `docs/scanning.md`, then the
@@ -119,6 +130,30 @@ Optional client project variables:
    `release` job checks that the tag and the package versions agree.
 2. In each client project, change `ref` and `A2VM_REF` in `.gitlab-ci.yml`, one client at a
    time if needed.
+
+## 7. Publishing the documentation to a product project
+
+The job `sync-product-docs` of the code project copies `docs/` into another project where the
+teams read the reference (for example a `product` project holding the documents of every pillar),
+on every version tag, or by hand (Run pipeline). The copy is one way and replaces what is there:
+edit the source in the code project, never the copy.
+
+1. In the product project: **Settings > Access tokens**, a project access token, role Maintainer
+   (or Developer if developers may push to the default branch), scope `write_repository`, with an
+   expiry date.
+2. In the code project, **Settings > CI/CD > Variables**:
+
+   | Key | Value | Options |
+   | --- | --- | --- |
+   | `PRODUCT_DOCS_REPO` | path of the product project | Visible |
+   | `PRODUCT_DOCS_PATH` | folder of the copy, e.g. `docs` or `docs/a2vm` | Visible |
+   | `PRODUCT_SYNC_TOKEN` | the token | Masked and hidden, protected |
+
+3. Push a tag: the job pushes one commit "docs: sync from … vX.Y.Z" to the product project, and
+   writes `.synced-from` (source and version) in the folder.
+
+`PRODUCT_DOCS_PATH` is copied with deletion: a file that exists only there is removed. Give A2VM
+its own folder when other teams write next to it. Without the three variables the job does not run.
 
 ## CI/CD variables renamed in v0.11.1
 

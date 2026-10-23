@@ -1,0 +1,10 @@
+# Tenant pipeline: everything comes from the A2VM code project, at a fixed version. Replace the
+# project path with the path of the A2VM code project in your GitLab (and set the CI/CD variable
+# A2VM_PROJECT to the same path, on the group of the tenants).
+include:
+  - project: group/subgroup/a2vm
+    ref: v0.11.7
+    file: templates/client-pipeline.yml
+
+variables:
+  A2VM_REF: v0.11.7   # keep equal to the include ref

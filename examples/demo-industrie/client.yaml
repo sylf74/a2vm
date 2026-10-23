@@ -1,0 +1,119 @@
+# Fictitious client for the first A2VM run in a new GitLab: real products, invented company,
+# names and addresses. No scanner yet: every asset is declared and matched against the CVE
+# records by vendor, product and version (detect inventory). Replace it with a real tenant later.
+
+schema_version: 2
+client:
+  id: demo-industrie
+  name: Démo Industrie
+  updated: 2026-10-23
+
+defaults:
+  exposure: controlled
+  mission_prevalence: support
+  public_wellbeing_impact: minimal
+  owner: dsi-infra@demo-industrie.example
+
+alerts:
+  recipients: [cert@demo-industrie.example]
+  level: all
+  attach: [docx]
+  watchlist:
+    - "Fortinet FortiGate"
+    - "Palo Alto Networks PAN-OS"
+    - "Cisco ASA"
+    - "Ivanti Connect Secure"
+    - "Citrix NetScaler"
+    - "Microsoft Exchange Server"
+    - "VMware ESXi"
+    - "Veeam Backup & Replication"
+    - "Atlassian Confluence"
+    - "Siemens SIMATIC"
+
+assets:
+  - id: fw-internet
+    description: Internet firewall and SSL VPN (FortiGate cluster)
+    vendor: Fortinet
+    product: FortiOS
+    product_aliases: ["FortiGate", "FortiOS SSL-VPN"]
+    versions: ["7.2.8"]
+    exposure: open
+    mission_prevalence: essential
+    zone: edge
+    owner: reseau@demo-industrie.example
+  - id: adc-portail
+    description: Application delivery controller publishing the customer portal
+    vendor: Citrix
+    product: NetScaler ADC
+    product_aliases: ["NetScaler", "Citrix ADC"]
+    versions: ["14.1-21.12"]
+    exposure: open
+    mission_prevalence: essential
+    zone: dmz
+    owner: reseau@demo-industrie.example
+  - id: vpn-tiers
+    description: Remote access for maintenance contractors
+    vendor: Ivanti
+    product: Connect Secure
+    product_aliases: ["Ivanti Connect Secure", "Pulse Connect Secure"]
+    versions: ["22.7R2.3"]
+    exposure: open
+    mission_prevalence: support
+    zone: dmz
+    owner: reseau@demo-industrie.example
+  - id: messagerie
+    description: Exchange Server 2019, reached from the Internet through the ADC
+    vendor: Microsoft
+    product: Exchange Server 2019
+    product_aliases: ["Microsoft Exchange Server 2019", "Exchange Server"]
+    versions: ["15.2.1544.4"]
+    exposure: open
+    mission_prevalence: essential
+    zone: lan
+  - id: vcenter
+    description: vCenter Server managing the production clusters
+    vendor: VMware
+    product: vCenter Server
+    product_aliases: ["VMware vCenter Server"]
+    versions: ["8.0 U2"]
+    exposure: small
+    mission_prevalence: essential
+    zone: admin
+  - id: esxi
+    description: ESXi hypervisors of the production clusters
+    vendor: VMware
+    product: ESXi
+    product_aliases: ["VMware ESXi"]
+    versions: ["8.0 U2"]
+    exposure: small
+    mission_prevalence: essential
+    zone: admin
+  - id: sauvegarde
+    description: Backup server
+    vendor: Veeam
+    product: Veeam Backup & Replication
+    product_aliases: ["Backup & Replication"]
+    versions: ["12.1.2.172"]
+    exposure: controlled
+    mission_prevalence: essential
+    zone: admin
+  - id: wiki
+    description: Internal wiki
+    vendor: Atlassian
+    product: Confluence Data Center
+    product_aliases: ["Confluence Server", "Confluence"]
+    versions: ["8.5.4"]
+    exposure: controlled
+    mission_prevalence: support
+    zone: lan
+  - id: supervision-usine
+    description: Workshop supervision (SCADA) of the production line
+    vendor: Siemens
+    product: SIMATIC WinCC
+    product_aliases: ["WinCC"]
+    versions: ["V8.0"]
+    exposure: small
+    mission_prevalence: essential
+    public_wellbeing_impact: material
+    zone: ot
+    owner: automatisme@demo-industrie.example
