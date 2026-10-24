@@ -207,7 +207,7 @@ deterministic rules and people decide. Decisions that concern one pillar only ar
 - Each tenant project includes the pipeline template at a pinned A2VM tag: `validate` on every push; `collect → via → detect → assets → triage` on the daily schedule; `watch`, then the manual `send-alerts` (the analyst's validation), on a 10-minute schedule.
 - Jobs fetch the A2VM code at that tag with their job token; the tenant project holds only its own data.
 - A client with an internet exposure also has a collection-only external project, run by the cloud scanner; since v0.11.2 the internal pipeline pulls its latest detection and joins it to the internal assets, so one decision is taken per asset and CVE.
-- Target (D3): GitLab deploys code and configuration to the container runtime; pillar 1 becomes a long-running service there (record API, collection and watch as scheduled tasks); the per-tenant jobs run there on their schedules and write to the reporting database. Today everything runs as GitLab pipelines, the mode kept for development and the homelab.
+- Target (D3): GitLab deploys code and configuration to the container runtime; pillar 1 becomes a long-running service there (record API, collection and watch as scheduled tasks); the per-tenant jobs run there on their schedules and write to the reporting database. Since v0.12.0 the daily run of a tenant can run as a Kubernetes CronJob deployed from its project (`docs/kubernetes.md`); the watch and everything else run as GitLab pipelines, the mode kept for development and the homelab.
 
 ### Target architecture (under evaluation, D15)
 
@@ -287,7 +287,8 @@ Migration, each step usable on its own:
    its project, its secrets as above, its working files on a volume instead of job artifacts. The
    chart is deployed by the GitLab agent from the tenant project. Run side by side with the
    pipeline on one tenant, outputs compared, then the pipeline's schedule is switched off.
-   Execution leaves GitLab; the code does not change.
+   Execution leaves GitLab; the code does not change. Done in v0.12.0 for the daily run; the
+   watch and the analysts' validation follow, once they no longer read the pipeline's inventory.
 2. **Shared platform.** PostgreSQL in the cluster (reporting database and the future history
    database), the event bus, the observability stack; the reporting database may move from its
    VM into the cluster.
@@ -451,8 +452,8 @@ release.
 | v0.11.4 | Exposure gaps listed in the report and the reporting dataset; alert sheet as a Word file from a template per client (tags), sent to the client as Word or as a PDF made from it; analysts edit a sheet (text or Word) in the client project before sending | 1, 3 |
 | v0.11.5 | Restitution (D14): reporting database (PostgreSQL) filled by a `publish` job from each run's dataset, with history and a reading role per tenant; Grafana dashboard; portal deployed as code (Terraform, cloud-init); D3: in production GitLab holds and deploys code and configuration only | 3 |
 | v0.11.6 | Restitution moved to pillar 3 (`verdict publish`, `verdict db`, `verdict grafana`; package `dispatch` removed, the name kept for pillar 4); Grafana dashboards "which assets to fix first" and "which CVEs to fix first": filters, a snapshot compared with an earlier one, decision × severity matrix with KEV; each decision carries its CVSS rating, fix availability, product type and detection sources (database schema version 2); reporting connection as a maskable URI; LLDs of pillars 1 and 2 | 1, 2, 3 |
-| v0.11.7 (current) | Decision chain, CISA Coordinator and BOD 26-04 trees drawn in the triage LLD from the SSVC tables themselves; documentation published to a product project on every tag (`sync-product-docs`); code project path and runner tags as group variables for another GitLab layout; fictitious tenant `examples/demo-industrie`; `CLAUDE.md` for contributors | 3 |
-| v0.12.0 (to confirm) | D15 step 1: one container image per pillar built at every tag; chart `a2vm-tenant` running the daily and watch work as Kubernetes CronJobs, deployed by the GitLab agent; run side by side with the pipeline on the homelab tenant | All |
+| v0.11.7 | Decision chain, CISA Coordinator and BOD 26-04 trees drawn in the triage LLD from the SSVC tables themselves; documentation published to a product project on every tag (`sync-product-docs`); code project path and runner tags as group variables for another GitLab layout; fictitious tenant `examples/demo-industrie`; `CLAUDE.md` for contributors | 3 |
+| v0.12.0 (current) | D15 step 1: one container image per pillar built at every tag (`images`, Buildah, GitLab registry); chart `a2vm-tenant` running the daily run as a Kubernetes CronJob, one container per step in the image of its pillar, deployed from the tenant project by the job `deploy-k8s` through the GitLab agent, secrets copied from the CI/CD variables; the watch stays in GitLab (`docs/kubernetes.md`) | All |
 | Next (to confirm) | Client portal VM (Grafana) in service; history database and finding lifecycle; decision API (D15 step 3) | 1, 3, 4 |
 | Then (to confirm) | Dispatch & Capitalization; Emergency Actions | 4, 5 |
 | v1.0 (target) | The architecture of D15 in production: each pillar a service on Kubernetes with its APIs and events, the decision service of pillar 3 shared by the daily run, the watch and the alert review, collectors near the client networks; the GitLab pipeline mode kept for development | All |

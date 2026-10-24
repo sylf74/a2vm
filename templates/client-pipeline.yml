@@ -11,10 +11,10 @@
 #
 #     include:
 #       - project: vulnops/a2vm
-#         ref: v0.11.7
+#         ref: v0.12.0
 #         file: templates/client-pipeline.yml
 #     variables:
-#       A2VM_REF: v0.11.7        # same version as the include
+#       A2VM_REF: v0.12.0        # same version as the include
 #
 # Jobs:
 #   push to the default branch     validate (profile and targets)
@@ -22,6 +22,8 @@
 #                                  optional TRIAGE_CVES="CVE-... CVE-...", TRIAGE_SINCE (default 26h)
 #   same, with A2VM_JOB=watch   watch (CERT-FR, KEV, critical CVEs matched to the client; alerts
 #                                  mailed to the analysts) -> send-alerts (manual: the validation)
+#   push or "Run pipeline", with A2VM_K8S_CONTEXT   deploy-k8s: the daily run as a Kubernetes
+#                                  CronJob (docs/kubernetes.md)
 #
 # CI/CD variables (client project, or inherited from the groups):
 #   A2VM_SSH_KEY          File, protected: private key of this client's read-only scan account
@@ -54,7 +56,7 @@ variables:
   A2VM_RUNNER_TAG: llm-lan
   A2VM_COLLECT_TAG: llm-lan
 
-stages: [validate, collect, via, detect, assets, triage, publish, watch, send]
+stages: [validate, deploy, collect, via, detect, assets, triage, publish, watch, send]
 
 .a2vm:
   image: python:3.12-slim
@@ -109,6 +111,81 @@ validate:
     - if [ -f "$A2VM_TARGETS" ]; then detect plan "$A2VM_TARGETS" --profile "$A2VM_PROFILE"; fi
     - if [ -f contacts.yaml ]; then via contacts "$A2VM_PROFILE" --contacts contacts.yaml; fi
     - if [ -f templates/alert.docx ]; then via check-template templates/alert.docx; fi
+
+# -- Kubernetes (HLD D15, step 1): the daily run as a CronJob in the cluster -----------------------
+# When A2VM_K8S_CONTEXT names a GitLab agent context allowed for this project (e.g.
+# vulnops/k8s:homelab), each push to the default branch and each "Run pipeline" deploys this tenant
+# with the chart deploy/charts/a2vm-tenant of A2VM_REF (a release tag: the images exist for tags
+# only): this project's profile, targets and settings, its secrets from its CI/CD variables, the
+# pillar images from the code project's registry. Variables: docs/kubernetes.md.
+deploy-k8s:
+  stage: deploy
+  image: alpine:3.22
+  tags: ["$A2VM_RUNNER_TAG"]
+  needs: [validate]
+  rules:
+    - if: $A2VM_JOB == "watch" || $VULNOPS_JOB == "watch"
+      when: never
+    - if: $A2VM_K8S_CONTEXT && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web")
+  cache: []
+  script:
+    - apk add --no-cache -q git helm kubectl
+    - if [ -n "${CI_SERVER_TLS_CA_FILE:-}" ]; then export GIT_SSL_CAINFO="$CI_SERVER_TLS_CA_FILE"; fi
+    - BASE="${A2VM_SERVER_URL:-${CI_SERVER_PROTOCOL}://${CI_SERVER_HOST}:${CI_SERVER_PORT}}"
+    - git -c advice.detachedHead=false clone -q --depth 1 --branch "$A2VM_REF"
+        "${BASE%%://*}://gitlab-ci-token:${CI_JOB_TOKEN}@${BASE#*://}/${A2VM_PROJECT}.git" .a2vm
+    - kubectl config use-context "$A2VM_K8S_CONTEXT"
+    # GitLab behind a private CA: kubectl reaches the cluster through GitLab (File variable).
+    - if [ -n "${A2VM_K8S_CA:-}" ]; then kubectl config set-cluster gitlab --certificate-authority="$A2VM_K8S_CA"; fi
+    - NS="${A2VM_K8S_NAMESPACE:-a2vm-$(echo "$CI_PROJECT_NAME" | tr 'A-Z_' 'a-z-')}"
+    - kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f -
+    # The tenant's secrets, from its CI/CD variables (File or text), into one Secret; never printed.
+    - |
+      umask 077; S="$(mktemp -d)"
+      put() {
+        if [ -z "$2" ]; then return 0; fi
+        if [ -f "$2" ]; then cp "$2" "$S/$1"; else printf '%s' "$2" > "$S/$1"; fi
+      }
+      put ssh-key "${A2VM_SSH_KEY:-}"
+      put llm-api-key "${LLM_API_KEY:-}"
+      put gti-api-key "${GTI_API_KEY:-}"
+      put gvm-user "${A2VM_GVM_USER:-}"
+      put gvm-password "${A2VM_GVM_PASSWORD:-}"
+      put reporting-dsn "${A2VM_REPORTING_DSN:-}"
+      put reporting-ca "${A2VM_REPORTING_CA:-}"
+      put gitlab-token "${A2VM_GITLAB_TOKEN:-}"
+      put gitlab-ca "${CI_SERVER_TLS_CA_FILE:-}"
+      kubectl -n "$NS" create secret generic a2vm-tenant --from-file="$S" --dry-run=client -o yaml | kubectl apply -f -
+      echo "secret a2vm-tenant: $(ls "$S" | tr '\n' ' ')"
+      rm -rf "$S"
+    # A private registry: a deploy token with read_registry (A2VM_REGISTRY_USER, A2VM_REGISTRY_PASSWORD).
+    - |
+      PULL=""
+      if [ -n "${A2VM_REGISTRY_USER:-}" ] && [ -n "${A2VM_REGISTRY_PASSWORD:-}" ]; then
+        kubectl -n "$NS" create secret docker-registry a2vm-registry --docker-server="${A2VM_REGISTRY:-$CI_REGISTRY}" \
+          --docker-username="$A2VM_REGISTRY_USER" --docker-password="$A2VM_REGISTRY_PASSWORD" --dry-run=client -o yaml | kubectl apply -f -
+        PULL="--set image.pullSecret=a2vm-registry"
+      fi
+    # Non-secret settings handed to the run.
+    - |
+      ENVF="$(mktemp)"; echo "env:" > "$ENVF"
+      for v in A2VM_LLM_ENABLED A2VM_LLM_BASE_URL A2VM_LLM_MODEL A2VM_GTI_ENABLED A2VM_EXTERNAL_PROJECT; do
+        eval "val=\"\${$v:-}\""
+        if [ -n "$val" ]; then printf '  %s: "%s"\n' "$v" "$val" >> "$ENVF"; fi
+      done
+      printf '  A2VM_SERVER_URL: "%s"\n' "${A2VM_SERVER_URL:-$CI_SERVER_URL}" >> "$ENVF"
+    - |
+      FILES="--set-file files.profile=$A2VM_PROFILE"
+      if [ -f "$A2VM_TARGETS" ]; then FILES="$FILES --set-file files.targets=$A2VM_TARGETS"; fi
+      if [ -f settings.yaml ]; then FILES="$FILES --set-file files.settings=settings.yaml"; fi
+      helm upgrade --install a2vm .a2vm/deploy/charts/a2vm-tenant -n "$NS" \
+        --set tenant="$(echo "$CI_PROJECT_NAME" | tr 'A-Z_' 'a-z-')" \
+        --set image.registry="${A2VM_IMAGE_REGISTRY:-$CI_REGISTRY/$A2VM_PROJECT}" \
+        --set image.tag="$A2VM_REF" \
+        --set secret.name=a2vm-tenant \
+        --set daily.schedule="${A2VM_K8S_SCHEDULE:-45 5 * * *}" \
+        $PULL $FILES -f "$ENVF"
+      kubectl -n "$NS" get cronjob,pvc
 
 # Exit code 3 = collection incomplete: the job shows as a warning and the pipeline goes on with
 # what was collected (plus the declared inventory).

@@ -1,0 +1,58 @@
+# Values of one tenant. The tenant project's job deploy-k8s fills them (docs/kubernetes.md); by
+# hand: helm upgrade --install a2vm deploy/charts/a2vm-tenant -n a2vm-<client> \
+#   --set tenant=<client> --set image.registry=<registry>/vulnops/a2vm \
+#   --set-file files.profile=client.yaml [--set-file files.targets=targets.yaml]
+
+# Client id, as in client.yaml: used in names and labels.
+tenant: ""
+
+image:
+  # Where the pillar images are: <registry>/<pillar>:<tag> (via, detect, verdict).
+  registry: ""
+  # Default: v<appVersion>. Images exist for release tags only.
+  tag: ""
+  pullPolicy: IfNotPresent
+  # Name of a docker-registry Secret, when the registry is private.
+  pullSecret: ""
+
+# Content of the tenant's files (--set-file). profile is required; the others are optional.
+files:
+  profile: ""     # client.yaml
+  targets: ""     # targets.yaml: without it, declared inventory only
+  settings: ""    # settings.yaml: without it, the defaults of the version
+
+daily:
+  schedule: "45 5 * * *"
+  timeZone: Europe/Paris
+  # Records changed since (via collect --since); same default as the pipeline.
+  since: 26h
+  suspend: false
+  # A network scan can run for hours (targets timeout_minutes, default 240).
+  activeDeadlineSeconds: 21600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+
+# Name of the Secret holding the tenant's secrets. Every key is optional:
+#   ssh-key         private key of the read-only scan account
+#   llm-api-key     LLM_API_KEY
+#   gti-api-key     GTI_API_KEY
+#   gvm-user, gvm-password   OpenVAS (GMP) account
+#   reporting-dsn   writer connection to the reporting database
+#   reporting-ca    certificate of the reporting database
+#   gitlab-token    A2VM_GITLAB_TOKEN (external detection)
+#   gitlab-ca       CA of GitLab, for the GitLab API (external detection)
+secret:
+  name: ""
+
+# Non-secret settings, as environment variables (A2VM_LLM_ENABLED, A2VM_LLM_BASE_URL,
+# A2VM_LLM_MODEL, A2VM_GTI_ENABLED, A2VM_EXTERNAL_PROJECT, A2VM_SERVER_URL...).
+env: {}
+
+# Working files (work/, output/, the sources cache): kept from one run to the next.
+storage:
+  size: 5Gi
+  storageClass: ""
+
+resources: {}
+nodeSelector: {}
+tolerations: []
