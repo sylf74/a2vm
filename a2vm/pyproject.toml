@@ -17,4 +17,4 @@ a2vm = "a2vm.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-"a2vm" = ["schemas/*.json"]
+"a2vm" = ["schemas/*.json", "schemas/openapi/*.yaml"]
