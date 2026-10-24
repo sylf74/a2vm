@@ -2,6 +2,7 @@
 # hand: helm upgrade --install a2vm deploy/charts/a2vm-tenant -n a2vm-<client> \
 #   --set tenant=<client> --set image.registry=<registry>/vulnops/a2vm \
 #   --set-file files.profile=client.yaml [--set-file files.targets=targets.yaml]
+#   [--set intake.enabled=true --set-file intake.collectors=collectors.yaml --set intake.digestsSecret=...]
 
 # Client id, as in client.yaml: used in names and labels.
 tenant: ""
@@ -20,6 +21,49 @@ files:
   profile: ""     # client.yaml
   targets: ""     # targets.yaml: without it, declared inventory only
   settings: ""    # settings.yaml: without it, the defaults of the version
+
+# First step of the daily run (LLD detection §8.4):
+# - local: the run collects itself from the cluster (targets.yaml: SSH, OpenVAS), as in v0.12;
+# - intake: the run reads the latest detection of each declared source from the detection
+#     service, where the collectors near the networks push them (needs intake.enabled).
+collect:
+  mode: local
+
+# Detection service of the tenant (`detect serve`, LLD detection §8.2): receives the pushes of the
+# collectors declared in the tenant's collectors.yaml. deploy-k8s fills this section when the
+# tenant project has a collectors.yaml (docs/collectors.md).
+intake:
+  enabled: false
+  collectors: ""        # collectors.yaml (--set-file)
+  # Secret with the key `digests`: one `<collector id|read> <sha256 of the token>` per line.
+  digestsSecret: ""
+  # Any value that changes with the digests (deploy-k8s: their sha256): the service restarts and
+  # reads them.
+  digestsChecksum: ""
+  keep: 14              # detections kept per source and collector
+  maxMb: 200            # largest detection accepted, uncompressed
+  storage:
+    size: 2Gi
+    storageClass: ""
+  resources: {}
+  # The push endpoint (POST /v1/tenants/<tenant>/detections only) for the collectors outside the
+  # cluster. The read calls stay inside the cluster.
+  ingress:
+    enabled: false
+    className: ""
+    host: ""            # e.g. detect-lab.apps.example.org
+    tlsSecret: ""       # certificate of the host; empty: the controller's default certificate
+    # Addresses of the collectors (CIDR), the only sources allowed to push: required.
+    allowFrom: []
+    # ingress-nginx: allow-list and body size as its annotations. Another controller: false, and its
+    # own allow-list in `annotations` (the chart then cannot check it).
+    nginx: true
+    annotations: {}
+  # The service accepts connections from the ingress controller and the tenant's daily run only,
+  # and opens none.
+  networkPolicy:
+    enabled: true
+    ingressNamespace: kube-system   # namespace of the ingress controller (RKE2: kube-system)
 
 daily:
   schedule: "45 5 * * *"
@@ -41,6 +85,7 @@ daily:
 #   reporting-ca    certificate of the reporting database
 #   gitlab-token    A2VM_GITLAB_TOKEN (external detection)
 #   gitlab-ca       CA of GitLab, for the GitLab API (external detection)
+#   detect-read-token   token of the daily run on the detection service (collect.mode intake)
 secret:
   name: ""
 

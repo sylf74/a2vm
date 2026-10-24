@@ -1,12 +1,14 @@
 # Contract of the pillar 2 detection service (HLD D15, LLD vulnerability-detection §8).
-# Status: design for v0.13.0, under review. Within v1, fields and calls are only added.
+# Status: v1, as built in v0.13.0 (detect serve). Within v1, fields and calls are only added.
 openapi: 3.1.0
 info:
   title: A2VM detection service
-  version: "1.0.0-draft"
+  version: "1.0.0"
   description: >
     Collectors near the networks push one detection per source (vulnops.detection/1); the daily
-    run and pillar 3 read the latest detection of each source. Every call carries the tenant.
+    run and pillar 3 read the latest detection of each source and collector. Every call carries
+    the tenant. Read calls stay inside the cluster; until service accounts, they carry the read
+    token of the tenant's daily run.
 servers:
   - url: https://detect.example.org
 tags:
@@ -63,7 +65,10 @@ paths:
     get:
       tags: [read]
       operationId: latestDetections
-      summary: The latest accepted detection of each source of the tenant
+      summary: The latest accepted detection of each source and collector of the tenant
+      description: >
+        Two collectors of one tenant (two networks) may push the same source: one entry each; the
+        daily run merges them.
       security:
         - serviceIdentity: []
       parameters:
@@ -71,15 +76,16 @@ paths:
         - name: source
           in: query
           required: false
-          schema: {type: string}
+          schema: {type: string, pattern: "^[a-z0-9][a-z0-9-]{0,62}$"}
       responses:
         "200":
-          description: One entry per source
+          description: One entry per source and collector
           content:
             application/json:
               schema:
                 type: array
                 items: {$ref: "#/components/schemas/StoredDetection"}
+        "400": {$ref: "#/components/responses/Problem"}
         "401": {$ref: "#/components/responses/Problem"}
         "403": {$ref: "#/components/responses/Problem"}
   /v1/tenants/{tenant}/detections/{id}:
@@ -142,7 +148,7 @@ components:
     serviceIdentity:
       type: http
       scheme: bearer
-      description: Kubernetes service account token of the calling service.
+      description: Kubernetes service account token of the calling service (target); v0.13.0 checks the read token of the tenant's daily run, kept by the service as a digest.
   parameters:
     tenant:
       name: tenant
@@ -194,7 +200,7 @@ components:
               last_received_at: {type: string, format: date-time}
               age_hours: {type: number}
               stale: {type: boolean}
-              last_error: {type: string}
+              last_error: {type: string, description: "Last refused push (time and reason), until a push is accepted; kept in memory"}
     Problem:
       type: object
       properties:

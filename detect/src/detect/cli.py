@@ -142,6 +142,11 @@ def cmd_serve(args: argparse.Namespace) -> int:
         f"({', '.join(registry.collectors) or 'none'}), read token {readers}, store {args.store}",
         flush=True,
     )
+    try:
+        Path(args.store).mkdir(parents=True, exist_ok=True)  # a new volume: /readyz waits for it
+    except OSError as exc:
+        print(f"store {args.store}: {exc}", file=sys.stderr)
+        return 2
     service = Service(registry, FileStore(args.store, args.keep), args.max_mb * 1024 * 1024)
     httpd = serve(service, args.host, args.port)
     try:
@@ -182,6 +187,16 @@ def cmd_collectors(args: argparse.Namespace) -> int:
     if not collectors:
         print(f"{args.collectors}: no collector declared", file=sys.stderr)
         return 2
+    if args.profile:
+        try:
+            client = load_profile(args.profile).id
+        except ProfileError as exc:
+            print(exc, file=sys.stderr)
+            return 2
+        if client != args.tenant:
+            # The push names the tenant in its path and the client in its body: both must agree.
+            print(f"{args.profile}: client {client!r} is not the tenant {args.tenant!r}", file=sys.stderr)
+            return 2
     for c in collectors.values():
         variable = "A2VM_COLLECTOR_TOKEN_" + c.id.upper().replace("-", "_")
         print(f"{args.tenant}: collector {c.id} ({', '.join(c.sources)}, max {c.max_age_hours:g} h), token {variable}")
@@ -331,7 +346,8 @@ def main(argv: list[str] | None = None) -> int:
 
     cl = sub.add_parser("collectors", help="check the tenant's declaration of its collectors")
     cl.add_argument("collectors", help="collectors.yaml")
-    cl.add_argument("--tenant", required=True, help="client id of the tenant project")
+    cl.add_argument("--tenant", required=True, help="tenant id (the deploy job uses the project name)")
+    cl.add_argument("--profile", help="client.yaml: its client id must be the tenant id")
     cl.set_defaults(func=cmd_collectors)
 
     args = parser.parse_args(argv)

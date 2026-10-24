@@ -378,6 +378,11 @@ def test_cli_checks_the_declaration(tmp_path, declaration, capsys):
     empty.write_text("collectors: []\n")
     assert main(["collectors", str(empty), "--tenant", "lab"]) == 2
     assert main(["collectors", str(declaration[0]), "--tenant", "Lab"]) == 2
+    profile = tmp_path / "client.yaml"
+    profile.write_text((FIXTURES.parent.parent / "examples" / "lab" / "client.yaml").read_text())
+    assert main(["collectors", str(declaration[0]), "--tenant", "lab", "--profile", str(profile)]) == 0
+    assert main(["collectors", str(declaration[0]), "--tenant", "lab-prod", "--profile", str(profile)]) == 2
+    assert "is not the tenant" in capsys.readouterr().err
 
 
 # -- agent ----------------------------------------------------------------------------------------

@@ -47,6 +47,7 @@ variables:
   A2VM_REF: main
   A2VM_PROFILE: client.yaml
   A2VM_TARGETS: targets.yaml
+  A2VM_COLLECTORS: collectors.yaml
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
   A2VM_CACHE_DIR: "$CI_PROJECT_DIR/.cache"
   DEBIAN_FRONTEND: noninteractive
@@ -109,6 +110,7 @@ validate:
   script:
     - a2vm validate "$A2VM_PROFILE"
     - if [ -f "$A2VM_TARGETS" ]; then detect plan "$A2VM_TARGETS" --profile "$A2VM_PROFILE"; fi
+    - if [ -f "$A2VM_COLLECTORS" ]; then detect collectors "$A2VM_COLLECTORS" --tenant "$(echo "$CI_PROJECT_NAME" | tr 'A-Z_' 'a-z-')" --profile "$A2VM_PROFILE"; fi
     - if [ -f contacts.yaml ]; then via contacts "$A2VM_PROFILE" --contacts contacts.yaml; fi
     - if [ -f templates/alert.docx ]; then via check-template templates/alert.docx; fi
 
@@ -139,6 +141,34 @@ deploy-k8s:
     - if [ -n "${A2VM_K8S_CA:-}" ]; then kubectl config set-cluster gitlab --certificate-authority="$A2VM_K8S_CA"; fi
     - NS="${A2VM_K8S_NAMESPACE:-a2vm-$(echo "$CI_PROJECT_NAME" | tr 'A-Z_' 'a-z-')}"
     - kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f -
+    # Detection service (HLD D15 step 2), when the project declares its collectors: the digests of
+    # their tokens (A2VM_COLLECTOR_TOKEN_<ID>) in the Secret a2vm-intake, the read token of the
+    # daily run kept from one deployment to the next; no token is printed (docs/collectors.md).
+    - |
+      INTAKE=""; READ_TOKEN=""; I="$(mktemp -d)"; chmod 700 "$I"
+      if [ -f "$A2VM_COLLECTORS" ]; then
+        apk add --no-cache -q python3 py3-yaml
+        kubectl -n "$NS" get secret a2vm-tenant -o jsonpath='{.data.detect-read-token}' 2>/dev/null \
+          | base64 -d > "$I/deployed-read-token" 2>/dev/null || true
+        python3 .a2vm/deploy/intake/intake_secrets.py "$A2VM_COLLECTORS" --out "$I" --read-token "$I/deployed-read-token"
+        rm -f "$I/deployed-read-token"
+        kubectl -n "$NS" create secret generic a2vm-intake --from-file=digests="$I/digests" --dry-run=client -o yaml | kubectl apply -f -
+        READ_TOKEN="$I/detect-read-token"
+        INTAKE="--set intake.enabled=true --set-file intake.collectors=$A2VM_COLLECTORS --set intake.digestsSecret=a2vm-intake"
+        INTAKE="$INTAKE --set intake.digestsChecksum=$(sha256sum "$I/digests" | cut -d' ' -f1) --set collect.mode=${A2VM_COLLECT_MODE:-intake}"
+        # The push endpoint for the collectors outside the cluster, open to their addresses only.
+        # (a values file with an empty `intake:` would drop the chart's defaults: written only with a host)
+        if [ -n "${A2VM_INTAKE_HOST:-}" ]; then
+          printf 'intake:\n  ingress:\n    enabled: true\n    host: "%s"\n' "$A2VM_INTAKE_HOST" > "$I/values.yaml"
+          if [ -n "${A2VM_INTAKE_INGRESS_CLASS:-}" ]; then printf '    className: "%s"\n' "$A2VM_INTAKE_INGRESS_CLASS" >> "$I/values.yaml"; fi
+          if [ -n "${A2VM_INTAKE_TLS_SECRET:-}" ]; then printf '    tlsSecret: "%s"\n' "$A2VM_INTAKE_TLS_SECRET" >> "$I/values.yaml"; fi
+          echo "    allowFrom:" >> "$I/values.yaml"
+          for cidr in $(echo "${A2VM_INTAKE_ALLOW:-}" | tr ',' ' '); do printf '      - "%s"\n' "$cidr" >> "$I/values.yaml"; done
+          INTAKE="$INTAKE -f $I/values.yaml"
+        else
+          echo "No A2VM_INTAKE_HOST: the detection service has no ingress (collectors inside the cluster only)"
+        fi
+      fi
     # The tenant's secrets, from its CI/CD variables (File or text), into one Secret; never printed.
     - |
       umask 077; S="$(mktemp -d)"
@@ -155,6 +185,7 @@ deploy-k8s:
       put reporting-ca "${A2VM_REPORTING_CA:-}"
       put gitlab-token "${A2VM_GITLAB_TOKEN:-}"
       put gitlab-ca "${CI_SERVER_TLS_CA_FILE:-}"
+      put detect-read-token "$READ_TOKEN"
       kubectl -n "$NS" create secret generic a2vm-tenant --from-file="$S" --dry-run=client -o yaml | kubectl apply -f -
       echo "secret a2vm-tenant: $(ls "$S" | tr '\n' ' ')"
       rm -rf "$S"
@@ -184,8 +215,10 @@ deploy-k8s:
         --set image.tag="$A2VM_REF" \
         --set secret.name=a2vm-tenant \
         --set daily.schedule="${A2VM_K8S_SCHEDULE:-45 5 * * *}" \
-        $PULL $FILES -f "$ENVF"
+        $PULL $FILES $INTAKE -f "$ENVF"
+      rm -rf "$I"
       kubectl -n "$NS" get cronjob,pvc
+      if [ -n "$INTAKE" ]; then kubectl -n "$NS" get deployment,service,ingress -l app.kubernetes.io/component=detect; fi
 
 # Exit code 3 = collection incomplete: the job shows as a warning and the pipeline goes on with
 # what was collected (plus the declared inventory).
