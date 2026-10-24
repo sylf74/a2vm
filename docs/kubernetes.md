@@ -62,19 +62,24 @@ image build needs more rights than a pipeline job, and the tenants' runner holds
 - A **project runner** of the code project only (*Settings > CI/CD > Runners > New project
   runner*), tag `build`, "Run untagged jobs" unchecked, **Protected** checked: only tags and
   protected branches use it, so only the code's maintainers run jobs there.
-- **Shell executor**: Buildah runs rootless as the `gitlab-runner` user (its `/etc/subuid` and
-  `/etc/subgid` ranges, created by `useradd`); no Docker daemon, no privileged container.
+- **Shell executor**: Buildah runs rootless as the `gitlab-runner` user; no Docker daemon, no
+  privileged container. The runner's package creates `gitlab-runner` as a system user, without
+  the `/etc/subuid` and `/etc/subgid` ranges rootless Buildah needs: add them (a free range of
+  65536 ids), otherwise the build stops on `potentially insufficient UIDs or GIDs`.
 
 ```bash
 sudo dnf install -y git buildah
 curl -L https://packages.gitlab.com/install/repositories/runner/gitlab-runner/script.rpm.sh | sudo bash
 sudo dnf install -y gitlab-runner
+sudo usermod --add-subuids 200000-265535 --add-subgids 200000-265535 gitlab-runner
+sudo loginctl enable-linger gitlab-runner
 grep gitlab-runner /etc/subuid /etc/subgid
 sudo gitlab-runner register --non-interactive --url https://gitlab.example.org \
   --token "$(cat runner-token.txt)" --executor shell --description a2vm-build
 ```
 
-The token (`glrt-…`) shown when the runner is created is read from a file, not typed. A first
+The token (`glrt-…`) shown when the runner is created is read from a file, not typed; it is a
+secret (`gitlab-runner list` prints it, `gitlab-runner verify` does not). A first
 check: *Run pipeline* on `main`, then ▶ on `images` builds the images tagged with the commit.
 
 ## 2. Per tenant
