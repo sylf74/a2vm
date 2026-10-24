@@ -27,11 +27,9 @@ Host names below are examples.
    Omnibus instance, set `registry_external_url 'https://registry.example.org'` in
    `/etc/gitlab/gitlab.rb` and run `gitlab-ctl reconfigure`. Without a registry, the `images` job
    does not run.
-2. **Images**: the tag `v0.12.0` (and every later tag) runs the `images` job of the code project:
-   `<registry>/vulnops/a2vm/via`, `…/detect`, `…/verdict`, tagged like the release. The job uses
-   Buildah, without a Docker daemon nor a privileged runner. If it stops on a namespace or
-   permission error, the runner's Docker executor refuses the user namespaces Buildah needs: run
-   the job on a runner with `privileged = true`, or allow `unshare` in its seccomp profile.
+2. **Images**: the tag `v0.12.1` (and every later tag) runs the `images` job of the code project:
+   `<registry>/vulnops/a2vm/via`, `…/detect`, `…/verdict`, tagged like the release, built with
+   Buildah on the build runner below.
 3. **Pulling the images**: a group deploy token (group `vulnops` > *Settings > Repository >
    Deploy tokens*, scope `read_registry`), stored as group variables `A2VM_REGISTRY_USER`
    (visible) and `A2VM_REGISTRY_PASSWORD` (masked). The job turns them into a pull secret.
@@ -54,6 +52,31 @@ sudo systemctl restart rke2-server
    behind a private CA, its CA as the group variable `A2VM_K8S_CA` (File): `kubectl` in the job
    reaches the cluster through GitLab.
 
+### Build runner
+
+The images are built on a runner of their own, never on the runner of the tenants' pipelines: an
+image build needs more rights than a pipeline job, and the tenants' runner holds their scan keys.
+
+- A small VM without client data (2 vCPU, 4 GB, 40 GB), with `git`, `buildah` and `gitlab-runner`;
+  the CA of GitLab and of its registry in the system trust store (`update-ca-trust` on Rocky).
+- A **project runner** of the code project only (*Settings > CI/CD > Runners > New project
+  runner*), tag `build`, "Run untagged jobs" unchecked, **Protected** checked: only tags and
+  protected branches use it, so only the code's maintainers run jobs there.
+- **Shell executor**: Buildah runs rootless as the `gitlab-runner` user (its `/etc/subuid` and
+  `/etc/subgid` ranges, created by `useradd`); no Docker daemon, no privileged container.
+
+```bash
+sudo dnf install -y git buildah
+curl -L https://packages.gitlab.com/install/repositories/runner/gitlab-runner/script.rpm.sh | sudo bash
+sudo dnf install -y gitlab-runner
+grep gitlab-runner /etc/subuid /etc/subgid
+sudo gitlab-runner register --non-interactive --url https://gitlab.example.org \
+  --token "$(cat runner-token.txt)" --executor shell --description a2vm-build
+```
+
+The token (`glrt-…`) shown when the runner is created is read from a file, not typed. A first
+check: *Run pipeline* on `main`, then ▶ on `images` builds the images tagged with the commit.
+
 ## 2. Per tenant
 
 CI/CD variables of the tenant project (or of a subgroup):
@@ -72,7 +95,7 @@ namespace, never into the job log, and hands the others (`A2VM_LLM_*`, `A2VM_GTI
 `A2VM_EXTERNAL_PROJECT`) to the CronJob. External detection uses the GitLab API with
 `A2VM_GITLAB_TOKEN`, since a pod has no job token.
 
-Then move the tenant's `.gitlab-ci.yml` to `v0.12.0` (both `ref` and `A2VM_REF`) and push: the
+Then move the tenant's `.gitlab-ci.yml` to `v0.12.1` (both `ref` and `A2VM_REF`) and push: the
 pipeline runs `validate`, then `deploy-k8s`, which ends with the CronJob and its volume. Each
 later push to the default branch redeploys (new profile, new targets, new version).
 
