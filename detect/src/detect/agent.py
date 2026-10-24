@@ -23,9 +23,11 @@ collector.yaml, on the collector's machine (secrets in files readable by the age
       folder: /var/lib/a2vm/import/trivy
 
 `detect agent run` runs the connectors (or one, `--connector`) and pushes each detection; a
-system timer gives each connector its schedule. A push that fails for a reason worth retrying
-(service unreachable, 5xx) is kept in the spool, one file per source (the newest wins), and pushed
-again at the next run. The agent only connects out: to its targets and scanners, and to the service.
+system timer gives each connector its schedule (docs/collectors.md). A push that fails for a reason
+worth retrying (service unreachable, 429, 5xx) is kept in the spool, one file per source (the newest
+wins), and pushed again at the next run; a spooled detection the service refuses for good (too old,
+source no longer declared) is set aside as `<source>.json.rejected`. The agent only connects out:
+to its targets and scanners, and to the service.
 """
 
 from __future__ import annotations
@@ -42,6 +44,7 @@ from a2vm.io import Detection, write_detection
 
 from .collect import collect, load_targets
 from .intake.client import IntakeError, push
+from .intake.registry import ID
 from .openvas import load_openvas_file
 from .scanners import load_dnf_file, load_trivy_file, merge
 
@@ -132,12 +135,19 @@ def load_config(path: str | Path) -> AgentConfig:
     for key in ("collector", "tenant", "service", "token_file"):
         if not data.get(key):
             raise AgentError(f"{path}: `{key}` is required")
+    for key in ("collector", "tenant"):
+        if not ID.match(str(data[key])):
+            raise AgentError(f"{path}: `{key}` must be lower-case letters, digits and dashes")
     if not str(data["service"]).startswith(("https://", "http://")):
         raise AgentError(f"{path}: `service` must be an http(s) URL")
     connectors: list[Any] = []
     for i, c in enumerate(data.get("connectors") or []):
         where = f"{path}: connectors[{i}]"
-        kind, name = c.get("type"), c.get("name") or f"connector{i}"
+        if not isinstance(c, dict):
+            raise AgentError(f"{where}: expected a mapping")
+        kind, name = c.get("type"), str(c.get("name") or f"connector{i}")
+        if not ID.match(name):
+            raise AgentError(f"{where}: name {name!r} must be lower-case letters, digits and dashes")
         if kind == "targets":
             if not c.get("targets"):
                 raise AgentError(f"{where}: `targets` (a targets file) is required")
@@ -155,9 +165,9 @@ def load_config(path: str | Path) -> AgentConfig:
     if len({c.name for c in connectors}) != len(connectors):
         raise AgentError(f"{path}: connector names must be unique")
     return AgentConfig(
-        collector=data["collector"],
-        tenant=data["tenant"],
-        service=data["service"],
+        collector=str(data["collector"]),
+        tenant=str(data["tenant"]),
+        service=str(data["service"]),
         token_file=Path(data["token_file"]),
         work=Path(data.get("work", "/var/lib/a2vm/work")),
         spool=Path(data.get("spool", "/var/lib/a2vm/spool")),
@@ -180,21 +190,31 @@ class RunReport:
         return 0
 
 
-def _push_or_spool(cfg: AgentConfig, token: str, document: dict[str, Any], report: RunReport, transport=None) -> None:
+def _push_or_spool(
+    cfg: AgentConfig,
+    token: str,
+    document: dict[str, Any],
+    report: RunReport,
+    transport=None,
+    spooled: bool = False,
+) -> None:
     source = document["source"]
+    spool_file = cfg.spool / f"{source}.json"
     try:
         receipt = push(cfg.service, cfg.tenant, token, document, cfg.collector, cfg.ca_file, transport)
         report.pushed.append(f"{source} -> {receipt['id']}{' (already received)' if receipt.get('duplicate') else ''}")
-        (cfg.spool / f"{source}.json").unlink(missing_ok=True)
+        spool_file.unlink(missing_ok=True)
     except IntakeError as exc:
         if getattr(exc, "retry", False):
             cfg.spool.mkdir(parents=True, exist_ok=True)
             tmp = cfg.spool / f".{source}.json.tmp"
             tmp.write_text(json.dumps(document, ensure_ascii=False), encoding="utf-8")
-            os.replace(tmp, cfg.spool / f"{source}.json")
+            os.replace(tmp, spool_file)
             report.spooled.append(f"{source}: {exc}")
         else:
             report.errors.append(f"{source}: {exc}")
+            if spooled:  # refused for good: kept for a look, never pushed again
+                os.replace(spool_file, spool_file.with_name(spool_file.name + ".rejected"))
 
 
 def run(cfg: AgentConfig, only: str | None = None, transport=None) -> RunReport:
@@ -207,7 +227,11 @@ def run(cfg: AgentConfig, only: str | None = None, transport=None) -> RunReport:
         except (OSError, ValueError) as exc:
             report.errors.append(f"spool {spooled.name}: {exc}")
             continue
-        _push_or_spool(cfg, token, document, report, transport)
+        if not isinstance(document, dict) or spooled.stem != document.get("source"):
+            report.errors.append(f"spool {spooled.name}: not a detection of that source, set aside")
+            os.replace(spooled, spooled.with_name(spooled.name + ".rejected"))
+            continue
+        _push_or_spool(cfg, token, document, report, transport, spooled=True)
     selected = [c for c in cfg.connectors if only in (None, c.name)]
     if only and not selected:
         raise AgentError(f"no connector named {only!r}")

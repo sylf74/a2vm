@@ -12,6 +12,7 @@
   serve      the detection service: receives the collectors' pushes, serves the latest detections
   agent      the collector: runs its connectors near a network and pushes to the detection service
   fetch      the daily run's first step in the cluster: the latest detections from the service
+  collectors check the tenant's declaration of its collectors (collectors.yaml)
 
 Output: <out>/<client>/<source>.json (default work/detect).
 """
@@ -170,14 +171,46 @@ def cmd_agent(args: argparse.Namespace) -> int:
     return report.status
 
 
+def cmd_collectors(args: argparse.Namespace) -> int:
+    from .intake.registry import RegistryError, load_collectors
+
+    try:
+        collectors = load_collectors(args.tenant, args.collectors)
+    except (RegistryError, OSError) as exc:
+        print(exc, file=sys.stderr)
+        return 2
+    if not collectors:
+        print(f"{args.collectors}: no collector declared", file=sys.stderr)
+        return 2
+    for c in collectors.values():
+        variable = "A2VM_COLLECTOR_TOKEN_" + c.id.upper().replace("-", "_")
+        print(f"{args.tenant}: collector {c.id} ({', '.join(c.sources)}, max {c.max_age_hours:g} h), token {variable}")
+    return 0
+
+
 def cmd_fetch(args: argparse.Namespace) -> int:
     """Exit 0 when every expected source was written, 3 when some were left out (warning), 1 when none
     was (the run stops rather than report an estate without its scanners)."""
     from .intake.client import IntakeError, fetch
+    from .intake.registry import RegistryError, load_collectors
 
+    sources: list[str] = list(args.source)
+    max_age: float | dict[str, float] = args.max_age_hours
+    if args.collectors:
+        try:
+            collectors = load_collectors(args.tenant, args.collectors)
+        except (RegistryError, OSError) as exc:
+            print(exc, file=sys.stderr)
+            return 2
+        ages: dict[str, float] = {}
+        for c in collectors.values():
+            for s in c.sources:
+                ages[s] = max(ages.get(s, 0.0), c.max_age_hours)
+        sources = sources or sorted(ages)
+        max_age = ages
     token = _read_secret(args.token_file)
     try:
-        result = fetch(args.url, args.tenant, token, args.out, args.source, args.max_age_hours, args.ca_file)
+        result = fetch(args.url, args.tenant, token, args.out, sources, max_age, args.ca_file)
     except IntakeError as exc:
         print(f"{args.tenant}: {exc}", file=sys.stderr)
         return 1
@@ -290,10 +323,16 @@ def main(argv: list[str] | None = None) -> int:
     f.add_argument("--tenant", required=True)
     f.add_argument("--token-file", required=True, help="the daily run's read token")
     f.add_argument("--source", action="append", default=[], help="expected source (repeat); default: all")
-    f.add_argument("--max-age-hours", type=float, default=30)
+    f.add_argument("--max-age-hours", type=float, default=30, help="without --collectors")
+    f.add_argument("--collectors", help="the tenant's collectors.yaml: expected sources and their max age")
     f.add_argument("--ca-file")
     f.add_argument("--out", default="work/detect")
     f.set_defaults(func=cmd_fetch)
+
+    cl = sub.add_parser("collectors", help="check the tenant's declaration of its collectors")
+    cl.add_argument("collectors", help="collectors.yaml")
+    cl.add_argument("--tenant", required=True, help="client id of the tenant project")
+    cl.set_defaults(func=cmd_collectors)
 
     args = parser.parse_args(argv)
     return args.func(args)

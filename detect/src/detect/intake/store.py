@@ -8,6 +8,9 @@ it behind the same interface once the shared platform has it (D15 step 3).
   <root>/<tenant>/<source>/<id>.meta.json  its receipt
   <root>/<tenant>/_keys/<sha256>           idempotency: collector and key -> id
 
+Retention and "latest" are per source and collector: two collectors of one tenant (two networks)
+may push the same source, and the daily run merges their latest detections.
+
 Writes go to a temporary file renamed into place, so a reader never sees half a document.
 """
 
@@ -18,10 +21,13 @@ import gzip
 import hashlib
 import json
 import os
+import re
 import threading
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
+
+RID = re.compile(r"^[0-9]{8}T[0-9]{12}Z-[0-9a-f]{12}$")
 
 
 @dataclass
@@ -93,7 +99,7 @@ class FileStore:
             _atomic(folder / f"{rid}.json.gz", gzip.compress(body))
             _atomic(folder / f"{rid}.meta.json", json.dumps(receipt.to_dict()).encode())
             _atomic(key_file, rid.encode())
-            self._prune(folder)
+            self._prune(folder, collector)
         return receipt
 
     def _receipts(self, folder: Path) -> list[Receipt]:
@@ -105,10 +111,22 @@ class FileStore:
                 continue
         return sorted(out, key=lambda r: (parse_time(r.generated_at), r.received_at))
 
-    def _prune(self, folder: Path) -> None:
-        for old in self._receipts(folder)[: -self.keep]:
+    def _prune(self, folder: Path, collector: str) -> None:
+        dropped = {r.id for r in [r for r in self._receipts(folder) if r.collector == collector][: -self.keep]}
+        for rid in dropped:
             for suffix in (".json.gz", ".meta.json"):
-                (folder / f"{old.id}{suffix}").unlink(missing_ok=True)
+                (folder / f"{rid}{suffix}").unlink(missing_ok=True)
+        if dropped:  # the idempotency keys of the detections dropped go with them
+            for key_file in (folder.parent / "_keys").glob("*"):
+                try:
+                    if key_file.read_text(encoding="utf-8").strip() in dropped:
+                        key_file.unlink(missing_ok=True)
+                except OSError:
+                    continue
+
+    def ready(self) -> bool:
+        """The volume is mounted and writable."""
+        return self.root.is_dir() and os.access(self.root, os.W_OK)
 
     def sources(self, tenant: str) -> list[str]:
         base = self.root / tenant
@@ -117,17 +135,20 @@ class FileStore:
         )
 
     def latest(self, tenant: str, source: str | None = None) -> list[tuple[Receipt, dict[str, Any]]]:
+        """The latest detection of each source and collector (the newest generated_at wins)."""
         out = []
         for s in [source] if source else self.sources(tenant):
-            receipts = self._receipts(self.root / tenant / s)
-            if receipts:
-                found = self.get(tenant, receipts[-1].id, s)
+            newest: dict[str, Receipt] = {}
+            for r in self._receipts(self.root / tenant / s):
+                newest[r.collector] = r  # sorted oldest first
+            for collector in sorted(newest):
+                found = self.get(tenant, newest[collector].id, s)
                 if found:
                     out.append(found)
         return out
 
     def get(self, tenant: str, rid: str, source: str | None = None) -> tuple[Receipt, dict[str, Any]] | None:
-        if "/" in rid or rid.startswith("."):
+        if not RID.match(rid):
             return None
         for s in [source] if source else self.sources(tenant):
             folder = self.root / tenant / s

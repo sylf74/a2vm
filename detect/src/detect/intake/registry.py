@@ -73,10 +73,16 @@ class Registry:
         return max(ages) if ages else None
 
 
-def load_registry(tenant: str, collectors_file: str | Path, digests_file: str | Path) -> Registry:
+def load_collectors(tenant: str, collectors_file: str | Path) -> dict[str, Collector]:
+    """The declaration of the tenant project, checked (also run by the pipeline's validate job)."""
     if not ID.match(tenant):
         raise RegistryError(f"invalid tenant id {tenant!r}")
-    data = yaml.safe_load(Path(collectors_file).read_text(encoding="utf-8")) or {}
+    try:
+        data = yaml.safe_load(Path(collectors_file).read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError as exc:
+        raise RegistryError(f"{collectors_file}: not YAML: {exc}") from exc
+    if not isinstance(data, dict) or not isinstance(data.get("collectors") or [], list):
+        raise RegistryError(f"{collectors_file}: expected `collectors:` and a list")
     collectors: dict[str, Collector] = {}
     for i, entry in enumerate(data.get("collectors") or []):
         where = f"{collectors_file}: collectors[{i}]"
@@ -87,7 +93,10 @@ def load_registry(tenant: str, collectors_file: str | Path, digests_file: str | 
             raise RegistryError(f"{where}: invalid id {cid!r}")
         if cid in collectors:
             raise RegistryError(f"{where}: duplicate id {cid!r}")
-        sources = tuple(str(s) for s in entry.get("sources") or [])
+        raw_sources = entry.get("sources") or []
+        if not isinstance(raw_sources, list):
+            raise RegistryError(f"{where}: `sources` must be a list")
+        sources = tuple(str(s) for s in raw_sources)
         if not sources or not all(SOURCE.match(s) for s in sources):
             raise RegistryError(f"{where}: `sources` must list the sources this collector pushes")
         try:
@@ -97,6 +106,11 @@ def load_registry(tenant: str, collectors_file: str | Path, digests_file: str | 
         if max_age <= 0:
             raise RegistryError(f"{where}: max_age_hours must be positive")
         collectors[cid] = Collector(cid, tenant, sources, max_age, str(entry.get("description", "")))
+    return collectors
+
+
+def load_registry(tenant: str, collectors_file: str | Path, digests_file: str | Path) -> Registry:
+    collectors = load_collectors(tenant, collectors_file)
     tokens: dict[str, list[str]] = {}
     path = Path(digests_file)
     if path.exists():

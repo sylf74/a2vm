@@ -26,8 +26,8 @@ from urllib.parse import parse_qs, urlsplit
 
 from a2vm.io import ExchangeError, validate_detection
 
-from .registry import Registry
-from .store import FileStore, age_hours, parse_time
+from .registry import SOURCE, Collector, Registry
+from .store import FileStore, Receipt, age_hours, parse_time
 
 log = logging.getLogger("detect.serve")
 FUTURE_TOLERANCE = dt.timedelta(minutes=10)
@@ -48,6 +48,9 @@ class Service:
         self.registry = registry
         self.store = store
         self.max_bytes = max_bytes
+        # Last refusal per collector and source ("*" when the source is not known yet), cleared by an
+        # accepted push of that source; in memory: a restart forgets them, the log keeps them.
+        self.last_errors: dict[tuple[str, str], str] = {}
 
     def _tenant(self, tenant: str) -> None:
         if tenant != self.registry.tenant:
@@ -66,9 +69,46 @@ class Service:
         self._tenant(tenant)
         collector = self.registry.collector_for(token)
         if collector is None:
+            log.warning("push refused tenant=%s: missing or unknown collector token", tenant)
             raise Problem(HTTPStatus.UNAUTHORIZED, "missing or unknown collector token")
         if collector.tenant != tenant:
             raise Problem(HTTPStatus.FORBIDDEN, "collector not declared for this tenant")
+        state: dict[str, str] = {"source": "*"}
+        try:
+            receipt = self._accept(tenant, collector, key, body, gzipped, now, state)
+        except Problem as p:
+            self.last_errors[(collector.id, state["source"])] = f"{now.isoformat(timespec='seconds')} {p.detail[:300]}"
+            log.warning(
+                "push refused tenant=%s collector=%s source=%s status=%d: %s",
+                tenant,
+                collector.id,
+                state["source"],
+                int(p.status),
+                p.detail,
+            )
+            raise
+        self.last_errors.pop((collector.id, receipt.source), None)
+        self.last_errors.pop((collector.id, "*"), None)
+        log.info(
+            "push tenant=%s collector=%s source=%s id=%s duplicate=%s",
+            tenant,
+            collector.id,
+            receipt.source,
+            receipt.id,
+            receipt.duplicate,
+        )
+        return receipt.to_dict()
+
+    def _accept(
+        self,
+        tenant: str,
+        collector: Collector,
+        key: str | None,
+        body: bytes,
+        gzipped: bool,
+        now: dt.datetime,
+        state: dict[str, str],
+    ) -> Receipt:
         if not key or len(key) > 128:
             raise Problem(HTTPStatus.BAD_REQUEST, "Idempotency-Key header required (at most 128 characters)")
         if gzipped:
@@ -87,6 +127,8 @@ class Service:
             validate_detection(document, "body")
         except ExchangeError as exc:
             raise Problem(HTTPStatus.UNPROCESSABLE_ENTITY, str(exc)) from exc
+        if document["source"] in collector.sources:
+            state["source"] = document["source"]  # where the status shows a refusal
         if document["client_id"] != tenant:
             raise Problem(HTTPStatus.UNPROCESSABLE_ENTITY, "client_id differs from the tenant")
         if document["source"] not in collector.sources:
@@ -99,16 +141,7 @@ class Service:
             raise Problem(HTTPStatus.UNPROCESSABLE_ENTITY, "generated_at is in the future")
         if (now - generated).total_seconds() / 3600 > collector.max_age_hours:
             raise Problem(HTTPStatus.UNPROCESSABLE_ENTITY, f"older than {collector.max_age_hours:g} hours")
-        receipt = self.store.put(tenant, collector.id, body, document, key, now)
-        log.info(
-            "push tenant=%s collector=%s source=%s id=%s duplicate=%s",
-            tenant,
-            collector.id,
-            receipt.source,
-            receipt.id,
-            receipt.duplicate,
-        )
-        return receipt.to_dict()
+        return self.store.put(tenant, collector.id, body, document, key, now)
 
     def _reader(self, tenant: str, token: str | None) -> None:
         self._tenant(tenant)
@@ -117,6 +150,8 @@ class Service:
 
     def latest(self, tenant: str, token: str | None, source: str | None = None) -> list[dict[str, Any]]:
         self._reader(tenant, token)
+        if source is not None and not SOURCE.match(source):
+            raise Problem(HTTPStatus.BAD_REQUEST, "invalid source")
         return [
             {"receipt": r.to_dict(), "age_hours": age_hours(r.generated_at), "detection": doc}
             for r, doc in self.store.latest(tenant, source)
@@ -132,17 +167,20 @@ class Service:
 
     def collectors(self, tenant: str, token: str | None) -> list[dict[str, Any]]:
         self._reader(tenant, token)
-        latest = {r.source: r for r, _ in self.store.latest(tenant)}
+        latest = {(r.collector, r.source): r for r, _ in self.store.latest(tenant)}
         out = []
         for c in self.registry.collectors.values():
             sources = []
             for s in c.sources:
                 entry: dict[str, Any] = {"source": s, "max_age_hours": c.max_age_hours}
-                r = latest.get(s)
-                if r is not None and r.collector == c.id:
+                r = latest.get((c.id, s))
+                if r is not None:
                     entry["last_received_at"] = r.received_at
                     entry["age_hours"] = age_hours(r.generated_at)
                 entry["stale"] = entry.get("age_hours", c.max_age_hours + 1) > c.max_age_hours
+                error = self.last_errors.get((c.id, s)) or self.last_errors.get((c.id, "*"))
+                if error:
+                    entry["last_error"] = error
                 sources.append(entry)
             out.append({"id": c.id, "description": c.description, "sources": sources})
         return out
@@ -182,7 +220,7 @@ def make_handler(service: Service) -> type[BaseHTTPRequestHandler]:
         def do_GET(self) -> None:  # noqa: N802 - http.server API
             path = urlsplit(self.path).path
             if path in ("/healthz", "/readyz"):
-                ready = path == "/healthz" or service.store.root.exists()
+                ready = path == "/healthz" or service.store.ready()
                 self._send(
                     HTTPStatus.OK if ready else HTTPStatus.SERVICE_UNAVAILABLE,
                     {"status": "ok" if ready else "not ready"},
@@ -201,6 +239,9 @@ def make_handler(service: Service) -> type[BaseHTTPRequestHandler]:
                     raise Problem(HTTPStatus.NOT_FOUND, "no such route")
             except Problem as p:
                 self._problem(p)
+            except Exception:  # noqa: BLE001 - answer rather than drop the connection
+                log.exception("GET %s failed", path)
+                self._problem(Problem(HTTPStatus.INTERNAL_SERVER_ERROR, "internal error"))
 
         def do_POST(self) -> None:  # noqa: N802 - http.server API
             try:
@@ -211,6 +252,8 @@ def make_handler(service: Service) -> type[BaseHTTPRequestHandler]:
                     length = int(self.headers.get("Content-Length", ""))
                 except ValueError as exc:
                     raise Problem(HTTPStatus.LENGTH_REQUIRED, "Content-Length required") from exc
+                if length < 0:
+                    raise Problem(HTTPStatus.BAD_REQUEST, "invalid Content-Length")
                 if length > service.max_bytes:
                     raise Problem(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, f"body larger than {service.max_bytes} bytes")
                 body = self.rfile.read(length)
@@ -219,6 +262,9 @@ def make_handler(service: Service) -> type[BaseHTTPRequestHandler]:
                 self._send(HTTPStatus.ACCEPTED, receipt)
             except Problem as p:
                 self._problem(p)
+            except Exception:  # noqa: BLE001 - a 5xx: the collector keeps the detection and retries
+                log.exception("POST %s failed", urlsplit(self.path).path)
+                self._problem(Problem(HTTPStatus.INTERNAL_SERVER_ERROR, "internal error"))
 
     return Handler
 

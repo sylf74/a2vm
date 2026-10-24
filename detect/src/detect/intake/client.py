@@ -12,7 +12,11 @@ from typing import Any
 
 import httpx
 
-from a2vm.io import ExchangeError, validate_detection
+from a2vm.io import Detection, ExchangeError, validate_detection, write_detection
+from a2vm.models import AssetObservation, Finding, NotAffected
+
+from ..scanners import merge
+from .registry import SOURCE
 
 
 class IntakeError(RuntimeError):
@@ -79,12 +83,16 @@ def fetch(
     token: str,
     out: str | Path,
     sources: list[str],
-    max_age_hours: float,
+    max_age_hours: float | dict[str, float],
     ca_file: str | None = None,
     transport: httpx.BaseTransport | None = None,
 ) -> FetchResult:
-    """Write the latest detection of each source to <out>/<tenant>/<source>.json; a source missing or
-    older than max_age_hours is a problem (the run goes on without it, as with detect external)."""
+    """Write the latest detection of each source to <out>/<tenant>/<source>.json.
+
+    `sources` are the sources expected (default: every source received); `max_age_hours` is one
+    limit or one per source (the declaration of the collectors). When several collectors push the
+    same source (several networks), their latest detections are merged into one file. A source
+    missing or too old is a problem: the run goes on without it, as with detect external."""
     result = FetchResult()
     try:
         with _client(base_url, token, ca_file, transport) as c:
@@ -93,27 +101,51 @@ def fetch(
         raise IntakeError(f"detection service unreachable: {exc}") from exc
     if r.status_code != 200:
         raise IntakeError(f"read refused ({r.status_code}): {_detail(r)}")
-    latest = {e["receipt"]["source"]: e for e in r.json()}
-    for source in sources or sorted(latest):
-        entry = latest.get(source)
-        if entry is None:
-            result.problems.append(f"{source}: nothing received yet")
+    try:
+        entries = r.json()
+        by_source: dict[str, list[dict[str, Any]]] = {}
+        for e in entries:
+            by_source.setdefault(str(e["receipt"]["source"]), []).append(e)
+    except (ValueError, KeyError, TypeError) as exc:
+        raise IntakeError(f"unexpected answer of the detection service: {exc}") from exc
+    for source in sources or sorted(by_source):
+        if not SOURCE.match(source):
+            result.problems.append(f"{source[:64]!r}: not a source name, left out")
             continue
-        receipt, age = entry["receipt"], float(entry["age_hours"])
-        if age > max_age_hours:
-            result.problems.append(f"{source}: latest from {receipt['generated_at']} ({age:g} h old), left out")
+        limit = max_age_hours.get(source, 30.0) if isinstance(max_age_hours, dict) else float(max_age_hours)
+        kept: list[Detection] = []
+        for entry in by_source.get(source, []):
+            receipt = entry["receipt"]
+            who = f"{source} from {receipt.get('collector', '?')}"
+            age = float(entry["age_hours"])
+            if age > limit:
+                result.problems.append(f"{who}: latest from {receipt['generated_at']} ({age:g} h old), left out")
+                continue
+            doc = entry["detection"]
+            try:
+                validate_detection(doc, who)
+            except ExchangeError as exc:
+                result.problems.append(f"{exc}, left out")
+                continue
+            if doc.get("client_id") != tenant or doc.get("source") != source:
+                result.problems.append(f"{who}: document of another tenant or source, left out")
+                continue
+            kept.append(_as_detection(doc))
+        if not kept:
+            if source not in by_source:
+                result.problems.append(f"{source}: nothing received yet")
             continue
-        doc = entry["detection"]
-        try:
-            validate_detection(doc, source)
-        except ExchangeError as exc:
-            result.problems.append(f"{exc}, left out")
-            continue
-        if doc.get("client_id") != tenant or doc.get("source") != source:
-            result.problems.append(f"{source}: document of another tenant or source, left out")
-            continue
-        path = Path(out) / tenant / f"{source}.json"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(doc, ensure_ascii=False, indent=1), encoding="utf-8")
+        path = write_detection(Path(out) / tenant / f"{source}.json", kept[0] if len(kept) == 1 else merge(kept))
         result.written.append(path)
     return result
+
+
+def _as_detection(doc: dict[str, Any]) -> Detection:
+    return Detection(
+        client_id=doc["client_id"],
+        source=doc["source"],
+        observations=[AssetObservation(**o) for o in doc["observations"]],
+        findings=[Finding.from_dict(f) for f in doc["findings"]],
+        not_affected=[NotAffected(**n) for n in doc["not_affected"]],
+        skipped=dict(doc["skipped"]),
+    )
