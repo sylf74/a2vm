@@ -249,7 +249,7 @@ flowchart LR
 | Building block | Runs as | Exposes | Notes |
 | --- | --- | --- | --- |
 | Pillar 1 VIA (VIA team) | Service; collection and watch as CronJobs | Records API (CVE records, changes since a date), alerts | Replaces the reference `via` package; the record schema stays the contract (§6) |
-| Pillar 2 Detection | Intake service; per-tenant import jobs | Detection intake and read API | Collectors run where the networks are (internal runner, agents in client zones) and push; the cluster does not reach every client network |
+| Pillar 2 Detection | Detection service (`detect serve`); collectors (`detect agent`) near the networks | Detection intake (push by the collectors) and read API (`schemas/openapi/detect.v1.yaml`) | Collectors run where the networks are, on their own schedule, and push; the cluster never reaches a client network and a target allows only its collector; the tenant project declares its collectors (LLD detection §8) |
 | Pillar 3 verdict | Decision and asset-context service; per-tenant daily re-evaluation as CronJob | Decision API (`decisions:evaluate`), assets, findings | One decision function serves the batch run and the API; the asset context needs the history database (and the asset graph) |
 | Pillar 4 Dispatch | Service | Actions, finding lifecycle | Not started |
 | Shared platform | Gateway, identity, secrets, PostgreSQL (e.g. CloudNativePG), graph database, event bus (e.g. NATS JetStream), observability, LLM endpoint | — | Operated by a platform team or provided by the company's Kubernetes offer; secrets are Kubernetes Secrets at first, kept in an HSM-backed store later (see Tenant isolation) |
@@ -289,18 +289,21 @@ Migration, each step usable on its own:
    pipeline on one tenant, outputs compared, then the pipeline's schedule is switched off.
    Execution leaves GitLab; the code does not change. Done in v0.12.0 for the daily run; the
    watch and the analysts' validation follow, once they no longer read the pipeline's inventory.
-2. **Shared platform.** PostgreSQL in the cluster (reporting database and the future history
+2. **Collectors and detection intake** (v0.13.0): collectors near the networks push their
+   detections to the detection service; the daily run reads them instead of collecting; the
+   tenant project declares its collectors (LLD detection §8).
+3. **Shared platform.** PostgreSQL in the cluster (reporting database and the future history
    database), the event bus, the observability stack; the reporting database may move from its
    VM into the cluster.
-3. **The two APIs that unblock the most**: decisions (pillar 3, `a2vm.decision_request/1` →
+4. **The two APIs that unblock the most**: decisions (pillar 3, `a2vm.decision_request/1` →
    `a2vm.decision/1`) and records (pillar 1, VIA team); the watch asks verdict for the decision of
    each asset concerned instead of applying its own urgency rules; the daily run and the watch
    call the same decision service.
-4. History database and asset graph; asset and finding APIs.
-5. Event bus in use: one shared intelligence service publishes new records and KEV changes for
+5. History database and asset graph; asset and finding APIs.
+6. Event bus in use: one shared intelligence service publishes new records and KEV changes for
    every tenant; collectors near the client networks publish their observations; re-evaluation
    and dispatch are driven by events.
-6. The GitLab pipeline mode stays for development and the homelab: same code, two ways to run it.
+7. The GitLab pipeline mode stays for development and the homelab: same code, two ways to run it.
 
 The platform part was proven on a homelab cluster in October 2026: three control-plane nodes and
 one worker (RKE2), Ceph storage through Rook, a load balancer and an ingress controller, internal
@@ -455,6 +458,7 @@ release.
 | v0.11.7 | Decision chain, CISA Coordinator and BOD 26-04 trees drawn in the triage LLD from the SSVC tables themselves; documentation published to a product project on every tag (`sync-product-docs`); code project path and runner tags as group variables for another GitLab layout; fictitious tenant `examples/demo-industrie`; `CLAUDE.md` for contributors | 3 |
 | v0.12.1 (current) | Pillar images built with Buildah on a dedicated build runner (project runner of the code project, protected, shell executor, rootless): the tenants' runner stays unprivileged | All |
 | v0.12.0 | D15 step 1: one container image per pillar built at every tag (`images`, GitLab registry); chart `a2vm-tenant` running the daily run as a Kubernetes CronJob, one container per step in the image of its pillar, deployed from the tenant project by the job `deploy-k8s` through the GitLab agent, secrets copied from the CI/CD variables; the watch stays in GitLab (`docs/kubernetes.md`) | All |
+| v0.13.0 (to confirm) | D15 step 2: detection service in the cluster and collectors near the networks pushing to it (`detect serve`, `detect agent`, connectors SSH Trivy and dnf, OpenVAS, file import); tenant project declares its collectors; the daily run reads the detections instead of collecting | 2 |
 | Next (to confirm) | Client portal VM (Grafana) in service; history database and finding lifecycle; decision API (D15 step 3) | 1, 3, 4 |
 | Then (to confirm) | Dispatch & Capitalization; Emergency Actions | 4, 5 |
 | v1.0 (target) | The architecture of D15 in production: each pillar a service on Kubernetes with its APIs and events, the decision service of pillar 3 shared by the daily run, the watch and the alert review, collectors near the client networks; the GitLab pipeline mode kept for development | All |
