@@ -9,6 +9,41 @@ app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 a2vm/tenant: {{ .Values.tenant | quote }}
 {{- end -}}
 
+{{/* Labels that select the pods of one component: include "a2vm-tenant.selector" (dict "root" . "component" "detect") */}}
+{{- define "a2vm-tenant.selector" -}}
+app.kubernetes.io/name: a2vm-tenant
+app.kubernetes.io/instance: {{ .root.Release.Name }}
+app.kubernetes.io/component: {{ .component }}
+{{- end -}}
+
+{{/* Detection service of the tenant, inside the cluster. */}}
+{{- define "a2vm-tenant.intakeUrl" -}}
+{{- printf "http://%s-detect:8080" (include "a2vm-tenant.name" .) -}}
+{{- end -}}
+
+{{/* Checks of the values that templates cannot express alone. */}}
+{{- define "a2vm-tenant.checks" -}}
+{{- if not (has .Values.collect.mode (list "local" "intake")) -}}
+{{- fail "collect.mode must be local or intake" -}}
+{{- end -}}
+{{- if and (eq .Values.collect.mode "intake") (not .Values.intake.enabled) -}}
+{{- fail "collect.mode intake needs intake.enabled (the detection service)" -}}
+{{- end -}}
+{{- if .Values.intake.enabled -}}
+{{- $_ := required "intake.collectors is required (--set-file intake.collectors=collectors.yaml)" .Values.intake.collectors -}}
+{{- $_ := required "intake.digestsSecret is required (Secret with the key digests)" .Values.intake.digestsSecret -}}
+{{- if and (eq .Values.collect.mode "intake") (not .Values.secret.name) -}}
+{{- fail "collect.mode intake needs secret.name (key detect-read-token)" -}}
+{{- end -}}
+{{- if and .Values.intake.ingress.enabled (not .Values.intake.ingress.host) -}}
+{{- fail "intake.ingress.host is required with the ingress" -}}
+{{- end -}}
+{{- if and .Values.intake.ingress.enabled .Values.intake.ingress.nginx (not .Values.intake.ingress.allowFrom) -}}
+{{- fail "intake.ingress.allowFrom is required: the addresses of the collectors, the only sources allowed to push" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
 {{/* Image of a pillar: include "a2vm-tenant.image" (dict "root" . "pillar" "via") */}}
 {{- define "a2vm-tenant.image" -}}
 {{- $root := .root -}}
@@ -54,6 +89,11 @@ a2vm/tenant: {{ .Values.tenant | quote }}
 {{- if .Values.secret.name }}
 - name: secrets
   mountPath: /secrets
+  readOnly: true
+{{- end }}
+{{- if .Values.intake.enabled }}
+- name: collectors
+  mountPath: /intake
   readOnly: true
 {{- end }}
 {{- end -}}

@@ -54,6 +54,13 @@ def _validate(kind: str, data: dict[str, Any], where: str) -> None:
         raise ExchangeError(f"{where}: {path}: {e.message} ({len(errors)} error(s))")
 
 
+def validate_detection(data: dict[str, Any], where: str = "<detection>") -> None:
+    """Check a detection document received from outside (detection service, LLD detection §8)."""
+    if not isinstance(data, dict) or data.get("schema") != DETECTION:
+        raise ExchangeError(f"{where}: expected a {DETECTION} document")
+    _validate(DETECTION, data, where)
+
+
 def now() -> str:
     return dt.datetime.now(dt.UTC).isoformat(timespec="seconds")
 

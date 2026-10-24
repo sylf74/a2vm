@@ -1,0 +1,224 @@
+{{- /*
+Detection service of the tenant (LLD detection §8.2): `detect serve`, one replica on a volume of
+its own (the store is files until PostgreSQL, D15 step 3), the declared collectors from the tenant
+project, the digests of their tokens from a Secret. Push from outside through the ingress, from the
+collectors' addresses only; reads from the daily run of the namespace.
+*/ -}}
+{{- if .Values.intake.enabled }}
+{{- include "a2vm-tenant.checks" . }}
+{{- $name := include "a2vm-tenant.name" . }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}-collectors
+  labels:
+    {{- include "a2vm-tenant.labels" . | nindent 4 }}
+data:
+  collectors.yaml: |
+    {{- .Values.intake.collectors | nindent 4 }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $name }}-detections
+  labels:
+    {{- include "a2vm-tenant.labels" . | nindent 4 }}
+  annotations:
+    # The detections received survive an uninstall: delete the claim by hand to drop them.
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: [ReadWriteOnce]
+  {{- if .Values.intake.storage.storageClass }}
+  storageClassName: {{ .Values.intake.storage.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.intake.storage.size | quote }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}-detect
+  labels:
+    {{- include "a2vm-tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: detect
+spec:
+  replicas: 1             # one writer on a ReadWriteOnce volume
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "a2vm-tenant.selector" (dict "root" . "component" "detect") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "a2vm-tenant.labels" . | nindent 8 }}
+        app.kubernetes.io/component: detect
+      annotations:
+        # A new declaration or new token digests restart the service, which reads them at start.
+        checksum/collectors: {{ .Values.intake.collectors | sha256sum }}
+        checksum/digests: {{ .Values.intake.digestsChecksum | quote }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      {{- if .Values.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.image.pullSecret }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: detect
+          image: {{ include "a2vm-tenant.image" (dict "root" . "pillar" "detect") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["detect", "serve"]
+          args:
+            - --tenant={{ .Values.tenant }}
+            - --collectors=/intake/collectors.yaml
+            - --digests=/intake-secret/digests
+            - --store=/data/detections
+            - --keep={{ .Values.intake.keep }}
+            - --max-mb={{ .Values.intake.maxMb }}
+            - --port=8080
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet: {path: /readyz, port: http}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 30
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: collectors
+              mountPath: /intake
+              readOnly: true
+            - name: digests
+              mountPath: /intake-secret
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          {{- with .Values.intake.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ $name }}-detections
+        - name: collectors
+          configMap:
+            name: {{ $name }}-collectors
+        - name: digests
+          secret:
+            secretName: {{ .Values.intake.digestsSecret }}
+            defaultMode: 0440   # readable by the service group (fsGroup)
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}-detect
+  labels:
+    {{- include "a2vm-tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: detect
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "a2vm-tenant.selector" (dict "root" . "component" "detect") | nindent 4 }}
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+{{- if .Values.intake.ingress.enabled }}
+{{- $ing := .Values.intake.ingress }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $name }}-detect
+  labels:
+    {{- include "a2vm-tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: detect
+  {{- if or $ing.nginx $ing.annotations }}
+  annotations:
+    {{- if $ing.nginx }}
+    # Only the collectors' addresses may push; the controller must see them (no SNAT in front of it).
+    nginx.ingress.kubernetes.io/whitelist-source-range: {{ join "," $ing.allowFrom | quote }}
+    nginx.ingress.kubernetes.io/proxy-body-size: {{ printf "%vm" .Values.intake.maxMb | quote }}
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    {{- end }}
+    {{- with $ing.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- end }}
+spec:
+  {{- if $ing.className }}
+  ingressClassName: {{ $ing.className | quote }}
+  {{- end }}
+  tls:
+    - hosts: [{{ $ing.host | quote }}]
+      {{- if $ing.tlsSecret }}
+      secretName: {{ $ing.tlsSecret | quote }}
+      {{- end }}
+  rules:
+    - host: {{ $ing.host | quote }}
+      http:
+        paths:
+          # The push only: the read calls are not published.
+          - path: {{ printf "/v1/tenants/%s/detections" .Values.tenant | quote }}
+            pathType: Exact
+            backend:
+              service:
+                name: {{ $name }}-detect
+                port:
+                  name: http
+{{- end }}
+{{- if .Values.intake.networkPolicy.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $name }}-detect
+  labels:
+    {{- include "a2vm-tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: detect
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "a2vm-tenant.selector" (dict "root" . "component" "detect") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.intake.networkPolicy.ingressNamespace | quote }}
+        - podSelector:
+            matchLabels:
+              {{- include "a2vm-tenant.selector" (dict "root" . "component" "daily") | nindent 14 }}
+      ports:
+        - port: 8080
+          protocol: TCP
+  egress: []              # the service opens no connection
+{{- end }}
+{{- end }}

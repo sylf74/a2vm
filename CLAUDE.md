@@ -14,12 +14,13 @@ other files of `docs/`.
 | --- | --- |
 | `a2vm/` | Common contract: data model, JSON schemas of the exchange files, settings, profiles, LLM client and guard, extension points |
 | `via/` | Pillar 1, intelligence (records) and watch (alerts) |
-| `detect/` | Pillar 2, detection: SSH collection, OpenVAS, declared inventory, external scan |
+| `detect/` | Pillar 2, detection: SSH collection, OpenVAS, declared inventory, external scan; collector agent and detection service (`detect agent`, `detect serve`, `detect fetch`) |
 | `verdict/` | Pillar 3, asset context, SSVC decision, restitution (reporting database, Grafana) |
 | `templates/client-pipeline.yml` | The pipeline every tenant project includes at a version tag |
 | `examples/` | Fictitious tenants (`lab`, `demo-industrie`) |
 | `deploy/portal/` | Terraform and cloud-init of the reporting database and Grafana |
-| `deploy/charts/a2vm-tenant/` | Helm chart: a tenant's daily run as a Kubernetes CronJob (D15 step 1, `docs/kubernetes.md`) |
+| `deploy/charts/a2vm-tenant/` | Helm chart: a tenant's daily run as a Kubernetes CronJob (D15 step 1, `docs/kubernetes.md`) and its detection service (D15 step 2, `docs/collectors.md`) |
+| `deploy/intake/` | Script of the job `deploy-k8s` that turns the collectors' tokens into digests (stdlib and PyYAML only) |
 | `images/` | Dockerfile of the pillar images (one per pillar, built by the `images` job on tags) |
 | `scripts/` | Generators of committed files: dashboards, decision diagrams, neutral Word template |
 

@@ -9,7 +9,15 @@ is a warning, as in the pipeline.
 mkdir -p /data/work
 rm -rf /data/work/detect && mkdir -p /data/work/detect
 if [ -f /secrets/gitlab-ca ]; then export CI_SERVER_TLS_CA_FILE=/secrets/gitlab-ca; fi
-rc=0
+# Exit codes: 0 done, 3 partial (a warning, the run goes on), anything else stops the run.
+failed=0; partial=0
+step() { rc=0; "$@" || rc=$?; if [ "$rc" -eq 3 ]; then partial=1; elif [ "$rc" -ne 0 ]; then failed="$rc"; fi; }
+{{- if eq .Values.collect.mode "intake" }}
+# collect.mode intake: the collectors near the networks have pushed their detections.
+if [ ! -s /secrets/detect-read-token ]; then echo "No detect-read-token: the detection service cannot be read"; exit 1; fi
+step detect fetch --url {{ include "a2vm-tenant.intakeUrl" . | quote }} --tenant {{ .Values.tenant | quote }} \
+  --token-file /secrets/detect-read-token --collectors /intake/collectors.yaml --out /data/work/detect
+{{- else }}
 if [ ! -f /config/targets.yaml ]; then
   echo "No targets.yaml: no scanner collection, declared inventory only"
 else
@@ -20,19 +28,21 @@ else
     if ssh-keygen -y -f "$HOME/.ssh/vulnops_scan" > /dev/null 2>&1; then
       echo "scan key: $(ssh-keygen -l -f "$HOME/.ssh/vulnops_scan")"
     else
-      echo "ssh-key is not a usable private key: SSH targets skipped"; NO_SSH="--no-ssh"; rc=3
+      echo "ssh-key is not a usable private key: SSH targets skipped"; NO_SSH="--no-ssh"; partial=1
     fi
   else
     echo "No ssh-key: SSH targets skipped (OpenVAS scan only, if configured)"; NO_SSH="--no-ssh"
   fi
-  detect collect /config/targets.yaml $NO_SSH --raw /tmp/scans --out /data/work/detect || rc=$?
+  step detect collect /config/targets.yaml $NO_SSH --raw /tmp/scans --out /data/work/detect
   rm -rf /tmp/scans
 fi
+{{- end }}
+if [ "$failed" -ne 0 ]; then exit "$failed"; fi
 if [ -n "${A2VM_EXTERNAL_PROJECT:-}" ]; then
-  detect external /config/client.yaml --project "$A2VM_EXTERNAL_PROJECT" --out /data/work/detect || rc=$?
+  step detect external /config/client.yaml --project "$A2VM_EXTERNAL_PROJECT" --out /data/work/detect
 fi
-if [ "$rc" -ne 0 ] && [ "$rc" -ne 3 ]; then exit "$rc"; fi
-if [ "$rc" -eq 3 ]; then echo "WARN collection incomplete: going on with what was collected"; fi
+if [ "$failed" -ne 0 ]; then exit "$failed"; fi
+if [ "$partial" -eq 1 ]; then echo "WARN collection incomplete: going on with what was collected"; fi
 {{- end -}}
 
 {{- define "a2vm-tenant.step.via" -}}
@@ -90,6 +100,7 @@ exit "$rc"
   {{- end }}
 {{- end -}}
 
+{{- include "a2vm-tenant.checks" . }}
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -116,6 +127,7 @@ spec:
         metadata:
           labels:
             {{- include "a2vm-tenant.labels" . | nindent 12 }}
+            app.kubernetes.io/component: daily
         spec:
           restartPolicy: Never
           automountServiceAccountToken: false
@@ -163,4 +175,9 @@ spec:
                 secretName: {{ .Values.secret.name }}
                 defaultMode: 0440   # readable by the run group (fsGroup)
                 optional: true
+            {{- end }}
+            {{- if .Values.intake.enabled }}
+            - name: collectors
+              configMap:
+                name: {{ include "a2vm-tenant.name" . }}-collectors
             {{- end }}
