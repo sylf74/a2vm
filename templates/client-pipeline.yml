@@ -7,6 +7,8 @@
 #   contacts.yaml    who receives the alerts, with their role and levels (optional)
 #   watch-sources.yaml  optional, replaces the code's catalogue of watch sources for this client
 #   settings.yaml    optional, overrides the default settings of the A2VM version in use
+#   collectors.yaml  optional: the collectors that push this client's detections to its detection
+#                    service on Kubernetes (docs/collectors.md)
 #   .gitlab-ci.yml   includes this file at a fixed version:
 #
 #     include:
@@ -27,6 +29,8 @@
 #
 # CI/CD variables (client project, or inherited from the groups):
 #   A2VM_SSH_KEY          File, protected: private key of this client's read-only scan account
+#   A2VM_COLLECTOR_TOKEN_<ID> (masked, protected)   token of each collector of collectors.yaml;
+#                            A2VM_INTAKE_HOST, A2VM_INTAKE_ALLOW: its push endpoint (docs/collectors.md)
 #   A2VM_GVM_USER, A2VM_GVM_PASSWORD (masked)   OpenVAS (GMP) account, when targets.yaml has
 #                            an openvas section; A2VM_GVM_CA, A2VM_GVM_CERT, A2VM_GVM_KEY
 #                            (File) for a tls:// GMP endpoint with client certificates (docs/openvas.md)

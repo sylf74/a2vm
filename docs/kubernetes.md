@@ -1,4 +1,4 @@
-# Tenants on Kubernetes (v0.12.0, HLD D15 step 1)
+# Tenants on Kubernetes (v0.12.0, HLD D15 steps 1 and 2)
 
 The daily run of a tenant (collect → intelligence → detection → assets → triage → publish) can
 run in a Kubernetes cluster instead of GitLab: a CronJob, one container per step in the image of
@@ -12,8 +12,17 @@ tenant project ── push ──▶ deploy-k8s ──(GitLab agent)──▶ na
                                                           ├── CronJob a2vm-<tenant>-daily
                                                           ├── ConfigMap (client.yaml, targets.yaml, settings.yaml)
                                                           ├── Secret a2vm-tenant (from the CI/CD variables)
-                                                          └── volume a2vm-<tenant>-data (work/, output/, cache)
+                                                          ├── volume a2vm-<tenant>-data (work/, output/, cache)
+                                                          └── with collectors.yaml (v0.13.0): Deployment,
+                                                              Service, Ingress, NetworkPolicy a2vm-<tenant>-detect,
+                                                              volume a2vm-<tenant>-detections, Secret a2vm-intake
+collectors near the networks ── HTTPS push ──▶ ingress ──▶ a2vm-<tenant>-detect ◀── detect fetch (daily run)
 ```
+
+Since v0.13.0, a tenant project with a `collectors.yaml` also gets its **detection service**: the
+collectors near its networks push their detections there, and the daily run reads them instead
+of collecting from the cluster (`collect.mode: intake`). Declaration, tokens, installation of a
+collector and checks: [`collectors.md`](collectors.md).
 
 What stays in GitLab in this step: the watch and the analysts' validation (`watch`,
 `send-alerts`), which read the inventory of the daily **pipeline**. A tenant that uses the watch
@@ -100,7 +109,7 @@ namespace, never into the job log, and hands the others (`A2VM_LLM_*`, `A2VM_GTI
 `A2VM_EXTERNAL_PROJECT`) to the CronJob. External detection uses the GitLab API with
 `A2VM_GITLAB_TOKEN`, since a pod has no job token.
 
-Then move the tenant's `.gitlab-ci.yml` to `v0.12.1` (both `ref` and `A2VM_REF`) and push: the
+Then move the tenant's `.gitlab-ci.yml` to `v0.13.0` (both `ref` and `A2VM_REF`) and push: the
 pipeline runs `validate`, then `deploy-k8s`, which ends with the CronJob and its volume. Each
 later push to the default branch redeploys (new profile, new targets, new version).
 
@@ -137,8 +146,10 @@ except for a tenant that uses the watch (see above).
 
 - Watch and alert validation stay in GitLab pipelines.
 - The run's report is read from the volume or the dashboards; there are no job artifacts.
-- Collection runs where the CronJob runs: the cluster must reach the targets (SSH, OpenVAS). A
-  client network the cluster cannot reach keeps its collection on a runner near it
-  (`A2VM_COLLECT_TAG`) until collectors near the networks come (D15).
+- Without `collectors.yaml`, collection runs where the CronJob runs: the cluster must reach the
+  targets (SSH, OpenVAS). With it (v0.13.0), collectors near the networks push and the cluster
+  connects to no client machine (`collectors.md`).
+- The detection service keeps its detections on a volume, one replica, until PostgreSQL (D15
+  step 3); its read calls use a token of the daily run until service accounts.
 - One namespace per tenant in a shared cluster; a client that requires a physical separation
   gets a cluster of its own, with the same chart (HLD D15, Tenant isolation).

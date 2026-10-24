@@ -91,10 +91,10 @@ The code project's own pipeline only runs lint, tests and the offline examples.
 ```yaml
 include:
   - project: vulnops/a2vm
-    ref: v0.12.1
+    ref: v0.13.0
     file: templates/client-pipeline.yml
 variables:
-  A2VM_REF: v0.12.1
+  A2VM_REF: v0.13.0
 ```
 
 3. If `targets.yaml` is used: scan key and target accounts as in `docs/scanning.md`, then the
@@ -128,6 +128,8 @@ Optional client project variables:
 With the variable `A2VM_K8S_CONTEXT`, a push to the default branch also deploys the tenant's daily
 run as a Kubernetes CronJob (job `deploy-k8s`): prerequisites, variables and checks in
 `docs/kubernetes.md`.
+With a `collectors.yaml` (since v0.13.0), it also deploys the tenant's detection service, where
+collectors near the client networks push their detections (`docs/collectors.md`).
 
 ## 6. Releasing a new version
 

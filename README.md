@@ -77,6 +77,9 @@ keys come from CI/CD variables, never from the repository.
 **detect — Detection** (`detect`) — writes one detection file per client and source:
 asset observations (what a source saw) and findings (asset × CVE, with package, installed and
 fixed versions).
+Since v0.13.0, collectors near the client networks (`detect agent`) push their detections to
+the detection service of the tenant in the cluster (`detect serve`), and the daily run reads them
+(`detect fetch`): `docs/collectors.md`.
 
 | Source | Command | Covers |
 | --- | --- | --- |
