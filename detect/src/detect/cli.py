@@ -9,6 +9,9 @@
   inventory  match a records file against the assets declared in client profiles
   external   bring the latest detection of the client's external project (A2VM_EXTERNAL_PROJECT)
              into this run, as source external-scan
+  serve      the detection service: receives the collectors' pushes, serves the latest detections
+  agent      the collector: runs its connectors near a network and pushes to the detection service
+  fetch      the daily run's first step in the cluster: the latest detections from the service
 
 Output: <out>/<client>/<source>.json (default work/detect).
 """
@@ -109,6 +112,85 @@ def cmd_external(args: argparse.Namespace) -> int:
     return 3 if result.problems else 0
 
 
+def _read_secret(path: str) -> str:
+    try:
+        value = Path(path).read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        raise SystemExit(f"{path}: {exc}") from exc
+    if not value:
+        raise SystemExit(f"{path} is empty")
+    return value
+
+
+def cmd_serve(args: argparse.Namespace) -> int:
+    import logging
+
+    from .intake.registry import RegistryError, load_registry
+    from .intake.server import Service, serve
+    from .intake.store import FileStore
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    try:
+        registry = load_registry(args.tenant, args.collectors, args.digests)
+    except (RegistryError, OSError) as exc:
+        print(exc, file=sys.stderr)
+        return 2
+    readers = "set" if "read" in registry.tokens else "MISSING"
+    print(
+        f"{registry.tenant}: {len(registry.collectors)} collector(s) declared "
+        f"({', '.join(registry.collectors) or 'none'}), read token {readers}, store {args.store}",
+        flush=True,
+    )
+    service = Service(registry, FileStore(args.store, args.keep), args.max_mb * 1024 * 1024)
+    httpd = serve(service, args.host, args.port)
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        httpd.server_close()
+    return 0
+
+
+def cmd_agent(args: argparse.Namespace) -> int:
+    from .agent import AgentError, load_config, run
+
+    try:
+        cfg = load_config(args.config)
+        report = run(cfg, args.connector)
+    except AgentError as exc:
+        print(exc, file=sys.stderr)
+        return 2
+    for line in report.pushed:
+        print(f"{cfg.tenant} [{cfg.collector}]: pushed {line}")
+    for line in report.spooled:
+        print(f"  WARN  kept for the next run: {line}", file=sys.stderr)
+    for line in report.errors:
+        print(f"  ERROR {line}", file=sys.stderr)
+    return report.status
+
+
+def cmd_fetch(args: argparse.Namespace) -> int:
+    """Exit 0 when every expected source was written, 3 when some were left out (warning), 1 when none
+    was (the run stops rather than report an estate without its scanners)."""
+    from .intake.client import IntakeError, fetch
+
+    token = _read_secret(args.token_file)
+    try:
+        result = fetch(args.url, args.tenant, token, args.out, args.source, args.max_age_hours, args.ca_file)
+    except IntakeError as exc:
+        print(f"{args.tenant}: {exc}", file=sys.stderr)
+        return 1
+    for path in result.written:
+        print(f"{args.tenant}: {path.stem} from the detection service -> {path}")
+    for problem in result.problems:
+        print(f"  WARN  {problem}", file=sys.stderr)
+    if not result.written:
+        print(f"{args.tenant}: no detection received from the collectors", file=sys.stderr)
+        return 1
+    return 3 if result.problems else 0
+
+
 def cmd_plan(args: argparse.Namespace) -> int:
     try:
         tf = load_targets(args.targets)
@@ -184,6 +266,34 @@ def main(argv: list[str] | None = None) -> int:
     m.add_argument("--min-qod", type=int, default=70, help="OpenVAS: minimum quality of detection (default 70)")
     m.add_argument("--out", default="work/detect")
     m.set_defaults(func=cmd_import)
+
+    sv = sub.add_parser("serve", help="the detection service (one tenant)")
+    sv.add_argument("--tenant", required=True)
+    sv.add_argument("--collectors", required=True, help="the tenant's collectors.yaml")
+    sv.add_argument("--digests", required=True, help="`<collector id|read> <sha256>` per line")
+    sv.add_argument("--store", default="/data/detections")
+    sv.add_argument("--keep", type=int, default=14, help="detections kept per source")
+    sv.add_argument("--max-mb", type=int, default=200, help="largest detection accepted, uncompressed")
+    sv.add_argument("--host", default="0.0.0.0")  # noqa: S104 - in a pod
+    sv.add_argument("--port", type=int, default=8080)
+    sv.set_defaults(func=cmd_serve)
+
+    ag = sub.add_parser("agent", help="the collector: run connectors and push to the detection service")
+    ag_sub = ag.add_subparsers(dest="agent_command", required=True)
+    ar = ag_sub.add_parser("run", help="run the connectors (or one) and push their detections")
+    ar.add_argument("--config", default="/etc/a2vm/collector/collector.yaml")
+    ar.add_argument("--connector", help="only this connector")
+    ar.set_defaults(func=cmd_agent)
+
+    f = sub.add_parser("fetch", help="the latest detections of the tenant from the detection service")
+    f.add_argument("--url", required=True, help="detection service, e.g. http://a2vm-homelab-detect:8080")
+    f.add_argument("--tenant", required=True)
+    f.add_argument("--token-file", required=True, help="the daily run's read token")
+    f.add_argument("--source", action="append", default=[], help="expected source (repeat); default: all")
+    f.add_argument("--max-age-hours", type=float, default=30)
+    f.add_argument("--ca-file")
+    f.add_argument("--out", default="work/detect")
+    f.set_defaults(func=cmd_fetch)
 
     args = parser.parse_args(argv)
     return args.func(args)
