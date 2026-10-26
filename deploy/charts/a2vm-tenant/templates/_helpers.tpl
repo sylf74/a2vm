@@ -21,6 +21,24 @@ app.kubernetes.io/component: {{ .component }}
 {{- printf "http://%s-detect:8080" (include "a2vm-tenant.name" .) -}}
 {{- end -}}
 
+{{/* Ingress controller of the push endpoint: nginx, traefik or other (v0.13.0 values: nginx: false = other). */}}
+{{- define "a2vm-tenant.ingressController" -}}
+{{- $c := .Values.intake.ingress.controller | default "nginx" -}}
+{{- if and (eq $c "nginx") (eq (toString .Values.intake.ingress.nginx) "false") -}}
+{{- $c = "other" -}}
+{{- end -}}
+{{- $c -}}
+{{- end -}}
+
+{{/* Secret of the push endpoint's certificate. */}}
+{{- define "a2vm-tenant.intakeTlsSecret" -}}
+{{- if .Values.intake.ingress.tlsSecret -}}
+{{- .Values.intake.ingress.tlsSecret -}}
+{{- else if .Values.intake.ingress.clusterIssuer -}}
+{{- printf "%s-detect-tls" (include "a2vm-tenant.name" .) -}}
+{{- end -}}
+{{- end -}}
+
 {{/* Checks of the values that templates cannot express alone. */}}
 {{- define "a2vm-tenant.checks" -}}
 {{- if not (has .Values.collect.mode (list "local" "intake")) -}}
@@ -38,7 +56,11 @@ app.kubernetes.io/component: {{ .component }}
 {{- if and .Values.intake.ingress.enabled (not .Values.intake.ingress.host) -}}
 {{- fail "intake.ingress.host is required with the ingress" -}}
 {{- end -}}
-{{- if and .Values.intake.ingress.enabled .Values.intake.ingress.nginx (not .Values.intake.ingress.allowFrom) -}}
+{{- $controller := include "a2vm-tenant.ingressController" . -}}
+{{- if not (has $controller (list "nginx" "traefik" "other")) -}}
+{{- fail "intake.ingress.controller must be nginx, traefik or other" -}}
+{{- end -}}
+{{- if and .Values.intake.ingress.enabled (ne $controller "other") (not .Values.intake.ingress.allowFrom) -}}
 {{- fail "intake.ingress.allowFrom is required: the addresses of the collectors, the only sources allowed to push" -}}
 {{- end -}}
 {{- end -}}

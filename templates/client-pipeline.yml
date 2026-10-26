@@ -13,10 +13,10 @@
 #
 #     include:
 #       - project: vulnops/a2vm
-#         ref: v0.13.0
+#         ref: v0.13.1
 #         file: templates/client-pipeline.yml
 #     variables:
-#       A2VM_REF: v0.13.0        # same version as the include
+#       A2VM_REF: v0.13.1        # same version as the include
 #
 # Jobs:
 #   push to the default branch     validate (profile and targets)
@@ -30,7 +30,8 @@
 # CI/CD variables (client project, or inherited from the groups):
 #   A2VM_SSH_KEY          File, protected: private key of this client's read-only scan account
 #   A2VM_COLLECTOR_TOKEN_<ID> (masked, protected)   token of each collector of collectors.yaml;
-#                            A2VM_INTAKE_HOST, A2VM_INTAKE_ALLOW: its push endpoint (docs/collectors.md)
+#                            A2VM_INTAKE_HOST, A2VM_INTAKE_ALLOW, A2VM_INTAKE_INGRESS_CONTROLLER
+#                            (nginx, traefik), A2VM_INTAKE_CLUSTER_ISSUER: its push endpoint (docs/collectors.md)
 #   A2VM_GVM_USER, A2VM_GVM_PASSWORD (masked)   OpenVAS (GMP) account, when targets.yaml has
 #                            an openvas section; A2VM_GVM_CA, A2VM_GVM_CERT, A2VM_GVM_KEY
 #                            (File) for a tls:// GMP endpoint with client certificates (docs/openvas.md)
@@ -166,6 +167,8 @@ deploy-k8s:
           printf 'intake:\n  ingress:\n    enabled: true\n    host: "%s"\n' "$A2VM_INTAKE_HOST" > "$I/values.yaml"
           if [ -n "${A2VM_INTAKE_INGRESS_CLASS:-}" ]; then printf '    className: "%s"\n' "$A2VM_INTAKE_INGRESS_CLASS" >> "$I/values.yaml"; fi
           if [ -n "${A2VM_INTAKE_TLS_SECRET:-}" ]; then printf '    tlsSecret: "%s"\n' "$A2VM_INTAKE_TLS_SECRET" >> "$I/values.yaml"; fi
+          if [ -n "${A2VM_INTAKE_INGRESS_CONTROLLER:-}" ]; then printf '    controller: "%s"\n' "$A2VM_INTAKE_INGRESS_CONTROLLER" >> "$I/values.yaml"; fi
+          if [ -n "${A2VM_INTAKE_CLUSTER_ISSUER:-}" ]; then printf '    clusterIssuer: "%s"\n' "$A2VM_INTAKE_CLUSTER_ISSUER" >> "$I/values.yaml"; fi
           echo "    allowFrom:" >> "$I/values.yaml"
           for cidr in $(echo "${A2VM_INTAKE_ALLOW:-}" | tr ',' ' '); do printf '      - "%s"\n' "$cidr" >> "$I/values.yaml"; done
           INTAKE="$INTAKE -f $I/values.yaml"

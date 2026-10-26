@@ -52,12 +52,20 @@ intake:
     enabled: false
     className: ""
     host: ""            # e.g. detect-lab.apps.example.org
-    tlsSecret: ""       # certificate of the host; empty: the controller's default certificate
-    # Addresses of the collectors (CIDR), the only sources allowed to push: required.
+    # Secret of the host's certificate; empty: the controller's default certificate, or with
+    # clusterIssuer, <release name>-<tenant>-detect-tls made by cert-manager.
+    tlsSecret: ""
+    # cert-manager ClusterIssuer that signs the certificate (annotation on the Ingress); empty: none.
+    clusterIssuer: ""
+    # Addresses of the collectors (CIDR), the only sources allowed to push: required with nginx and
+    # traefik. The controller must see them: no source NAT in front of it (behind a LoadBalancer
+    # Service, externalTrafficPolicy: Local).
     allowFrom: []
-    # ingress-nginx: allow-list and body size as its annotations. Another controller: false, and its
-    # own allow-list in `annotations` (the chart then cannot check it).
-    nginx: true
+    # How the allow-list is set:
+    # - nginx: ingress-nginx annotations (allow-list, body size);
+    # - traefik: a Traefik Middleware ipAllowList attached to the Ingress (traefik.io/v1alpha1);
+    # - other: nothing; put the controller's own allow-list in `annotations` (not checked).
+    controller: nginx
     annotations: {}
   # The service accepts connections from the ingress controller and the tenant's daily run only,
   # and opens none.
