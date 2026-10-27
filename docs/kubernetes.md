@@ -109,7 +109,7 @@ namespace, never into the job log, and hands the others (`A2VM_LLM_*`, `A2VM_GTI
 `A2VM_EXTERNAL_PROJECT`) to the CronJob. External detection uses the GitLab API with
 `A2VM_GITLAB_TOKEN`, since a pod has no job token.
 
-Then move the tenant's `.gitlab-ci.yml` to `v0.13.1` (both `ref` and `A2VM_REF`) and push: the
+Then move the tenant's `.gitlab-ci.yml` to `v0.13.2` (both `ref` and `A2VM_REF`) and push: the
 pipeline runs `validate`, then `deploy-k8s`, which ends with the CronJob and its volume. Each
 later push to the default branch redeploys (new profile, new targets, new version).
 

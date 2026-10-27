@@ -6,4 +6,4 @@ sheets. VIA depends on a2vm only; asset matching and remediation delays come fro
 pillars through a2vm.extensions.
 """
 
-__version__ = "0.13.1"
+__version__ = "0.13.2"
