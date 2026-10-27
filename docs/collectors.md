@@ -98,6 +98,42 @@ sudo chown 10001:10001 /etc/a2vm/collector/token
 sudo cat /etc/a2vm/collector/token   # once, to copy into A2VM_COLLECTOR_TOKEN_<ID>
 ```
 
+Then put the CA of the push endpoint's certificate in `/etc/a2vm/collector/ca.pem` (owner 10001,
+mode 0640) and, for a private registry, the registry's CA where the container engine reads it
+(see *Two CAs* below).
+
+### With the install script (Docker)
+
+`deploy/collector/install-collector.sh` does the rest, and can be run again: each step only does
+what is missing. From a folder holding `scan_key` (the private key of the scan account),
+`targets.yaml` (the tenant's targets file) and `registry-user.txt` / `registry-password.txt` (a
+deploy token with `read_registry`):
+
+```bash
+sudo bash install-collector.sh --tenant lab --collector lab-lan \
+  --service https://detect-lab.apps.example.org \
+  --image registry.example.org/vulnops/a2vm/detect:v0.13.2 \
+  --openvas-hosts "192.0.2.0/24" --gvm-socket-volume greenbone-community-edition_gvmd_socket_vol
+```
+
+| Step | What it does |
+| --- | --- |
+| Checks | Token and `ca.pem` present; `client` of the targets file = `--tenant` |
+| Scan key | Normalised (no CR, final newline), checked with `ssh-keygen`, installed 0600; the copy in the folder removed |
+| Targets | `identity_file` pointed at the key; with `--openvas-hosts`, an `openvas` section on the gvmd socket (an existing one keeps its hosts) |
+| GMP account | With `--openvas-hosts` and no `gvm.env`: the account `--gvm-user` made in gvmd, its password written to `gvm.env` (root, 0600), never printed |
+| `collector.yaml` | A connector `lan-ssh` when the targets file has targets, `lan-openvas` with `--openvas-hosts` |
+| Image | Pulled (login with the deploy token when given); the password file removed |
+| Socket | Its rights read; `--group-add` when "other" may not use it |
+| Configuration | Read by the agent inside the image: an error shows before the first run |
+| Units | `a2vm-collector@.service` and `.timer` (`--schedule`, default 07:30), one timer enabled per connector |
+
+It starts no scan: it ends with the commands of the first runs. Without `--openvas-hosts`, the
+collector does SSH scans only, and Docker is the only engine the script uses; with Podman, follow
+the steps by hand below.
+
+### By hand
+
 The scan key of the read-only account goes to `/etc/a2vm/collector/ssh/scan_key` (owner 10001,
 mode 0600), the targets file of the network to `/etc/a2vm/collector/targets.yaml` with
 `identity_file: /etc/a2vm/collector/ssh/scan_key`. Then `/etc/a2vm/collector/collector.yaml`:
@@ -127,7 +163,7 @@ from a file:
 
 ```bash
 sudo podman login registry.example.org -u "$(cat registry-user.txt)" --password-stdin < registry-password.txt
-sudo podman pull registry.example.org/vulnops/a2vm/detect:v0.13.1
+sudo podman pull registry.example.org/vulnops/a2vm/detect:v0.13.2
 ```
 
 One systemd service and timer per connector, `/etc/systemd/system/a2vm-collector@.service`:
@@ -147,7 +183,7 @@ ExecStart=/usr/bin/podman run --rm --name a2vm-collector-%i --user 10001:10001 \
   -v /etc/a2vm/collector:/etc/a2vm/collector:ro,Z \
   -v /var/lib/a2vm:/var/lib/a2vm:Z \
   -v /var/lib/a2vm-ssh:/home/a2vm/.ssh:Z \
-  registry.example.org/vulnops/a2vm/detect:v0.13.1 \
+  registry.example.org/vulnops/a2vm/detect:v0.13.2 \
   detect agent run --config /etc/a2vm/collector/collector.yaml --connector %i
 ```
 
@@ -218,7 +254,7 @@ ExecStart=/usr/bin/docker run --rm --name a2vm-collector-%i --user 10001:10001 \
   -v /var/lib/a2vm:/var/lib/a2vm \
   -v /var/lib/a2vm-ssh:/home/a2vm/.ssh \
   -v greenbone-community-edition_gvmd_socket_vol:/run/gvmd \
-  registry.example.org/vulnops/a2vm/detect:v0.13.1 \
+  registry.example.org/vulnops/a2vm/detect:v0.13.2 \
   detect agent run --config /etc/a2vm/collector/collector.yaml --connector %i
 ```
 

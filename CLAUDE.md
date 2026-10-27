@@ -21,6 +21,7 @@ other files of `docs/`.
 | `deploy/portal/` | Terraform and cloud-init of the reporting database and Grafana |
 | `deploy/charts/a2vm-tenant/` | Helm chart: a tenant's daily run as a Kubernetes CronJob (D15 step 1, `docs/kubernetes.md`) and its detection service (D15 step 2, `docs/collectors.md`) |
 | `deploy/intake/` | Script of the job `deploy-k8s` that turns the collectors' tokens into digests (stdlib and PyYAML only) |
+| `deploy/collector/` | Install script of a collector on its VM (`docs/collectors.md` §2) |
 | `images/` | Dockerfile of the pillar images (one per pillar, built by the `images` job on tags) |
 | `scripts/` | Generators of committed files: dashboards, decision diagrams, neutral Word template |
 
