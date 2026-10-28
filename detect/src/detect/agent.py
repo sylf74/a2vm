@@ -9,6 +9,7 @@ collector.yaml, on the collector's machine (secrets in files readable by the age
   service: https://detect-homelab.apps.example.org
   token_file: /etc/a2vm/collector/token
   ca_file: /etc/a2vm/collector/ca.pem      # optional: CA of the service's certificate
+  timeout_seconds: 600                     # optional: wait for the service's answer to a push
   work: /var/lib/a2vm/work
   spool: /var/lib/a2vm/spool
   connectors:
@@ -119,6 +120,7 @@ class AgentConfig:
     spool: Path
     connectors: list[Any] = field(default_factory=list)
     ca_file: str | None = None
+    timeout_seconds: float = 600.0
 
     def token(self) -> str:
         try:
@@ -162,6 +164,12 @@ def load_config(path: str | Path) -> AgentConfig:
             raise AgentError(f"{where}: unknown type {kind!r} (targets, file-import)")
     if not connectors:
         raise AgentError(f"{path}: at least one connector is required")
+    try:
+        timeout = float(data.get("timeout_seconds", 600))
+    except (TypeError, ValueError) as exc:
+        raise AgentError(f"{path}: timeout_seconds: {exc}") from exc
+    if timeout <= 0:
+        raise AgentError(f"{path}: timeout_seconds must be positive")
     if len({c.name for c in connectors}) != len(connectors):
         raise AgentError(f"{path}: connector names must be unique")
     return AgentConfig(
@@ -173,6 +181,7 @@ def load_config(path: str | Path) -> AgentConfig:
         spool=Path(data.get("spool", "/var/lib/a2vm/spool")),
         connectors=connectors,
         ca_file=data.get("ca_file"),
+        timeout_seconds=timeout,
     )
 
 
@@ -201,7 +210,9 @@ def _push_or_spool(
     source = document["source"]
     spool_file = cfg.spool / f"{source}.json"
     try:
-        receipt = push(cfg.service, cfg.tenant, token, document, cfg.collector, cfg.ca_file, transport)
+        receipt = push(
+            cfg.service, cfg.tenant, token, document, cfg.collector, cfg.ca_file, transport, cfg.timeout_seconds
+        )
         report.pushed.append(f"{source} -> {receipt['id']}{' (already received)' if receipt.get('duplicate') else ''}")
         spool_file.unlink(missing_ok=True)
     except IntakeError as exc:

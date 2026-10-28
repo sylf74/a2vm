@@ -225,7 +225,9 @@ def cmd_fetch(args: argparse.Namespace) -> int:
         max_age = ages
     token = _read_secret(args.token_file)
     try:
-        result = fetch(args.url, args.tenant, token, args.out, sources, max_age, args.ca_file)
+        result = fetch(
+            args.url, args.tenant, token, args.out, sources, max_age, args.ca_file, timeout=args.timeout_seconds
+        )
     except IntakeError as exc:
         print(f"{args.tenant}: {exc}", file=sys.stderr)
         return 1
@@ -341,6 +343,7 @@ def main(argv: list[str] | None = None) -> int:
     f.add_argument("--max-age-hours", type=float, default=30, help="without --collectors")
     f.add_argument("--collectors", help="the tenant's collectors.yaml: expected sources and their max age")
     f.add_argument("--ca-file")
+    f.add_argument("--timeout-seconds", type=float, default=600, help="wait for the service's answer")
     f.add_argument("--out", default="work/detect")
     f.set_defaults(func=cmd_fetch)
 

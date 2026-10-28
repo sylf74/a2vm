@@ -6,6 +6,20 @@ is a warning, as in the pipeline.
 */ -}}
 
 {{- define "a2vm-tenant.step.collect" -}}
+# One run at a time on the working volume: CronJob's concurrencyPolicy does not cover a run started
+# by hand (kubectl create job --from=cronjob/...). The lock is the pod's; a lock older than the
+# run's deadline is from a run that was killed.
+now=$(date +%s)
+if ! mkdir /data/.a2vm-run 2>/dev/null; then
+  started=$(cat /data/.a2vm-run/started 2>/dev/null || echo 0)
+  if [ $((now - started)) -lt {{ .Values.daily.activeDeadlineSeconds }} ]; then
+    echo "Another run holds the working volume (pod $(cat /data/.a2vm-run/pod 2>/dev/null), started $(( (now - started) / 60 )) min ago): stopping"
+    exit 1
+  fi
+  echo "WARN lock of a run started $(( (now - started) / 60 )) min ago and never released: taken over"
+fi
+echo "$now" > /data/.a2vm-run/started
+echo "$HOSTNAME" > /data/.a2vm-run/pod
 mkdir -p /data/work
 rm -rf /data/work/detect && mkdir -p /data/work/detect
 if [ -f /secrets/gitlab-ca ]; then export CI_SERVER_TLS_CA_FILE=/secrets/gitlab-ca; fi
@@ -68,6 +82,7 @@ verdict run /config/client.yaml --settings "$SETTINGS" --records /data/work/reco
 {{- end -}}
 
 {{- define "a2vm-tenant.step.publish" -}}
+trap 'if [ "$(cat /data/.a2vm-run/pod 2>/dev/null)" = "$HOSTNAME" ]; then rm -rf /data/.a2vm-run; fi' EXIT
 if [ -z "${A2VM_REPORTING_DSN:-}" ]; then echo "No reporting-dsn: nothing to publish"; exit 0; fi
 if [ -s /secrets/reporting-ca ]; then export A2VM_REPORTING_CA=/secrets/reporting-ca; fi
 rc=0
@@ -85,6 +100,7 @@ exit "$rc"
   args:
     - |
       echo "A2VM {{ $root.Chart.AppVersion }}, tenant {{ $root.Values.tenant }}, step {{ .name }}"
+      trap 'rc=$?; if [ "$rc" -ne 0 ] && [ "$(cat /data/.a2vm-run/pod 2>/dev/null)" = "$HOSTNAME" ]; then rm -rf /data/.a2vm-run; fi' EXIT
       {{- include (printf "a2vm-tenant.step.%s" .name) $root | nindent 6 }}
   env:
     {{- include "a2vm-tenant.env" $root | nindent 4 }}

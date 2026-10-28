@@ -109,7 +109,7 @@ namespace, never into the job log, and hands the others (`A2VM_LLM_*`, `A2VM_GTI
 `A2VM_EXTERNAL_PROJECT`) to the CronJob. External detection uses the GitLab API with
 `A2VM_GITLAB_TOKEN`, since a pod has no job token.
 
-Then move the tenant's `.gitlab-ci.yml` to `v0.13.2` (both `ref` and `A2VM_REF`) and push: the
+Then move the tenant's `.gitlab-ci.yml` to `v0.13.3` (both `ref` and `A2VM_REF`) and push: the
 pipeline runs `validate`, then `deploy-k8s`, which ends with the CronJob and its volume. Each
 later push to the default branch redeploys (new profile, new targets, new version).
 
@@ -125,7 +125,8 @@ kubectl -n $NS logs job/run-<HHMM> --all-containers --prefix -f
 ```
 
 The steps run one after the other (`collect`, `via`, `detect`, `assets`, `triage`, then
-`publish`); a failed step stops the run and shows as `Init:Error`. Exit code 3 (partial
+`publish`); a failed step stops the run and shows as `Init:Error`. One run at a time: the CronJob forbids
+overlaps, and since v0.13.3 a run started by hand while another holds the volume stops at `collect`. Exit code 3 (partial
 collection, reporting database unreachable) is a warning, as in the pipeline.
 
 The report and the reporting dataset are on the tenant's volume, in `output/<client>/`. To read

@@ -18,6 +18,7 @@ import datetime as dt
 import json
 import logging
 import re
+import time
 import zlib
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -73,6 +74,21 @@ class Service:
             raise Problem(HTTPStatus.UNAUTHORIZED, "missing or unknown collector token")
         if collector.tenant != tenant:
             raise Problem(HTTPStatus.FORBIDDEN, "collector not declared for this tenant")
+        if not key or len(key) > 128:
+            raise Problem(HTTPStatus.BAD_REQUEST, "Idempotency-Key header required (at most 128 characters)")
+        # A retry of a detection already stored is answered at once, before any decompression or
+        # validation: the key is bound to this authenticated collector, the stored document was validated.
+        known = self.store.known(tenant, collector.id, key)
+        if known is not None:
+            log.info(
+                "push tenant=%s collector=%s source=%s id=%s duplicate=True",
+                tenant,
+                collector.id,
+                known.source,
+                known.id,
+            )
+            return known.to_dict()
+        started = time.monotonic()
         state: dict[str, str] = {"source": "*"}
         try:
             receipt = self._accept(tenant, collector, key, body, gzipped, now, state)
@@ -90,12 +106,15 @@ class Service:
         self.last_errors.pop((collector.id, receipt.source), None)
         self.last_errors.pop((collector.id, "*"), None)
         log.info(
-            "push tenant=%s collector=%s source=%s id=%s duplicate=%s",
+            "push tenant=%s collector=%s source=%s id=%s duplicate=%s received=%d bytes document=%d bytes seconds=%.1f",
             tenant,
             collector.id,
             receipt.source,
             receipt.id,
             receipt.duplicate,
+            len(body),
+            int(state.get("size", "0")),
+            time.monotonic() - started,
         )
         return receipt.to_dict()
 
@@ -109,16 +128,19 @@ class Service:
         now: dt.datetime,
         state: dict[str, str],
     ) -> Receipt:
-        if not key or len(key) > 128:
-            raise Problem(HTTPStatus.BAD_REQUEST, "Idempotency-Key header required (at most 128 characters)")
+        received = body
         if gzipped:
             try:
                 d = zlib.decompressobj(wbits=31)
                 body = d.decompress(body, self.max_bytes + 1)
             except zlib.error as exc:
                 raise Problem(HTTPStatus.BAD_REQUEST, f"invalid gzip body: {exc}") from exc
+            if len(body) <= self.max_bytes and (d.unused_data or not d.eof):
+                # Stored as received: one complete gzip member, nothing after it.
+                raise Problem(HTTPStatus.BAD_REQUEST, "invalid gzip body: one complete gzip stream expected")
         if len(body) > self.max_bytes:
             raise Problem(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, f"body larger than {self.max_bytes} bytes")
+        state["size"] = str(len(body))
         try:
             document = json.loads(body)
         except ValueError as exc:
@@ -141,7 +163,7 @@ class Service:
             raise Problem(HTTPStatus.UNPROCESSABLE_ENTITY, "generated_at is in the future")
         if (now - generated).total_seconds() / 3600 > collector.max_age_hours:
             raise Problem(HTTPStatus.UNPROCESSABLE_ENTITY, f"older than {collector.max_age_hours:g} hours")
-        return self.store.put(tenant, collector.id, body, document, key, now)
+        return self.store.put(tenant, collector.id, body, document, key, now, received if gzipped else None)
 
     def _reader(self, tenant: str, token: str | None) -> None:
         self._tenant(tenant)

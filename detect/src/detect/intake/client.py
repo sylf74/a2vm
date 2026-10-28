@@ -23,12 +23,21 @@ class IntakeError(RuntimeError):
     pass
 
 
-def _client(base_url: str, token: str, ca_file: str | None, transport: httpx.BaseTransport | None) -> httpx.Client:
+TIMEOUT = 600.0  # a large detection (100 MB and more) takes the service a minute or more to validate
+
+
+def _client(
+    base_url: str,
+    token: str,
+    ca_file: str | None,
+    transport: httpx.BaseTransport | None,
+    timeout: float = TIMEOUT,
+) -> httpx.Client:
     return httpx.Client(
         base_url=base_url.rstrip("/"),
         headers={"Authorization": f"Bearer {token}", "User-Agent": "a2vm-detect"},
         verify=ca_file or True,
-        timeout=httpx.Timeout(60.0, connect=15.0),
+        timeout=httpx.Timeout(timeout, connect=15.0),
         transport=transport,
     )
 
@@ -48,13 +57,14 @@ def push(
     collector: str,
     ca_file: str | None = None,
     transport: httpx.BaseTransport | None = None,
+    timeout: float = TIMEOUT,
 ) -> dict[str, Any]:
     """Push one detection; the idempotency key is derived from the content, so a retry is harmless.
     Raises IntakeError with `retry` set when trying again later may succeed."""
     body = json.dumps(document, ensure_ascii=False).encode("utf-8")
     key = f"{collector}:{document['source']}:{hashlib.sha256(body).hexdigest()[:32]}"
     try:
-        with _client(base_url, token, ca_file, transport) as c:
+        with _client(base_url, token, ca_file, transport, timeout) as c:
             r = c.post(
                 f"/v1/tenants/{tenant}/detections",
                 content=gzip.compress(body),
@@ -86,6 +96,7 @@ def fetch(
     max_age_hours: float | dict[str, float],
     ca_file: str | None = None,
     transport: httpx.BaseTransport | None = None,
+    timeout: float = TIMEOUT,
 ) -> FetchResult:
     """Write the latest detection of each source to <out>/<tenant>/<source>.json.
 
@@ -95,7 +106,7 @@ def fetch(
     missing or too old is a problem: the run goes on without it, as with detect external."""
     result = FetchResult()
     try:
-        with _client(base_url, token, ca_file, transport) as c:
+        with _client(base_url, token, ca_file, transport, timeout) as c:
             r = c.get(f"/v1/tenants/{tenant}/detections/latest")
     except httpx.HTTPError as exc:
         raise IntakeError(f"detection service unreachable: {exc}") from exc

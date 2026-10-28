@@ -3,8 +3,8 @@
 # A2VM_PROJECT to the same path, on the group of the tenants).
 include:
   - project: group/subgroup/a2vm
-    ref: v0.13.2
+    ref: v0.13.3
     file: templates/client-pipeline.yml
 
 variables:
-  A2VM_REF: v0.13.2   # keep equal to the include ref
+  A2VM_REF: v0.13.3   # keep equal to the include ref

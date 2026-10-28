@@ -379,16 +379,34 @@ pillar.
 | 3. Triage & Prioritization | Missing SSVC inputs; rationale | In development |
 | 4. Dispatch & Capitalization | Ideas: remediation instructions or tickets, capitalisation summaries | Not started |
 | 5. Emergency Actions | Idea: crisis communications | Not started |
+| Across pillars | Conversational search of a tenant's data by its analysts (below) | Planned (v0.15.0) |
 
 Invariants:
 
 - AI proposes or writes; it never decides. The SSVC tree and the policy are deterministic, and a proposal becomes a fact only through review.
 - Every use case has a deterministic fallback; the platform works without an LLM.
-- Vendor text is untrusted: passed as data only, and the model has no tools.
+- Vendor text is untrusted: passed as data only. In the generation tasks of the pillars the model has no tools; in conversational search it has read-only tools scoped to the session's tenant, and nothing else (no write, no network, no URL fetch).
 - Every AI output is marked as such, with the model, and checked against a schema or a guard before reaching a report.
 - Licensed content (Google Threat Intelligence) is never sent to an LLM.
 - Client data goes only to the LLM endpoint approved for that tenant (§3, §9).
-- The model is recorded with each run; prompts are not stored, as they carry client data.
+- The model is recorded with each run; prompts are not stored, as they carry client data. Conversational search keeps no chat history beyond a retention set per tenant, stored in the tenant's namespace.
+
+### Conversational search (target, v0.15.0)
+
+Analysts of a tenant ask in plain language for a CVE, an asset, a finding, the decisions of a level
+or an exposure, and get the answer as text, a table or a document (Word, PowerPoint) to hand over.
+Clients are out of scope in the first version.
+
+| Item | Design |
+| --- | --- |
+| Interface | Open WebUI, one instance per tenant in its namespace, behind the ingress, analysts' accounts only |
+| Model | The tenant's approved LLM endpoint, served with tool calling (vLLM: `--enable-auto-tool-choice --tool-call-parser hermes` for Qwen3) |
+| Tools | A read-only tool server (OpenAPI) on `verdict serve`: search a CVE, a finding, an asset; list decisions with filters; explain a decision (stored rationale and SSVC path); answers short and paged (under about 2,000 tokens) |
+| Facts | Identifiers, numbers and levels come from the tools, never from the model's memory; each answer names the data it rests on |
+| Documents | Built by the tool server from the data with the A2VM templates, not written by the model |
+| Decisions | Read only: no decision, review flag or exposure is changed through the chat |
+| Safety | Tools scoped to the tenant of the session; no write, no network, no URL fetch; external images and links not rendered (no exfiltration through a rendered URL); vendor text in tool results stays untrusted data |
+
 
 ## 9. Deployment modes
 
@@ -460,8 +478,13 @@ release.
 | v0.12.0 | D15 step 1: one container image per pillar built at every tag (`images`, GitLab registry); chart `a2vm-tenant` running the daily run as a Kubernetes CronJob, one container per step in the image of its pillar, deployed from the tenant project by the job `deploy-k8s` through the GitLab agent, secrets copied from the CI/CD variables; the watch stays in GitLab (`docs/kubernetes.md`) | All |
 | v0.13.0 | D15 step 2: detection service of each tenant in the cluster (`detect serve`, API `detect.v1`, detections on a volume until PostgreSQL) and collectors near the networks pushing to it with a token per collector (`detect agent`, connectors `targets` for SSH Trivy and dnf and OpenVAS, `file-import`; systemd timer, spool); the tenant project declares its collectors (`collectors.yaml`), `deploy-k8s` hands the token digests to the service and publishes the push endpoint to the collectors' addresses only; the daily run reads the latest detections (`detect fetch`, `collect.mode: intake`) instead of collecting (`docs/collectors.md`) | 2 |
 | v0.13.1 | Push endpoint behind Traefik (allow-list as an `ipAllowList` Middleware) and certificate from a cert-manager issuer (`A2VM_INTAKE_INGRESS_CONTROLLER`, `A2VM_INTAKE_CLUSTER_ISSUER`); collector guide: OpenVAS on the collector (GMP account from an environment file, gvmd socket, a connector of its own), the two CAs, end-to-end check (`docs/collectors.md`) | 2 |
-| v0.13.2 (current) | Install script of a collector (`deploy/collector/install-collector.sh`): configuration, GMP account made on the scanner host, image, one systemd timer per connector, configuration checked by the agent before the first run | 2 |
-| Next (to confirm) | Client portal VM (Grafana) in service; history database and finding lifecycle; decision API (D15 step 3) | 1, 3, 4 |
+| v0.13.2 | Install script of a collector (`deploy/collector/install-collector.sh`): configuration, GMP account made on the scanner host, image, one systemd timer per connector, configuration checked by the agent before the first run | 2 |
+| v0.13.3 (current) | Large detections: a retry answered from its idempotency key before any validation, the gzip body stored as received, clients waiting 10 minutes (`timeout_seconds`), size and time of each push logged; one daily run at a time on a tenant's volume (lock taken by `collect`) | 2 |
+| v0.14.0 (to confirm) | D15 step 3, read side first: `verdict serve`, the latest run of each tenant (decisions with their rationale and SSVC path, findings, assets, CVE records) behind a filtered and paged read API, pushed by the daily run; files on its own volume until PostgreSQL | 3 |
+| v0.15.0 (to confirm) | Conversational search for analysts (§8): Open WebUI in the tenant's namespace on the tenant's approved LLM endpoint, a read-only tool server on `verdict serve`, exports (table, Word, PowerPoint) built from the data | 3 |
+| v0.16.0 (to confirm) | `A2VM_RUN_MODE` (`gitlab` or `kubernetes`) in the tenant's `.gitlab-ci.yml`; the watch as a CronJob, the analysts' validation still a manual GitLab job until a review page | 1 |
+| v0.17.0 (to confirm) | PostgreSQL (CloudNativePG) behind `detect serve` and `verdict serve`: history between runs, finding lifecycle, several replicas, row-level security per tenant | 2, 3 |
+| Next (to confirm) | Client portal VM (Grafana) in service; review page of the alerts on `verdict serve`; decisions asked by the watch (D15 step 3, write side) | 1, 3, 4 |
 | Then (to confirm) | Dispatch & Capitalization; Emergency Actions | 4, 5 |
 | v1.0 (target) | The architecture of D15 in production: each pillar a service on Kubernetes with its APIs and events, the decision service of pillar 3 shared by the daily run, the watch and the alert review, collectors near the client networks; the GitLab pipeline mode kept for development | All |
 
