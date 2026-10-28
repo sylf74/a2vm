@@ -5,6 +5,28 @@ analyst and, under **Upgrade**, what a tenant must do when it moves to that tag 
 `A2VM_REF` in its `.gitlab-ci.yml`). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
 §11) and the LLDs. A release adds its entry here in the same merge request (CLAUDE.md, Releasing).
 
+## v0.15.1 — 2026-10-28
+
+The analysts' chat, after its first use on a tenant.
+
+- Assets found as people name them: by id (`host:web01.example.org`), host name
+  (`web01.example.org`) or short name (`web01`), any case, in the decision service's filter `asset`
+  and in `assets/{asset}`. The tool server decodes the path parameters the chat encodes (an asset id
+  with `:` or `/` was refused).
+- Documents: `export_decisions` builds a Word (A4 landscape), PowerPoint (16:9) or CSV document from
+  the data (run, filters, counts, table, explanation of the most urgent decisions); the chat answers
+  a download link on its own address, valid one hour (`/a2vm/exports/…`, routed to the tool server,
+  token never logged). verdict depends on `python-docx` and `python-pptx`.
+- Retention: a second container of the chat's pod (`verdict chat-retention`) deletes every hour the
+  chats unchanged for `A2VM_CHAT_RETENTION_DAYS` days (default 30, 0 keeps them), as Open WebUI
+  deletes a chat.
+- Instructions of the model: look an asset up with `list_assets` before saying it has nothing; the
+  only link allowed is a document's; every answer ends with `Source : run <id> du <date>`.
+- LLD triage §15.4 and §16 (16.6 documents, 16.7 retention), `docs/chat.md` §7.
+
+**Upgrade**: move the tenant to v0.15.1 and push; nothing else (`A2VM_CHAT_RETENTION_DAYS` to keep
+chats longer than 30 days). Chats older than 30 days are deleted within the hour after the upgrade.
+
 ## v0.15.0 — 2026-10-28
 
 Conversational search for analysts (HLD §8), all in the tenant's namespace; the model stays on the

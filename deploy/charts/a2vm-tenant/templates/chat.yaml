@@ -71,6 +71,8 @@ spec:
             - --read-token-file=/secrets/verdict-read-token
             - --digests=/tools-secret/digests
             - --max-chars={{ $chat.maxChars }}
+            - --public-url={{ printf "https://%s" $chat.host }}
+            - --export-minutes={{ $chat.exportMinutes }}
             - --port=8080
           ports:
             - name: http
@@ -290,6 +292,33 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+        {{- if gt (int $chat.retentionDays) 0 }}
+        # Retention of the chats (Open WebUI has none): every hour, the chats unchanged for
+        # chat.retentionDays days are deleted from Open WebUI's database, as Open WebUI deletes one.
+        - name: retention
+          image: {{ include "a2vm-tenant.image" (dict "root" . "pillar" "verdict") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["verdict", "chat-retention"]
+          args:
+            - --db=/app/backend/data/webui.db
+            - --days={{ $chat.retentionDays }}
+            - --every=3600
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: data
+              mountPath: /app/backend/data
+          resources:
+            requests: {cpu: 5m, memory: 32Mi}
+            limits: {memory: 128Mi}
+        {{- end }}
+      {{- if .Values.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.image.pullSecret }}
+      {{- end }}
       volumes:
         - name: data
           persistentVolumeClaim:
@@ -377,6 +406,15 @@ spec:
     - host: {{ $chat.host | quote }}
       http:
         paths:
+          # Downloads of the documents the tool server built (a link per document, valid for
+          # chat.exportMinutes); nothing else of the tool server is published.
+          - path: /a2vm/exports/
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $name }}-tools
+                port:
+                  name: http
           - path: /
             pathType: Prefix
             backend:
@@ -386,7 +424,8 @@ spec:
                   name: http
 {{- if $chat.networkPolicy.enabled }}
 ---
-# The tool server: from Open WebUI only; to the decision service and the DNS only.
+# The tool server: from Open WebUI, and from the ingress controller for the downloads; to the
+# decision service and the DNS only.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -404,6 +443,9 @@ spec:
         - podSelector:
             matchLabels:
               {{- include "a2vm-tenant.selector" (dict "root" . "component" "chat") | nindent 14 }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $chat.networkPolicy.ingressNamespace | quote }}
       ports:
         - {port: 8080, protocol: TCP}
   egress:

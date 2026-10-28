@@ -87,7 +87,15 @@ def cmd_tools(args: argparse.Namespace) -> int:
         print(exc, file=sys.stderr)
         return 2
     read_token = _read_secret(args.read_token_file)
-    tools = Tools(args.tenant, tokens, args.verdict_url, read_token, args.max_chars)
+    tools = Tools(
+        args.tenant,
+        tokens,
+        args.verdict_url,
+        read_token,
+        args.max_chars,
+        public_url=args.public_url,
+        export_ttl=args.export_minutes * 60,
+    )
     print(
         f"{args.tenant}: tool server on {args.verdict_url}, "
         f"chat token {'set' if 'chat' in tokens.digests else 'MISSING'}, "
@@ -106,6 +114,10 @@ def cmd_tools(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str]) -> int:
+    if argv[:1] == ["chat-retention"]:
+        from .retention import main as retention
+
+        return retention(argv[1:])
     parser = argparse.ArgumentParser(prog="verdict")
     sub = parser.add_subparsers(dest="command", required=True)
     s = sub.add_parser("serve", help="the decision service of one tenant (read API on its latest runs)")
@@ -131,6 +143,8 @@ def main(argv: list[str]) -> int:
     t.add_argument("--read-token-file", required=True, help="read token of the decision service")
     t.add_argument("--digests", required=True, help="`chat <sha256>`: the chat interface's token")
     t.add_argument("--max-chars", type=int, default=8000, help="longest answer, in characters of JSON")
+    t.add_argument("--public-url", default="", help="address of the chat, for download links (https://chat-lab...)")
+    t.add_argument("--export-minutes", type=int, default=60, help="how long a download link stays valid")
     t.add_argument("--host", default="0.0.0.0")  # noqa: S104 - in a pod
     t.add_argument("--port", type=int, default=8080)
     t.set_defaults(func=cmd_tools)

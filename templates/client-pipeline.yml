@@ -13,10 +13,10 @@
 #
 #     include:
 #       - project: vulnops/a2vm
-#         ref: v0.15.0
+#         ref: v0.15.1
 #         file: templates/client-pipeline.yml
 #     variables:
-#       A2VM_REF: v0.15.0        # same version as the include
+#       A2VM_REF: v0.15.1        # same version as the include
 #
 # Jobs:
 #   push to the default branch     validate (profile and targets)
@@ -34,7 +34,7 @@
 #                            (nginx, traefik), A2VM_INTAKE_CLUSTER_ISSUER: its push endpoint (docs/collectors.md)
 #   A2VM_VERDICT_SERVICE  false: no decision service in the cluster (default true; docs/kubernetes.md)
 #   A2VM_CHAT_HOST        the analysts' chat on the decision service (Open WebUI); A2VM_CHAT_ALLOW,
-#                            A2VM_CHAT_ADMIN_EMAIL, A2VM_CHAT_LLM_EGRESS... (docs/chat.md)
+#                            A2VM_CHAT_ADMIN_EMAIL, A2VM_CHAT_RETENTION_DAYS, A2VM_CHAT_LLM_EGRESS... (docs/chat.md)
 #   A2VM_GVM_USER, A2VM_GVM_PASSWORD (masked)   OpenVAS (GMP) account, when targets.yaml has
 #                            an openvas section; A2VM_GVM_CA, A2VM_GVM_CERT, A2VM_GVM_KEY
 #                            (File) for a tls:// GMP endpoint with client certificates (docs/openvas.md)

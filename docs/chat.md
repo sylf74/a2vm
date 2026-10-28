@@ -39,6 +39,7 @@ pages (about 2,000 tokens at most) for the model's context.
 | `A2VM_CHAT_HOST` | Host of the chat; set, `deploy-k8s` deploys it | Visible |
 | `A2VM_CHAT_ALLOW` | Optional: the analysts' networks, CIDR, comma-separated; empty: every source | Visible |
 | `A2VM_CHAT_ADMIN_EMAIL` | Optional: login of the first admin (default `admin@example.org`) | Visible |
+| `A2VM_CHAT_RETENTION_DAYS` | Optional: chats unchanged for longer are deleted (default 30; 0 keeps them) | Visible |
 | `A2VM_CHAT_LLM_EGRESS` | Optional: `cidr:port,...` of the LLM endpoints, when the job cannot resolve their names | Visible |
 | `A2VM_CHAT_INGRESS_CONTROLLER`, `A2VM_CHAT_INGRESS_CLASS`, `A2VM_CHAT_TLS_SECRET`, `A2VM_CHAT_CLUSTER_ISSUER` | Optional; default to the `A2VM_INTAKE_*` ones | Visible |
 
@@ -66,8 +67,8 @@ the admin's password in *Settings > Account*; the Secret's value only serves the
 ## 4. Check
 
 In a new chat, the model is preselected and the tool **A2VM** is on (the wrench icon under the
-input box). Ask for instance "Quels sont les ACT KEV du dernier run ?": the answer names the run,
-and the tool server's log shows the calls:
+input box). Ask for instance "Quels sont les ACT KEV du dernier run ?": the answer ends with the
+run it rests on (`Source : run …`), and the tool server's log shows the calls:
 
 ```bash
 kubectl -n $NS logs deploy/a2vm-lab-tools --tail=20
@@ -110,10 +111,25 @@ triage-prioritization §7.1 and §16.5.
 | Browser | Content-Security-Policy: no image, script or request to another host, so an answer cannot send data out through a URL; links and images in vendor text are removed by the tool server |
 | Decisions | Read only: nothing in the chat changes a decision, a review flag or an exposure |
 
-## 7. Limits of v0.15.0
+## 7. Documents and retention (v0.15.1)
 
-- Answers as text and tables; Word and PowerPoint exports built from the data come in v0.15.1.
+Ask for a document in plain words ("fais-moi un Word des ACT exposés à Internet", "un PowerPoint des
+KEV", "un CSV des décisions de web01"): the tool server builds it from the data, with the run, the
+filters, the counts, the table and the explanation of the most urgent decisions, and the chat
+answers with a download link. The link is valid one hour (`chat.exportMinutes`), on the chat's
+own address, for whoever holds it: hand over the file, not the link. Detail: LLD
+triage-prioritization §16.6.
+
+Chats unchanged for 30 days are deleted, every hour, by a second container of the chat's pod
+(`A2VM_CHAT_RETENTION_DAYS` on the tenant project: another number of days, 0 to keep them). Its
+log says how many it deleted:
+
+```bash
+kubectl -n $NS logs deploy/a2vm-lab-chat -c retention --tail=5
+```
+
+## 8. Limits
+
 - Local accounts made by the admin; sign-in with GitLab (OIDC) later.
-- Chats are kept on the chat's volume until a user deletes them: the retention per tenant of HLD §8
-  is not enforced yet.
+- Documents in a neutral layout; the tenant's own Word and PowerPoint templates later.
 - One replica on a volume (SQLite); PostgreSQL with the decision service (v0.17.0).
