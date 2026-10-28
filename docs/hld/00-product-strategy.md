@@ -403,7 +403,7 @@ Clients are out of scope in the first version.
 | Interface | Open WebUI, one instance per tenant in its namespace, behind the ingress, analysts' accounts only |
 | Model | The tenant's approved LLM endpoint, served with tool calling (vLLM: `--enable-auto-tool-choice --tool-call-parser hermes` for Qwen3) |
 | Tools | A read-only tool server (OpenAPI, `verdict tools`) on `verdict serve`: search a CVE, a finding, an asset; list decisions with filters; explain a decision (stored rationale and SSVC path); answers short and paged (under about 2,000 tokens) |
-| Deployment | All in the tenant's namespace (Open WebUI, tool server, decision service), configured from the chart only; the model outside the cluster on the tenant's approved endpoints, one VM or several (the chat spreads its calls, the daily run moves to the next endpoint when one is down); `docs/chat.md` |
+| Deployment | All in the tenant's namespace (Open WebUI, tool server, decision service), configured from the chart only; the model outside the cluster on the tenant's approved endpoints, one VM or several (the chat through an LLM gateway in the namespace that spreads its calls and leaves a failed endpoint out, the daily run moving to the next endpoint when one is down); `docs/chat.md` |
 | Accounts and history | Local accounts made by the tenant's chat admin (GitLab sign-in later); chats on the chat's volume, retention per tenant not enforced yet (v0.15.1) |
 | Facts | Identifiers, numbers and levels come from the tools, never from the model's memory; each answer names the data it rests on |
 | Documents | Built by the tool server from the data with the A2VM templates, not written by the model (v0.15.1) |
@@ -420,7 +420,7 @@ DAT of each deployment.
 | --- | --- | --- |
 | Who operates | The vulnerability management service | The client |
 | LLM endpoint | Chosen by the service, on premises by default; the client's own SaaS LLM only with its written approval (contract or delivery sheet) | Chosen by the client, under its responsibility |
-| Isolation | One endpoint configured per tenant (CI variable); a tenant's data never reaches another tenant's endpoint or an endpoint it has not approved | Single tenant |
+| Isolation | One endpoint configured per tenant (CI variable), or several serving the same model for resilience (v0.15.0); a tenant's data never reaches another tenant's endpoint or an endpoint it has not approved | Single tenant |
 | Where it is recorded | MSSP DAT and the tenant project configuration | The client's DAT |
 | Hosting options | MSSP datacenter (confidentiality, shared platform; network flows to each client) or company cloud zone (elastic runners; confidentiality review per client) | At the client (data never leaves the client; one platform per client to operate) |
 
@@ -484,7 +484,7 @@ release.
 | v0.13.2 | Install script of a collector (`deploy/collector/install-collector.sh`): configuration, GMP account made on the scanner host, image, one systemd timer per connector, configuration checked by the agent before the first run | 2 |
 | v0.13.3 | Large detections: a retry answered from its idempotency key before any validation, the gzip body stored as received, clients waiting 10 minutes (`timeout_seconds`), size and time of each push logged; one daily run at a time on a tenant's volume (lock taken by `collect`) | 2 |
 | v0.14.0 | D15 step 3, read side first: decision service of each tenant (`verdict serve`, API `verdict.v1`), the last runs pushed by the daily run's `publish` step (`verdict push`, `triage.json` as `a2vm.triage/1`), decisions with their rationale and SSVC inputs, CVEs and assets behind filtered and paged reads; inside the cluster only, files on its own volume until PostgreSQL; release notes in `CHANGELOG.md` | 3 |
-| v0.15.0 (current) | Conversational search for analysts (§8): Open WebUI in the tenant's namespace on the tenant's approved LLM endpoints, a read-only tool server on `verdict serve` (`verdict tools`), answers as text and tables; several LLM endpoints per tenant (spread by the chat, failover for the daily run) | 3 |
+| v0.15.0 (current) | Conversational search for analysts (§8): Open WebUI in the tenant's namespace on the tenant's approved LLM endpoints, a read-only tool server on `verdict serve` (`verdict tools`), answers as text and tables; several LLM endpoints per tenant (LLM gateway for the chat, failover for the daily run) | 3 |
 | v0.15.1 (to confirm) | Word and PowerPoint documents built by the tool server from the data; retention of the chats per tenant | 3 |
 | v0.16.0 (to confirm) | `A2VM_RUN_MODE` (`gitlab` or `kubernetes`) in the tenant's `.gitlab-ci.yml`; the watch as a CronJob, the analysts' validation still a manual GitLab job until a review page | 1 |
 | v0.17.0 (to confirm) | PostgreSQL (CloudNativePG) behind `detect serve` and `verdict serve`: history between runs, finding lifecycle, several replicas, row-level security per tenant | 2, 3 |

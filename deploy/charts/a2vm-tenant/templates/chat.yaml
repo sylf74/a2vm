@@ -4,7 +4,9 @@ Conversational search of the tenant's analysts (HLD §8, LLD triage §16), all i
   service's read token, answers Open WebUI only and connects to the decision service only;
 - chat: Open WebUI, on the tenant's approved LLM endpoints (one or several VMs outside the
   cluster), configured from these values only (ENABLE_PERSISTENT_CONFIG=false), behind the ingress;
-  it connects to the tool server, the LLM endpoints and the DNS only.
+  it connects to the tool server, the LLM endpoint (or the gateway) and the DNS only;
+- llm (several endpoints only): nginx in front of the endpoints, round robin, failed endpoint left
+  out and the request sent to the next; Open WebUI itself uses the first connection of a model only.
 */ -}}
 {{- if .Values.chat.enabled }}
 {{- include "a2vm-tenant.checks" . }}
@@ -14,10 +16,8 @@ Conversational search of the tenant's analysts (HLD §8, LLD triage §16), all i
 {{- $prompt := replace "{tenant}" .Values.tenant $chat.systemPrompt }}
 {{- $grants := list (dict "principal_type" "user" "principal_id" "*" "permission" "read") }}
 {{- $connection := dict "type" "openapi" "url" (include "a2vm-tenant.toolsUrl" .) "spec_type" "url" "path" "openapi.json" "auth_type" "bearer" "key" "__A2VM_TOOLS_TOKEN__" "config" (dict "enable" true "access_grants" $grants) "info" (dict "id" "a2vm" "name" "A2VM" "description" (printf "Vulnerability decisions of tenant %s (read only)" .Values.tenant)) }}
-{{- $configs := dict }}
-{{- range $i, $_ := $chat.llm.endpoints }}
-{{- $_ := set $configs (toString $i) (dict "enable" true "model_ids" (list $chat.llm.model)) }}
-{{- end }}
+{{- $gateway := gt (len $chat.llm.endpoints) 1 }}
+{{- $configs := dict "0" (dict "enable" true "model_ids" (list $chat.llm.model)) }}
 {{- $tls := $ing.tlsSecret | default (ternary (printf "%s-chat-tls" $name) "" (ne $ing.clusterIssuer "")) }}
 apiVersion: apps/v1
 kind: Deployment
@@ -199,12 +199,10 @@ spec:
               export WEBUI_SECRET_KEY="$(cat /chat-secrets/chat-secret-key)"
               export WEBUI_ADMIN_PASSWORD="$(cat /chat-secrets/chat-admin-password)"
               key="$(cat /chat-secrets/llm-api-key 2>/dev/null || true)"
-              keys="$key"
-              for _ in $(seq 2 {{ len $chat.llm.endpoints }}); do keys="$keys;$key"; done
-              export OPENAI_API_KEYS="$keys"
+              export OPENAI_API_KEYS="$key"
               token="$(tr -cd '0-9a-f' < /chat-secrets/chat-tools-token)"
               export TOOL_SERVER_CONNECTIONS="${TOOL_SERVER_CONNECTIONS_TEMPLATE/__A2VM_TOOLS_TOKEN__/$token}"
-              unset TOOL_SERVER_CONNECTIONS_TEMPLATE key keys token
+              unset TOOL_SERVER_CONNECTIONS_TEMPLATE key token
               exec bash start.sh
           env:
             - {name: HOME, value: /tmp}
@@ -223,7 +221,7 @@ spec:
             # The tenant's approved endpoints only, its model only.
             - {name: ENABLE_OLLAMA_API, value: "false"}
             - {name: ENABLE_OPENAI_API, value: "true"}
-            - {name: OPENAI_API_BASE_URLS, value: {{ join ";" $chat.llm.endpoints | quote }}}
+            - {name: OPENAI_API_BASE_URLS, value: {{ include "a2vm-tenant.chatLlmUrl" . | quote }}}
             - {name: OPENAI_API_CONFIGS, value: {{ toJson $configs | quote }}}
             - {name: DEFAULT_MODELS, value: {{ $chat.llm.model | quote }}}
             - {name: ENABLE_DIRECT_CONNECTIONS, value: "false"}
@@ -450,6 +448,52 @@ spec:
               {{- include "a2vm-tenant.selector" (dict "root" . "component" "tools") | nindent 14 }}
       ports:
         - {port: 8080, protocol: TCP}
+    {{- if $gateway }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "a2vm-tenant.selector" (dict "root" . "component" "llm") | nindent 14 }}
+      ports:
+        - {port: 8080, protocol: TCP}
+    {{- else }}
+    {{- range $chat.llm.egress }}
+    - to:
+        - ipBlock:
+            cidr: {{ .cidr | quote }}
+      ports:
+        - {port: {{ .port }}, protocol: TCP}
+    {{- end }}
+    {{- end }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $chat.networkPolicy.dnsNamespace | quote }}
+      ports:
+        - {port: 53, protocol: UDP}
+        - {port: 53, protocol: TCP}
+{{- if $gateway }}
+---
+# The LLM gateway: from Open WebUI only; to the LLM endpoints and the DNS only.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $name }}-llm
+  labels:
+    {{- include "a2vm-tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: llm
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "a2vm-tenant.selector" (dict "root" . "component" "llm") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "a2vm-tenant.selector" (dict "root" . "component" "chat") | nindent 14 }}
+      ports:
+        - {port: 8080, protocol: TCP}
+  egress:
     {{- range $chat.llm.egress }}
     - to:
         - ipBlock:
@@ -464,5 +508,148 @@ spec:
       ports:
         - {port: 53, protocol: UDP}
         - {port: 53, protocol: TCP}
+{{- end }}
+{{- end }}
+{{- if $gateway }}
+{{- $gw := $chat.llm.gateway }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}-llm
+  labels:
+    {{- include "a2vm-tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: llm
+data:
+  nginx.conf: |
+    worker_processes 1;
+    pid /tmp/nginx.pid;
+    error_log /dev/stderr warn;
+    events { worker_connections 256; }
+    http {
+      client_body_temp_path /tmp/client_temp;
+      proxy_temp_path /tmp/proxy_temp;
+      fastcgi_temp_path /tmp/fastcgi_temp;
+      uwsgi_temp_path /tmp/uwsgi_temp;
+      scgi_temp_path /tmp/scgi_temp;
+      server_tokens off;
+      # Method, path, status, endpoint and time; never a header or a body (they carry client data).
+      log_format llm '$time_iso8601 $request_method $uri $status upstream=$upstream_addr upstream_status=$upstream_status seconds=$request_time';
+      access_log /dev/stdout llm;
+      upstream llm {
+        {{- range $chat.llm.endpoints }}
+        {{- $u := urlParse . }}
+        server {{ if contains ":" $u.host }}{{ $u.host }}{{ else }}{{ $u.host }}:80{{ end }} max_fails=1 fail_timeout={{ $gw.failSeconds }}s;
+        {{- end }}
+        keepalive 16;
+      }
+      server {
+        listen 8080;
+        client_max_body_size 8m;
+        location = /healthz { access_log off; return 200 "ok\n"; }
+        location {{ (urlParse (first $chat.llm.endpoints)).path | trimSuffix "/" }}/ {
+          proxy_pass http://llm;
+          proxy_http_version 1.1;
+          proxy_set_header Connection "";
+          proxy_buffering off;
+          proxy_request_buffering on;
+          proxy_connect_timeout {{ $gw.connectSeconds }}s;
+          proxy_read_timeout {{ $gw.readSeconds }}s;
+          proxy_send_timeout {{ $gw.readSeconds }}s;
+          # A request goes to the next endpoint when one is down or busy, before any answer started.
+          proxy_next_upstream error timeout http_429 http_502 http_503 http_504 non_idempotent;
+          proxy_next_upstream_tries 0;
+        }
+        location / { return 404; }
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}-llm
+  labels:
+    {{- include "a2vm-tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: llm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "a2vm-tenant.selector" (dict "root" . "component" "llm") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "a2vm-tenant.labels" . | nindent 8 }}
+        app.kubernetes.io/component: llm
+      annotations:
+        checksum/endpoints: {{ toJson $chat.llm.endpoints | sha256sum | quote }}
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: llm
+          image: {{ $gw.image | quote }}
+          imagePullPolicy: IfNotPresent
+          command: ["nginx", "-c", "/etc/a2vm/nginx.conf", "-g", "daemon off;"]
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 30
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: conf
+              mountPath: /etc/a2vm
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          {{- with $gw.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: conf
+          configMap:
+            name: {{ $name }}-llm
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}-llm
+  labels:
+    {{- include "a2vm-tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: llm
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "a2vm-tenant.selector" (dict "root" . "component" "llm") | nindent 4 }}
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
 {{- end }}
 {{- end }}

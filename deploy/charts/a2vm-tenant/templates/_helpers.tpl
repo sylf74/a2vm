@@ -49,6 +49,16 @@ app.kubernetes.io/component: {{ .component }}
 {{- printf "http://%s-tools:8080" (include "a2vm-tenant.name" .) -}}
 {{- end -}}
 
+{{/* What the chat calls for its model: the endpoint itself, or the gateway when there are several. */}}
+{{- define "a2vm-tenant.chatLlmUrl" -}}
+{{- $eps := .Values.chat.llm.endpoints -}}
+{{- if gt (len $eps) 1 -}}
+{{- printf "http://%s-llm:8080%s" (include "a2vm-tenant.name" .) (urlParse (first $eps)).path | trimSuffix "/" -}}
+{{- else -}}
+{{- first $eps | trimSuffix "/" -}}
+{{- end -}}
+{{- end -}}
+
 {{/* Checks of the values that templates cannot express alone. */}}
 {{- define "a2vm-tenant.checks" -}}
 {{- if not (has .Values.collect.mode (list "local" "intake")) -}}
@@ -75,6 +85,18 @@ app.kubernetes.io/component: {{ .component }}
 {{- end -}}
 {{- if not .Values.secret.name -}}
 {{- fail "chat.enabled needs secret.name (keys chat-secret-key, chat-admin-password, chat-tools-token, verdict-read-token)" -}}
+{{- end -}}
+{{- if gt (len .Values.chat.llm.endpoints) 1 -}}
+{{- $first := urlParse (first .Values.chat.llm.endpoints) -}}
+{{- range .Values.chat.llm.endpoints -}}
+{{- $u := urlParse . -}}
+{{- if ne $u.scheme "http" -}}
+{{- fail (printf "chat.llm.endpoints: %s: several endpoints go through the gateway, which reaches them over http only (put one https load balancer as the single endpoint instead)" .) -}}
+{{- end -}}
+{{- if ne $u.path $first.path -}}
+{{- fail "chat.llm.endpoints: several endpoints must share their path (e.g. /v1)" -}}
+{{- end -}}
+{{- end -}}
 {{- end -}}
 {{- if not (has .Values.chat.ingress.controller (list "nginx" "traefik" "other")) -}}
 {{- fail "chat.ingress.controller must be nginx, traefik or other" -}}

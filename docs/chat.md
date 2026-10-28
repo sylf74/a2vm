@@ -10,7 +10,8 @@ flowchart LR
   analyst["Analyst<br/>browser"] -- "HTTPS<br/>ingress" --> chat["Open WebUI<br/>a2vm-&lt;tenant&gt;-chat"]
   chat -- "tool calls<br/>chat token" --> tools["Tool server<br/>verdict tools"]
   tools -- "read token" --> verdict["Decision service<br/>verdict serve"]
-  chat -- "chat completions" --> llm["LLM endpoints<br/>VMs outside the cluster"]
+  chat -- "chat completions" --> gw["LLM gateway<br/>several endpoints only"]
+  gw --> llm["LLM endpoints<br/>VMs outside the cluster"]
   daily["Daily run"] -- "publish step" --> verdict
 ```
 
@@ -81,13 +82,22 @@ the chat.
 `A2VM_LLM_BASE_URL` takes several endpoints serving the same model, comma-separated
 (`http://192.0.2.10:8000/v1,http://192.0.2.11:8000/v1`):
 
-- the chat spreads its calls over them (Open WebUI);
-- the daily run's LLM calls go to the first one and move to the next when it cannot be reached,
-  times out or answers 429 or 5xx, and stay there (`a2vm.llm`);
-- the NetworkPolicy of the chat opens each of them.
+- **the chat** goes through an LLM gateway in the namespace (nginx, `a2vm-<tenant>-llm`): its calls
+  spread over the endpoints; an endpoint that refuses, times out or answers 429 or 5xx is left out
+  for 30 seconds and the request goes to the next one, so the analyst sees nothing. Open WebUI
+  alone would use the first endpoint only. Which endpoint answered is in the gateway's log:
 
-Every endpoint must serve the tenant's model under the same name and be approved for the tenant
-(HLD §9).
+  ```bash
+  kubectl -n $NS logs deploy/a2vm-lab-llm --tail=20
+  ```
+
+- **the daily run** calls the first endpoint and moves to the next one when it is down, then stays
+  there for the rest of the run (`LLM calls move to …` in its log);
+- with one endpoint, nothing changes: no gateway, the chat connects to it.
+
+Every endpoint must serve the tenant's model under the same name, be approved for the tenant (HLD
+§9), and, behind the gateway, be reached over http with the same path. Detail: LLD
+triage-prioritization §7.1 and §16.5.
 
 ## 6. What is closed
 
@@ -96,7 +106,7 @@ Every endpoint must serve the tenant's model under the same name and be approved
 | Configuration | From the chart's values only (`ENABLE_PERSISTENT_CONFIG=false`): what an admin changes in the admin panel does not survive a restart |
 | Models | The tenant's model on its endpoints only; no Ollama, no direct connection from a browser |
 | Tools | The A2VM tool server only: no web search, no code execution, no image generation, no user tools or tool servers, no file upload |
-| Network | Open WebUI offline (no model download, no update check, no telemetry); NetworkPolicy to the tool server, the LLM endpoints and the DNS |
+| Network | Open WebUI offline (no model download, no update check, no telemetry); NetworkPolicy to the tool server, the LLM endpoint (or the gateway) and the DNS |
 | Browser | Content-Security-Policy: no image, script or request to another host, so an answer cannot send data out through a URL; links and images in vendor text are removed by the tool server |
 | Decisions | Read only: nothing in the chat changes a decision, a review flag or an exposure |
 

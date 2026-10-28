@@ -8,6 +8,7 @@ import ast
 import json
 import logging
 import os
+import re
 import subprocess
 import threading
 from pathlib import Path
@@ -211,7 +212,7 @@ def test_chat_is_closed_offline_and_configured_from_the_values():
         "ipBlock:",
     ):
         assert needle in text, needle
-    assert text.count("kind: NetworkPolicy") == 2
+    assert text.count("kind: NetworkPolicy") == 3  # tools, chat, LLM gateway
     values = yaml.safe_load((CHART / "values.yaml").read_text())
     chat = values["chat"]
     assert chat["enabled"] is False and chat["networkPolicy"]["enabled"] is True
@@ -303,3 +304,58 @@ def test_tool_server_over_http(tools):
     finally:
         httpd.shutdown()
         httpd.server_close()
+
+
+def test_every_open_webui_setting_of_the_chart_is_explained_in_the_lld():
+    chart = (CHART / "templates" / "chat.yaml").read_text()
+    names = set(re.findall(r"\{name: ([A-Z_]+), value:", chart)) | set(re.findall(r"export ([A-Z_]+)=", chart))
+    lld = (ROOT / "docs" / "lld" / "triage-prioritization.md").read_text()
+    section = lld.split("### 16.4 Open WebUI: how it is locked", 1)[1].split("### 16.5", 1)[0]
+    missing = sorted(n for n in names if f"`{n}`" not in section)
+    assert names and not missing, missing
+
+
+def test_an_endpoint_is_left_for_the_next_one_on_failures_only():
+    from a2vm.llm.client import _endpoint_down
+
+    req = httpx.Request("POST", "http://a.example/v1/chat/completions")
+    for code, down in ((429, True), (500, True), (503, True), (400, False), (404, False), (422, False)):
+        exc = httpx.HTTPStatusError("x", request=req, response=httpx.Response(code, request=req))
+        assert _endpoint_down(exc) is down, code
+    assert _endpoint_down(httpx.ConnectError("x", request=req)) and _endpoint_down(httpx.ReadTimeout("x", request=req))
+    lld = (ROOT / "docs" / "lld" / "triage-prioritization.md").read_text()
+    section = lld.split("### 7.1 Several endpoints", 1)[1].split("## 8.", 1)[0]
+    for needle in ("429 or 5xx", "Answer 4xx other than 429", "max_consecutive_errors", "Retried on the same endpoint"):
+        assert needle in section, needle
+
+
+def test_several_endpoints_go_through_a_gateway_that_is_documented_line_by_line():
+    chart = (CHART / "templates" / "chat.yaml").read_text()
+    gateway = chart.split("nginx.conf: |", 1)[1].split("---", 1)[0]
+    for needle in (
+        "max_fails=1",
+        "proxy_next_upstream error timeout http_429 http_502 http_503 http_504 non_idempotent",
+        "proxy_next_upstream_tries 0",
+        "proxy_buffering off",
+        "location / { return 404; }",
+        "server_tokens off",
+    ):
+        assert needle in gateway, needle
+    directives = set(
+        re.findall(r"^\s*(proxy_[a-z_]+|upstream|server_tokens|log_format|max_fails|fail_timeout)\b", gateway, re.M)
+    )
+    directives |= {"max_fails", "fail_timeout"}
+    lld = (ROOT / "docs" / "lld" / "triage-prioritization.md").read_text()
+    table = lld.split("### 16.5 LLM gateway of the chat", 1)[1].split("### 16.6", 1)[0]
+    undocumented = sorted(
+        d
+        for d in directives
+        - {"proxy_pass", "proxy_http_version", "proxy_set_header", "proxy_request_buffering", "proxy_temp_path"}
+        if f"`{d}" not in table
+    )
+    assert not undocumented, undocumented
+    assert 'include "a2vm-tenant.chatLlmUrl"' in chart and "{{- if $gateway }}" in chart
+    helpers = (CHART / "templates" / "_helpers.tpl").read_text()
+    assert "over http only" in helpers and "must share their path" in helpers
+    values = yaml.safe_load((CHART / "values.yaml").read_text())
+    assert values["chat"]["llm"]["gateway"]["image"].startswith("nginx/nginx-unprivileged:")

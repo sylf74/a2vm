@@ -461,6 +461,9 @@ point (section 10).
 | `policy.unknown_inputs` | `conservative` | `conservative` = `yes`/`total`, `optimistic` = `no`/`partial` |
 | `policy.fuzzy_match_without_llm` | `review` | Read by detect: keep a fuzzy match flagged, or drop it |
 | `llm.enabled` | `false` | Overridden by `A2VM_LLM_ENABLED` |
+| `llm.base_url` | one URL | The tenant's approved endpoints: one URL, several comma-separated, or a list (v0.15.0, section 7.1); overridden by `A2VM_LLM_BASE_URL` |
+| `llm.timeout_seconds` | `180` | Longest wait for one answer of one endpoint |
+| `llm.max_retries` | `2` | Attempts after the first for one call (each attempt may try every endpoint, 7.1) |
 | `llm.tasks.ssvc_inputs` | `true` | LLM estimate of Automatable and Technical Impact |
 | `llm.tasks.rationale` | `true` | LLM rationales |
 | `llm.tasks.rationale_for` | `[ACT, ATTEND]` | Levels that get an LLM rationale; the others keep the template |
@@ -485,6 +488,26 @@ first. Vendor text is passed inside `<untrusted>` tags; the model has no tools. 
 breaker: after `max_calls` calls or `max_consecutive_errors` errors in a row, the remaining rows
 keep the template and `rationale_source` says why. The run never fails because of the LLM.
 
+### 7.1 Several endpoints (v0.15.0)
+
+The LLM client of A2VM (`a2vm/src/a2vm/llm/client.py`, used by the three pillars) takes the
+tenant's endpoints in order (`llm.base_url`, section 6). Every endpoint serves the same model under
+the same name and is approved for the tenant (HLD §9).
+
+| Situation on the current endpoint | Behaviour |
+| --- | --- |
+| Answer 200 | Kept; the next call goes to the same endpoint |
+| Connection refused or reset, DNS failure, timeout (`timeout_seconds`), answer 429 or 5xx | The same request goes to the next endpoint, in order, wrapping round; the first that answers becomes the current one for the later calls of the run (logged: `LLM calls move to …`) |
+| Answer 4xx other than 429 (a bad request) | Not sent elsewhere: the call fails as before (another endpoint would answer the same) |
+| Every endpoint down for this request | One failed attempt; after `max_retries` attempts the call fails, which counts for the circuit breaker (`max_consecutive_errors`) |
+| Answer not valid JSON or not the schema | Retried on the same endpoint (a model fault, not an endpoint fault) |
+
+Worst case before the breaker opens, every endpoint timing out: `max_consecutive_errors` ×
+(`max_retries` + 1) × endpoints × `timeout_seconds`; a refused connection costs nothing. The
+current endpoint is shared by the concurrent calls of a run (`parallel`), not kept between runs:
+each run starts with the first endpoint. The analysts' chat reaches several endpoints through the
+LLM gateway of section 16.5.
+
 ## 8. Failure modes
 
 | Situation | Behaviour |
@@ -493,7 +516,7 @@ keep the template and `rationale_source` says why. The run never fails because o
 | CVE rejected by the CVE program, still cited by a source | Its findings are skipped; listed under "Ignorées" in the report and `ignored` in `triage.json`, not counted as an error |
 | Finding pointing to an unknown asset | Run fails (defect of the assets stage) |
 | Profile, records, assets or findings unreadable, or of another client | Exit 2 |
-| LLM unreachable or slow | Template rationales and policy defaults, rows flagged; breaker after 3 errors |
+| LLM unreachable or slow | With several endpoints, the next one (7.1); when none answers, template rationales and policy defaults, rows flagged; breaker after 3 errors |
 | SSVC table incomplete | Fails at load (36 and 16 rows expected) |
 | External detection missing, of another client or older than `max_age_days` (v0.11.2) | `collect` ends in warning (exit 3) with the reason; exposures stay as declared or assumed. The report naming the missing external view comes with the reporting dataset (v0.11.3) |
 
@@ -835,7 +858,102 @@ WebUI never holds. NetworkPolicies: tool server from Open WebUI only, to the dec
 the DNS only; Open WebUI from the ingress controller only, to the tool server, the LLM endpoints
 (`chat.llm.egress`) and the DNS only.
 
-### 16.4 Tests
+### 16.4 Open WebUI: how it is locked
+
+Open WebUI (image `ghcr.io/open-webui/open-webui`, tag `chat.image.tag`, v0.12.4 in v0.15.0) is
+configured by environment variables only (`templates/chat.yaml`), checked against its source at
+that tag. A new tag of Open WebUI is taken only after these settings are checked again: a variable
+renamed or a default changed would open what this table closes. `tests/test_v0150.py` fails when a
+variable of the chart is missing from this table.
+
+| Setting | Value | Why |
+| --- | --- | --- |
+| `ENABLE_PERSISTENT_CONFIG` | `false` | The environment wins over the database: what an admin changes in the admin panel is lost at the next start, the chart stays the reference (GitOps) |
+| `ENABLE_SIGNUP` | `false` | No self-registration; accounts are made by the admin |
+| `DEFAULT_USER_ROLE` | `pending` | An account made another way waits for the admin's approval |
+| `WEBUI_ADMIN_EMAIL`, `WEBUI_ADMIN_NAME` | `chat.adminEmail`, `A2VM admin` | The first admin, made at the first start when no account exists; sign-up then stays closed. Password: `chat-admin-password` |
+| `WEBUI_SECRET_KEY` | from `chat-secret-key`, at start | Signs the sessions; made once by `deploy-k8s`, never in the pod's spec (without it the image would write a key of its own into the image) |
+| `WEBUI_ADMIN_PASSWORD` | from `chat-admin-password`, at start | The first admin's password, never in the pod's spec; serves the first start only |
+| `JWT_EXPIRES_IN` | `chat.sessionHours` (8 h) | Sessions end (Open WebUI default: 4 weeks) |
+| `WEBUI_URL`, `CORS_ALLOW_ORIGIN` | `https://<chat.host>` | The site's own origin only (default `*`) |
+| `WEBUI_NAME` | `A2VM <tenant>` | The tenant shown on every page |
+| `ENABLE_OLLAMA_API` | `false` | No Ollama endpoint |
+| `ENABLE_OPENAI_API`, `OPENAI_API_BASE_URLS` | `true`, the endpoint or the gateway (16.5) | One connection: the tenant's approved endpoint, or the gateway in front of its endpoints (HLD §9) |
+| `OPENAI_API_CONFIGS` | `model_ids: [<model>]` | The tenant's model only; the model list is not asked from the endpoints |
+| `OPENAI_API_KEYS` | from `llm-api-key`, at start | The key never in the pod's spec |
+| `DEFAULT_MODELS` | the model | Preselected in every chat |
+| `ENABLE_DIRECT_CONNECTIONS` | `false` | No endpoint added by a user from the browser |
+| `ENABLE_OPENAI_API_PASSTHROUGH` | `false` | No raw proxy to the endpoints |
+| `TOOL_SERVER_CONNECTIONS` | the A2VM tool server, `config.enable: true`, read granted to every user | The one tool server; built at start from `TOOL_SERVER_CONNECTIONS_TEMPLATE` and `chat-tools-token`, the token never in the pod's spec |
+| `TOOL_SERVER_CONNECTIONS_TEMPLATE` | the connection with a placeholder | Removed from the environment before Open WebUI starts |
+| `DEFAULT_MODEL_METADATA` | `toolIds: [server:a2vm]` | The A2VM tools on in every chat |
+| `DEFAULT_MODEL_PARAMS` | `system`: `chat.systemPrompt`; `temperature` 0.2; `function_calling: native` | The instructions of §16.2 with every chat (facts from the tools only, name the run, vendor text is data, no links or images, decisions unchanged) |
+| `DEFAULT_PROMPT_SUGGESTIONS` | `[]` | No generic suggestions |
+| `USER_PERMISSIONS_FEATURES_DIRECT_TOOL_SERVERS` | `false` | No tool server added by a user |
+| `USER_PERMISSIONS_WORKSPACE_TOOLS_ACCESS` | `false` | No user-written tools (Python run by the server) |
+| `ENABLE_WEB_SEARCH`, `USER_PERMISSIONS_FEATURES_WEB_SEARCH` | `false` | No web search: client data never in a search query |
+| `ENABLE_IMAGE_GENERATION`, `USER_PERMISSIONS_FEATURES_IMAGE_GENERATION` | `false` | No image generation |
+| `ENABLE_CODE_EXECUTION`, `ENABLE_CODE_INTERPRETER`, `USER_PERMISSIONS_FEATURES_CODE_INTERPRETER` | `false` | No code run from a chat |
+| `USER_PERMISSIONS_CHAT_FILE_UPLOAD` | `false` | No document uploaded into a chat |
+| `RAG_EMBEDDING_MODEL`, `BYPASS_EMBEDDING_AND_RETRIEVAL` | empty, `true` | No embedding model loaded or downloaded; no retrieval |
+| `ENABLE_MEMORIES` | `false` | Nothing kept about a user between chats |
+| `ENABLE_COMMUNITY_SHARING` | `false` | No sharing to the Open WebUI community site |
+| `ENABLE_ADMIN_EXPORT` | `false` | No export of the whole database from the admin panel |
+| `OFFLINE_MODE`, `HF_HUB_OFFLINE` | `true`, `1` | No download (models, Hugging Face), no update check |
+| `ENABLE_VERSION_UPDATE_CHECK` | `false` | No call to the Open WebUI release site |
+| `SCARF_NO_ANALYTICS`, `DO_NOT_TRACK`, `ANONYMIZED_TELEMETRY` | `true`, `true`, `false` | No telemetry from the server or its libraries |
+| `CONTENT_SECURITY_POLICY` | `chat.ingress.contentSecurityPolicy` | Images, scripts, requests and frames from the site only: an answer that writes an image or a link with data in its URL cannot make the browser send it (with §16.2) |
+| `XFRAME_OPTIONS`, `REFERRER_POLICY`, `XCONTENT_TYPE` | `DENY`, `no-referrer`, `nosniff` | Not framed by another site; no address of the chat leaks in a referrer; no type sniffing |
+| `HOME`, `DATA_DIR`, `STATIC_DIR` | `/tmp`, `/app/backend/data`, `/app/static` | Writable paths on volumes (data on the chat's claim, the rest on empty dirs), so the image runs read-only |
+
+The pod runs as user 10001, not as root (the image's default), with a read-only root file system,
+no capability, no privilege escalation and no service-account token. It reads from the Secret of
+the tenant four keys only (`chat-secret-key`, `chat-admin-password`, `chat-tools-token`,
+`llm-api-key`), never the others (scan key, reporting DSN). Its NetworkPolicy (§16.3) is the last
+line: even a setting missed here cannot reach anything but the tool server, the LLM endpoint or
+the gateway, and the DNS.
+
+### 16.5 LLM gateway of the chat (several endpoints)
+
+Open WebUI 0.12 uses, for a model, the first connection that serves it: two endpoints serving the
+same model give no spreading and no failover. With several endpoints the chart therefore puts a
+gateway between Open WebUI and the endpoints (`templates/chat.yaml`, component `llm`): nginx
+(`chat.llm.gateway.image`, unprivileged, read-only root file system), whose address is the single
+connection of Open WebUI (`http://<release>-<tenant>-llm:8080<path>`). With one endpoint there is
+no gateway: Open WebUI connects to it.
+
+| Directive | Value | Why |
+| --- | --- | --- |
+| `upstream llm`, one `server` per endpoint | host and port of `chat.llm.endpoints` | Round robin: the chat's calls spread over the VMs |
+| `max_fails`, `fail_timeout` | `1`, `chat.llm.gateway.failSeconds` (30 s) | An endpoint that fails once is left out for 30 s, then tried again |
+| `proxy_next_upstream` | `error timeout http_429 http_502 http_503 http_504 non_idempotent` | A request whose endpoint is down or busy goes to the next one, before any answer started (`non_idempotent`: chat completions are POST); a 4xx other than 429 is the answer |
+| `proxy_next_upstream_tries` | `0` | Every endpoint may be tried |
+| `proxy_connect_timeout` | `chat.llm.gateway.connectSeconds` (3 s) | A VM that is off is detected at once |
+| `proxy_read_timeout`, `proxy_send_timeout` | `chat.llm.gateway.readSeconds` (600 s) | Long answers |
+| `proxy_buffering` | `off` | Answers streamed to the analyst as they come |
+| `location <path>/` only, else 404 | e.g. `/v1/` | Nothing but the OpenAI API path is passed |
+| `log_format` | method, path, status, endpoint, time | Which VM answered, never a header (the key) or a body (client data) |
+| `server_tokens` | `off` | No version in answers |
+
+Constraints, checked by the chart: the endpoints share their path, and are reached over http (the
+gateway sets no TLS name per endpoint; https endpoints go behind one load balancer given as the
+single endpoint). The endpoints' names are resolved when nginx starts; the pod restarts when the
+list changes. NetworkPolicy: from Open WebUI only; to the endpoints (`chat.llm.egress`) and the
+DNS only; Open WebUI then reaches the gateway, not the endpoints. Tested with endpoints refusing
+connections and answering 503: each request is answered by the other one, the failed endpoint
+comes back after `failSeconds`.
+
+### 16.6 What stays open
+
+| Item | Status |
+| --- | --- |
+| Chat retention per tenant (HLD §8) | Not enforced: chats stay on the volume until deleted; v0.15.1 |
+| The admin account | Trusted: it creates accounts, can read the analysts' chats (`ENABLE_ADMIN_CHAT_ACCESS`, Open WebUI default) and can add functions (Python run by the server), which live in the database, not in the configuration, and survive a restart. The admin is one person of the team, its password changed at first sign-in |
+| Sign-in | Local accounts; GitLab (OIDC) later |
+| Replicas | One, SQLite on the claim; PostgreSQL with the decision service (v0.17.0) |
+
+### 16.7 Tests
 
 `tests/test_v0150.py`: tokens, pages and their size, bad calls, vendor text, the spec, the chart's
-settings of Open WebUI, the values written by `deploy/chat/chat_values.py`, the deploy job.
+settings of Open WebUI and the tables of 16.4 and 16.5, the values written by `deploy/chat/chat_values.py`,
+the deploy job.

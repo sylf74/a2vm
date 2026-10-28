@@ -22,8 +22,9 @@ tenant's approved LLM endpoints outside the cluster.
   `chat-secret-key`, `chat-admin-password`, `chat-tools-token`; digest in the Secret `a2vm-chat`)
   and its values (`deploy/chat/chat_values.py`: endpoints resolved for the NetworkPolicy).
 - Several LLM endpoints per tenant: `A2VM_LLM_BASE_URL` (or `llm.base_url`) takes a comma-separated
-  list; the daily run moves to the next endpoint when one is down and stays there, the chat
-  spreads its calls over them.
+  list. The daily run moves to the next endpoint when one is down and stays there; the chat goes
+  through an LLM gateway in the namespace (nginx: round robin, a failed endpoint left out and the
+  request sent to the next), since Open WebUI uses one endpoint per model.
 - Decision service (v0.14.0 follow-ups): successful probes no longer logged (also `detect serve`),
   memory request and limit by default (256 Mi, 1 Gi), the read command of `docs/kubernetes.md`
   mounts the token instead of passing it on the command line.

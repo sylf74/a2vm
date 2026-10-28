@@ -114,6 +114,17 @@ chat:
     model: ""           # deploy-k8s: A2VM_LLM_MODEL
     # Where the endpoints are, for the NetworkPolicy: one {cidr, port} per endpoint.
     egress: []
+    # With several endpoints, the chat calls them through a gateway in the namespace (nginx): round
+    # robin, an endpoint that fails is left out for `failSeconds` and the request goes to the next.
+    # The endpoints then share their scheme (http) and path (e.g. /v1).
+    gateway:
+      image: nginx/nginx-unprivileged:1.30-alpine-slim
+      connectSeconds: 3     # an endpoint that does not accept the connection by then is down
+      readSeconds: 600      # longest wait for an answer
+      failSeconds: 30       # how long a failed endpoint is left out
+      resources:
+        requests: {cpu: 10m, memory: 16Mi}
+        limits: {memory: 64Mi}
   image:
     repository: ghcr.io/open-webui/open-webui
     tag: v0.12.4
