@@ -101,6 +101,7 @@ CI/CD variables of the tenant project (or of a subgroup):
 | `A2VM_K8S_NAMESPACE` | Optional, default `a2vm-<project name>` | Visible |
 | `A2VM_K8S_SCHEDULE` | Optional, cron in Europe/Paris, default `45 5 * * *` | Visible |
 | `A2VM_IMAGE_REGISTRY` | Optional, default `<registry>/<code project path>` | Visible |
+| `A2VM_VERDICT_SERVICE` | Optional, `false` to deploy no decision service (default `true`, v0.14.0) | Visible |
 
 The other variables are the pipeline's (`docs/deployment.md`): the job copies the secret ones
 (`A2VM_SSH_KEY`, `LLM_API_KEY`, `GTI_API_KEY`, `A2VM_GVM_USER`, `A2VM_GVM_PASSWORD`,
@@ -109,7 +110,7 @@ namespace, never into the job log, and hands the others (`A2VM_LLM_*`, `A2VM_GTI
 `A2VM_EXTERNAL_PROJECT`) to the CronJob. External detection uses the GitLab API with
 `A2VM_GITLAB_TOKEN`, since a pod has no job token.
 
-Then move the tenant's `.gitlab-ci.yml` to `v0.13.3` (both `ref` and `A2VM_REF`) and push: the
+Then move the tenant's `.gitlab-ci.yml` to `v0.14.0` (both `ref` and `A2VM_REF`) and push: the
 pipeline runs `validate`, then `deploy-k8s`, which ends with the CronJob and its volume. Each
 later push to the default branch redeploys (new profile, new targets, new version).
 
@@ -125,7 +126,7 @@ kubectl -n $NS logs job/run-<HHMM> --all-containers --prefix -f
 ```
 
 The steps run one after the other (`collect`, `via`, `detect`, `assets`, `triage`, then
-`publish`); a failed step stops the run and shows as `Init:Error`. One run at a time: the CronJob forbids
+`publish`, which pushes the run to the decision service, then to the reporting database); a failed step stops the run and shows as `Init:Error`. One run at a time: the CronJob forbids
 overlaps, and since v0.13.3 a run started by hand while another holds the volume stops at `collect`. Exit code 3 (partial
 collection, reporting database unreachable) is a warning, as in the pipeline.
 
@@ -143,10 +144,31 @@ totals per level of the two runs of the same day (`runs` table, or the `overview
 When they agree, switch off the tenant's daily schedule in GitLab (*Build > Pipeline schedules*),
 except for a tenant that uses the watch (see above).
 
+### Decision service (v0.14.0)
+
+`deploy-k8s` deploys `verdict serve` next to the CronJob (Deployment, Service and volume
+`a2vm-<tenant>-verdict`, `a2vm-<tenant>-runs`), unless `A2VM_VERDICT_SERVICE=false`. It makes two
+tokens once and keeps them in the Secret `a2vm-tenant` (`verdict-publish-token`,
+`verdict-read-token`), their digests in the Secret `a2vm-verdict`; none appears in the job log. The
+`publish` step of each run pushes `triage.json`; the service keeps the last 7 runs (LLD triage
+§15). Only the daily run and pods labelled `a2vm.io/verdict-reader=true` reach it. To read it
+from a workstation:
+
+```bash
+NS=a2vm-homelab
+kubectl -n $NS logs deploy/a2vm-homelab-verdict --tail=5
+kubectl -n $NS run verdict-reader --rm -i --restart=Never --image=curlimages/curl:8.11.1 \
+  --labels=a2vm.io/verdict-reader=true \
+  --env="TOKEN=$(kubectl -n $NS get secret a2vm-tenant -o jsonpath='{.data.verdict-read-token}' | base64 -d)" \
+  --command -- sh -c 'curl -sf -H "Authorization: Bearer $TOKEN" "http://a2vm-homelab-verdict:8080/v1/tenants/homelab/decisions?level=ACT&limit=5"'
+```
+
 ## 4. Limits of this step
 
 - Watch and alert validation stay in GitLab pipelines.
-- The run's report is read from the volume or the dashboards; there are no job artifacts.
+- The run's report is read from the volume, the dashboards or the decision service; there are no job artifacts.
+- The decision service keeps the last runs as files, one replica, and is read with a token until
+  service accounts; it answers reads only (D15 step 3, read side).
 - Without `collectors.yaml`, collection runs where the CronJob runs: the cluster must reach the
   targets (SSH, OpenVAS). With it (v0.13.0), collectors near the networks push and the cluster
   connects to no client machine (`collectors.md`).

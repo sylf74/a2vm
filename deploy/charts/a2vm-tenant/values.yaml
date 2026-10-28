@@ -73,6 +73,25 @@ intake:
     enabled: true
     ingressNamespace: kube-system   # namespace of the ingress controller (RKE2: kube-system)
 
+# Decision service of the tenant (`verdict serve`, LLD triage §15): keeps the last runs pushed by
+# the daily run at its `publish` step and answers the analysts' tools inside the cluster (no
+# ingress). deploy-k8s enables it unless A2VM_VERDICT_SERVICE=false.
+verdict:
+  enabled: false
+  # Secret with the key `digests`: `publish <sha256>` (the daily run) and `read <sha256>` (tools).
+  digestsSecret: ""
+  digestsChecksum: ""   # changes with the digests: the service restarts and reads them
+  keep: 7               # runs kept
+  maxMb: 400            # largest triage accepted, uncompressed
+  storage:
+    size: 2Gi
+    storageClass: ""
+  resources: {}
+  # The service accepts connections from the tenant's daily run and from pods labelled
+  # a2vm.io/verdict-reader=true in the namespace (the analysts' tools), and opens none.
+  networkPolicy:
+    enabled: true
+
 daily:
   schedule: "45 5 * * *"
   timeZone: Europe/Paris
@@ -94,6 +113,8 @@ daily:
 #   gitlab-token    A2VM_GITLAB_TOKEN (external detection)
 #   gitlab-ca       CA of GitLab, for the GitLab API (external detection)
 #   detect-read-token   token of the daily run on the detection service (collect.mode intake)
+#   verdict-publish-token   token of the daily run on the decision service (verdict.enabled)
+#   verdict-read-token   token of the analysts' tools on the decision service (not read by this chart)
 secret:
   name: ""
 

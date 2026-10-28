@@ -2,9 +2,9 @@
 
 | Item | Value |
 | --- | --- |
-| Building block | Pillar 3 package `verdict` (command `verdict`): Asset context (`verdict.assets`, `verdict assets build`), Decision (`verdict run`) and Restitution (`verdict.restitution`: `verdict publish`, `verdict db`, `verdict grafana`) |
-| Status | v0.11.6 as built (decision logic unchanged since v0.9.0) |
-| Place in the set | C4 level 3 of pillar 3 of the HLD ([`../hld/30-triage-prioritization.md`](../hld/30-triage-prioritization.md)): Decision (sections 1 to 12), Restitution (section 13), Asset context (section 14). Goals, constraints and contracts: HLD. Servers, zones and flows: DAT |
+| Building block | Pillar 3 package `verdict` (command `verdict`): Asset context (`verdict.assets`, `verdict assets build`), Decision (`verdict run`) Restitution (`verdict.restitution`: `verdict publish`, `verdict db`, `verdict grafana`) and Decision service (`verdict.service`: `verdict serve`, `verdict push`) |
+| Status | v0.14.0 as built (decision logic unchanged since v0.9.0) |
+| Place in the set | C4 level 3 of pillar 3 of the HLD ([`../hld/30-triage-prioritization.md`](../hld/30-triage-prioritization.md)): Decision (sections 1 to 12), Restitution (section 13), Asset context (section 14), Decision service (section 15). Goals, constraints and contracts: HLD. Servers, zones and flows: DAT |
 | Code | `verdict/src/verdict/`, shared model in `a2vm/src/a2vm/models.py` |
 
 This document says how verdict turns findings into decisions: its inputs and outputs, the rules
@@ -718,3 +718,81 @@ their versions for the report.
 `tests/test_detection_assets.py` (reconciliation, attribute precedence, former exposure values,
 zone and exposure source), `tests/test_external.py` (external scan, `published`, `behind`, gaps).
 
+## 15. Decision service (`verdict serve`, v0.14.0)
+
+The read side of HLD D15 step 3: the latest run of a tenant, and the few before it, behind a short
+and paged read API, for the analysts and the tools of the conversational search (HLD §8). Contract:
+`a2vm/src/a2vm/schemas/openapi/verdict.v1.yaml`; code: `verdict/src/verdict/service/`.
+
+### 15.1 Flow
+
+```mermaid
+flowchart LR
+  run["Daily run<br/>verdict run"] -- "triage.json<br/>a2vm.triage/1" --> push["publish step<br/>verdict push"]
+  push -- "POST /v1/tenants/{t}/runs<br/>publish token, gzip" --> svc["verdict serve<br/>one per tenant namespace"]
+  svc --> vol[("Volume<br/>last runs")]
+  tools["Analysts' tools<br/>pods a2vm.io/verdict-reader"] -- "GET summary, decisions,<br/>cves, assets; read token" --> svc
+```
+
+The `publish` step pushes the run's `triage.json` before it loads `reporting.json` into the
+reporting database. A failed push is a warning: the run's results stay on the volume and the next
+run pushes again. The service is reached inside the cluster only (ClusterIP, no ingress).
+
+### 15.2 Triage file (`a2vm.triage/1`)
+
+`triage.json` carries `schema: a2vm.triage/1` from v0.14.0
+(`a2vm/src/a2vm/schemas/triage.schema.json`). The schema checks what the service relies on: the
+client id, `generated_at`, `cve_count` and per row the CVE, the asset, the level, the SSVC outcome
+and the rationale; the other fields of a row are kept as they are.
+
+### 15.3 Push
+
+| Check, in order | Refusal |
+| --- | --- |
+| Tenant of the path is the service's | 404 |
+| Publish token | 401 |
+| `Idempotency-Key` (the client sends the sha256 of the file): a known key is answered from its receipt at once, nothing read | 400 |
+| Size (`--max-mb`, default 400 MB uncompressed), one complete gzip stream, JSON, `a2vm.triage/1` | 413, 400, 422 |
+| Client id is the tenant; `generated_at` not in the future (10 minutes of tolerance) | 422 |
+
+Accepted: 202 and a receipt (id, `generated_at`, `received_at`, digest, rows, counts per level).
+The run is stored as received (gzip), with its receipt, written by rename; the service keeps the
+last `--keep` runs (default 7) by `generated_at`. Each push is logged with its rows, size and time.
+`verdict push` exits 0 when stored or already stored, 3 when the service is unreachable or answers
+5xx (retry later), 1 when refused.
+
+### 15.4 Read
+
+Every read names the run it comes from (`run: {id, generated_at}`); `?run=` takes `latest`
+(default) or the id of a kept run.
+
+| Call | Answer |
+| --- | --- |
+| `GET runs` | The runs kept, newest first |
+| `GET summary` | Counts per level, KEV per level, per exposure and level, assets, findings to review, the ten assets and CVEs with most ACT, exposure gaps |
+| `GET decisions` | One page of decisions, a few fields each (id, CVE, asset, level, SSVC, exposure, zone, KEV, EPSS, CVSS, due date, review flag, product, title); filters `level`, `cve`, `asset`, `exposure`, `zone`, `kev`, `needs_review`, `source`, `min_epss`, `min_cvss`, `product`, `q`; `sort` by level (default), EPSS, CVSS, due date, CVE, asset |
+| `GET decisions/{id}` | One decision in full: rationale, SSVC inputs and their sources, reasons, fixes, due date |
+| `GET cves/{cve}` | The CVE as the run knows it (description, CVSS, CWE, KEV, EPSS, SSVC inputs, fixes) and the decisions on it, paged |
+| `GET assets`, `GET assets/{asset}` | Assets with their counts per level, most ACT first; one asset and its decisions, paged |
+
+Pages: `limit` 1 to 200 (default 25), `offset`, `next_offset` while more remain. A decision id is
+the finding id, else `<CVE>@<asset>`. The due date is the first observation plus the BOD 26-04
+delay, as in the reporting dataset. Two runs are kept in memory, the others read on demand.
+
+### 15.5 Tokens and deployment
+
+The Secret `a2vm-verdict` holds the digests (`publish <sha256>`, `read <sha256>`); the tokens are
+in the Secret `a2vm-tenant` (`verdict-publish-token` for the daily run, `verdict-read-token` for
+the tools). `deploy-k8s` makes them once and keeps them (docs/kubernetes.md). A NetworkPolicy lets
+in the daily run and the pods labelled `a2vm.io/verdict-reader=true` only, and lets out nothing.
+
+### 15.6 Limits
+
+Runs as files on one volume, one replica, no history between runs beyond the runs kept: PostgreSQL
+(v0.17.0) brings history and replicas. Bearer tokens until service accounts. Read side only: the
+watch and the alert review do not ask the service for decisions yet (D15 step 3, write side).
+
+### 15.7 Tests
+
+`tests/test_verdict_service.py` (schema, push and its refusals, reads, retention, HTTP and CLI),
+`tests/test_v0140.py` (contract, chart, deploy job, release notes).

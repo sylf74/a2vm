@@ -25,6 +25,7 @@ DETECTION = "vulnops.detection/1"
 ASSETS = "vulnops.assets/1"
 FINDINGS = "vulnops.findings/2"
 REPORTING = "a2vm.reporting/1"
+TRIAGE = "a2vm.triage/1"
 
 _SCHEMA_FILES = {
     RECORDS: "vulnerability_records",
@@ -32,6 +33,7 @@ _SCHEMA_FILES = {
     ASSETS: "assets",
     FINDINGS: "findings",
     REPORTING: "reporting",
+    TRIAGE: "triage",
 }
 
 
@@ -59,6 +61,13 @@ def validate_detection(data: dict[str, Any], where: str = "<detection>") -> None
     if not isinstance(data, dict) or data.get("schema") != DETECTION:
         raise ExchangeError(f"{where}: expected a {DETECTION} document")
     _validate(DETECTION, data, where)
+
+
+def validate_triage(data: dict[str, Any], where: str = "<triage>") -> None:
+    """Check a triage document received from outside (decision service, LLD triage §15)."""
+    if not isinstance(data, dict) or data.get("schema") != TRIAGE:
+        raise ExchangeError(f"{where}: expected a {TRIAGE} document")
+    _validate(TRIAGE, data, where)
 
 
 def now() -> str:

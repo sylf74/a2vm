@@ -189,6 +189,9 @@ docs/scanning.md                           read-only scanner set-up
 docs/openvas.md                            OpenVAS network scans (Greenbone), mutual TLS to GMP
 docs/alerts.md                             watch mode, sources, alert sheets, mail
 docs/gti.md                                Google Threat Intelligence connector
+docs/kubernetes.md                         daily run, detection and decision services on Kubernetes
+docs/collectors.md                         collectors near the networks and the detection service
+CHANGELOG.md                               release notes, one entry per tag
 tests/                                     tests and offline fixtures
 scripts/run-pipeline.sh                    the CI pipeline, locally
 scripts/build-hld.sh                       the HLD assembled into one document

@@ -13,10 +13,10 @@
 #
 #     include:
 #       - project: vulnops/a2vm
-#         ref: v0.13.3
+#         ref: v0.14.0
 #         file: templates/client-pipeline.yml
 #     variables:
-#       A2VM_REF: v0.13.3        # same version as the include
+#       A2VM_REF: v0.14.0        # same version as the include
 #
 # Jobs:
 #   push to the default branch     validate (profile and targets)
@@ -32,6 +32,7 @@
 #   A2VM_COLLECTOR_TOKEN_<ID> (masked, protected)   token of each collector of collectors.yaml;
 #                            A2VM_INTAKE_HOST, A2VM_INTAKE_ALLOW, A2VM_INTAKE_INGRESS_CONTROLLER
 #                            (nginx, traefik), A2VM_INTAKE_CLUSTER_ISSUER: its push endpoint (docs/collectors.md)
+#   A2VM_VERDICT_SERVICE  false: no decision service in the cluster (default true; docs/kubernetes.md)
 #   A2VM_GVM_USER, A2VM_GVM_PASSWORD (masked)   OpenVAS (GMP) account, when targets.yaml has
 #                            an openvas section; A2VM_GVM_CA, A2VM_GVM_CERT, A2VM_GVM_KEY
 #                            (File) for a tls:// GMP endpoint with client certificates (docs/openvas.md)
@@ -176,6 +177,24 @@ deploy-k8s:
           echo "No A2VM_INTAKE_HOST: the detection service has no ingress (collectors inside the cluster only)"
         fi
       fi
+    # Decision service (HLD D15 step 3, read side), unless A2VM_VERDICT_SERVICE=false: a publish token
+    # (the daily run) and a read token (the analysts' tools), made once and kept from one deployment
+    # to the next in the Secret a2vm-tenant; their digests in the Secret a2vm-verdict; none printed.
+    - |
+      VERDICT=""; V="$(mktemp -d)"; chmod 700 "$V"
+      if [ "${A2VM_VERDICT_SERVICE:-true}" != "false" ]; then
+        for k in verdict-publish-token verdict-read-token; do
+          kubectl -n "$NS" get secret a2vm-tenant -o jsonpath="{.data.$k}" 2>/dev/null | base64 -d > "$V/$k" 2>/dev/null || true
+          if [ "$(wc -c < "$V/$k")" -lt 32 ]; then od -An -tx1 -N32 /dev/urandom | tr -d ' \n' > "$V/$k"; fi
+        done
+        printf 'publish %s\nread %s\n' "$(sha256sum < "$V/verdict-publish-token" | cut -d' ' -f1)" \
+          "$(sha256sum < "$V/verdict-read-token" | cut -d' ' -f1)" > "$V/digests"
+        kubectl -n "$NS" create secret generic a2vm-verdict --from-file=digests="$V/digests" --dry-run=client -o yaml | kubectl apply -f -
+        VERDICT="--set verdict.enabled=true --set verdict.digestsSecret=a2vm-verdict"
+        VERDICT="$VERDICT --set verdict.digestsChecksum=$(sha256sum "$V/digests" | cut -d' ' -f1)"
+      else
+        echo "A2VM_VERDICT_SERVICE=false: no decision service"
+      fi
     # The tenant's secrets, from its CI/CD variables (File or text), into one Secret; never printed.
     - |
       umask 077; S="$(mktemp -d)"
@@ -193,6 +212,8 @@ deploy-k8s:
       put gitlab-token "${A2VM_GITLAB_TOKEN:-}"
       put gitlab-ca "${CI_SERVER_TLS_CA_FILE:-}"
       put detect-read-token "$READ_TOKEN"
+      put verdict-publish-token "$(cat "$V/verdict-publish-token" 2>/dev/null)"
+      put verdict-read-token "$(cat "$V/verdict-read-token" 2>/dev/null)"
       kubectl -n "$NS" create secret generic a2vm-tenant --from-file="$S" --dry-run=client -o yaml | kubectl apply -f -
       echo "secret a2vm-tenant: $(ls "$S" | tr '\n' ' ')"
       rm -rf "$S"
@@ -222,10 +243,11 @@ deploy-k8s:
         --set image.tag="$A2VM_REF" \
         --set secret.name=a2vm-tenant \
         --set daily.schedule="${A2VM_K8S_SCHEDULE:-45 5 * * *}" \
-        $PULL $FILES $INTAKE -f "$ENVF"
-      rm -rf "$I"
+        $PULL $FILES $INTAKE $VERDICT -f "$ENVF"
+      rm -rf "$I" "$V"
       kubectl -n "$NS" get cronjob,pvc
       if [ -n "$INTAKE" ]; then kubectl -n "$NS" get deployment,service,ingress -l app.kubernetes.io/component=detect; fi
+      if [ -n "$VERDICT" ]; then kubectl -n "$NS" get deployment,service -l app.kubernetes.io/component=verdict; fi
 
 # Exit code 3 = collection incomplete: the job shows as a warning and the pipeline goes on with
 # what was collected (plus the declared inventory).

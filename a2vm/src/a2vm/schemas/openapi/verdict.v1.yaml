@@ -1,0 +1,292 @@
+# Contract of the pillar 3 decision service, read side (HLD D15 step 3, LLD triage-prioritization §15).
+# Status: v1, as built in v0.14.0 (verdict serve). Within v1, fields and calls are only added.
+openapi: 3.1.0
+info:
+  title: A2VM decision service
+  version: "1.0.0"
+  description: >
+    The daily run pushes its triage (a2vm.triage/1); analysts' tools read the latest run, or one
+    of the last runs kept, through short and paged answers. Every call carries the tenant. The
+    service is reached inside the cluster only. Every answer names the run it comes from.
+servers:
+  - url: http://a2vm-lab-verdict:8080
+tags:
+  - name: publish
+  - name: read
+  - name: operations
+paths:
+  /v1/tenants/{tenant}/runs:
+    post:
+      tags: [publish]
+      operationId: pushRun
+      summary: Push the triage of a run
+      security:
+        - publishToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: sha256 of the triage document; a retry with the same key is answered from it at once.
+          schema: {type: string, maxLength: 128}
+        - name: Content-Encoding
+          in: header
+          required: false
+          schema: {type: string, enum: [gzip]}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "../triage.schema.json"}
+      responses:
+        "202":
+          description: Stored (or already stored under this key)
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/RunReceipt"}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "413": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+    get:
+      tags: [read]
+      operationId: listRuns
+      summary: The runs kept, newest first
+      security:
+        - readToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+      responses:
+        "200":
+          description: Receipts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: {type: array, items: {$ref: "#/components/schemas/RunReceipt"}}
+        "401": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/summary:
+    get:
+      tags: [read]
+      operationId: summary
+      summary: Counts of a run per level, exposure and KEV; assets and CVEs with most ACT
+      security:
+        - readToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+        - $ref: "#/components/parameters/run"
+      responses:
+        "200": {description: Summary, content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/decisions:
+    get:
+      tags: [read]
+      operationId: listDecisions
+      summary: Decisions of a run, filtered, sorted and paged; a few fields each
+      security:
+        - readToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+        - $ref: "#/components/parameters/run"
+        - {name: level, in: query, schema: {type: string}, description: "ACT, ATTEND, TRACK, comma-separated"}
+        - {name: cve, in: query, schema: {type: string}}
+        - {name: asset, in: query, schema: {type: string}}
+        - {name: exposure, in: query, schema: {type: string, enum: [open, controlled, small]}}
+        - {name: zone, in: query, schema: {type: string}}
+        - {name: kev, in: query, schema: {type: boolean}}
+        - {name: needs_review, in: query, schema: {type: boolean}}
+        - {name: source, in: query, schema: {type: string}, description: Detection source that saw the finding}
+        - {name: min_epss, in: query, schema: {type: number}}
+        - {name: min_cvss, in: query, schema: {type: number}}
+        - {name: product, in: query, schema: {type: string}, description: Part of the vendor or product name}
+        - {name: q, in: query, schema: {type: string}, description: Part of the CVE id, asset or description}
+        - {name: sort, in: query, schema: {type: string, enum: [level, epss, cvss, due_date, cve, asset]}}
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/offset"
+      responses:
+        "200":
+          description: One page
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DecisionPage"}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/decisions/{id}:
+    get:
+      tags: [read]
+      operationId: getDecision
+      summary: One decision in full (rationale, SSVC inputs and their sources, reasons, fixes)
+      security:
+        - readToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+        - $ref: "#/components/parameters/run"
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200": {description: The decision, content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/cves/{cve}:
+    get:
+      tags: [read]
+      operationId: getCve
+      summary: One CVE in the run (description, CVSS, EPSS, KEV, SSVC inputs, fixes) and the assets it concerns
+      security:
+        - readToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+        - $ref: "#/components/parameters/run"
+        - {name: cve, in: path, required: true, schema: {type: string, pattern: "^CVE-[0-9]{4}-[0-9]{4,}$"}}
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/offset"
+      responses:
+        "200": {description: The CVE, content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/assets:
+    get:
+      tags: [read]
+      operationId: listAssets
+      summary: Assets of the run with their counts per level, most ACT first
+      security:
+        - readToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+        - $ref: "#/components/parameters/run"
+        - {name: q, in: query, schema: {type: string}}
+        - {name: exposure, in: query, schema: {type: string}}
+        - {name: zone, in: query, schema: {type: string}}
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/offset"
+      responses:
+        "200": {description: One page, content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/assets/{asset}:
+    get:
+      tags: [read]
+      operationId: getAsset
+      summary: One asset and its decisions, paged
+      security:
+        - readToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+        - $ref: "#/components/parameters/run"
+        - {name: asset, in: path, required: true, schema: {type: string}}
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/offset"
+      responses:
+        "200": {description: The asset, content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /healthz:
+    get:
+      tags: [operations]
+      operationId: healthz
+      security: []
+      responses:
+        "200": {description: Alive}
+  /readyz:
+    get:
+      tags: [operations]
+      operationId: readyz
+      security: []
+      responses:
+        "200": {description: Ready (store writable)}
+        "503": {description: Not ready}
+components:
+  securitySchemes:
+    publishToken:
+      type: http
+      scheme: bearer
+      description: Token of the tenant's daily run; the service keeps its digest only.
+    readToken:
+      type: http
+      scheme: bearer
+      description: Token of the analysts' tools of the tenant; the service keeps its digest only. Later the Kubernetes service account of the caller.
+  parameters:
+    tenant:
+      name: tenant
+      in: path
+      required: true
+      schema: {type: string, pattern: "^[a-z0-9][a-z0-9-]{0,62}$"}
+    run:
+      name: run
+      in: query
+      required: false
+      description: "`latest` (default) or the id of a run kept"
+      schema: {type: string}
+    limit:
+      name: limit
+      in: query
+      required: false
+      schema: {type: integer, minimum: 1, maximum: 200, default: 25}
+    offset:
+      name: offset
+      in: query
+      required: false
+      schema: {type: integer, minimum: 0, default: 0}
+  responses:
+    Problem:
+      description: Error (RFC 9457)
+      content:
+        application/problem+json:
+          schema: {$ref: "#/components/schemas/Problem"}
+  schemas:
+    RunReceipt:
+      type: object
+      required: [id, tenant, generated_at, received_at, digest, rows, counts]
+      properties:
+        id: {type: string}
+        tenant: {type: string}
+        generated_at: {type: string}
+        received_at: {type: string}
+        digest: {type: string, description: "sha256 of the uncompressed triage"}
+        rows: {type: integer}
+        counts: {type: object, additionalProperties: {type: integer}}
+        duplicate: {type: boolean}
+    DecisionPage:
+      type: object
+      required: [run, total, offset, limit, items]
+      properties:
+        run: {$ref: "#/components/schemas/RunRef"}
+        total: {type: integer}
+        offset: {type: integer}
+        limit: {type: integer}
+        next_offset: {type: integer}
+        items:
+          type: array
+          items:
+            type: object
+            required: [id, cve, asset, level, ssvc]
+            properties:
+              id: {type: string}
+              cve: {type: string}
+              asset: {type: string}
+              asset_name: {type: string}
+              level: {enum: [ACT, ATTEND, TRACK]}
+              ssvc: {type: string}
+              exposure: {type: string}
+              zone: {type: string}
+              kev: {type: boolean}
+              epss: {type: [number, "null"]}
+              cvss: {type: [number, "null"]}
+              due_date: {type: [string, "null"]}
+              needs_review: {type: boolean}
+              product: {type: string}
+              title: {type: string}
+    RunRef:
+      type: object
+      required: [id, generated_at]
+      properties:
+        id: {type: string}
+        generated_at: {type: string}
+    Problem:
+      type: object
+      properties:
+        type: {type: string}
+        title: {type: string}
+        status: {type: integer}
+        detail: {type: string}
