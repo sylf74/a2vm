@@ -112,7 +112,7 @@ deploy token with `read_registry`):
 ```bash
 sudo bash install-collector.sh --tenant lab --collector lab-lan \
   --service https://detect-lab.apps.example.org \
-  --image registry.example.org/vulnops/a2vm/detect:v0.13.2 \
+  --image registry.example.org/vulnops/a2vm/detect:v0.13.3 \
   --openvas-hosts "192.0.2.0/24" --gvm-socket-volume greenbone-community-edition_gvmd_socket_vol
 ```
 
@@ -144,6 +144,7 @@ tenant: lab
 service: https://detect-lab.apps.example.org
 token_file: /etc/a2vm/collector/token
 # ca_file: /etc/a2vm/collector/ca.pem      # CA of the endpoint's certificate, if private
+# timeout_seconds: 600                     # wait for the service's answer to a push (default 600)
 work: /var/lib/a2vm/work
 spool: /var/lib/a2vm/spool
 connectors:
@@ -163,7 +164,7 @@ from a file:
 
 ```bash
 sudo podman login registry.example.org -u "$(cat registry-user.txt)" --password-stdin < registry-password.txt
-sudo podman pull registry.example.org/vulnops/a2vm/detect:v0.13.2
+sudo podman pull registry.example.org/vulnops/a2vm/detect:v0.13.3
 ```
 
 One systemd service and timer per connector, `/etc/systemd/system/a2vm-collector@.service`:
@@ -183,7 +184,7 @@ ExecStart=/usr/bin/podman run --rm --name a2vm-collector-%i --user 10001:10001 \
   -v /etc/a2vm/collector:/etc/a2vm/collector:ro,Z \
   -v /var/lib/a2vm:/var/lib/a2vm:Z \
   -v /var/lib/a2vm-ssh:/home/a2vm/.ssh:Z \
-  registry.example.org/vulnops/a2vm/detect:v0.13.2 \
+  registry.example.org/vulnops/a2vm/detect:v0.13.3 \
   detect agent run --config /etc/a2vm/collector/collector.yaml --connector %i
 ```
 
@@ -254,7 +255,7 @@ ExecStart=/usr/bin/docker run --rm --name a2vm-collector-%i --user 10001:10001 \
   -v /var/lib/a2vm:/var/lib/a2vm \
   -v /var/lib/a2vm-ssh:/home/a2vm/.ssh \
   -v greenbone-community-edition_gvmd_socket_vol:/run/gvmd \
-  registry.example.org/vulnops/a2vm/detect:v0.13.2 \
+  registry.example.org/vulnops/a2vm/detect:v0.13.3 \
   detect agent run --config /etc/a2vm/collector/collector.yaml --connector %i
 ```
 
@@ -308,6 +309,7 @@ source missing or older than its `max_age_hours`; with no detection at all, it s
 
 | Situation | Behaviour |
 | --- | --- |
+| A large detection (100 MB and more, e.g. Trivy on big container images) | The service takes a minute or more to validate it; the agent waits `timeout_seconds` (600 by default). A retry of a detection already stored is answered at once (idempotency key) |
 | Service unreachable, 429 or 5xx | The detection is kept in `/var/lib/a2vm/spool` (newest per source) and pushed at the next run; exit 3 |
 | Push refused (401 token, 403 source not declared, 422 another client or too old) | Error in the journal and in the service's log, nothing stored; a spooled detection refused this way is set aside as `<source>.json.rejected` |
 | Detection older than `max_age_hours` at the daily run | Left out with a warning; the run goes on with the other sources |
@@ -359,6 +361,10 @@ Once the collector pushes, the whole chain runs from the collector to the decisi
    | `assets` | `lab: <n> assets from <k> sources, <m> findings, …`: `k` counts `trivy`, `dnf-updateinfo`, `openvas` and `inventory` |
    | `triage` | `lab: ACT=… ATTEND=… TRACK=… review=… errors=0 … -> /data/output/lab` |
    | `publish` | Published, or `WARN reporting database unreachable` (exit 3, a warning) when the reporting database is stopped |
+
+   One run at a time: a run started by hand while another (scheduled or by hand) holds the
+   tenant's volume stops at `collect` with `Another run holds the working volume`. Wait for the
+   other one, or delete its job.
 
 5. **Compare** with the pipeline run of the same day: the totals per level of `triage` should agree
    with those of the GitLab `triage` job (or of the `runs` table when both publish). A source

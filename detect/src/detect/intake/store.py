@@ -71,6 +71,19 @@ class FileStore:
         self.keep = max(1, keep)
         self._lock = threading.Lock()
 
+    def _key_file(self, tenant: str, collector: str, key: str) -> Path:
+        return self.root / tenant / "_keys" / hashlib.sha256(f"{collector}\0{key}".encode()).hexdigest()
+
+    def known(self, tenant: str, collector: str, key: str) -> Receipt | None:
+        """The receipt stored under this collector's idempotency key, read without the document."""
+        key_file = self._key_file(tenant, collector, key)
+        if not key_file.exists():
+            return None
+        receipt = self.receipt(tenant, key_file.read_text(encoding="utf-8").strip())
+        if receipt is not None:
+            receipt.duplicate = True
+        return receipt
+
     def put(
         self,
         tenant: str,
@@ -79,28 +92,40 @@ class FileStore:
         document: dict[str, Any],
         key: str,
         now: dt.datetime | None = None,
+        gzipped: bytes | None = None,
     ) -> Receipt:
+        """Store one accepted detection; `gzipped`, the body as received when it came compressed, is
+        stored as it is (no second compression of a large document)."""
         now = now or dt.datetime.now(dt.UTC)
         source = document["source"]
         sha = hashlib.sha256(body).hexdigest()
-        key_file = self.root / tenant / "_keys" / hashlib.sha256(f"{collector}\0{key}".encode()).hexdigest()
+        key_file = self._key_file(tenant, collector, key)
         with self._lock:
-            if key_file.exists():
-                known = self.get(tenant, key_file.read_text(encoding="utf-8").strip())
-                if known is not None:
-                    receipt, _ = known
-                    receipt.duplicate = True
-                    return receipt
+            known = self.known(tenant, collector, key)
+            if known is not None:
+                return known
             rid = f"{now.strftime('%Y%m%dT%H%M%S%fZ')}-{sha[:12]}"
             receipt = Receipt(
                 rid, tenant, collector, source, document["generated_at"], now.isoformat(timespec="seconds"), sha
             )
             folder = self.root / tenant / source
-            _atomic(folder / f"{rid}.json.gz", gzip.compress(body))
+            _atomic(folder / f"{rid}.json.gz", gzipped if gzipped is not None else gzip.compress(body, 6))
             _atomic(folder / f"{rid}.meta.json", json.dumps(receipt.to_dict()).encode())
             _atomic(key_file, rid.encode())
             self._prune(folder, collector)
         return receipt
+
+    def receipt(self, tenant: str, rid: str) -> Receipt | None:
+        if not RID.match(rid):
+            return None
+        for s in self.sources(tenant):
+            meta = self.root / tenant / s / f"{rid}.meta.json"
+            if meta.exists():
+                try:
+                    return Receipt(**json.loads(meta.read_text(encoding="utf-8")))
+                except (OSError, ValueError, TypeError):
+                    return None
+        return None
 
     def _receipts(self, folder: Path) -> list[Receipt]:
         out = []
