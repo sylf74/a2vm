@@ -83,6 +83,20 @@ verdict run /config/client.yaml --settings "$SETTINGS" --records /data/work/reco
 
 {{- define "a2vm-tenant.step.publish" -}}
 trap 'if [ "$(cat /data/.a2vm-run/pod 2>/dev/null)" = "$HOSTNAME" ]; then rm -rf /data/.a2vm-run; fi' EXIT
+{{- if .Values.verdict.enabled }}
+# The decision service first: the analysts read the run there, the reporting database may be down.
+TRIAGE=$(ls /data/output/*/*/triage.json 2>/dev/null | sort | tail -1)
+if [ -z "$TRIAGE" ]; then
+  echo "WARN no triage.json: nothing pushed to the decision service"
+elif [ ! -s /secrets/verdict-publish-token ]; then
+  echo "WARN no verdict-publish-token: nothing pushed to the decision service"
+else
+  vrc=0
+  verdict push "$TRIAGE" --url {{ include "a2vm-tenant.verdictUrl" . | quote }} --tenant {{ .Values.tenant | quote }} \
+    --token-file /secrets/verdict-publish-token || vrc=$?
+  if [ "$vrc" -ne 0 ]; then echo "WARN decision service not updated (exit $vrc): the next run pushes again"; fi
+fi
+{{- end }}
 if [ -z "${A2VM_REPORTING_DSN:-}" ]; then echo "No reporting-dsn: nothing to publish"; exit 0; fi
 if [ -s /secrets/reporting-ca ]; then export A2VM_REPORTING_CA=/secrets/reporting-ca; fi
 rc=0

@@ -39,6 +39,11 @@ app.kubernetes.io/component: {{ .component }}
 {{- end -}}
 {{- end -}}
 
+{{/* Decision service of the tenant, inside the cluster. */}}
+{{- define "a2vm-tenant.verdictUrl" -}}
+{{- printf "http://%s-verdict:8080" (include "a2vm-tenant.name" .) -}}
+{{- end -}}
+
 {{/* Checks of the values that templates cannot express alone. */}}
 {{- define "a2vm-tenant.checks" -}}
 {{- if not (has .Values.collect.mode (list "local" "intake")) -}}
@@ -46,6 +51,9 @@ app.kubernetes.io/component: {{ .component }}
 {{- end -}}
 {{- if and (eq .Values.collect.mode "intake") (not .Values.intake.enabled) -}}
 {{- fail "collect.mode intake needs intake.enabled (the detection service)" -}}
+{{- end -}}
+{{- if .Values.verdict.enabled -}}
+{{- $_ := required "verdict.digestsSecret is required (Secret with the key digests)" .Values.verdict.digestsSecret -}}
 {{- end -}}
 {{- if .Values.intake.enabled -}}
 {{- $_ := required "intake.collectors is required (--set-file intake.collectors=collectors.yaml)" .Values.intake.collectors -}}

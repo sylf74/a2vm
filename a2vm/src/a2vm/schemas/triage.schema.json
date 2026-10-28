@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "a2vm.triage/1",
+  "title": "Triage of a run: every decision of one tenant",
+  "description": "Written by verdict run (triage.json), pushed to verdict serve (LLD triage-prioritization §15). Within /1 fields are only added.",
+  "type": "object",
+  "required": ["schema", "client", "generated_at", "cve_count", "rows"],
+  "properties": {
+    "schema": {"const": "a2vm.triage/1"},
+    "client": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,62}$"},
+        "name": {"type": "string"},
+        "profile_updated": {"type": ["string", "null"]}
+      }
+    },
+    "generated_at": {"type": "string", "minLength": 10},
+    "cve_count": {"type": "integer", "minimum": 0},
+    "llm_model": {"type": ["string", "null"]},
+    "rows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["cve_id", "asset_id", "delivery_decision", "ssvc_decision", "rationale"],
+        "properties": {
+          "cve_id": {"type": "string", "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$"},
+          "asset_id": {"type": "string"},
+          "asset_id_full": {"type": "string"},
+          "finding_id": {"type": "string"},
+          "delivery_decision": {"enum": ["ACT", "ATTEND", "TRACK"]},
+          "ssvc_decision": {"type": "string"},
+          "rationale": {"type": "string"},
+          "rationale_source": {"type": "string"},
+          "needs_review": {"type": "boolean"},
+          "in_kev": {"type": "boolean"},
+          "epss": {"type": ["number", "null"]},
+          "reasons": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "not_affected": {"type": "array"},
+    "errors": {"type": "array"},
+    "ignored": {"type": "array"},
+    "exposure_gaps": {"type": "array"}
+  }
+}

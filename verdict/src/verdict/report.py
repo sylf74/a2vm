@@ -8,7 +8,7 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 
-from a2vm.io import write_reporting
+from a2vm.io import TRIAGE, write_reporting
 from a2vm.models import TriageRow, TriageRun
 
 from . import reporting
@@ -55,6 +55,7 @@ def _md_escape(text: str) -> str:
 
 def write_json(run: TriageRun, path: Path) -> None:
     data = {
+        "schema": TRIAGE,
         "client": {"id": run.client.id, "name": run.client.name, "profile_updated": run.client.updated},
         "generated_at": run.generated_at,
         "cve_count": run.cve_count,

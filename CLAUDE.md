@@ -15,11 +15,11 @@ other files of `docs/`.
 | `a2vm/` | Common contract: data model, JSON schemas of the exchange files, settings, profiles, LLM client and guard, extension points |
 | `via/` | Pillar 1, intelligence (records) and watch (alerts) |
 | `detect/` | Pillar 2, detection: SSH collection, OpenVAS, declared inventory, external scan; collector agent and detection service (`detect agent`, `detect serve`, `detect fetch`) |
-| `verdict/` | Pillar 3, asset context, SSVC decision, restitution (reporting database, Grafana) |
+| `verdict/` | Pillar 3, asset context, SSVC decision, restitution (reporting database, Grafana); decision service (`verdict serve`, `verdict push`) |
 | `templates/client-pipeline.yml` | The pipeline every tenant project includes at a version tag |
 | `examples/` | Fictitious tenants (`lab`, `demo-industrie`) |
 | `deploy/portal/` | Terraform and cloud-init of the reporting database and Grafana |
-| `deploy/charts/a2vm-tenant/` | Helm chart: a tenant's daily run as a Kubernetes CronJob (D15 step 1, `docs/kubernetes.md`) and its detection service (D15 step 2, `docs/collectors.md`) |
+| `deploy/charts/a2vm-tenant/` | Helm chart: a tenant's daily run as a Kubernetes CronJob (D15 step 1, `docs/kubernetes.md`), its detection service (D15 step 2, `docs/collectors.md`) and its decision service (D15 step 3) |
 | `deploy/intake/` | Script of the job `deploy-k8s` that turns the collectors' tokens into digests (stdlib and PyYAML only) |
 | `deploy/collector/` | Install script of a collector on its VM (`docs/collectors.md` §2) |
 | `images/` | Dockerfile of the pillar images (one per pillar, built by the `images` job on tags) |
@@ -71,7 +71,8 @@ job always runs them.
 1. Bump `version` in `a2vm/`, `via/`, `detect/`, `verdict/` `pyproject.toml`, `__version__` in
    `a2vm` and `via`, and `version`/`appVersion` of `deploy/charts/a2vm-tenant/Chart.yaml`; set the
    new tag in `examples/*/.gitlab-ci.yml` and `docs/deployment.md`; add the version to the roadmap
-   table of the HLD (§11).
+   table of the HLD (§11) and its release notes at the top of `CHANGELOG.md` (what changed, then
+   what a tenant does to upgrade; `tests/test_v0140.py` checks the current version is there).
 2. Merge, then tag `vX.Y.Z` on the default branch: the `release` job checks the versions, `images`
    builds the pillar images where a registry exists, and `sync-product-docs` publishes `docs/`
    where configured (`docs/deployment.md` §7).

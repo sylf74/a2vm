@@ -33,6 +33,7 @@ reporting database and the dashboards that read it show its decisions and nothin
 | Out | Assets (read only for pillars 1, 4, 5) | Strategy §6 |
 | Out | Decisions; reports, `triage.json`, `triage.csv`, run page | Strategy §6 |
 | Out | Reporting dataset `reporting.json`, published into the reporting database read by the Grafana client portal (Qlik Sense planned) | Strategy §6, D14; LLD §12, §13 |
+| Out | Decision service: the last runs (`a2vm.triage/1`) behind the read API `verdict.v1`, inside the tenant's namespace | Strategy §6, D15; LLD §15 |
 
 ## 3. Building blocks
 
@@ -41,6 +42,7 @@ reporting database and the dashboards that read it show its decisions and nothin
 | Asset context (`verdict assets build`) | Consolidates observations into one inventory per tenant and sets each attribute with its source (exposure as SSVC value, zone, mission, well-being, owner); reconciles declared and observed assets, internal and external | Detections → `assets.json`, `findings.json` |
 | Decision (`verdict run`) | One SSVC decision per finding, BOD 26-04 timeline, reasons, review flags, rationale; risk acceptance | Records, assets, findings → `triage.json`, `triage.csv`, report, run page, `reporting.json` |
 | Restitution (`verdict publish`, `verdict db`, `verdict grafana`) | Loads each run's reporting dataset into the reporting database (history kept, a reading role per tenant); ships the Grafana dashboards: overview of a client, which assets to fix first, which CVEs to fix first | `reporting.json` → PostgreSQL schema `a2vm`; dashboards (JSON) |
+| Decision service (`verdict serve`, `verdict push`) | Keeps the last runs of a tenant pushed by the daily run and answers short, paged reads for analysts and their tools (D15 step 3, read side) | `triage.json` → read API `verdict.v1` |
 
 ## 4. Asset context
 
@@ -89,7 +91,7 @@ client CMDB, when available, is the reference for context.
 
 | Item | Content |
 | --- | --- |
-| In place | v0.9.0: SSVC decision with BOD 26-04 timelines, exposure model with source and zone; v0.11.2: external detection pulled by the tenant project and joined through `published` endpoints (exposure `open`, source `external-scan`); v0.11.3: reporting dataset `reporting.json` for the client portal; v0.11.4: exposure gaps (hosts the external scan reaches that the profile does not describe) at the top of the report; v0.11.5: reporting database and overview dashboard; v0.11.6: restitution in this pillar, dashboards per asset and per CVE, decisions carry CVSS rating, fix availability, product type and sources |
+| In place | v0.9.0: SSVC decision with BOD 26-04 timelines, exposure model with source and zone; v0.11.2: external detection pulled by the tenant project and joined through `published` endpoints (exposure `open`, source `external-scan`); v0.11.3: reporting dataset `reporting.json` for the client portal; v0.11.4: exposure gaps (hosts the external scan reaches that the profile does not describe) at the top of the report; v0.11.5: reporting database and overview dashboard; v0.11.6: restitution in this pillar, dashboards per asset and per CVE, decisions carry CVSS rating, fix availability, product type and sources; v0.14.0: decision service `verdict serve` (read side of D15 step 3), `triage.json` versioned as `a2vm.triage/1` |
 | Planned | The client portal in service; alert on a new exposure gap; Qlik Sense connector once specified |
 | Risks | Incomplete asset data from clients (safe defaults when criticality or exposure is unknown); AI proposes a wrong decision point (flagged, analyst validation) |
 | Open points | Exposure gap: immediate alert through the watch (pillar 1), or a section of the daily report |

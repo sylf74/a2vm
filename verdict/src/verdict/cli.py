@@ -6,6 +6,8 @@ verdict run …            decide on the findings of each client, from the recor
 verdict publish …        load reporting datasets into the reporting database (restitution)
 verdict db …             administer the reporting database: `verdict db -h`
 verdict grafana …        Grafana dashboards reading the reporting database: `verdict grafana -h`
+verdict serve …          the decision service of one tenant: read API on its latest runs
+verdict push …           push a run's triage to the decision service
 """
 
 from __future__ import annotations
@@ -24,6 +26,7 @@ from .report import write_all
 from .triage import Triage
 
 RESTITUTION = {"publish", "db", "grafana"}
+SERVICE = {"serve", "push"}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -36,6 +39,10 @@ def main(argv: list[str] | None = None) -> int:
         from .restitution.cli import main as restitution_main
 
         return restitution_main(args_in)
+    if args_in[:1] and args_in[0] in SERVICE:
+        from .service.cli import main as service_main
+
+        return service_main(args_in)
     parser = argparse.ArgumentParser(
         prog="verdict", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -45,6 +52,8 @@ def main(argv: list[str] | None = None) -> int:
         ("publish", "load reporting datasets into the reporting database"),
         ("db", "administer the reporting database"),
         ("grafana", "Grafana dashboards"),
+        ("serve", "the decision service of one tenant"),
+        ("push", "push a run's triage to the decision service"),
     ):
         sub.add_parser(name, help=f"{text}: `verdict {name} -h`", add_help=False)  # fmt: skip
     r = sub.add_parser("run", help="triage the findings of one or more clients")
