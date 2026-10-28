@@ -58,6 +58,8 @@ def test_contract_names_the_routes_the_service_answers():
         "/v1/tenants/{tenant}/cves/{cve}",
         "/v1/tenants/{tenant}/assets",
         "/v1/tenants/{tenant}/assets/{asset}",
+        "/v1/tenants/{tenant}/assets/{asset}/fixes",
+        "/v1/tenants/{tenant}/changes",
         "/healthz",
         "/readyz",
     }

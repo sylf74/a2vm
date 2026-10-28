@@ -58,6 +58,8 @@ class VulnRecord:
     epss_percentile: float | None = None
     gti: dict[str, Any] | None = None  # Google Threat Intelligence vulnerability view (intel.gti)
     cwe_names: dict[str, str] = field(default_factory=dict)  # CWE id -> name, from the record
+    updated: str | None = None  # last update of the CVE record (dateUpdated, since v0.15.2)
+    epss_date: str | None = None  # day of the EPSS score (since v0.15.2)
 
     @property
     def in_kev(self) -> bool:
@@ -376,6 +378,12 @@ class TriageRow:
     seen_by: dict[str, str] = field(default_factory=dict)  # source -> latest observation
     product_type: str = ""  # application | os | hardware (CPE part of the product), "" when unknown (v0.11.6)
     fix_available: bool = False  # a fixed version or a patch is known (scanner, CVE record) (v0.11.6)
+    # Dates of the facts the decision rests on (since v0.15.2): the CVE record, the KEV entry, EPSS.
+    cve_published: str = ""
+    cve_updated: str = ""
+    kev_date_added: str = ""
+    kev_due_date: str = ""
+    epss_date: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

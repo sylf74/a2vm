@@ -6,7 +6,7 @@
 #
 #   sudo bash install-collector.sh --tenant lab --collector lab-lan \
 #     --service https://detect-lab.apps.example.org \
-#     --image registry.example.org/vulnops/a2vm/detect:v0.15.1 \
+#     --image registry.example.org/vulnops/a2vm/detect:v0.15.2 \
 #     [--openvas-hosts "192.0.2.0/24, 198.51.100.0/24" --gvm-socket-volume <docker volume of gvmd.sock>] \
 #     [--gvm-user a2vm-scan] [--schedule "*-*-* 07:30:00"]
 #

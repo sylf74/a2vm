@@ -122,6 +122,7 @@ def parse_record(record: dict[str, Any]) -> CveFacts:
         cve_id=meta.get("cveId", ""),
         state=meta.get("state", "PUBLISHED"),
         published=meta.get("datePublished"),
+        updated=meta.get("dateUpdated"),
         description=description.strip(),
         cwes=cwes,
         cwe_names=cwe_names,

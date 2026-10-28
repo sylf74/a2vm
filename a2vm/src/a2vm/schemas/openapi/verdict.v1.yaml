@@ -102,6 +102,8 @@ paths:
         - {name: min_cvss, in: query, schema: {type: number}}
         - {name: product, in: query, schema: {type: string}, description: Part of the vendor or product name}
         - {name: q, in: query, schema: {type: string}, description: Part of the CVE id, asset or description}
+        - {name: due_before, in: query, schema: {type: string, format: date}, description: Due on or before this day (since v0.15.2)}
+        - {name: overdue, in: query, schema: {type: boolean}, description: Past their due date (since v0.15.2)}
         - {name: sort, in: query, schema: {type: string, enum: [level, epss, cvss, due_date, cve, asset]}}
         - $ref: "#/components/parameters/limit"
         - $ref: "#/components/parameters/offset"
@@ -133,7 +135,10 @@ paths:
     get:
       tags: [read]
       operationId: getCve
-      summary: One CVE in the run (description, CVSS, EPSS, KEV, SSVC inputs, fixes) and the assets it concerns
+      summary: >-
+        One CVE in the run (description, CVSS, EPSS, KEV, SSVC inputs, fixes, dates) and the assets it concerns;
+        `concerned: false` with `not_affected` when the tenant has the product outside the vulnerable range
+        (since v0.15.2); 404 when no asset is concerned
       security:
         - readToken: []
       parameters:
@@ -179,6 +184,44 @@ paths:
         - $ref: "#/components/parameters/offset"
       responses:
         "200": {description: The asset, content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/assets/{asset}/fixes:
+    get:
+      tags: [read]
+      operationId: getFixPlan
+      summary: The decisions of one asset grouped by the fix that clears them, most ACT cleared first (since v0.15.2)
+      security:
+        - readToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+        - $ref: "#/components/parameters/run"
+        - {name: asset, in: path, required: true, schema: {type: string}}
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/offset"
+      responses:
+        "200": {description: The plan, content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/changes:
+    get:
+      tags: [read]
+      operationId: listChanges
+      summary: Decisions new, gone or at another level since an earlier run, each with why (since v0.15.2)
+      security:
+        - readToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+        - $ref: "#/components/parameters/run"
+        - {name: since, in: query, schema: {type: string}, description: "`previous` (default) or a run id"}
+        - {name: kind, in: query, schema: {type: string}, description: "new, gone, changed, comma-separated"}
+        - {name: level, in: query, schema: {type: string}}
+        - {name: asset, in: query, schema: {type: string}}
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/offset"
+      responses:
+        "200": {description: One page of changes, content: {application/json: {schema: {type: object}}}}
+        "400": {$ref: "#/components/responses/Problem"}
         "401": {$ref: "#/components/responses/Problem"}
         "404": {$ref: "#/components/responses/Problem"}
   /healthz:

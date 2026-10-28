@@ -128,7 +128,20 @@ log says how many it deleted:
 kubectl -n $NS logs deploy/a2vm-lab-chat -c retention --tail=5
 ```
 
-## 8. Limits
+## 8. Questions an analyst asks (v0.15.2)
+
+| Question | Tool |
+| --- | --- |
+| "Qu'est-ce qui a changé depuis hier ?", "pourquoi je la vois seulement ce matin ?" | `what_changed`: new, gone, other level, each with why (first detected by a source, CVE published or updated, added to KEV, EPSS, exposure) |
+| "Quand a-t-elle été mise à jour ?", "depuis quand au KEV ?" | `get_cve`, `get_decision`: published, updated, added to KEV, KEV due date, EPSS day, first seen |
+| "Que dois-je appliquer sur web01, dans quel ordre ?" | `get_fix_plan`: the fix that clears most ACT first |
+| "Qu'est-ce qui arrive à échéance cette semaine ?", "qu'est-ce qui est en retard ?" | `search_decisions` with `due_before`, `overdue` |
+| "Sommes-nous concernés par CVE-… ?" | `get_cve`: concerned assets, or the assets that have the product outside the vulnerable range, or none |
+
+`what_changed` needs two runs in the decision service: the day after the first daily run with
+v0.14.0 or later. The dates appear for the runs made with v0.15.2 or later.
+
+## 9. Limits
 
 - Local accounts made by the admin; sign-in with GitLab (OIDC) later.
 - Documents in a neutral layout; the tenant's own Word and PowerPoint templates later.

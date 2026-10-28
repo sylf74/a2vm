@@ -285,6 +285,11 @@ class Triage:
             seen_by=_seen_by(finding),
             product_type=product_type(record, finding.match.vendor, finding.match.product, asset),
             fix_available=fix_available(record, finding),
+            cve_published=record.published or "",
+            cve_updated=record.updated or "",
+            kev_date_added=str((record.kev or record.adp_kev or {}).get("dateAdded") or ""),
+            kev_due_date=str((record.kev or {}).get("dueDate") or ""),
+            epss_date=record.epss_date or "",
         )
         row.rationale = template_rationale(row)
         return row
