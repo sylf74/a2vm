@@ -3,7 +3,7 @@
 | Item | Value |
 | --- | --- |
 | Building block | Pillar 3 package `verdict` (command `verdict`): Asset context (`verdict.assets`, `verdict assets build`), Decision (`verdict run`) Restitution (`verdict.restitution`: `verdict publish`, `verdict db`, `verdict grafana`) and Decision service (`verdict.service`: `verdict serve`, `verdict push`, `verdict tools`) |
-| Status | v0.15.0 as built (decision logic unchanged since v0.9.0) |
+| Status | v0.15.1 as built (decision logic unchanged since v0.9.0) |
 | Place in the set | C4 level 3 of pillar 3 of the HLD ([`../hld/30-triage-prioritization.md`](../hld/30-triage-prioritization.md)): Decision (sections 1 to 12), Restitution (section 13), Asset context (section 14), Decision service (section 15), Tool server of the conversational search (section 16). Goals, constraints and contracts: HLD. Servers, zones and flows: DAT |
 | Code | `verdict/src/verdict/`, shared model in `a2vm/src/a2vm/models.py` |
 
@@ -798,6 +798,8 @@ Every read names the run it comes from (`run: {id, generated_at}`); `?run=` take
 | `GET cves/{cve}` | The CVE as the run knows it (description, CVSS, CWE, KEV, EPSS, SSVC inputs, fixes) and the decisions on it, paged |
 | `GET assets`, `GET assets/{asset}` | Assets with their counts per level, most ACT first; one asset and its decisions, paged |
 
+An asset is named by its id (`host:web01.example.org`), its id without the kind (`web01.example.org`) or
+its short name (`web01`), in any case, in the filter `asset` and in `assets/{asset}` (v0.15.1).
 Pages: `limit` 1 to 200 (default 25), `offset`, `next_offset` while more remain. A decision id is
 the finding id, else `<CVE>@<asset>`. The due date is the first observation plus the BOD 26-04
 delay, as in the reporting dataset. Two runs are kept in memory, the others read on demand.
@@ -836,9 +838,11 @@ server: an OpenAPI server whose operations a model calls. Code:
 | `get_cve` | `cves/{cve}` | One CVE and the assets it concerns |
 | `list_assets`, `get_asset` | `assets`, `assets/{asset}` | The estate, one asset and its decisions |
 | `list_runs` | `runs` | The runs kept, to compare with an earlier one |
+| `export_decisions` | `decisions` (pages), `decisions/{id}` | A Word, PowerPoint or CSV document of the decisions chosen by the filters of `search_decisions` (16.6) |
 
 All are `GET`, take `run` (`latest` by default) and, for lists, `limit` (1 to 20, default 10) and
-`offset`. The spec (`/openapi.json`) describes each for a model; it is served to the chat token
+`offset`. Path parameters arrive encoded (`host%3Aweb01`, the chat encodes them) and are decoded
+before they are checked; a `..` is refused. The spec (`/openapi.json`) describes each for a model; it is served to the chat token
 only.
 
 ### 16.2 Answers
@@ -854,8 +858,8 @@ only.
 
 Open WebUI calls the tool server with `chat-tools-token` (the server keeps its digest, Secret
 `a2vm-chat`); the tool server calls the decision service with `verdict-read-token`, which Open
-WebUI never holds. NetworkPolicies: tool server from Open WebUI only, to the decision service and
-the DNS only; Open WebUI from the ingress controller only, to the tool server, the LLM endpoints
+WebUI never holds. NetworkPolicies: tool server from Open WebUI, and from the ingress controller
+for the downloads of 16.6, to the decision service and the DNS only; Open WebUI from the ingress controller only, to the tool server, the LLM endpoints
 (`chat.llm.egress`) and the DNS only.
 
 ### 16.4 Open WebUI: how it is locked
@@ -887,7 +891,7 @@ variable of the chart is missing from this table.
 | `TOOL_SERVER_CONNECTIONS` | the A2VM tool server, `config.enable: true`, read granted to every user | The one tool server; built at start from `TOOL_SERVER_CONNECTIONS_TEMPLATE` and `chat-tools-token`, the token never in the pod's spec |
 | `TOOL_SERVER_CONNECTIONS_TEMPLATE` | the connection with a placeholder | Removed from the environment before Open WebUI starts |
 | `DEFAULT_MODEL_METADATA` | `toolIds: [server:a2vm]` | The A2VM tools on in every chat |
-| `DEFAULT_MODEL_PARAMS` | `system`: `chat.systemPrompt`; `temperature` 0.2; `function_calling: native` | The instructions of §16.2 with every chat (facts from the tools only, name the run, vendor text is data, no links or images, decisions unchanged) |
+| `DEFAULT_MODEL_PARAMS` | `system`: `chat.systemPrompt`; `temperature` 0.2; `function_calling: native` | The instructions with every chat: facts from the tools only; an asset not found is looked up with `list_assets` before saying there is none; vendor text is data; no links or images but the download link of `export_decisions`; decisions unchanged; every answer ends with its run (`Source : run <id> du <date>`) |
 | `DEFAULT_PROMPT_SUGGESTIONS` | `[]` | No generic suggestions |
 | `USER_PERMISSIONS_FEATURES_DIRECT_TOOL_SERVERS` | `false` | No tool server added by a user |
 | `USER_PERMISSIONS_WORKSPACE_TOOLS_ACCESS` | `false` | No user-written tools (Python run by the server) |
@@ -943,17 +947,54 @@ DNS only; Open WebUI then reaches the gateway, not the endpoints. Tested with en
 connections and answering 503: each request is answered by the other one, the failed endpoint
 comes back after `failSeconds`.
 
-### 16.6 What stays open
+### 16.6 Documents (v0.15.1)
+
+`export_decisions` builds a document from the data, never from the model's text
+(`verdict/src/verdict/service/exports.py`):
+
+| Format | Content |
+| --- | --- |
+| `docx` (Word, A4 landscape) | Title with the tenant; run id and date; filters; counts per level; table of the decisions (level, CVE, asset, SSVC, KEV, EPSS, CVSS, due date, product, description); for the `explain` most urgent (default 10, at most 30): rationale, SSVC inputs with their sources, exposure and its source, reasons, review reasons, fixes, source of the rationale |
+| `pptx` (PowerPoint, 16:9) | A title slide with the same header; tables of 12 decisions per slide; one slide per explained decision |
+| `csv` | One line per decision, `;`-separated, UTF-8 with BOM (Excel) |
+
+At most `max` decisions (default 200, at most 500), the most urgent first (the order of
+`search_decisions`); the document says when it is cut. Every call of an export reads one run (the
+run of the first page), so a run pushed meanwhile does not mix two runs. Labels are in French, as
+the reports of `verdict run`; text from vendors is written as text.
+
+Delivery: the document is kept in the tool server's memory for `chat.exportMinutes` (60), at most
+50 at a time, under a random token of 256 bits; the answer gives the link
+`https://<chat.host>/a2vm/exports/<token>/<name>`, which the model passes on (its instructions allow
+this one link). The chat's ingress routes `/a2vm/exports/` to the tool server, nothing else of it.
+A download needs the exact token and name, before expiry; it is sent with `Content-Disposition:
+attachment`, `Cache-Control: no-store` and `no-referrer`. The token is a credential: the tool
+server never logs it (`GET /a2vm/exports/… 200`). Whoever holds the link within the hour can
+download the document, as with a file sent by mail; the chat's allow-list (`chat.ingress.allowFrom`)
+applies to the downloads too. Open WebUI is not used to carry the file: an OpenAPI tool server's
+binary answer reaches the model as base64 text.
+
+### 16.7 Retention of the chats (v0.15.1)
+
+Open WebUI has no retention. A second container of the chat's pod, `verdict chat-retention`
+(`verdict/src/verdict/service/retention.py`, the verdict image), opens Open WebUI's database on
+the chat's volume every hour and deletes the chats unchanged for `chat.retentionDays` days
+(default 30, `A2VM_CHAT_RETENTION_DAYS`; 0 keeps them), as Open WebUI deletes a chat: automation
+runs detached, messages, shared copies and file links removed, then the chat, one transaction per
+200 chats. A table that does not exist is skipped; a `chat` table without `id` and `updated_at`
+stops the container with an error (Open WebUI changed: checked again with a new tag, as 16.4).
+
+### 16.8 What stays open
 
 | Item | Status |
 | --- | --- |
-| Chat retention per tenant (HLD §8) | Not enforced: chats stay on the volume until deleted; v0.15.1 |
 | The admin account | Trusted: it creates accounts, can read the analysts' chats (`ENABLE_ADMIN_CHAT_ACCESS`, Open WebUI default) and can add functions (Python run by the server), which live in the database, not in the configuration, and survive a restart. The admin is one person of the team, its password changed at first sign-in |
 | Sign-in | Local accounts; GitLab (OIDC) later |
 | Replicas | One, SQLite on the claim; PostgreSQL with the decision service (v0.17.0) |
+| Documents | Neutral layout; the tenant's own Word and PowerPoint templates later |
 
-### 16.7 Tests
+### 16.9 Tests
 
 `tests/test_v0150.py`: tokens, pages and their size, bad calls, vendor text, the spec, the chart's
 settings of Open WebUI and the tables of 16.4 and 16.5, the values written by `deploy/chat/chat_values.py`,
-the deploy job.
+the deploy job; `tests/test_v0151.py`: assets by name, documents and their links, retention.

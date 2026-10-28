@@ -45,7 +45,7 @@ detection files in `work/detect` carry what the later stages use.
 | Key | Example | Options |
 | --- | --- | --- |
 | `A2VM_LLM_ENABLED` | `true` | Visible, not protected |
-| `A2VM_LLM_BASE_URL` | `http://192.0.2.103:8000/v1`; several endpoints of the same model, comma-separated (v0.15.0, `docs/chat.md` §5) | Visible, not protected |
+| `A2VM_LLM_BASE_URL` | `http://192.0.2.103:8000/v1`; several endpoints of the same model, comma-separated (v0.15.1, `docs/chat.md` §5) | Visible, not protected |
 | `A2VM_LLM_MODEL` | `qwen3-14b` | Visible, not protected |
 | `LLM_API_KEY` | (only if the server requires one) | Masked, protected |
 
@@ -91,10 +91,10 @@ The code project's own pipeline only runs lint, tests and the offline examples.
 ```yaml
 include:
   - project: vulnops/a2vm
-    ref: v0.15.0
+    ref: v0.15.1
     file: templates/client-pipeline.yml
 variables:
-  A2VM_REF: v0.15.0
+  A2VM_REF: v0.15.1
 ```
 
 3. If `targets.yaml` is used: scan key and target accounts as in `docs/scanning.md`, then the

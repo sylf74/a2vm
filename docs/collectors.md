@@ -112,7 +112,7 @@ deploy token with `read_registry`):
 ```bash
 sudo bash install-collector.sh --tenant lab --collector lab-lan \
   --service https://detect-lab.apps.example.org \
-  --image registry.example.org/vulnops/a2vm/detect:v0.15.0 \
+  --image registry.example.org/vulnops/a2vm/detect:v0.15.1 \
   --openvas-hosts "192.0.2.0/24" --gvm-socket-volume greenbone-community-edition_gvmd_socket_vol
 ```
 
@@ -164,7 +164,7 @@ from a file:
 
 ```bash
 sudo podman login registry.example.org -u "$(cat registry-user.txt)" --password-stdin < registry-password.txt
-sudo podman pull registry.example.org/vulnops/a2vm/detect:v0.15.0
+sudo podman pull registry.example.org/vulnops/a2vm/detect:v0.15.1
 ```
 
 One systemd service and timer per connector, `/etc/systemd/system/a2vm-collector@.service`:
@@ -184,7 +184,7 @@ ExecStart=/usr/bin/podman run --rm --name a2vm-collector-%i --user 10001:10001 \
   -v /etc/a2vm/collector:/etc/a2vm/collector:ro,Z \
   -v /var/lib/a2vm:/var/lib/a2vm:Z \
   -v /var/lib/a2vm-ssh:/home/a2vm/.ssh:Z \
-  registry.example.org/vulnops/a2vm/detect:v0.15.0 \
+  registry.example.org/vulnops/a2vm/detect:v0.15.1 \
   detect agent run --config /etc/a2vm/collector/collector.yaml --connector %i
 ```
 
@@ -255,7 +255,7 @@ ExecStart=/usr/bin/docker run --rm --name a2vm-collector-%i --user 10001:10001 \
   -v /var/lib/a2vm:/var/lib/a2vm \
   -v /var/lib/a2vm-ssh:/home/a2vm/.ssh \
   -v greenbone-community-edition_gvmd_socket_vol:/run/gvmd \
-  registry.example.org/vulnops/a2vm/detect:v0.15.0 \
+  registry.example.org/vulnops/a2vm/detect:v0.15.1 \
   detect agent run --config /etc/a2vm/collector/collector.yaml --connector %i
 ```
 

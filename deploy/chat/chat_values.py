@@ -11,6 +11,7 @@ NetworkPolicy. Endpoints given by name are resolved here, in the job, to their a
     A2VM_CHAT_LLM_EGRESS            optional: `cidr:port,...`, instead of resolving the endpoints
     A2VM_CHAT_ALLOW                 optional: the analysts' networks (CIDR, comma-separated)
     A2VM_CHAT_ADMIN_EMAIL           optional: login of the first admin
+    A2VM_CHAT_RETENTION_DAYS        optional: chats unchanged for longer are deleted (default 30, 0: kept)
     A2VM_CHAT_INGRESS_CONTROLLER, A2VM_CHAT_INGRESS_CLASS, A2VM_CHAT_TLS_SECRET,
     A2VM_CHAT_CLUSTER_ISSUER        optional; default to the A2VM_INTAKE_* ones
 """
@@ -82,6 +83,11 @@ def values(env: dict[str, str]) -> dict:
     }
     if env.get("A2VM_CHAT_ADMIN_EMAIL"):
         chat["adminEmail"] = env["A2VM_CHAT_ADMIN_EMAIL"]
+    if env.get("A2VM_CHAT_RETENTION_DAYS", "").strip():
+        days = int(env["A2VM_CHAT_RETENTION_DAYS"])
+        if days < 0:
+            raise ValueError("A2VM_CHAT_RETENTION_DAYS: 0 (keep) or a number of days")
+        chat["retentionDays"] = days
     return {"chat": chat}
 
 

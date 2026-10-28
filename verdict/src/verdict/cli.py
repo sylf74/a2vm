@@ -9,6 +9,7 @@ verdict grafana …        Grafana dashboards reading the reporting database: `v
 verdict serve …          the decision service of one tenant: read API on its latest runs
 verdict push …           push a run's triage to the decision service
 verdict tools …          tool server of the conversational search, on the decision service
+verdict chat-retention … delete the analysts' chats older than the tenant's retention
 """
 
 from __future__ import annotations
@@ -27,7 +28,7 @@ from .report import write_all
 from .triage import Triage
 
 RESTITUTION = {"publish", "db", "grafana"}
-SERVICE = {"serve", "push", "tools"}
+SERVICE = {"serve", "push", "tools", "chat-retention"}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -56,6 +57,7 @@ def main(argv: list[str] | None = None) -> int:
         ("serve", "the decision service of one tenant"),
         ("push", "push a run's triage to the decision service"),
         ("tools", "tool server of the conversational search"),
+        ("chat-retention", "delete the analysts' chats older than the tenant's retention"),
     ):
         sub.add_parser(name, help=f"{text}: `verdict {name} -h`", add_help=False)  # fmt: skip
     r = sub.add_parser("run", help="triage the findings of one or more clients")

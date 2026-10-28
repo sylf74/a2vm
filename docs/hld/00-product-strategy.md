@@ -380,7 +380,7 @@ pillar.
 | 3. Triage & Prioritization | Missing SSVC inputs; rationale | In development |
 | 4. Dispatch & Capitalization | Ideas: remediation instructions or tickets, capitalisation summaries | Not started |
 | 5. Emergency Actions | Idea: crisis communications | Not started |
-| Across pillars | Conversational search of a tenant's data by its analysts (below) | In place (v0.15.0): text and tables; documents in v0.15.1 |
+| Across pillars | Conversational search of a tenant's data by its analysts (below) | In place: text and tables (v0.15.0), Word, PowerPoint and CSV documents, chat retention (v0.15.1) |
 
 Invariants:
 
@@ -404,9 +404,9 @@ Clients are out of scope in the first version.
 | Model | The tenant's approved LLM endpoint, served with tool calling (vLLM: `--enable-auto-tool-choice --tool-call-parser hermes` for Qwen3) |
 | Tools | A read-only tool server (OpenAPI, `verdict tools`) on `verdict serve`: search a CVE, a finding, an asset; list decisions with filters; explain a decision (stored rationale and SSVC path); answers short and paged (under about 2,000 tokens) |
 | Deployment | All in the tenant's namespace (Open WebUI, tool server, decision service), configured from the chart only; the model outside the cluster on the tenant's approved endpoints, one VM or several (the chat through an LLM gateway in the namespace that spreads its calls and leaves a failed endpoint out, the daily run moving to the next endpoint when one is down); `docs/chat.md` |
-| Accounts and history | Local accounts made by the tenant's chat admin (GitLab sign-in later); chats on the chat's volume, retention per tenant not enforced yet (v0.15.1) |
+| Accounts and history | Local accounts made by the tenant's chat admin (GitLab sign-in later); chats on the chat's volume, deleted after the tenant's retention (`A2VM_CHAT_RETENTION_DAYS`, default 30 days, v0.15.1) |
 | Facts | Identifiers, numbers and levels come from the tools, never from the model's memory; each answer names the data it rests on |
-| Documents | Built by the tool server from the data with the A2VM templates, not written by the model (v0.15.1) |
+| Documents | Word, PowerPoint and CSV built by the tool server from the data, not written by the model, downloaded through a link of one hour on the chat's address (v0.15.1); the tenant's own templates later |
 | Decisions | Read only: no decision, review flag or exposure is changed through the chat |
 | Safety | Tools scoped to the tenant of the session; no write, no network, no URL fetch; external images and links not rendered (no exfiltration through a rendered URL); vendor text in tool results stays untrusted data |
 
@@ -484,8 +484,8 @@ release.
 | v0.13.2 | Install script of a collector (`deploy/collector/install-collector.sh`): configuration, GMP account made on the scanner host, image, one systemd timer per connector, configuration checked by the agent before the first run | 2 |
 | v0.13.3 | Large detections: a retry answered from its idempotency key before any validation, the gzip body stored as received, clients waiting 10 minutes (`timeout_seconds`), size and time of each push logged; one daily run at a time on a tenant's volume (lock taken by `collect`) | 2 |
 | v0.14.0 | D15 step 3, read side first: decision service of each tenant (`verdict serve`, API `verdict.v1`), the last runs pushed by the daily run's `publish` step (`verdict push`, `triage.json` as `a2vm.triage/1`), decisions with their rationale and SSVC inputs, CVEs and assets behind filtered and paged reads; inside the cluster only, files on its own volume until PostgreSQL; release notes in `CHANGELOG.md` | 3 |
-| v0.15.0 (current) | Conversational search for analysts (§8): Open WebUI in the tenant's namespace on the tenant's approved LLM endpoints, a read-only tool server on `verdict serve` (`verdict tools`), answers as text and tables; several LLM endpoints per tenant (LLM gateway for the chat, failover for the daily run) | 3 |
-| v0.15.1 (to confirm) | Word and PowerPoint documents built by the tool server from the data; retention of the chats per tenant | 3 |
+| v0.15.0 | Conversational search for analysts (§8): Open WebUI in the tenant's namespace on the tenant's approved LLM endpoints, a read-only tool server on `verdict serve` (`verdict tools`), answers as text and tables; several LLM endpoints per tenant (LLM gateway for the chat, failover for the daily run) | 3 |
+| v0.15.1 (current) | Chat: assets found by id, host name or short name; Word, PowerPoint and CSV documents built by the tool server from the data (download link of one hour); retention of the chats per tenant; answers end with their run | 3 |
 | v0.16.0 (to confirm) | `A2VM_RUN_MODE` (`gitlab` or `kubernetes`) in the tenant's `.gitlab-ci.yml`; the watch as a CronJob, the analysts' validation still a manual GitLab job until a review page | 1 |
 | v0.17.0 (to confirm) | PostgreSQL (CloudNativePG) behind `detect serve` and `verdict serve`: history between runs, finding lifecycle, several replicas, row-level security per tenant | 2, 3 |
 | Next (to confirm) | Client portal VM (Grafana) in service; review page of the alerts on `verdict serve`; decisions asked by the watch (D15 step 3, write side) | 1, 3, 4 |

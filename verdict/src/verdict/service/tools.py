@@ -17,14 +17,19 @@ import copy
 import json
 import logging
 import re
+import secrets
+import threading
+import time
 from http import HTTPStatus
 from typing import Any
-from urllib.parse import parse_qsl, quote, urlsplit
+from urllib.parse import parse_qsl, quote, unquote, urlsplit
 
 import httpx
 
 from a2vm.service import JsonHandler, Problem, TokenSet
 from a2vm.service import serve as _serve
+
+from . import exports
 
 log = logging.getLogger("verdict.tools")
 ROLES = {"chat"}
@@ -32,6 +37,11 @@ MAX_CHARS = 8000
 PAGE_MAX = 20
 TEXT_MAX = 600
 LIST_MAX = 10
+EXPORT_MAX = 500
+EXPLAIN_MAX = 30
+EXPORT_TTL = 3600  # seconds a download link stays valid
+EXPORT_KEEP = 50  # documents kept at most
+EXPORT_PATH = re.compile(r"^/a2vm/exports/(?P<token>[A-Za-z0-9_-]{32,64})/(?P<name>[A-Za-z0-9._-]{1,120})$")
 IMAGE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
 URL = re.compile(r"\b(?:https?|ftp)://([^/\s)\]>\"']+)[^\s)\]>\"']*", re.IGNORECASE)
 ID = re.compile(r"^[A-Za-z0-9:@._/+-]{1,300}$")
@@ -76,6 +86,26 @@ def _p(name: str, description: str) -> dict[str, Any]:
     return {"name": name, "in": "path", "required": True, "description": description, "schema": {"type": "string"}}
 
 
+_SEARCH: list[dict[str, Any]] = [
+    _q("level", "string", "ACT, ATTEND or TRACK, comma-separated (e.g. ACT,ATTEND)"),
+    _q("cve", "string", "A CVE id, e.g. CVE-2024-3094"),
+    _q("asset", "string", "The asset: its id from list_assets (host:web01.example.org), its host name or short name"),
+    _q("exposure", "string", "open, controlled or small", enum=["open", "controlled", "small"]),
+    _q("kev", "boolean", "true: only CVEs in the CISA KEV catalogue"),
+    _q("needs_review", "boolean", "true: only decisions flagged for an analyst's review"),
+    _q("product", "string", "Part of the vendor or product name, e.g. openssl"),
+    _q("q", "string", "Free text found in the CVE id, the asset or the description"),
+    _q("min_epss", "number", "Lowest EPSS probability, 0 to 1"),
+    _q("min_cvss", "number", "Lowest CVSS base score, 0 to 10"),
+    _q(
+        "sort",
+        "string",
+        "Order: level (default), epss, cvss, due_date, cve, asset",
+        enum=["level", "epss", "cvss", "due_date", "cve", "asset"],
+    ),
+    *_PAGE,
+]
+
 # (path, operationId, summary, parameters, upstream path template)
 OPERATIONS: list[tuple[str, str, str, list[dict[str, Any]], str]] = [
     (
@@ -92,23 +122,7 @@ OPERATIONS: list[tuple[str, str, str, list[dict[str, Any]], str]] = [
         "Find decisions (one per CVE and asset) with filters; a page of short items, most urgent first. "
         "Use get_decision for the full explanation of one item.",
         [
-            _q("level", "string", "ACT, ATTEND or TRACK, comma-separated (e.g. ACT,ATTEND)"),
-            _q("cve", "string", "A CVE id, e.g. CVE-2024-3094"),
-            _q("asset", "string", "An asset id or name, e.g. host:web01 or web01"),
-            _q("exposure", "string", "open, controlled or small", enum=["open", "controlled", "small"]),
-            _q("kev", "boolean", "true: only CVEs in the CISA KEV catalogue"),
-            _q("needs_review", "boolean", "true: only decisions flagged for an analyst's review"),
-            _q("product", "string", "Part of the vendor or product name, e.g. openssl"),
-            _q("q", "string", "Free text found in the CVE id, the asset or the description"),
-            _q("min_epss", "number", "Lowest EPSS probability, 0 to 1"),
-            _q("min_cvss", "number", "Lowest CVSS base score, 0 to 10"),
-            _q(
-                "sort",
-                "string",
-                "Order: level (default), epss, cvss, due_date, cve, asset",
-                enum=["level", "epss", "cvss", "due_date", "cve", "asset"],
-            ),
-            *_PAGE,
+            *_SEARCH,
             _RUN,
         ],
         "decisions",
@@ -145,8 +159,40 @@ OPERATIONS: list[tuple[str, str, str, list[dict[str, Any]], str]] = [
         "/assets/{asset}",
         "get_asset",
         "One asset (owner, zone, exposure and its source) and its decisions, most urgent first, paged.",
-        [_p("asset", "Asset id or name from list_assets"), *_PAGE, _RUN],
+        [
+            _p("asset", "The asset: its id from list_assets (host:web01.example.org), its host name or short name"),
+            *_PAGE,
+            _RUN,
+        ],
         "assets/{asset}",
+    ),
+    (
+        "/exports",
+        "export_decisions",
+        "Build a document of decisions for the analyst to download: Word (docx), PowerPoint (pptx) or a table "
+        "(csv), from the data, with the run, the filters, the counts and the explanation of the most urgent "
+        "decisions. Takes the filters of search_decisions. Answers a download link valid for a limited time: give "
+        "it to the analyst as is.",
+        [
+            _q("format", "string", "docx (Word), pptx (PowerPoint) or csv (table)", enum=["docx", "pptx", "csv"]),
+            *[q for q in _SEARCH if q["name"] not in ("limit", "offset")],
+            _q(
+                "max",
+                "integer",
+                f"Most decisions in the document, 1 to {EXPORT_MAX} (default 200)",
+                minimum=1,
+                maximum=EXPORT_MAX,
+            ),
+            _q(
+                "explain",
+                "integer",
+                f"How many of the most urgent decisions are explained, 0 to {EXPLAIN_MAX} (default 10)",
+                minimum=0,
+                maximum=EXPLAIN_MAX,
+            ),
+            _RUN,
+        ],
+        "exports",
     ),
     (
         "/runs",
@@ -240,8 +286,14 @@ class Tools:
         read_token: str,
         max_chars: int = MAX_CHARS,
         transport: httpx.BaseTransport | None = None,
+        public_url: str = "",
+        export_ttl: int = EXPORT_TTL,
     ):
         self.tenant = tenant
+        self.public_url = public_url.rstrip("/")
+        self.export_ttl = export_ttl
+        self._exports: dict[str, tuple[float, str, str, bytes]] = {}
+        self._exports_lock = threading.Lock()
         self.tokens = tokens
         self.max_chars = max_chars
         self.spec = openapi(tenant)
@@ -261,9 +313,9 @@ class Tools:
             m = pattern.match(path)
             if not m:
                 continue
-            ids = m.groupdict()
+            ids = {k: unquote(v) for k, v in m.groupdict().items()}  # the chat encodes path parameters
             for name, value in ids.items():
-                if not ID.match(value) or (name == "cve" and not CVE.match(value)):
+                if not ID.match(value) or ".." in value or (name == "cve" and not CVE.match(value)):
                     raise Problem(HTTPStatus.BAD_REQUEST, f"{name}: not a valid identifier")
             query = dict(query)
             if "limit" in query:
@@ -274,6 +326,8 @@ class Tools:
                     raise Problem(HTTPStatus.BAD_REQUEST, f"limit: 1 to {PAGE_MAX}") from exc
             elif upstream in ("decisions", "assets", "cves/{cve}", "assets/{asset}"):
                 query["limit"] = "10"
+            if upstream == "exports":
+                return self.export(query)
             target = upstream.format(**{k: quote(v, safe=":@") for k, v in ids.items()})
             return self._get(target, query)
         raise Problem(HTTPStatus.NOT_FOUND, "no such tool")
@@ -294,6 +348,96 @@ class Tools:
         answer["source"] = "A2VM decision service: decisions of the run named in `run`"
         return fit(answer, self.max_chars)
 
+    # -- documents ------------------------------------------------------------------------------
+    def _raw(self, target: str, query: dict[str, str]) -> dict[str, Any]:
+        try:
+            r = self._http.get(f"/v1/tenants/{self.tenant}/{target}", params=query)
+        except httpx.HTTPError as exc:
+            raise Problem(HTTPStatus.BAD_GATEWAY, "the decision service cannot be reached") from exc
+        if r.status_code != 200:
+            try:
+                detail = r.json().get("detail", "")
+            except ValueError:
+                detail = ""
+            status = HTTPStatus(r.status_code) if r.status_code in (400, 404) else HTTPStatus.BAD_GATEWAY
+            raise Problem(status, detail or f"decision service answered {r.status_code}")
+        return r.json()
+
+    def export(self, query: dict[str, str]) -> dict[str, Any]:
+        kind = query.pop("format", "docx")
+        if kind not in exports.FORMATS:
+            raise Problem(HTTPStatus.BAD_REQUEST, f"format: one of {', '.join(exports.FORMATS)}")
+        try:
+            most = int(query.pop("max", 200))
+            explain = int(query.pop("explain", 10))
+        except ValueError as exc:
+            raise Problem(HTTPStatus.BAD_REQUEST, "max and explain: integers") from exc
+        if not 1 <= most <= EXPORT_MAX or not 0 <= explain <= EXPLAIN_MAX:
+            raise Problem(HTTPStatus.BAD_REQUEST, f"max: 1 to {EXPORT_MAX}; explain: 0 to {EXPLAIN_MAX}")
+        if not self.public_url:
+            raise Problem(HTTPStatus.SERVICE_UNAVAILABLE, "documents are not set up (no public URL)")
+        query.pop("offset", None)
+        query.pop("limit", None)
+        filters = {k: v for k, v in query.items() if k != "run"}
+        items: list[dict[str, Any]] = []
+        page: dict[str, Any] = {}
+        while len(items) < most:
+            page = self._raw(
+                "decisions", {**query, "limit": str(min(200, most - len(items))), "offset": str(len(items))}
+            )
+            items += page["items"]
+            if "next_offset" not in page:
+                break
+        run = page.get("run") or {}
+        pinned = {**query, "run": run.get("id", query.get("run", "latest"))}  # one run for every call
+        counts: dict[str, int] = {}
+        wanted = {lv.strip().upper() for lv in filters.get("level", "ACT,ATTEND,TRACK").split(",")}
+        for level in exports.LEVELS:
+            counts[level] = (
+                self._raw("decisions", {**pinned, "level": level, "limit": "1"})["total"] if level in wanted else 0
+            )
+        details = [self._raw(f"decisions/{quote(i['id'], safe=':@')}", {"run": pinned["run"]}) for i in items[:explain]]
+        meta = {
+            "tenant": self.tenant,
+            "run": run,
+            "filters": filters,
+            "total": page.get("total", len(items)),
+            "shown": len(items),
+            "truncated": page.get("total", 0) > len(items),
+            "counts": counts,
+        }
+        body = exports.build(kind, meta, items, details)
+        ctype, ext = exports.FORMATS[kind]
+        name = f"a2vm-{self.tenant}-{(run.get('id') or 'run')[:15]}-decisions.{ext}"
+        token = secrets.token_urlsafe(32)
+        now = time.time()
+        with self._exports_lock:
+            self._exports = {t: e for t, e in self._exports.items() if e[0] > now}
+            while len(self._exports) >= EXPORT_KEEP:
+                self._exports.pop(min(self._exports, key=lambda t: self._exports[t][0]))
+            self._exports[token] = (now + self.export_ttl, name, ctype, body)
+        log.info("export format=%s decisions=%d explained=%d bytes=%d", kind, len(items), len(details), len(body))
+        return {
+            "run": run,
+            "format": kind,
+            "decisions": len(items),
+            "total": meta["total"],
+            "explained": len(details),
+            "download": f"{self.public_url}/a2vm/exports/{token}/{name}",
+            "expires_in_minutes": self.export_ttl // 60,
+            "note": "Give the analyst the download link exactly as it is, as a markdown link.",
+        }
+
+    def download(self, path: str) -> tuple[str, str, bytes] | None:
+        m = EXPORT_PATH.match(path)
+        if not m:
+            return None
+        with self._exports_lock:
+            entry = self._exports.get(m["token"])
+        if not entry or entry[0] < time.time() or entry[1] != m["name"]:
+            return None
+        return entry[1], entry[2], entry[3]
+
     def close(self) -> None:
         self._http.close()
 
@@ -303,10 +447,32 @@ def make_handler(tools: Tools) -> type[JsonHandler]:
         server_version = "a2vm-tools"
         logger = log
 
+        def log_message(self, fmt: str, *args: Any) -> None:
+            if urlsplit(self.path).path.startswith("/a2vm/exports/"):
+                self.logger.info("%s /a2vm/exports/… %s", self.command, args[1] if len(args) > 1 else "")
+                return  # the download token is a credential: never logged
+            super().log_message(fmt, *args)
+
         def do_GET(self) -> None:  # noqa: N802 - http.server API
             url = urlsplit(self.path)
             if url.path in ("/healthz", "/readyz"):
                 self.send_json(HTTPStatus.OK, {"ready": True})
+                return
+            if url.path.startswith("/a2vm/exports/"):
+                found = tools.download(url.path)
+                if found is None:
+                    self.send_problem(Problem(HTTPStatus.NOT_FOUND, "no such document, or its link expired"))
+                    return
+                name, ctype, body = found
+                self.send_response(HTTPStatus.OK)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Content-Disposition", f'attachment; filename="{name}"')
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self.send_header("Referrer-Policy", "no-referrer")
+                self.end_headers()
+                self.wfile.write(body)
                 return
             try:
                 if url.path == "/openapi.json":

@@ -54,6 +54,16 @@ def _asset(row: dict[str, Any]) -> str:
     return row.get("asset_id_full") or row["asset_id"]
 
 
+def asset_names(row: dict[str, Any]) -> set[str]:
+    """The ways people and models name an asset: its id (`host:web01.example.org`), the id without its
+    kind (`web01.example.org`) and its short name (`web01`), any case."""
+    full = _asset(row).lower()
+    names = {full, row["asset_id"].lower()}
+    if ":" in full:
+        names.add(full.split(":", 1)[1])
+    return names
+
+
 def compact(row: dict[str, Any]) -> dict[str, Any]:
     match = row.get("match") or {}
     return {
@@ -182,8 +192,8 @@ class RunIndex:
         if "cve" in query:
             rows = [r for r in rows if r["cve_id"] == query["cve"].upper()]
         if "asset" in query:
-            a = query["asset"].lower()
-            rows = [r for r in rows if a in (_asset(r).lower(), r["asset_id"].lower())]
+            a = query["asset"].strip().lower()
+            rows = [r for r in rows if a in asset_names(r)]
         for name in ("exposure", "zone"):
             if name in query:
                 rows = [r for r in rows if r.get(name, "") == query[name]]
@@ -290,7 +300,8 @@ class RunIndex:
     def asset(self, asset: str, query: dict[str, str]) -> dict[str, Any] | None:
         rows = self.by_asset.get(asset)
         if rows is None:
-            rows = next((rs for a, rs in self.by_asset.items() if rs[0]["asset_id"] == asset), None)
+            name = asset.strip().lower()
+            rows = next((rs for rs in self.by_asset.values() if name in asset_names(rs[0])), None)
         if not rows:
             return None
         first = rows[0]
