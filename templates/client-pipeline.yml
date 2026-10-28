@@ -13,10 +13,10 @@
 #
 #     include:
 #       - project: vulnops/a2vm
-#         ref: v0.14.0
+#         ref: v0.15.0
 #         file: templates/client-pipeline.yml
 #     variables:
-#       A2VM_REF: v0.14.0        # same version as the include
+#       A2VM_REF: v0.15.0        # same version as the include
 #
 # Jobs:
 #   push to the default branch     validate (profile and targets)
@@ -33,6 +33,8 @@
 #                            A2VM_INTAKE_HOST, A2VM_INTAKE_ALLOW, A2VM_INTAKE_INGRESS_CONTROLLER
 #                            (nginx, traefik), A2VM_INTAKE_CLUSTER_ISSUER: its push endpoint (docs/collectors.md)
 #   A2VM_VERDICT_SERVICE  false: no decision service in the cluster (default true; docs/kubernetes.md)
+#   A2VM_CHAT_HOST        the analysts' chat on the decision service (Open WebUI); A2VM_CHAT_ALLOW,
+#                            A2VM_CHAT_ADMIN_EMAIL, A2VM_CHAT_LLM_EGRESS... (docs/chat.md)
 #   A2VM_GVM_USER, A2VM_GVM_PASSWORD (masked)   OpenVAS (GMP) account, when targets.yaml has
 #                            an openvas section; A2VM_GVM_CA, A2VM_GVM_CERT, A2VM_GVM_KEY
 #                            (File) for a tls:// GMP endpoint with client certificates (docs/openvas.md)
@@ -195,6 +197,24 @@ deploy-k8s:
       else
         echo "A2VM_VERDICT_SERVICE=false: no decision service"
       fi
+    # Conversational search (HLD §8), when A2VM_CHAT_HOST is set: Open WebUI and its tool server on
+    # the decision service. Its session key, its first admin's password and the tools' token are made
+    # once and kept in the Secret a2vm-tenant, the token's digest in the Secret a2vm-chat; none printed.
+    - |
+      CHAT=""; C="$(mktemp -d)"; chmod 700 "$C"
+      if [ -n "${A2VM_CHAT_HOST:-}" ] && [ -n "$VERDICT" ]; then
+        command -v python3 >/dev/null || apk add --no-cache -q python3
+        for k in chat-secret-key chat-admin-password chat-tools-token; do
+          kubectl -n "$NS" get secret a2vm-tenant -o jsonpath="{.data.$k}" 2>/dev/null | base64 -d > "$C/$k" 2>/dev/null || true
+          if [ "$(wc -c < "$C/$k")" -lt 32 ]; then od -An -tx1 -N32 /dev/urandom | tr -d ' \n' > "$C/$k"; fi
+        done
+        printf 'chat %s\n' "$(sha256sum < "$C/chat-tools-token" | cut -d' ' -f1)" > "$C/digests"
+        kubectl -n "$NS" create secret generic a2vm-chat --from-file=digests="$C/digests" --dry-run=client -o yaml | kubectl apply -f -
+        python3 .a2vm/deploy/chat/chat_values.py "$C/values.json"
+        CHAT="--set chat.toolsDigestsSecret=a2vm-chat --set chat.toolsDigestsChecksum=$(sha256sum "$C/digests" | cut -d' ' -f1) -f $C/values.json"
+      elif [ -n "${A2VM_CHAT_HOST:-}" ]; then
+        echo "WARN A2VM_CHAT_HOST is set but the decision service is not: no chat"
+      fi
     # The tenant's secrets, from its CI/CD variables (File or text), into one Secret; never printed.
     - |
       umask 077; S="$(mktemp -d)"
@@ -214,6 +234,9 @@ deploy-k8s:
       put detect-read-token "$READ_TOKEN"
       put verdict-publish-token "$(cat "$V/verdict-publish-token" 2>/dev/null)"
       put verdict-read-token "$(cat "$V/verdict-read-token" 2>/dev/null)"
+      put chat-secret-key "$(cat "$C/chat-secret-key" 2>/dev/null)"
+      put chat-admin-password "$(cat "$C/chat-admin-password" 2>/dev/null)"
+      put chat-tools-token "$(cat "$C/chat-tools-token" 2>/dev/null)"
       kubectl -n "$NS" create secret generic a2vm-tenant --from-file="$S" --dry-run=client -o yaml | kubectl apply -f -
       echo "secret a2vm-tenant: $(ls "$S" | tr '\n' ' ')"
       rm -rf "$S"
@@ -243,11 +266,12 @@ deploy-k8s:
         --set image.tag="$A2VM_REF" \
         --set secret.name=a2vm-tenant \
         --set daily.schedule="${A2VM_K8S_SCHEDULE:-45 5 * * *}" \
-        $PULL $FILES $INTAKE $VERDICT -f "$ENVF"
-      rm -rf "$I" "$V"
+        $PULL $FILES $INTAKE $VERDICT $CHAT -f "$ENVF"
+      rm -rf "$I" "$V" "$C"
       kubectl -n "$NS" get cronjob,pvc
       if [ -n "$INTAKE" ]; then kubectl -n "$NS" get deployment,service,ingress -l app.kubernetes.io/component=detect; fi
       if [ -n "$VERDICT" ]; then kubectl -n "$NS" get deployment,service -l app.kubernetes.io/component=verdict; fi
+      if [ -n "$CHAT" ]; then kubectl -n "$NS" get deployment,ingress -l 'app.kubernetes.io/component in (chat,tools)'; fi
 
 # Exit code 3 = collection incomplete: the job shows as a warning and the pipeline goes on with
 # what was collected (plus the declared inventory).

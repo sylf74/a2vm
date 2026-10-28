@@ -29,7 +29,7 @@ sources:
 
 llm:
   enabled: false                      # true once the inference server is reachable
-  base_url: "http://llm.lan:8000/v1"  # OpenAI-compatible endpoint (vLLM / SGLang)
+  base_url: "http://llm.lan:8000/v1"  # OpenAI-compatible endpoint (vLLM / SGLang); several: a list, or comma-separated
   model: "openai/gpt-oss-120b"
   api_key_env: "LLM_API_KEY"
   timeout_seconds: 180

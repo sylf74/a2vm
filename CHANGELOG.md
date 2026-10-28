@@ -5,6 +5,36 @@ analyst and, under **Upgrade**, what a tenant must do when it moves to that tag 
 `A2VM_REF` in its `.gitlab-ci.yml`). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
 §11) and the LLDs. A release adds its entry here in the same merge request (CLAUDE.md, Releasing).
 
+## v0.15.0 — 2026-10-28
+
+Conversational search for analysts (HLD §8), all in the tenant's namespace; the model stays on the
+tenant's approved LLM endpoints outside the cluster.
+
+- `verdict tools`: read-only OpenAPI tool server on the decision service for the model of the
+  chat: run summary, decisions with filters, one decision explained, one CVE, assets, runs. Answers
+  of about 2,000 tokens at most that name their run; vendor links and images removed. It holds the
+  decision service's read token; the chat has a token of its own (LLD triage §16).
+- Chart: `chat.enabled` deploys Open WebUI (v0.12.4) and the tool server, configured from the
+  values only: the tenant's model and endpoints only, no web search, no code execution, no file
+  upload, offline, Content-Security-Policy, sign-up closed (first admin from the Secret),
+  NetworkPolicies to the tool server, the LLM endpoints and the DNS only.
+- `deploy-k8s`: with `A2VM_CHAT_HOST`, makes the chat's secrets once (Secret keys
+  `chat-secret-key`, `chat-admin-password`, `chat-tools-token`; digest in the Secret `a2vm-chat`)
+  and its values (`deploy/chat/chat_values.py`: endpoints resolved for the NetworkPolicy).
+- Several LLM endpoints per tenant: `A2VM_LLM_BASE_URL` (or `llm.base_url`) takes a comma-separated
+  list. The daily run moves to the next endpoint when one is down and stays there; the chat goes
+  through an LLM gateway in the namespace (nginx: round robin, a failed endpoint left out and the
+  request sent to the next), since Open WebUI uses one endpoint per model.
+- Decision service (v0.14.0 follow-ups): successful probes no longer logged (also `detect serve`),
+  memory request and limit by default (256 Mi, 1 Gi), the read command of `docs/kubernetes.md`
+  mounts the token instead of passing it on the command line.
+- `docs/chat.md`: deployment, first sign-in, checks, several endpoints, what is closed, limits.
+
+**Upgrade**: for the chat, serve the model with tool calling (vLLM: `--enable-auto-tool-choice
+--tool-call-parser hermes`), set `A2VM_CHAT_HOST` (and `A2VM_CHAT_ALLOW`) on the tenant project
+and push; then sign in as the first admin and create the analysts' accounts (`docs/chat.md` §3).
+Without `A2VM_CHAT_HOST`, nothing changes.
+
 ## v0.14.0 — 2026-10-28
 
 D15 step 3, read side first: the decision service of each tenant.

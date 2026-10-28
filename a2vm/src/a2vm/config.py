@@ -9,6 +9,7 @@ verdict, so that core does not depend on any stage.
 from __future__ import annotations
 
 import os
+import re
 import sys
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -69,6 +70,13 @@ class LlmSettings:
     @property
     def api_key(self) -> str | None:
         return os.environ.get(self.api_key_env) or None
+
+    @property
+    def base_urls(self) -> list[str]:
+        """The endpoints serving the model, in order of preference: `base_url` is one URL, several
+        separated by `,` or `;` (A2VM_LLM_BASE_URL), or a list in settings.yaml (since v0.15.0)."""
+        raw = self.base_url if isinstance(self.base_url, list) else re.split(r"[,;\s]+", str(self.base_url))
+        return [u.strip().rstrip("/") for u in raw if u and u.strip()]
 
 
 @dataclass
@@ -161,7 +169,7 @@ def describe_llm(settings: Settings) -> str:
     if not llm.enabled:
         return "LLM: disabled"
     key = "set" if llm.api_key else "not set"
-    return f"LLM: enabled, base_url={llm.base_url}, model={llm.model}, api key {key}"
+    return f"LLM: enabled, base_url={', '.join(llm.base_urls)}, model={llm.model}, api key {key}"
 
 
 def describe_gti(settings: Settings) -> str:

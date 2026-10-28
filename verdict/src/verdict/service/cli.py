@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-a2vm-proprietary
-"""`verdict serve` (the decision service of one tenant) and `verdict push` (the daily run's push)."""
+"""`verdict serve` (the decision service of one tenant), `verdict push` (the daily run's push) and
+`verdict tools` (the tool server of the conversational search)."""
 
 from __future__ import annotations
 
@@ -74,6 +75,36 @@ def cmd_push(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_tools(args: argparse.Namespace) -> int:
+    from a2vm.service import TokenSet
+
+    from .tools import ROLES, Tools, serve
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    try:
+        tokens = TokenSet.load(args.digests, ROLES)
+    except (ValueError, OSError) as exc:
+        print(exc, file=sys.stderr)
+        return 2
+    read_token = _read_secret(args.read_token_file)
+    tools = Tools(args.tenant, tokens, args.verdict_url, read_token, args.max_chars)
+    print(
+        f"{args.tenant}: tool server on {args.verdict_url}, "
+        f"chat token {'set' if 'chat' in tokens.digests else 'MISSING'}, "
+        f"answers up to {args.max_chars} characters",
+        flush=True,
+    )
+    httpd = serve(tools, args.host, args.port)
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        httpd.server_close()
+        tools.close()
+    return 0
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="verdict")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -94,5 +125,14 @@ def main(argv: list[str]) -> int:
     p.add_argument("--ca-file")
     p.add_argument("--timeout-seconds", type=float, default=600)
     p.set_defaults(func=cmd_push)
+    t = sub.add_parser("tools", help="tool server of the conversational search, on the decision service")
+    t.add_argument("--tenant", required=True)
+    t.add_argument("--verdict-url", required=True, help="decision service, e.g. http://a2vm-lab-verdict:8080")
+    t.add_argument("--read-token-file", required=True, help="read token of the decision service")
+    t.add_argument("--digests", required=True, help="`chat <sha256>`: the chat interface's token")
+    t.add_argument("--max-chars", type=int, default=8000, help="longest answer, in characters of JSON")
+    t.add_argument("--host", default="0.0.0.0")  # noqa: S104 - in a pod
+    t.add_argument("--port", type=int, default=8080)
+    t.set_defaults(func=cmd_tools)
     args = parser.parse_args(argv)
     return args.func(args)

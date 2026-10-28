@@ -191,6 +191,7 @@ docs/alerts.md                             watch mode, sources, alert sheets, ma
 docs/gti.md                                Google Threat Intelligence connector
 docs/kubernetes.md                         daily run, detection and decision services on Kubernetes
 docs/collectors.md                         collectors near the networks and the detection service
+docs/chat.md                               analysts' conversational search (Open WebUI) in the tenant's namespace
 CHANGELOG.md                               release notes, one entry per tag
 tests/                                     tests and offline fixtures
 scripts/run-pipeline.sh                    the CI pipeline, locally

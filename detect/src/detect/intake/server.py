@@ -214,7 +214,10 @@ def make_handler(service: Service) -> type[BaseHTTPRequestHandler]:
         sys_version = ""
 
         def log_message(self, fmt: str, *args: Any) -> None:  # access log without query strings
-            log.info("%s %s %s", self.command, urlsplit(self.path).path, args[1] if len(args) > 1 else "")
+            path, status = urlsplit(self.path).path, str(args[1]) if len(args) > 1 else ""
+            if path in ("/healthz", "/readyz") and status == "200":
+                return  # the kubelet's probes: only their failures are logged
+            log.info("%s %s %s", self.command, path, status)
 
         def _token(self) -> str | None:
             auth = self.headers.get("Authorization", "")
