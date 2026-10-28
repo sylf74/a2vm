@@ -22,6 +22,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 DIGEST = re.compile(r"^[0-9a-f]{64}$")
+PROBES = ("/healthz", "/readyz")
 
 
 def digest(token: str) -> str:
@@ -80,7 +81,11 @@ class JsonHandler(BaseHTTPRequestHandler):
     logger = logging.getLogger("a2vm.service")
 
     def log_message(self, fmt: str, *args: Any) -> None:
-        self.logger.info("%s %s %s", self.command, urlsplit(self.path).path, args[1] if len(args) > 1 else "")
+        path = urlsplit(self.path).path
+        status = str(args[1]) if len(args) > 1 else ""
+        if path in PROBES and status == "200":
+            return  # the kubelet's probes, every few seconds: only their failures are logged
+        self.logger.info("%s %s %s", self.command, path, status)
 
     def bearer(self) -> str | None:
         auth = self.headers.get("Authorization", "")

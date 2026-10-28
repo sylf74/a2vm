@@ -2,9 +2,9 @@
 
 | Item | Value |
 | --- | --- |
-| Building block | Pillar 3 package `verdict` (command `verdict`): Asset context (`verdict.assets`, `verdict assets build`), Decision (`verdict run`) Restitution (`verdict.restitution`: `verdict publish`, `verdict db`, `verdict grafana`) and Decision service (`verdict.service`: `verdict serve`, `verdict push`) |
-| Status | v0.14.0 as built (decision logic unchanged since v0.9.0) |
-| Place in the set | C4 level 3 of pillar 3 of the HLD ([`../hld/30-triage-prioritization.md`](../hld/30-triage-prioritization.md)): Decision (sections 1 to 12), Restitution (section 13), Asset context (section 14), Decision service (section 15). Goals, constraints and contracts: HLD. Servers, zones and flows: DAT |
+| Building block | Pillar 3 package `verdict` (command `verdict`): Asset context (`verdict.assets`, `verdict assets build`), Decision (`verdict run`) Restitution (`verdict.restitution`: `verdict publish`, `verdict db`, `verdict grafana`) and Decision service (`verdict.service`: `verdict serve`, `verdict push`, `verdict tools`) |
+| Status | v0.15.0 as built (decision logic unchanged since v0.9.0) |
+| Place in the set | C4 level 3 of pillar 3 of the HLD ([`../hld/30-triage-prioritization.md`](../hld/30-triage-prioritization.md)): Decision (sections 1 to 12), Restitution (section 13), Asset context (section 14), Decision service (section 15), Tool server of the conversational search (section 16). Goals, constraints and contracts: HLD. Servers, zones and flows: DAT |
 | Code | `verdict/src/verdict/`, shared model in `a2vm/src/a2vm/models.py` |
 
 This document says how verdict turns findings into decisions: its inputs and outputs, the rules
@@ -796,3 +796,46 @@ watch and the alert review do not ask the service for decisions yet (D15 step 3,
 
 `tests/test_verdict_service.py` (schema, push and its refusals, reads, retention, HTTP and CLI),
 `tests/test_v0140.py` (contract, chart, deploy job, release notes).
+
+## 16. Tool server of the conversational search (`verdict tools`, v0.15.0)
+
+The analysts' chat of a tenant (HLD §8, `docs/chat.md`) asks the decision service through a tool
+server: an OpenAPI server whose operations a model calls. Code:
+`verdict/src/verdict/service/tools.py`; chart: `templates/chat.yaml`.
+
+### 16.1 Operations
+
+| Operation | Decision service call | For |
+| --- | --- | --- |
+| `get_run_summary` | `summary` | A general question: counts, the assets and CVEs with most ACT, exposure gaps |
+| `search_decisions` | `decisions` with its filters | A list: level, CVE, asset, exposure, KEV, review flag, product, text, EPSS, CVSS, sort |
+| `get_decision` | `decisions/{id}` | Why a level: rationale, reasons, SSVC inputs and their sources, fixes, due date |
+| `get_cve` | `cves/{cve}` | One CVE and the assets it concerns |
+| `list_assets`, `get_asset` | `assets`, `assets/{asset}` | The estate, one asset and its decisions |
+| `list_runs` | `runs` | The runs kept, to compare with an earlier one |
+
+All are `GET`, take `run` (`latest` by default) and, for lists, `limit` (1 to 20, default 10) and
+`offset`. The spec (`/openapi.json`) describes each for a model; it is served to the chat token
+only.
+
+### 16.2 Answers
+
+| Rule | Why |
+| --- | --- |
+| At most `--max-chars` of JSON (default 8,000, about 2,000 tokens): strings cut at 600 characters, lists at 10 with the count left out, then tighter; a page too long loses items at its end, `truncated` and `next_offset` say where to go on | The model's context (16k tokens on the reference model) holds a few answers |
+| Each answer carries `run` and `source` | The model names the data its answer rests on |
+| Links in text reduced to `[link: host]`, markdown images removed | Vendor text is untrusted: nothing the model repeats makes a browser fetch a URL (with the chat's Content-Security-Policy) |
+| Identifiers checked (`CVE-YYYY-N…`, safe characters), unknown operations 404 | No path or query reaches the decision service unchecked |
+
+### 16.3 Tokens and network
+
+Open WebUI calls the tool server with `chat-tools-token` (the server keeps its digest, Secret
+`a2vm-chat`); the tool server calls the decision service with `verdict-read-token`, which Open
+WebUI never holds. NetworkPolicies: tool server from Open WebUI only, to the decision service and
+the DNS only; Open WebUI from the ingress controller only, to the tool server, the LLM endpoints
+(`chat.llm.egress`) and the DNS only.
+
+### 16.4 Tests
+
+`tests/test_v0150.py`: tokens, pages and their size, bad calls, vendor text, the spec, the chart's
+settings of Open WebUI, the values written by `deploy/chat/chat_values.py`, the deploy job.

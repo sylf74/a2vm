@@ -1,0 +1,468 @@
+{{- /*
+Conversational search of the tenant's analysts (HLD §8, LLD triage §16), all in the namespace:
+- tools: `verdict tools`, a read-only OpenAPI tool server on the decision service; it holds the
+  service's read token, answers Open WebUI only and connects to the decision service only;
+- chat: Open WebUI, on the tenant's approved LLM endpoints (one or several VMs outside the
+  cluster), configured from these values only (ENABLE_PERSISTENT_CONFIG=false), behind the ingress;
+  it connects to the tool server, the LLM endpoints and the DNS only.
+*/ -}}
+{{- if .Values.chat.enabled }}
+{{- include "a2vm-tenant.checks" . }}
+{{- $name := include "a2vm-tenant.name" . }}
+{{- $chat := .Values.chat }}
+{{- $ing := $chat.ingress }}
+{{- $prompt := replace "{tenant}" .Values.tenant $chat.systemPrompt }}
+{{- $grants := list (dict "principal_type" "user" "principal_id" "*" "permission" "read") }}
+{{- $connection := dict "type" "openapi" "url" (include "a2vm-tenant.toolsUrl" .) "spec_type" "url" "path" "openapi.json" "auth_type" "bearer" "key" "__A2VM_TOOLS_TOKEN__" "config" (dict "enable" true "access_grants" $grants) "info" (dict "id" "a2vm" "name" "A2VM" "description" (printf "Vulnerability decisions of tenant %s (read only)" .Values.tenant)) }}
+{{- $configs := dict }}
+{{- range $i, $_ := $chat.llm.endpoints }}
+{{- $_ := set $configs (toString $i) (dict "enable" true "model_ids" (list $chat.llm.model)) }}
+{{- end }}
+{{- $tls := $ing.tlsSecret | default (ternary (printf "%s-chat-tls" $name) "" (ne $ing.clusterIssuer "")) }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}-tools
+  labels:
+    {{- include "a2vm-tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: tools
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "a2vm-tenant.selector" (dict "root" . "component" "tools") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "a2vm-tenant.labels" . | nindent 8 }}
+        app.kubernetes.io/component: tools
+        a2vm.io/verdict-reader: "true"
+      annotations:
+        checksum/digests: {{ $chat.toolsDigestsChecksum | quote }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      {{- if .Values.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.image.pullSecret }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: tools
+          image: {{ include "a2vm-tenant.image" (dict "root" . "pillar" "verdict") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["verdict", "tools"]
+          args:
+            - --tenant={{ .Values.tenant }}
+            - --verdict-url={{ include "a2vm-tenant.verdictUrl" . }}
+            - --read-token-file=/secrets/verdict-read-token
+            - --digests=/tools-secret/digests
+            - --max-chars={{ $chat.maxChars }}
+            - --port=8080
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet: {path: /readyz, port: http}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 30
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: secrets
+              mountPath: /secrets
+              readOnly: true
+            - name: digests
+              mountPath: /tools-secret
+              readOnly: true
+          {{- with $chat.tools.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: secrets
+          secret:
+            secretName: {{ .Values.secret.name }}
+            defaultMode: 0440
+            items:
+              - key: verdict-read-token
+                path: verdict-read-token
+        - name: digests
+          secret:
+            secretName: {{ $chat.toolsDigestsSecret }}
+            defaultMode: 0440
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}-tools
+  labels:
+    {{- include "a2vm-tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: tools
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "a2vm-tenant.selector" (dict "root" . "component" "tools") | nindent 4 }}
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $name }}-chat
+  labels:
+    {{- include "a2vm-tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: chat
+  annotations:
+    # Accounts and chats survive an uninstall: delete the claim by hand to drop them.
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: [ReadWriteOnce]
+  {{- if $chat.storage.storageClass }}
+  storageClassName: {{ $chat.storage.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ $chat.storage.size | quote }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}-chat
+  labels:
+    {{- include "a2vm-tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: chat
+spec:
+  replicas: 1             # SQLite on a ReadWriteOnce volume
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "a2vm-tenant.selector" (dict "root" . "component" "chat") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "a2vm-tenant.labels" . | nindent 8 }}
+        app.kubernetes.io/component: chat
+      annotations:
+        checksum/digests: {{ $chat.toolsDigestsChecksum | quote }}
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: chat
+          image: "{{ $chat.image.repository }}:{{ $chat.image.tag }}"
+          imagePullPolicy: IfNotPresent
+          workingDir: /app/backend
+          command: ["bash", "-c"]
+          args:
+            - |
+              set -eu
+              for f in chat-secret-key chat-admin-password chat-tools-token; do
+                if [ ! -s "/chat-secrets/$f" ]; then echo "missing key $f in Secret {{ .Values.secret.name }}" >&2; exit 2; fi
+              done
+              export WEBUI_SECRET_KEY="$(cat /chat-secrets/chat-secret-key)"
+              export WEBUI_ADMIN_PASSWORD="$(cat /chat-secrets/chat-admin-password)"
+              key="$(cat /chat-secrets/llm-api-key 2>/dev/null || true)"
+              keys="$key"
+              for _ in $(seq 2 {{ len $chat.llm.endpoints }}); do keys="$keys;$key"; done
+              export OPENAI_API_KEYS="$keys"
+              token="$(tr -cd '0-9a-f' < /chat-secrets/chat-tools-token)"
+              export TOOL_SERVER_CONNECTIONS="${TOOL_SERVER_CONNECTIONS_TEMPLATE/__A2VM_TOOLS_TOKEN__/$token}"
+              unset TOOL_SERVER_CONNECTIONS_TEMPLATE key keys token
+              exec bash start.sh
+          env:
+            - {name: HOME, value: /tmp}
+            - {name: DATA_DIR, value: /app/backend/data}
+            - {name: STATIC_DIR, value: /app/static}
+            - {name: WEBUI_NAME, value: {{ printf "A2VM %s" .Values.tenant | quote }}}
+            - {name: WEBUI_URL, value: {{ printf "https://%s" $chat.host | quote }}}
+            - {name: CORS_ALLOW_ORIGIN, value: {{ printf "https://%s" $chat.host | quote }}}
+            - {name: WEBUI_ADMIN_EMAIL, value: {{ $chat.adminEmail | quote }}}
+            - {name: WEBUI_ADMIN_NAME, value: "A2VM admin"}
+            # Configuration from these values only: what is changed in the admin panel does not stay.
+            - {name: ENABLE_PERSISTENT_CONFIG, value: "false"}
+            - {name: ENABLE_SIGNUP, value: "false"}
+            - {name: DEFAULT_USER_ROLE, value: pending}
+            - {name: JWT_EXPIRES_IN, value: {{ printf "%vh" $chat.sessionHours | quote }}}
+            # The tenant's approved endpoints only, its model only.
+            - {name: ENABLE_OLLAMA_API, value: "false"}
+            - {name: ENABLE_OPENAI_API, value: "true"}
+            - {name: OPENAI_API_BASE_URLS, value: {{ join ";" $chat.llm.endpoints | quote }}}
+            - {name: OPENAI_API_CONFIGS, value: {{ toJson $configs | quote }}}
+            - {name: DEFAULT_MODELS, value: {{ $chat.llm.model | quote }}}
+            - {name: ENABLE_DIRECT_CONNECTIONS, value: "false"}
+            - {name: ENABLE_OPENAI_API_PASSTHROUGH, value: "false"}
+            # The A2VM tools, selected in every chat; the instructions with every chat.
+            - {name: TOOL_SERVER_CONNECTIONS_TEMPLATE, value: {{ toJson (list $connection) | quote }}}
+            - {name: DEFAULT_MODEL_METADATA, value: {{ toJson (dict "toolIds" (list "server:a2vm")) | quote }}}
+            - {name: DEFAULT_MODEL_PARAMS, value: {{ toJson (dict "system" $prompt "temperature" 0.2 "function_calling" "native") | quote }}}
+            - {name: DEFAULT_PROMPT_SUGGESTIONS, value: "[]"}
+            # No network beyond the tools and the model: no web search, no download, no update check.
+            - {name: OFFLINE_MODE, value: "true"}
+            - {name: HF_HUB_OFFLINE, value: "1"}
+            - {name: ENABLE_WEB_SEARCH, value: "false"}
+            - {name: USER_PERMISSIONS_FEATURES_WEB_SEARCH, value: "false"}
+            - {name: ENABLE_IMAGE_GENERATION, value: "false"}
+            - {name: USER_PERMISSIONS_FEATURES_IMAGE_GENERATION, value: "false"}
+            - {name: ENABLE_CODE_EXECUTION, value: "false"}
+            - {name: ENABLE_CODE_INTERPRETER, value: "false"}
+            - {name: USER_PERMISSIONS_FEATURES_CODE_INTERPRETER, value: "false"}
+            - {name: USER_PERMISSIONS_FEATURES_DIRECT_TOOL_SERVERS, value: "false"}
+            - {name: USER_PERMISSIONS_WORKSPACE_TOOLS_ACCESS, value: "false"}
+            - {name: USER_PERMISSIONS_CHAT_FILE_UPLOAD, value: "false"}
+            - {name: RAG_EMBEDDING_MODEL, value: ""}
+            - {name: BYPASS_EMBEDDING_AND_RETRIEVAL, value: "true"}
+            - {name: ENABLE_COMMUNITY_SHARING, value: "false"}
+            - {name: ENABLE_MEMORIES, value: "false"}
+            - {name: ENABLE_ADMIN_EXPORT, value: "false"}
+            - {name: ENABLE_VERSION_UPDATE_CHECK, value: "false"}
+            - {name: SCARF_NO_ANALYTICS, value: "true"}
+            - {name: DO_NOT_TRACK, value: "true"}
+            - {name: ANONYMIZED_TELEMETRY, value: "false"}
+            # Browser side: nothing loaded from or sent to another host.
+            - {name: CONTENT_SECURITY_POLICY, value: {{ $ing.contentSecurityPolicy | replace "\n" " " | quote }}}
+            - {name: XFRAME_OPTIONS, value: DENY}
+            - {name: REFERRER_POLICY, value: no-referrer}
+            - {name: XCONTENT_TYPE, value: nosniff}
+          ports:
+            - name: http
+              containerPort: 8080
+          startupProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 10
+            failureThreshold: 30
+          readinessProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 15
+          livenessProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 30
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: data
+              mountPath: /app/backend/data
+            - name: static
+              mountPath: /app/static
+            - name: tmp
+              mountPath: /tmp
+            - name: secrets
+              mountPath: /chat-secrets
+              readOnly: true
+          {{- with $chat.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ $name }}-chat
+        - name: static
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+        - name: secrets
+          secret:
+            secretName: {{ .Values.secret.name }}
+            defaultMode: 0440
+            optional: true          # each key is checked at start; llm-api-key may be absent
+            items:
+              - {key: chat-secret-key, path: chat-secret-key}
+              - {key: chat-admin-password, path: chat-admin-password}
+              - {key: chat-tools-token, path: chat-tools-token}
+              - {key: llm-api-key, path: llm-api-key}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}-chat
+  labels:
+    {{- include "a2vm-tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: chat
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "a2vm-tenant.selector" (dict "root" . "component" "chat") | nindent 4 }}
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+{{- if and (eq $ing.controller "traefik") $ing.allowFrom }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ $name }}-chat-allow
+  labels:
+    {{- include "a2vm-tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: chat
+spec:
+  ipAllowList:
+    sourceRange:
+      {{- range $ing.allowFrom }}
+      - {{ . | quote }}
+      {{- end }}
+{{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $name }}-chat
+  labels:
+    {{- include "a2vm-tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: chat
+  annotations:
+    {{- if eq $ing.controller "nginx" }}
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-body-size: "8m"
+    {{- if $ing.allowFrom }}
+    nginx.ingress.kubernetes.io/whitelist-source-range: {{ join "," $ing.allowFrom | quote }}
+    {{- end }}
+    {{- else if and (eq $ing.controller "traefik") $ing.allowFrom }}
+    traefik.ingress.kubernetes.io/router.middlewares: {{ printf "%s-%s-chat-allow@kubernetescrd" .Release.Namespace $name | quote }}
+    {{- end }}
+    {{- if $ing.clusterIssuer }}
+    cert-manager.io/cluster-issuer: {{ $ing.clusterIssuer | quote }}
+    {{- end }}
+    {{- with $ing.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  {{- if $ing.className }}
+  ingressClassName: {{ $ing.className | quote }}
+  {{- end }}
+  tls:
+    - hosts: [{{ $chat.host | quote }}]
+      {{- if $tls }}
+      secretName: {{ $tls | quote }}
+      {{- end }}
+  rules:
+    - host: {{ $chat.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $name }}-chat
+                port:
+                  name: http
+{{- if $chat.networkPolicy.enabled }}
+---
+# The tool server: from Open WebUI only; to the decision service and the DNS only.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $name }}-tools
+  labels:
+    {{- include "a2vm-tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: tools
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "a2vm-tenant.selector" (dict "root" . "component" "tools") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "a2vm-tenant.selector" (dict "root" . "component" "chat") | nindent 14 }}
+      ports:
+        - {port: 8080, protocol: TCP}
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "a2vm-tenant.selector" (dict "root" . "component" "verdict") | nindent 14 }}
+      ports:
+        - {port: 8080, protocol: TCP}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $chat.networkPolicy.dnsNamespace | quote }}
+      ports:
+        - {port: 53, protocol: UDP}
+        - {port: 53, protocol: TCP}
+---
+# Open WebUI: from the ingress controller only; to the tool server, the LLM endpoints and the DNS only.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $name }}-chat
+  labels:
+    {{- include "a2vm-tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: chat
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "a2vm-tenant.selector" (dict "root" . "component" "chat") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $chat.networkPolicy.ingressNamespace | quote }}
+      ports:
+        - {port: 8080, protocol: TCP}
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "a2vm-tenant.selector" (dict "root" . "component" "tools") | nindent 14 }}
+      ports:
+        - {port: 8080, protocol: TCP}
+    {{- range $chat.llm.egress }}
+    - to:
+        - ipBlock:
+            cidr: {{ .cidr | quote }}
+      ports:
+        - {port: {{ .port }}, protocol: TCP}
+    {{- end }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $chat.networkPolicy.dnsNamespace | quote }}
+      ports:
+        - {port: 53, protocol: UDP}
+        - {port: 53, protocol: TCP}
+{{- end }}
+{{- end }}

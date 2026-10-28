@@ -1,0 +1,109 @@
+# Conversational search (analysts' chat)
+
+Since v0.15.0 the analysts of a tenant ask in plain language for a CVE, an asset or the decisions
+of a level, and get the answer from the tenant's latest run (HLD §8, LLD triage-prioritization
+§16). Everything runs in the tenant's namespace except the model, which stays on the tenant's
+approved LLM endpoints (one VM or several):
+
+```mermaid
+flowchart LR
+  analyst["Analyst<br/>browser"] -- "HTTPS<br/>ingress" --> chat["Open WebUI<br/>a2vm-&lt;tenant&gt;-chat"]
+  chat -- "tool calls<br/>chat token" --> tools["Tool server<br/>verdict tools"]
+  tools -- "read token" --> verdict["Decision service<br/>verdict serve"]
+  chat -- "chat completions" --> llm["LLM endpoints<br/>VMs outside the cluster"]
+  daily["Daily run"] -- "publish step" --> verdict
+```
+
+Open WebUI never sees the decision service's token, and reaches nothing but the tool server, the
+LLM endpoints and the DNS. The tool server reads only, for its tenant only, and answers short
+pages (about 2,000 tokens at most) for the model's context.
+
+## 1. Before deploying
+
+- The decision service of the tenant runs and has a run (v0.14.0, `docs/kubernetes.md`).
+- The model is served with tool calling. With vLLM and Qwen3, add to its command line:
+
+  ```bash
+  --enable-auto-tool-choice --tool-call-parser hermes
+  ```
+
+  Without these options the chat answers without its tools, from the model's memory: wrong.
+- A host name for the chat behind the cluster's ingress (e.g. `chat-lab.apps.example.org`); with
+  cert-manager, the ClusterIssuer of the push endpoint signs its certificate too.
+
+## 2. Variables of the tenant project
+
+| Key | Value | Options |
+| --- | --- | --- |
+| `A2VM_CHAT_HOST` | Host of the chat; set, `deploy-k8s` deploys it | Visible |
+| `A2VM_CHAT_ALLOW` | Optional: the analysts' networks, CIDR, comma-separated; empty: every source | Visible |
+| `A2VM_CHAT_ADMIN_EMAIL` | Optional: login of the first admin (default `admin@example.org`) | Visible |
+| `A2VM_CHAT_LLM_EGRESS` | Optional: `cidr:port,...` of the LLM endpoints, when the job cannot resolve their names | Visible |
+| `A2VM_CHAT_INGRESS_CONTROLLER`, `A2VM_CHAT_INGRESS_CLASS`, `A2VM_CHAT_TLS_SECRET`, `A2VM_CHAT_CLUSTER_ISSUER` | Optional; default to the `A2VM_INTAKE_*` ones | Visible |
+
+The model and its endpoints are the tenant's: `A2VM_LLM_MODEL` and `A2VM_LLM_BASE_URL` (usually on
+the group, `docs/deployment.md` §3). The job resolves the endpoints' names to their addresses for
+the NetworkPolicy and prints them. Nothing secret is typed: the job makes the session key of Open
+WebUI, its first admin's password and the token between Open WebUI and the tool server once, and
+keeps them in the Secret `a2vm-tenant` (`chat-secret-key`, `chat-admin-password`,
+`chat-tools-token`).
+
+## 3. First sign-in, analysts' accounts
+
+After the deployment (`kubectl -n <namespace> get pods -l 'app.kubernetes.io/component in (chat,tools)'`:
+both `Running`), read the first admin's password from its Secret and sign in at `https://<host>`:
+
+```bash
+NS=a2vm-lab
+kubectl -n $NS get secret a2vm-tenant -o jsonpath='{.data.chat-admin-password}' | base64 -d | pbcopy
+```
+
+(`pbcopy` on macOS; elsewhere `xclip -selection clipboard`, or read it on screen.) Sign-up is
+closed: the admin creates each analyst's account in *Admin Panel > Users* (role `user`). Change
+the admin's password in *Settings > Account*; the Secret's value only serves the first start.
+
+## 4. Check
+
+In a new chat, the model is preselected and the tool **A2VM** is on (the wrench icon under the
+input box). Ask for instance "Quels sont les ACT KEV du dernier run ?": the answer names the run,
+and the tool server's log shows the calls:
+
+```bash
+kubectl -n $NS logs deploy/a2vm-lab-tools --tail=20
+kubectl -n $NS logs deploy/a2vm-lab-chat --tail=50
+```
+
+If the answer comes without tool calls, check the vLLM options (§1) and that **A2VM** is on in
+the chat.
+
+## 5. Several LLM endpoints
+
+`A2VM_LLM_BASE_URL` takes several endpoints serving the same model, comma-separated
+(`http://192.0.2.10:8000/v1,http://192.0.2.11:8000/v1`):
+
+- the chat spreads its calls over them (Open WebUI);
+- the daily run's LLM calls go to the first one and move to the next when it cannot be reached,
+  times out or answers 429 or 5xx, and stay there (`a2vm.llm`);
+- the NetworkPolicy of the chat opens each of them.
+
+Every endpoint must serve the tenant's model under the same name and be approved for the tenant
+(HLD §9).
+
+## 6. What is closed
+
+| Item | Setting |
+| --- | --- |
+| Configuration | From the chart's values only (`ENABLE_PERSISTENT_CONFIG=false`): what an admin changes in the admin panel does not survive a restart |
+| Models | The tenant's model on its endpoints only; no Ollama, no direct connection from a browser |
+| Tools | The A2VM tool server only: no web search, no code execution, no image generation, no user tools or tool servers, no file upload |
+| Network | Open WebUI offline (no model download, no update check, no telemetry); NetworkPolicy to the tool server, the LLM endpoints and the DNS |
+| Browser | Content-Security-Policy: no image, script or request to another host, so an answer cannot send data out through a URL; links and images in vendor text are removed by the tool server |
+| Decisions | Read only: nothing in the chat changes a decision, a review flag or an exposure |
+
+## 7. Limits of v0.15.0
+
+- Answers as text and tables; Word and PowerPoint exports built from the data come in v0.15.1.
+- Local accounts made by the admin; sign-in with GitLab (OIDC) later.
+- Chats are kept on the chat's volume until a user deletes them: the retention per tenant of HLD §8
+  is not enforced yet.
+- One replica on a volume (SQLite); PostgreSQL with the decision service (v0.17.0).

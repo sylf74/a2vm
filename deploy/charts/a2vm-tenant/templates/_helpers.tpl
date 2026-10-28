@@ -44,6 +44,11 @@ app.kubernetes.io/component: {{ .component }}
 {{- printf "http://%s-verdict:8080" (include "a2vm-tenant.name" .) -}}
 {{- end -}}
 
+{{/* Tool server of the conversational search, inside the cluster. */}}
+{{- define "a2vm-tenant.toolsUrl" -}}
+{{- printf "http://%s-tools:8080" (include "a2vm-tenant.name" .) -}}
+{{- end -}}
+
 {{/* Checks of the values that templates cannot express alone. */}}
 {{- define "a2vm-tenant.checks" -}}
 {{- if not (has .Values.collect.mode (list "local" "intake")) -}}
@@ -54,6 +59,26 @@ app.kubernetes.io/component: {{ .component }}
 {{- end -}}
 {{- if .Values.verdict.enabled -}}
 {{- $_ := required "verdict.digestsSecret is required (Secret with the key digests)" .Values.verdict.digestsSecret -}}
+{{- end -}}
+{{- if .Values.chat.enabled -}}
+{{- if not .Values.verdict.enabled -}}
+{{- fail "chat.enabled needs verdict.enabled (the tools read the decision service)" -}}
+{{- end -}}
+{{- $_ := required "chat.host is required" .Values.chat.host -}}
+{{- $_ := required "chat.toolsDigestsSecret is required (Secret with the key digests)" .Values.chat.toolsDigestsSecret -}}
+{{- $_ := required "chat.llm.model is required (A2VM_LLM_MODEL)" .Values.chat.llm.model -}}
+{{- if not .Values.chat.llm.endpoints -}}
+{{- fail "chat.llm.endpoints is required: the tenant's approved LLM endpoints (A2VM_LLM_BASE_URL)" -}}
+{{- end -}}
+{{- if and .Values.chat.networkPolicy.enabled (not .Values.chat.llm.egress) -}}
+{{- fail "chat.llm.egress is required with the NetworkPolicy: {cidr, port} of each LLM endpoint" -}}
+{{- end -}}
+{{- if not .Values.secret.name -}}
+{{- fail "chat.enabled needs secret.name (keys chat-secret-key, chat-admin-password, chat-tools-token, verdict-read-token)" -}}
+{{- end -}}
+{{- if not (has .Values.chat.ingress.controller (list "nginx" "traefik" "other")) -}}
+{{- fail "chat.ingress.controller must be nginx, traefik or other" -}}
+{{- end -}}
 {{- end -}}
 {{- if .Values.intake.enabled -}}
 {{- $_ := required "intake.collectors is required (--set-file intake.collectors=collectors.yaml)" .Values.intake.collectors -}}

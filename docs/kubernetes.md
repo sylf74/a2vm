@@ -102,6 +102,7 @@ CI/CD variables of the tenant project (or of a subgroup):
 | `A2VM_K8S_SCHEDULE` | Optional, cron in Europe/Paris, default `45 5 * * *` | Visible |
 | `A2VM_IMAGE_REGISTRY` | Optional, default `<registry>/<code project path>` | Visible |
 | `A2VM_VERDICT_SERVICE` | Optional, `false` to deploy no decision service (default `true`, v0.14.0) | Visible |
+| `A2VM_CHAT_HOST` | Optional: the analysts' chat on the decision service, at this host (v0.15.0, `chat.md`) | Visible |
 
 The other variables are the pipeline's (`docs/deployment.md`): the job copies the secret ones
 (`A2VM_SSH_KEY`, `LLM_API_KEY`, `GTI_API_KEY`, `A2VM_GVM_USER`, `A2VM_GVM_PASSWORD`,
@@ -110,7 +111,7 @@ namespace, never into the job log, and hands the others (`A2VM_LLM_*`, `A2VM_GTI
 `A2VM_EXTERNAL_PROJECT`) to the CronJob. External detection uses the GitLab API with
 `A2VM_GITLAB_TOKEN`, since a pod has no job token.
 
-Then move the tenant's `.gitlab-ci.yml` to `v0.14.0` (both `ref` and `A2VM_REF`) and push: the
+Then move the tenant's `.gitlab-ci.yml` to `v0.15.0` (both `ref` and `A2VM_REF`) and push: the
 pipeline runs `validate`, then `deploy-k8s`, which ends with the CronJob and its volume. Each
 later push to the default branch redeploys (new profile, new targets, new version).
 
@@ -152,16 +153,20 @@ tokens once and keeps them in the Secret `a2vm-tenant` (`verdict-publish-token`,
 `verdict-read-token`), their digests in the Secret `a2vm-verdict`; none appears in the job log. The
 `publish` step of each run pushes `triage.json`; the service keeps the last 7 runs (LLD triage
 §15). Only the daily run and pods labelled `a2vm.io/verdict-reader=true` reach it. To read it
-from a workstation:
+from a workstation (the token is mounted in the pod, never in its spec or a command line):
 
 ```bash
 NS=a2vm-homelab
 kubectl -n $NS logs deploy/a2vm-homelab-verdict --tail=5
 kubectl -n $NS run verdict-reader --rm -i --restart=Never --image=curlimages/curl:8.11.1 \
   --labels=a2vm.io/verdict-reader=true \
-  --env="TOKEN=$(kubectl -n $NS get secret a2vm-tenant -o jsonpath='{.data.verdict-read-token}' | base64 -d)" \
-  --command -- sh -c 'curl -sf -H "Authorization: Bearer $TOKEN" "http://a2vm-homelab-verdict:8080/v1/tenants/homelab/decisions?level=ACT&limit=5"'
+  --overrides='{"spec":{"securityContext":{"runAsUser":10001},"volumes":[{"name":"t","secret":{"secretName":"a2vm-tenant","items":[{"key":"verdict-read-token","path":"token"}]}}],"containers":[{"name":"verdict-reader","image":"curlimages/curl:8.11.1","command":["sh","-c","curl -sf -H \"Authorization: Bearer $(cat /t/token)\" \"http://a2vm-homelab-verdict:8080/v1/tenants/homelab/decisions?level=ACT&limit=5\""],"volumeMounts":[{"name":"t","mountPath":"/t","readOnly":true}]}]}}'
 ```
+
+### Analysts' chat (v0.15.0)
+
+With `A2VM_CHAT_HOST`, `deploy-k8s` also deploys Open WebUI and the tool server `verdict tools` in
+the namespace, on the tenant's LLM endpoints: `chat.md`.
 
 ## 4. Limits of this step
 

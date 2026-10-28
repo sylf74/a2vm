@@ -64,7 +64,8 @@ def test_every_secret_the_job_writes_is_read_by_the_chart_and_documented():
     chart = _chart_text()
     read = set(re.findall(r"/secrets/([a-z-]+)", chart)) | set(re.findall(r'"([a-z]+(?:-[a-z]+)+)" ?}}?', chart))
     read |= set(re.findall(r'"[A-Z0-9_]+" "([a-z-]+)"', chart))
-    tools = {"verdict-read-token"}  # for the analysts' tools (v0.14.0), not read by the daily run
+    read |= set(re.findall(r"key: ([a-z]+(?:-[a-z]+)+)", chart))  # items of a Secret volume (v0.15.0)
+    tools: set[str] = set()
     assert written and written - tools <= read, written - tools - read
     values = (CHART / "values.yaml").read_text()
     documented = set(re.findall(r"^#   ([a-z][a-z-]+)(?:, ([a-z][a-z-]+))?\s", values, re.MULTILINE))
