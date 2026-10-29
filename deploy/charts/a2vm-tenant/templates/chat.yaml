@@ -73,6 +73,10 @@ spec:
             - --max-chars={{ $chat.maxChars }}
             - --public-url={{ printf "https://%s" $chat.host }}
             - --export-minutes={{ $chat.exportMinutes }}
+            {{- if .Values.watch.enabled }}
+            - --via-url={{ include "a2vm-tenant.viaUrl" . }}
+            - --via-token-file=/secrets/via-read-token
+            {{- end }}
             - --port=8080
           ports:
             - name: http
@@ -107,6 +111,10 @@ spec:
             items:
               - key: verdict-read-token
                 path: verdict-read-token
+              {{- if .Values.watch.enabled }}
+              - key: via-read-token
+                path: via-read-token
+              {{- end }}
         - name: digests
           secret:
             secretName: {{ $chat.toolsDigestsSecret }}
@@ -455,6 +463,14 @@ spec:
               {{- include "a2vm-tenant.selector" (dict "root" . "component" "verdict") | nindent 14 }}
       ports:
         - {port: 8080, protocol: TCP}
+    {{- if .Values.watch.enabled }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "a2vm-tenant.selector" (dict "root" . "component" "via") | nindent 14 }}
+      ports:
+        - {port: 8080, protocol: TCP}
+    {{- end }}
     - to:
         - namespaceSelector:
             matchLabels:

@@ -8,6 +8,8 @@
   via contacts …        check contacts.yaml and list who receives what (alert)
   via test-mail …       send one test message with this project's mail settings (alert)
   via check-template …  check the Word template of the alert sheet (alert)
+  via serve …           the watch service of one tenant, on Kubernetes (service)
+  via service …         the watch, the send and the inventory push of a tenant on Kubernetes (service)
 
 `via <command> -h` gives the options of each command.
 """
@@ -18,6 +20,7 @@ import sys
 
 INTEL = {"collect"}
 ALERT = {"watch", "send", "check-sources", "contacts", "test-mail", "check-template"}
+SERVICE = {"serve", "service"}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -30,6 +33,10 @@ def main(argv: list[str] | None = None) -> int:
         from .alert.cli import main as alert_main
 
         return alert_main(args)
+    if args and args[0] in SERVICE:
+        from .service.cli import main as service_main
+
+        return service_main(args)
     print(__doc__.strip())
     return 0 if args[:1] in (["-h"], ["--help"]) else 2
 

@@ -844,6 +844,7 @@ server: an OpenAPI server whose operations a model calls. Code:
 | `list_runs` | `runs` | The runs kept, to compare with an earlier one |
 | `what_changed` | `changes` | "What is new since yesterday", "why do I see this only today" (v0.15.2) |
 | `get_fix_plan` | `assets/{asset}/fixes` | "What do I apply on web01, in which order" (v0.15.2) |
+| `list_alerts`, `get_alert` | the watch service `via serve`: `alerts`, `alerts/{id}` | The watch's alerts and whether they were sent (v0.16.0, watch on Kubernetes; otherwise 503) |
 | `export_decisions` | `decisions` (pages), `decisions/{id}` | A Word, PowerPoint or CSV document of the decisions chosen by the filters of `search_decisions` (16.6) |
 
 All are `GET`, take `run` (`latest` by default) and, for lists, `limit` (1 to 20, default 10) and

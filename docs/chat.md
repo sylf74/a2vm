@@ -137,6 +137,7 @@ kubectl -n $NS logs deploy/a2vm-lab-chat -c retention --tail=5
 | "Que dois-je appliquer sur web01, dans quel ordre ?" | `get_fix_plan`: the fix that clears most ACT first |
 | "Qu'est-ce qui arrive à échéance cette semaine ?", "qu'est-ce qui est en retard ?" | `search_decisions` with `due_before`, `overdue` |
 | "Sommes-nous concernés par CVE-… ?" | `get_cve`: concerned assets, or the assets that have the product outside the vulnerable range, or none |
+| "Quelles alertes cette semaine ?", "celle-ci a-t-elle été envoyée ?" | `list_alerts`, `get_alert` (watch on Kubernetes, v0.16.0): alerts of the watch, their status (pending, sent, failed) and their sheet |
 
 `what_changed` needs two runs in the decision service: the day after the first daily run with
 v0.14.0 or later. The dates appear for the runs made with v0.15.2 or later.

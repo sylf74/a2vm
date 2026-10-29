@@ -5,6 +5,35 @@ analyst and, under **Upgrade**, what a tenant must do when it moves to that tag 
 `A2VM_REF` in its `.gitlab-ci.yml`). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
 §11) and the LLDs. A release adds its entry here in the same merge request (CLAUDE.md, Releasing).
 
+## v0.16.0 — 2026-10-29
+
+The watch on Kubernetes: a tenant no longer needs GitLab to run, only to deploy and validate.
+
+- `A2VM_RUN_MODE` in the tenant's `.gitlab-ci.yml`: `gitlab` (default, as before) or `kubernetes`,
+  where the scheduled pipelines no longer run the daily jobs nor the watch, and `deploy-k8s`
+  deploys the watch beside the daily run.
+- `via serve`: the watch service of the tenant (contract `via.v1`), the only writer of the watch's
+  state, the last daily inventory, the alerts with their sheets and their journal; roles `run`
+  (the tenant's jobs) and `read` (the chat's tools); sends nothing.
+- The watch as a CronJob every 10 minutes (`via service watch`): state and inventory from the
+  service, the same `via watch`, alerts, events and new state back. The daily run pushes its
+  inventory at a new step `inventory` (`via service push-inventory`).
+- Validation: the analysts' mail links to a prefilled *Run pipeline* (`A2VM_JOB=send`,
+  `A2VM_SEND_ONLY=<alert id>`); the job `send-alerts-k8s` starts a send Job in the namespace
+  (`via service send`, the same `via send`, the edits of the branch), which journals what it sent;
+  an alert is never sent twice by mistake.
+- Chat: `list_alerts` and `get_alert` read the watch service.
+- `deploy-k8s`: run and read tokens of the watch service (Secret keys `via-run-token`,
+  `via-read-token`, digests in `a2vm-via`), `contacts.yaml`, `watch-sources.yaml`, the Word
+  template (ConfigMap `a2vm-alert-template`), the mail settings (`smtp-password`,
+  `graph-client-secret` in the Secret, the others as settings).
+- LLD intelligence §3.7, HLD chapter 10 and D15 migration, `docs/kubernetes.md` §4,
+  `docs/alerts.md`, `docs/chat.md`.
+
+**Upgrade**: nothing changes with `A2VM_RUN_MODE: gitlab`. To move a tenant: set
+`A2VM_RUN_MODE: kubernetes` in its `.gitlab-ci.yml` and push; its first watch passage records the
+baseline. A profile with `alerts.attach: [pdf]` keeps the GitLab mode (no LibreOffice in the via image).
+
 ## v0.15.2 — 2026-10-28
 
 The analysts' daily questions in the chat.

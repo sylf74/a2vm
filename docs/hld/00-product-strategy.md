@@ -287,8 +287,9 @@ Migration, each step usable on its own:
    its project, its secrets as above, its working files on a volume instead of job artifacts. The
    chart is deployed by the GitLab agent from the tenant project. Run side by side with the
    pipeline on one tenant, outputs compared, then the pipeline's schedule is switched off.
-   Execution leaves GitLab; the code does not change. Done in v0.12.0 for the daily run; the
-   watch and the analysts' validation follow, once they no longer read the pipeline's inventory.
+   Execution leaves GitLab; the code does not change. Done in v0.12.0 for the daily run and in
+   v0.16.0 for the watch (`A2VM_RUN_MODE=kubernetes`: the watch service `via serve`, the watch as a
+   CronJob); the analysts' validation is still started from a GitLab pipeline.
 2. **Collectors and detection intake** (v0.13.0): collectors near the networks push their
    detections to the detection service; the daily run reads them instead of collecting; the
    tenant project declares its collectors (LLD detection §8).
@@ -486,10 +487,11 @@ release.
 | v0.14.0 | D15 step 3, read side first: decision service of each tenant (`verdict serve`, API `verdict.v1`), the last runs pushed by the daily run's `publish` step (`verdict push`, `triage.json` as `a2vm.triage/1`), decisions with their rationale and SSVC inputs, CVEs and assets behind filtered and paged reads; inside the cluster only, files on its own volume until PostgreSQL; release notes in `CHANGELOG.md` | 3 |
 | v0.15.0 | Conversational search for analysts (§8): Open WebUI in the tenant's namespace on the tenant's approved LLM endpoints, a read-only tool server on `verdict serve` (`verdict tools`), answers as text and tables; several LLM endpoints per tenant (LLM gateway for the chat, failover for the daily run) | 3 |
 | v0.15.1 | Chat: assets found by id, host name or short name; Word, PowerPoint and CSV documents built by the tool server from the data (download link of one hour); retention of the chats per tenant; answers end with their run | 3 |
-| v0.15.2 (current) | The analysts' daily questions in the chat: what changed since the run before and why, dates of the facts behind a decision (CVE published and updated, added to KEV, EPSS, first observation), fix plan of an asset, due this week and overdue, concerned or not by a CVE (versions outside the range); dates added to the records and the decisions | 1, 3 |
-| v0.16.0 (to confirm) | `A2VM_RUN_MODE` (`gitlab` or `kubernetes`) in the tenant's `.gitlab-ci.yml`; the watch as a CronJob, the analysts' validation still a manual GitLab job until a review page | 1 |
-| v0.17.0 (to confirm) | PostgreSQL (CloudNativePG) behind `detect serve` and `verdict serve`: history between runs, finding lifecycle, several replicas, row-level security per tenant | 2, 3 |
-| Next (to confirm) | Client portal VM (Grafana) in service; review page of the alerts on `verdict serve`; decisions asked by the watch (D15 step 3, write side) | 1, 3, 4 |
+| v0.15.2 | The analysts' daily questions in the chat: what changed since the run before and why, dates of the facts behind a decision (CVE published and updated, added to KEV, EPSS, first observation), fix plan of an asset, due this week and overdue, concerned or not by a CVE (versions outside the range); dates added to the records and the decisions | 1, 3 |
+| v0.16.0 (current) | The watch on Kubernetes: `A2VM_RUN_MODE` (gitlab, kubernetes) per tenant; the watch service `via serve` (state, last inventory, alerts and journal, contract `via.v1`), the watch as a CronJob, the daily run's inventory pushed to it; validation from a prefilled GitLab pipeline that starts a send Job; the chat reads the alerts | 1, 3 |
+| v0.16.1 (to confirm) | The review and validation page of the alerts on `via serve`, sign-in of the analysts (GitLab OIDC, shared with the chat); GitLab only deploys | 1 |
+| v0.17.0 (to confirm) | PostgreSQL (CloudNativePG) behind `detect serve`, `verdict serve` and `via serve`: history between runs, finding lifecycle, several replicas, row-level security per tenant | 2, 3 |
+| Next (to confirm) | Client portal VM (Grafana) in service; decisions asked by the watch (D15 step 3, write side); asset graph (Apache AGE in PostgreSQL or Neo4j, to settle) | 1, 3, 4 |
 | Then (to confirm) | Dispatch & Capitalization; Emergency Actions | 4, 5 |
 | v1.0 (target) | The architecture of D15 in production: each pillar a service on Kubernetes with its APIs and events, the decision service of pillar 3 shared by the daily run, the watch and the alert review, collectors near the client networks; the GitLab pipeline mode kept for development | All |
 

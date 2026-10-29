@@ -13,10 +13,10 @@
 #
 #     include:
 #       - project: vulnops/a2vm
-#         ref: v0.15.2
+#         ref: v0.16.0
 #         file: templates/client-pipeline.yml
 #     variables:
-#       A2VM_REF: v0.15.2        # same version as the include
+#       A2VM_REF: v0.16.0        # same version as the include
 #
 # Jobs:
 #   push to the default branch     validate (profile and targets)
@@ -56,6 +56,9 @@ variables:
   A2VM_PROFILE: client.yaml
   A2VM_TARGETS: targets.yaml
   A2VM_COLLECTORS: collectors.yaml
+  # gitlab: the daily run and the watch run in these pipelines; kubernetes: they run in the tenant's
+  # namespace (deploy-k8s deploys them) and the scheduled pipelines do nothing (docs/kubernetes.md §5).
+  A2VM_RUN_MODE: gitlab
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
   A2VM_CACHE_DIR: "$CI_PROJECT_DIR/.cache"
   DEBIAN_FRONTEND: noninteractive
@@ -100,7 +103,9 @@ stages: [validate, deploy, collect, via, detect, assets, triage, publish, watch,
 .data:
   extends: .a2vm
   rules:
-    - if: $A2VM_JOB == "watch" || $VULNOPS_JOB == "watch"
+    - if: $A2VM_JOB == "watch" || $VULNOPS_JOB == "watch" || $A2VM_JOB == "send"
+      when: never
+    - if: $A2VM_RUN_MODE == "kubernetes"
       when: never
     - if: $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"
   artifacts:
@@ -111,12 +116,16 @@ validate:
   extends: .a2vm
   stage: validate
   rules:
-    - if: $A2VM_JOB == "watch" || $VULNOPS_JOB == "watch"
+    - if: $A2VM_JOB == "watch" || $VULNOPS_JOB == "watch" || $A2VM_JOB == "send"
       when: never
     - if: $CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"
   script:
     - a2vm validate "$A2VM_PROFILE"
+    - |
+      if [ "$A2VM_RUN_MODE" = "kubernetes" ] && [ -z "${A2VM_K8S_CONTEXT:-}" ]; then
+        echo "A2VM_RUN_MODE=kubernetes needs A2VM_K8S_CONTEXT: nothing would run (docs/kubernetes.md)"; exit 1
+      fi
     - if [ -f "$A2VM_TARGETS" ]; then detect plan "$A2VM_TARGETS" --profile "$A2VM_PROFILE"; fi
     - if [ -f "$A2VM_COLLECTORS" ]; then detect collectors "$A2VM_COLLECTORS" --tenant "$(echo "$CI_PROJECT_NAME" | tr 'A-Z_' 'a-z-')" --profile "$A2VM_PROFILE"; fi
     - if [ -f contacts.yaml ]; then via contacts "$A2VM_PROFILE" --contacts contacts.yaml; fi
@@ -134,7 +143,7 @@ deploy-k8s:
   tags: ["$A2VM_RUNNER_TAG"]
   needs: [validate]
   rules:
-    - if: $A2VM_JOB == "watch" || $VULNOPS_JOB == "watch"
+    - if: $A2VM_JOB == "watch" || $VULNOPS_JOB == "watch" || $A2VM_JOB == "send"
       when: never
     - if: $A2VM_K8S_CONTEXT && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web")
   cache: []
@@ -215,6 +224,30 @@ deploy-k8s:
       elif [ -n "${A2VM_CHAT_HOST:-}" ]; then
         echo "WARN A2VM_CHAT_HOST is set but the decision service is not: no chat"
       fi
+    # The watch on Kubernetes (A2VM_RUN_MODE=kubernetes): the watch service and the watch CronJob. Its
+    # run and read tokens are made once and kept in the Secret a2vm-tenant, their digests in the Secret
+    # a2vm-via; the Word template of the alerts goes in the ConfigMap a2vm-alert-template.
+    - |
+      WATCH=""; W="$(mktemp -d)"; chmod 700 "$W"
+      if [ "$A2VM_RUN_MODE" = "kubernetes" ]; then
+        for k in via-run-token via-read-token; do
+          kubectl -n "$NS" get secret a2vm-tenant -o jsonpath="{.data.$k}" 2>/dev/null | base64 -d > "$W/$k" 2>/dev/null || true
+          if [ "$(wc -c < "$W/$k")" -lt 32 ]; then od -An -tx1 -N32 /dev/urandom | tr -d ' \n' > "$W/$k"; fi
+        done
+        printf 'run %s\nread %s\n' "$(sha256sum < "$W/via-run-token" | cut -d' ' -f1)" \
+          "$(sha256sum < "$W/via-read-token" | cut -d' ' -f1)" > "$W/digests"
+        kubectl -n "$NS" create secret generic a2vm-via --from-file=digests="$W/digests" --dry-run=client -o yaml | kubectl apply -f -
+        WATCH="--set watch.enabled=true --set watch.digestsSecret=a2vm-via"
+        WATCH="$WATCH --set watch.digestsChecksum=$(sha256sum "$W/digests" | cut -d' ' -f1)"
+        WATCH="$WATCH --set watch.sendPipelineUrl=$CI_PROJECT_URL/-/pipelines/new --set watch.sendRef=$CI_DEFAULT_BRANCH"
+        if [ -f templates/alert.docx ]; then
+          kubectl -n "$NS" create configmap a2vm-alert-template --from-file=alert.docx=templates/alert.docx --dry-run=client -o yaml | kubectl apply -f -
+          WATCH="$WATCH --set watch.alertTemplate=a2vm-alert-template"
+        fi
+        if [ -f contacts.yaml ]; then WATCH="$WATCH --set-file files.contacts=contacts.yaml"; fi
+        if [ -f watch-sources.yaml ]; then WATCH="$WATCH --set-file files.watchSources=watch-sources.yaml"; fi
+        echo "A2VM_RUN_MODE=kubernetes: the daily run and the watch run in $NS; the scheduled pipelines do nothing"
+      fi
     # The tenant's secrets, from its CI/CD variables (File or text), into one Secret; never printed.
     - |
       umask 077; S="$(mktemp -d)"
@@ -237,6 +270,10 @@ deploy-k8s:
       put chat-secret-key "$(cat "$C/chat-secret-key" 2>/dev/null)"
       put chat-admin-password "$(cat "$C/chat-admin-password" 2>/dev/null)"
       put chat-tools-token "$(cat "$C/chat-tools-token" 2>/dev/null)"
+      put via-run-token "$(cat "$W/via-run-token" 2>/dev/null)"
+      put via-read-token "$(cat "$W/via-read-token" 2>/dev/null)"
+      put smtp-password "${A2VM_SMTP_PASSWORD:-}"
+      put graph-client-secret "${A2VM_GRAPH_CLIENT_SECRET:-}"
       kubectl -n "$NS" create secret generic a2vm-tenant --from-file="$S" --dry-run=client -o yaml | kubectl apply -f -
       echo "secret a2vm-tenant: $(ls "$S" | tr '\n' ' ')"
       rm -rf "$S"
@@ -251,7 +288,9 @@ deploy-k8s:
     # Non-secret settings handed to the run.
     - |
       ENVF="$(mktemp)"; echo "env:" > "$ENVF"
-      for v in A2VM_LLM_ENABLED A2VM_LLM_BASE_URL A2VM_LLM_MODEL A2VM_GTI_ENABLED A2VM_EXTERNAL_PROJECT; do
+      for v in A2VM_LLM_ENABLED A2VM_LLM_BASE_URL A2VM_LLM_MODEL A2VM_GTI_ENABLED A2VM_EXTERNAL_PROJECT \
+          A2VM_MAIL_FROM A2VM_MAIL_TRANSPORT A2VM_SMTP_HOST A2VM_SMTP_PORT A2VM_SMTP_TLS A2VM_SMTP_USER \
+          A2VM_GRAPH_TENANT_ID A2VM_GRAPH_CLIENT_ID A2VM_GRAPH_SENDER A2VM_ANALYST_TO A2VM_SOURCE_FAILURES; do
         eval "val=\"\${$v:-}\""
         if [ -n "$val" ]; then printf '  %s: "%s"\n' "$v" "$val" >> "$ENVF"; fi
       done
@@ -266,12 +305,13 @@ deploy-k8s:
         --set image.tag="$A2VM_REF" \
         --set secret.name=a2vm-tenant \
         --set daily.schedule="${A2VM_K8S_SCHEDULE:-45 5 * * *}" \
-        $PULL $FILES $INTAKE $VERDICT $CHAT -f "$ENVF"
-      rm -rf "$I" "$V" "$C"
+        $PULL $FILES $INTAKE $VERDICT $CHAT $WATCH -f "$ENVF"
+      rm -rf "$I" "$V" "$C" "$W"
       kubectl -n "$NS" get cronjob,pvc
       if [ -n "$INTAKE" ]; then kubectl -n "$NS" get deployment,service,ingress -l app.kubernetes.io/component=detect; fi
       if [ -n "$VERDICT" ]; then kubectl -n "$NS" get deployment,service -l app.kubernetes.io/component=verdict; fi
       if [ -n "$CHAT" ]; then kubectl -n "$NS" get deployment,ingress -l 'app.kubernetes.io/component in (chat,tools)'; fi
+      if [ -n "$WATCH" ]; then kubectl -n "$NS" get deployment,cronjob -l 'app.kubernetes.io/component in (via,watch)'; fi
 
 # Exit code 3 = collection incomplete: the job shows as a warning and the pipeline goes on with
 # what was collected (plus the declared inventory).
@@ -383,6 +423,8 @@ watch:
   extends: .a2vm
   stage: watch
   rules:
+    - if: $A2VM_RUN_MODE == "kubernetes"
+      when: never
     - if: ($A2VM_JOB == "watch" || $VULNOPS_JOB == "watch") && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
   resource_group: watch
   cache:
@@ -408,6 +450,8 @@ send-alerts:
   stage: send
   needs: [watch]
   rules:
+    - if: $A2VM_RUN_MODE == "kubernetes"
+      when: never
     - if: ($A2VM_JOB == "watch" || $VULNOPS_JOB == "watch") && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
       when: manual
       allow_failure: true
@@ -435,6 +479,52 @@ send-alerts:
     when: always
     paths: [alerts/sent.json, alerts/alerts-log.jsonl, alerts/pdf/]
     expire_in: 90 days
+
+# The analyst's validation on Kubernetes (A2VM_RUN_MODE=kubernetes): the analysts' mail links to a new
+# pipeline of this project with A2VM_JOB=send and A2VM_SEND_ONLY=<alert id> filled in; "Run pipeline"
+# is the validation. The job hands the alert ids and this project's edits/ to a send Job in the
+# tenant's namespace (the deployed release's values), waits for it and shows its log.
+send-alerts-k8s:
+  stage: send
+  image: alpine:3.22
+  tags: ["$A2VM_RUNNER_TAG"]
+  needs: []
+  rules:
+    - if: $A2VM_RUN_MODE == "kubernetes" && $A2VM_JOB == "send" && $CI_PIPELINE_SOURCE == "web" && $A2VM_K8S_CONTEXT
+  resource_group: watch
+  cache: []
+  script:
+    - apk add --no-cache -q git helm kubectl
+    - if [ -n "${CI_SERVER_TLS_CA_FILE:-}" ]; then export GIT_SSL_CAINFO="$CI_SERVER_TLS_CA_FILE"; fi
+    - BASE="${A2VM_SERVER_URL:-${CI_SERVER_PROTOCOL}://${CI_SERVER_HOST}:${CI_SERVER_PORT}}"
+    - git -c advice.detachedHead=false clone -q --depth 1 --branch "$A2VM_REF"
+        "${BASE%%://*}://gitlab-ci-token:${CI_JOB_TOKEN}@${BASE#*://}/${A2VM_PROJECT}.git" .a2vm
+    - kubectl config use-context "$A2VM_K8S_CONTEXT"
+    - if [ -n "${A2VM_K8S_CA:-}" ]; then kubectl config set-cluster gitlab --certificate-authority="$A2VM_K8S_CA"; fi
+    - NS="${A2VM_K8S_NAMESPACE:-a2vm-$(echo "$CI_PROJECT_NAME" | tr 'A-Z_' 'a-z-')}"
+    - |
+      ONLY="$(printf '%s' "${A2VM_SEND_ONLY:-}" | tr ',' ' ' | tr -cd 'A-Za-z0-9._ -')"
+      JOB="send-$CI_PIPELINE_ID"; EDITS=""; V="$(mktemp -d)"
+      echo "alerts to send: ${ONLY:-the pending alerts of the latest watch}"
+      if [ -d edits ] && [ -n "$(ls edits 2>/dev/null)" ]; then
+        kubectl -n "$NS" create configmap "a2vm-edits-$CI_PIPELINE_ID" --from-file=edits/ --dry-run=client -o yaml | kubectl apply -f -
+        EDITS="--set watch.send.editsConfigMap=a2vm-edits-$CI_PIPELINE_ID"
+        echo "edits/: $(ls edits | wc -l) file(s) handed to the send job"
+      fi
+      helm get values a2vm -n "$NS" -o yaml > "$V/values.yaml"
+      helm template a2vm .a2vm/deploy/charts/a2vm-tenant -n "$NS" -f "$V/values.yaml" \
+        --set watch.send.job="$JOB" --set-string watch.send.only="$ONLY" $EDITS --show-only templates/watch.yaml \
+        | kubectl -n "$NS" apply -f -
+      rc=1
+      for _ in $(seq 120); do
+        state="$(kubectl -n "$NS" get job "$JOB" -o jsonpath='{.status.succeeded}/{.status.failed}')"
+        case "$state" in 1/*) rc=0; break ;; */1) break ;; esac
+        sleep 5
+      done
+      kubectl -n "$NS" logs "job/$JOB" --tail=-1 || true
+      if [ -n "$EDITS" ]; then kubectl -n "$NS" delete configmap "a2vm-edits-$CI_PIPELINE_ID" --ignore-not-found; fi
+      rm -rf "$V"
+      if [ "$rc" -ne 0 ]; then echo "the send job did not succeed: see its log above"; exit 1; fi
 
 # Checks the mail settings (A2VM_MAIL_FROM, SMTP or Graph, A2VM_ANALYST_TO): Build > Pipelines >
 # New pipeline (or ▶ on a schedule), then ▶ on this job. To another address: A2VM_TEST_TO in its form.

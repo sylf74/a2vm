@@ -15,3 +15,11 @@ data:
   settings.yaml: |
     {{- .Values.files.settings | nindent 4 }}
   {{- end }}
+  {{- if .Values.files.contacts }}
+  contacts.yaml: |
+    {{- .Values.files.contacts | nindent 4 }}
+  {{- end }}
+  {{- if .Values.files.watchSources }}
+  watch-sources.yaml: |
+    {{- .Values.files.watchSources | nindent 4 }}
+  {{- end }}

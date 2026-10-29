@@ -59,6 +59,22 @@ app.kubernetes.io/component: {{ .component }}
 {{- end -}}
 {{- end -}}
 
+{{/* Watch service of the tenant, inside the cluster. */}}
+{{- define "a2vm-tenant.viaUrl" -}}
+{{- printf "http://%s-via:8080" (include "a2vm-tenant.name" .) -}}
+{{- end -}}
+
+{{/* A copy of the tenant's files where the watch reads them (the Word template beside the profile). */}}
+{{- define "a2vm-tenant.watchFiles" -}}
+mkdir -p /tmp/cfg/templates
+cp /config/*.yaml /tmp/cfg/ 2>/dev/null || true
+if [ -s /alert-template/alert.docx ]; then cp /alert-template/alert.docx /tmp/cfg/templates/alert.docx; fi
+{{ include "a2vm-tenant.settings" . }}
+SOURCES=/opt/a2vm/config/watch-sources.yaml
+if [ -f /tmp/cfg/watch-sources.yaml ]; then SOURCES=/tmp/cfg/watch-sources.yaml; fi
+if [ ! -s /secrets/via-run-token ]; then echo "No via-run-token: the watch service cannot be used"; exit 1; fi
+{{- end -}}
+
 {{/* Checks of the values that templates cannot express alone. */}}
 {{- define "a2vm-tenant.checks" -}}
 {{- if not (has .Values.collect.mode (list "local" "intake")) -}}
@@ -69,6 +85,12 @@ app.kubernetes.io/component: {{ .component }}
 {{- end -}}
 {{- if .Values.verdict.enabled -}}
 {{- $_ := required "verdict.digestsSecret is required (Secret with the key digests)" .Values.verdict.digestsSecret -}}
+{{- end -}}
+{{- if .Values.watch.enabled -}}
+{{- $_ := required "watch.digestsSecret is required (Secret with the key digests)" .Values.watch.digestsSecret -}}
+{{- if not .Values.secret.name -}}
+{{- fail "watch.enabled needs secret.name (key via-run-token)" -}}
+{{- end -}}
 {{- end -}}
 {{- if .Values.chat.enabled -}}
 {{- if not .Values.verdict.enabled -}}
@@ -141,7 +163,7 @@ app.kubernetes.io/component: {{ .component }}
   value: {{ $value | quote }}
 {{- end }}
 {{- if .Values.secret.name }}
-{{- range $var, $key := dict "LLM_API_KEY" "llm-api-key" "GTI_API_KEY" "gti-api-key" "A2VM_GVM_USER" "gvm-user" "A2VM_GVM_PASSWORD" "gvm-password" "A2VM_REPORTING_DSN" "reporting-dsn" "A2VM_GITLAB_TOKEN" "gitlab-token" }}
+{{- range $var, $key := dict "LLM_API_KEY" "llm-api-key" "GTI_API_KEY" "gti-api-key" "A2VM_GVM_USER" "gvm-user" "A2VM_GVM_PASSWORD" "gvm-password" "A2VM_REPORTING_DSN" "reporting-dsn" "A2VM_GITLAB_TOKEN" "gitlab-token" "A2VM_SMTP_PASSWORD" "smtp-password" "A2VM_GRAPH_CLIENT_SECRET" "graph-client-secret" }}
 - name: {{ $var }}
   valueFrom:
     secretKeyRef:
