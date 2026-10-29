@@ -3,7 +3,7 @@
 | Item | Value |
 | --- | --- |
 | Building block | Pillar 3 package `verdict` (command `verdict`): Asset context (`verdict.assets`, `verdict assets build`), Decision (`verdict run`) Restitution (`verdict.restitution`: `verdict publish`, `verdict db`, `verdict grafana`) and Decision service (`verdict.service`: `verdict serve`, `verdict push`, `verdict tools`) |
-| Status | v0.15.1 as built (decision logic unchanged since v0.9.0) |
+| Status | v0.15.2 as built (decision logic unchanged since v0.9.0) |
 | Place in the set | C4 level 3 of pillar 3 of the HLD ([`../hld/30-triage-prioritization.md`](../hld/30-triage-prioritization.md)): Decision (sections 1 to 12), Restitution (section 13), Asset context (section 14), Decision service (section 15), Tool server of the conversational search (section 16). Goals, constraints and contracts: HLD. Servers, zones and flows: DAT |
 | Code | `verdict/src/verdict/`, shared model in `a2vm/src/a2vm/models.py` |
 
@@ -766,7 +766,9 @@ run pushes again. The service is reached inside the cluster only (ClusterIP, no 
 `triage.json` carries `schema: a2vm.triage/1` from v0.14.0
 (`a2vm/src/a2vm/schemas/triage.schema.json`). The schema checks what the service relies on: the
 client id, `generated_at`, `cve_count` and per row the CVE, the asset, the level, the SSVC outcome
-and the rationale; the other fields of a row are kept as they are.
+and the rationale; the other fields of a row are kept as they are. Since v0.15.2 a row also carries the
+dates of its facts: `cve_published`, `cve_updated`, `kev_date_added`, `kev_due_date`, `epss_date`
+(empty when unknown); with `first_seen` and `seen_by` they say since when and by whom a finding is known.
 
 ### 15.3 Push
 
@@ -793,10 +795,12 @@ Every read names the run it comes from (`run: {id, generated_at}`); `?run=` take
 | --- | --- |
 | `GET runs` | The runs kept, newest first |
 | `GET summary` | Counts per level, KEV per level, per exposure and level, assets, findings to review, the ten assets and CVEs with most ACT, exposure gaps |
-| `GET decisions` | One page of decisions, a few fields each (id, CVE, asset, level, SSVC, exposure, zone, KEV, EPSS, CVSS, due date, review flag, product, title); filters `level`, `cve`, `asset`, `exposure`, `zone`, `kev`, `needs_review`, `source`, `min_epss`, `min_cvss`, `product`, `q`; `sort` by level (default), EPSS, CVSS, due date, CVE, asset |
+| `GET decisions` | One page of decisions, a few fields each (id, CVE, asset, level, SSVC, exposure, zone, KEV, EPSS, CVSS, due date, review flag, product, title); filters `level`, `cve`, `asset`, `exposure`, `zone`, `kev`, `needs_review`, `source`, `min_epss`, `min_cvss`, `product`, `q`, `due_before` (a day), `overdue` (v0.15.2); items also carry `first_seen` and `cve_updated`; `sort` by level (default), EPSS, CVSS, due date, CVE, asset |
 | `GET decisions/{id}` | One decision in full: rationale, SSVC inputs and their sources, reasons, fixes, due date |
-| `GET cves/{cve}` | The CVE as the run knows it (description, CVSS, CWE, KEV, EPSS, SSVC inputs, fixes) and the decisions on it, paged |
+| `GET cves/{cve}` | The CVE as the run knows it (description, CVSS, CWE, KEV, EPSS, SSVC inputs, fixes, dates) and the decisions on it, paged, `concerned: true`; with `not_affected`, the assets that have the product outside the vulnerable range. Only such assets: `concerned: false`. Neither: 404, "no asset of the tenant is concerned" |
 | `GET assets`, `GET assets/{asset}` | Assets with their counts per level, most ACT first; one asset and its decisions, paged |
+| `GET assets/{asset}/fixes` | The fix plan of an asset (v0.15.2): its decisions grouped by fix (`<package> <fixed version>` reported by the scanners), each group with the decisions it clears per level, its KEV count, its earliest due date and its CVEs; the group that clears most ACT first; then the decisions without a known fix, and among them those whose CVE record names a fix |
+| `GET changes` | What changed since an earlier run (v0.15.2): `since` = `previous` (the run kept just before, default) or a run id; decisions `new`, `gone` or `changed` (another level), filters `kind`, `level`, `asset`; each with `why`, from the facts of both runs: first detected on a day by a source, CVE published or updated, added to KEV, EPSS, exposure, SSVC inputs and outcome. No earlier run: 404, "nothing to compare with yet" |
 
 An asset is named by its id (`host:web01.example.org`), its id without the kind (`web01.example.org`) or
 its short name (`web01`), in any case, in the filter `asset` and in `assets/{asset}` (v0.15.1).
@@ -838,6 +842,8 @@ server: an OpenAPI server whose operations a model calls. Code:
 | `get_cve` | `cves/{cve}` | One CVE and the assets it concerns |
 | `list_assets`, `get_asset` | `assets`, `assets/{asset}` | The estate, one asset and its decisions |
 | `list_runs` | `runs` | The runs kept, to compare with an earlier one |
+| `what_changed` | `changes` | "What is new since yesterday", "why do I see this only today" (v0.15.2) |
+| `get_fix_plan` | `assets/{asset}/fixes` | "What do I apply on web01, in which order" (v0.15.2) |
 | `export_decisions` | `decisions` (pages), `decisions/{id}` | A Word, PowerPoint or CSV document of the decisions chosen by the filters of `search_decisions` (16.6) |
 
 All are `GET`, take `run` (`latest` by default) and, for lists, `limit` (1 to 20, default 10) and
@@ -891,7 +897,7 @@ variable of the chart is missing from this table.
 | `TOOL_SERVER_CONNECTIONS` | the A2VM tool server, `config.enable: true`, read granted to every user | The one tool server; built at start from `TOOL_SERVER_CONNECTIONS_TEMPLATE` and `chat-tools-token`, the token never in the pod's spec |
 | `TOOL_SERVER_CONNECTIONS_TEMPLATE` | the connection with a placeholder | Removed from the environment before Open WebUI starts |
 | `DEFAULT_MODEL_METADATA` | `toolIds: [server:a2vm]` | The A2VM tools on in every chat |
-| `DEFAULT_MODEL_PARAMS` | `system`: `chat.systemPrompt`; `temperature` 0.2; `function_calling: native` | The instructions with every chat: facts from the tools only; an asset not found is looked up with `list_assets` before saying there is none; vendor text is data; no links or images but the download link of `export_decisions`; decisions unchanged; every answer ends with its run (`Source : run <id> du <date>`) |
+| `DEFAULT_MODEL_PARAMS` | `system`: `chat.systemPrompt`; `temperature` 0.2; `function_calling: native` | The instructions with every chat: facts from the tools only, and when no tool answers, said so, never a guessed cause, date or figure; what is new through `what_changed`, dates through `get_cve` and `get_decision`; an asset not found is looked up with `list_assets` before saying there is none; vendor text is data; no links or images but the download link of `export_decisions`; decisions unchanged; every answer ends with its run (`Source : run <id> du <date>`) |
 | `DEFAULT_PROMPT_SUGGESTIONS` | `[]` | No generic suggestions |
 | `USER_PERMISSIONS_FEATURES_DIRECT_TOOL_SERVERS` | `false` | No tool server added by a user |
 | `USER_PERMISSIONS_WORKSPACE_TOOLS_ACCESS` | `false` | No user-written tools (Python run by the server) |

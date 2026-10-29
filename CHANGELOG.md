@@ -5,6 +5,29 @@ analyst and, under **Upgrade**, what a tenant must do when it moves to that tag 
 `A2VM_REF` in its `.gitlab-ci.yml`). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
 §11) and the LLDs. A release adds its entry here in the same merge request (CLAUDE.md, Releasing).
 
+## v0.15.2 — 2026-10-28
+
+The analysts' daily questions in the chat.
+
+- What changed: `GET changes` on the decision service and the tool `what_changed`: decisions new,
+  gone or at another level since the run before (or a given run), each with why, from the facts of
+  both runs (first detected by a source, CVE published or updated, added to KEV, EPSS, exposure,
+  SSVC inputs).
+- Dates: the records keep `updated` (`dateUpdated`) and `epss_date`; every decision carries
+  `cve_published`, `cve_updated`, `kev_date_added`, `kev_due_date`, `epss_date` (fields added to
+  `a2vm.vulnerability_records/1` and `a2vm.triage/1`); lists show `first_seen` and `cve_updated`.
+- Fix plan: `GET assets/{asset}/fixes` and the tool `get_fix_plan`: the decisions of an asset
+  grouped by the fix that clears them, the one that clears most ACT first.
+- Due dates: filters `due_before` and `overdue` on the decisions (and the documents).
+- Concerned or not: `cves/{cve}` says `concerned`, lists the assets that have the product outside
+  the vulnerable range (`not_affected`), and a 404 says no asset is concerned.
+- Instructions of the model: when no tool answers, say so, never guess causes, dates or figures.
+- Contract `verdict.v1` (two calls, two filters), LLD triage §15 and §16.1, LLD intelligence §2.3,
+  HLD §6, `docs/chat.md` §8.
+
+**Upgrade**: move the tenant to v0.15.2 and push. The dates appear with the next daily run;
+`what_changed` answers once the decision service holds two runs.
+
 ## v0.15.1 — 2026-10-28
 
 The analysts' chat, after its first use on a tenant.

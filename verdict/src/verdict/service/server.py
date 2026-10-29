@@ -26,7 +26,7 @@ from a2vm.io import ExchangeError, validate_triage
 from a2vm.service import JsonHandler, Problem, TokenSet
 from a2vm.service import serve as _serve
 
-from .index import QueryError, RunIndex
+from .index import QueryError, RunIndex, changes
 from .store import RunStore, parse_time
 
 log = logging.getLogger("verdict.serve")
@@ -131,12 +131,29 @@ class Service:
                 self._indexes = {receipt.id: idx, **dict(list(self._indexes.items())[:1])}  # this one and one more
         return idx
 
+    def _before(self, idx: RunIndex, since: str) -> str:
+        """The run to compare with: `previous` (the run kept just before) or a run id."""
+        if since != "previous":
+            return since
+        this = parse_time(idx.receipt["generated_at"])
+        earlier = [r for r in self.store.receipts(self.tenant) if parse_time(r.generated_at) < this]
+        if not earlier:
+            raise Problem(HTTPStatus.NOT_FOUND, "no earlier run kept: nothing to compare with yet")
+        return earlier[-1].id  # receipts are oldest first
+
     def read(self, tenant: str, token: str | None, rest: str, query: dict[str, str]) -> Any:
         self._reader(tenant, token)
         if rest == "runs":
             return {"items": [r.to_dict() for r in reversed(self.store.receipts(tenant))]}
         idx = self.index(query.pop("run", "latest"))
         try:
+            if rest == "changes":
+                return changes(self.index(self._before(idx, query.pop("since", "previous"))), idx, query)
+            if rest.startswith("assets/") and rest.endswith("/fixes") and len(rest) > len("assets//fixes"):
+                found = idx.fix_plan(unquote(rest[len("assets/") : -len("/fixes")]), query)
+                if found is None:
+                    raise Problem(HTTPStatus.NOT_FOUND, "no such asset in this run")
+                return found
             if rest == "summary":
                 return idx.summary()
             if rest == "decisions":
@@ -157,6 +174,12 @@ class Service:
                 )
                 if found is False:
                     raise Problem(HTTPStatus.NOT_FOUND, "no such route")
+                if found is None and kind == "cves":
+                    raise Problem(
+                        HTTPStatus.NOT_FOUND,
+                        "no asset of the tenant is concerned by this CVE in this run: not detected on any asset, "
+                        "and no asset has the product in a version outside the range",
+                    )
                 if found is None:
                     raise Problem(HTTPStatus.NOT_FOUND, f"no such {kind[:-1]} in this run")
                 return found

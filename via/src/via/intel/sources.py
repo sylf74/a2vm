@@ -57,6 +57,7 @@ class Sources:
         )
         self._kev: dict[str, dict[str, Any]] | None = None
         self.gti_calls = 0  # network lookups made to GTI in this run (cache hits excluded)
+        self.epss_dates: dict[str, str] = {}  # cve -> day of its EPSS score (since v0.15.2)
 
     # -- plumbing ---------------------------------------------------------------------------
     def _cache_path(self, url: str) -> Path:
@@ -161,7 +162,8 @@ class Sources:
 
     # -- EPSS -------------------------------------------------------------------------------
     def epss(self, cve_ids: list[str]) -> dict[str, tuple[float, float]]:
-        """cve -> (score, percentile). Missing CVEs (too recent, rejected) are simply absent."""
+        """cve -> (score, percentile). Missing CVEs (too recent, rejected) are simply absent.
+        The day of each score is kept in `epss_dates` (since v0.15.2)."""
         out: dict[str, tuple[float, float]] = {}
         if self.fixtures:
             rows = (self._fixture("epss.json") or {}).get("data", [])
@@ -175,6 +177,8 @@ class Sources:
                 rows.extend((data or {}).get("data", []))
         for r in rows:
             out[r["cve"]] = (float(r["epss"]), float(r["percentile"]))
+            if r.get("date"):
+                self.epss_dates[r["cve"]] = r["date"]
         return out
 
     # -- CERT-FR -----------------------------------------------------------------------------

@@ -75,6 +75,7 @@ def collect(sources: Sources, cve_ids: list[str]) -> Collection:
         record.kev = kev.get(cve_id)
         if cve_id in epss:
             record.epss, record.epss_percentile = epss[cve_id]
+            record.epss_date = sources.epss_dates.get(cve_id)
         out.records.append(record)
     if getattr(sources.settings, "gti_enabled", False):
         out.notes = enrich(sources, out.records)

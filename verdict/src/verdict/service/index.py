@@ -82,6 +82,8 @@ def compact(row: dict[str, Any]) -> dict[str, Any]:
         "needs_review": bool(row.get("needs_review")),
         "product": " ".join(p for p in (match.get("vendor", ""), match.get("product", "")) if p),
         "title": _short(row.get("description", "")),
+        "first_seen": (row.get("first_seen") or "")[:10] or None,
+        "cve_updated": (row.get("cve_updated") or "")[:10] or None,
     }
 
 
@@ -98,6 +100,17 @@ def _float(value: str, name: str) -> float:
         return float(value)
     except ValueError as exc:
         raise QueryError(f"{name}: a number") from exc
+
+
+def _day(value: str, name: str) -> str:
+    try:
+        return dt.date.fromisoformat(value[:10]).isoformat()
+    except ValueError as exc:
+        raise QueryError(f"{name}: a date, YYYY-MM-DD") from exc
+
+
+def _level_rank(level: str) -> int:
+    return LEVELS.index(level) if level in LEVELS else len(LEVELS)
 
 
 def page(query: dict[str, str]) -> tuple[int, int]:
@@ -225,6 +238,13 @@ class RunIndex:
                 for r in rows
                 if q in r["cve_id"].lower() or q in _asset(r).lower() or q in (r.get("description") or "").lower()
             ]
+        if "due_before" in query:
+            limit_day = _day(query["due_before"], "due_before")
+            rows = [r for r in rows if (due_date(r) or "9999") <= limit_day]
+        if "overdue" in query:
+            want = _bool(query["overdue"], "overdue")
+            today = query.get("today") or dt.date.today().isoformat()
+            rows = [r for r in rows if (bool(due_date(r)) and due_date(r) < today) == want]
         sort = query.get("sort", "level")
         if sort not in SORTS:
             raise QueryError(f"sort: one of {', '.join(SORTS)}")
@@ -247,10 +267,31 @@ class RunIndex:
             return None
         return {"run": self.run, "id": rid, "due_date": due_date(row), **row}
 
+    def not_affected(self, cve: str) -> list[dict[str, Any]]:
+        return [
+            {
+                "asset": n.get("asset_id"),
+                "deployed_versions": n.get("deployed_versions") or [],
+                "source": n.get("source"),
+            }
+            for n in self.document.get("not_affected") or []
+            if n.get("cve_id") == cve
+        ]
+
     def cve(self, cve: str, query: dict[str, str]) -> dict[str, Any] | None:
-        rows = self.by_cve.get(cve.upper())
+        cve = cve.upper()
+        rows = self.by_cve.get(cve)
         if not rows:
-            return None
+            spared = self.not_affected(cve)
+            if not spared:
+                return None
+            return {
+                "run": self.run,
+                "cve": cve,
+                "concerned": False,
+                "why": "the tenant has the product, in versions outside the vulnerable range",
+                "not_affected": spared[:50],
+            }
         first = rows[0]
         fixes = sorted({f for r in rows for f in r.get("fixes") or []})
         limit, offset = page(query)
@@ -268,7 +309,14 @@ class RunIndex:
             "automatable": first.get("automatable"),
             "technical_impact": first.get("technical_impact"),
             "fixes": fixes[:50],
+            "concerned": True,
+            "published": first.get("cve_published") or None,
+            "updated": first.get("cve_updated") or None,
+            "kev_date_added": first.get("kev_date_added") or None,
+            "kev_due_date": first.get("kev_due_date") or None,
+            "epss_date": first.get("epss_date") or None,
             "levels": dict(Counter(r["delivery_decision"] for r in rows)),
+            "not_affected": self.not_affected(cve)[:50],
             "assets": _paged([compact(r) for r in ordered], limit, offset),
         }
 
@@ -320,3 +368,146 @@ class RunIndex:
             "counts": {lv: counts.get(lv, 0) for lv in LEVELS},
             "decisions": _paged([compact(r) for r in ordered], limit, offset),
         }
+
+    def fix_plan(self, asset: str, query: dict[str, str]) -> dict[str, Any] | None:
+        """The decisions of one asset grouped by the fix that clears them, the fix that clears most
+        ACT first: what to apply, in which order."""
+        found = self.asset(asset, {})
+        if found is None:
+            return None
+        rows = self.by_asset.get(found["asset"]) or []
+        groups: dict[str, list[dict[str, Any]]] = {}
+        without: list[dict[str, Any]] = []
+        for r in rows:
+            fixes = r.get("fixes") or []
+            if not fixes:
+                without.append(r)
+            for f in fixes:
+                groups.setdefault(f, []).append(r)
+        plan = []
+        for fix, rs in groups.items():
+            counts = Counter(r["delivery_decision"] for r in rs)
+            dues = sorted(d for d in (due_date(r) for r in rs) if d)
+            plan.append(
+                {
+                    "fix": fix,
+                    "clears": {lv: counts.get(lv, 0) for lv in LEVELS},
+                    "kev": sum(1 for r in rs if r.get("in_kev")),
+                    "earliest_due_date": dues[0] if dues else None,
+                    "cves": sorted(
+                        {r["cve_id"] for r in rs},
+                        key=lambda c: min(_level_rank(r["delivery_decision"]) for r in rs if r["cve_id"] == c),
+                    )[:20],
+                }
+            )
+        plan.sort(key=lambda g: (-g["clears"]["ACT"], -g["clears"]["ATTEND"], -g["kev"], g["fix"]))
+        limit, offset = page(query)
+        nofix = Counter(r["delivery_decision"] for r in without)
+        return {
+            "run": self.run,
+            "asset": found["asset"],
+            "name": found["name"],
+            "counts": found["counts"],
+            "plan": _paged(plan, limit, offset),
+            "without_known_fix": {
+                "counts": {lv: nofix.get(lv, 0) for lv in LEVELS},
+                "fix_in_cve_record": sum(1 for r in without if r.get("fix_available")),
+            },
+        }
+
+
+def _reasons(old: dict[str, Any], new: dict[str, Any]) -> list[str]:
+    """Why a decision moved, from the facts both runs recorded."""
+    out = []
+    if bool(old.get("in_kev")) != bool(new.get("in_kev")):
+        out.append(
+            "added to CISA KEV" + (f" on {new['kev_date_added']}" if new.get("kev_date_added") else "")
+            if new.get("in_kev")
+            else "removed from CISA KEV"
+        )
+    oe, ne = old.get("epss"), new.get("epss")
+    if oe != ne and (oe is not None or ne is not None):
+        out.append(f"EPSS {oe if oe is not None else '—'} -> {ne if ne is not None else '—'}")
+    if old.get("exposure") != new.get("exposure"):
+        out.append(f"exposure {old.get('exposure') or '—'} -> {new.get('exposure') or '—'}")
+    for key in ("exploitation", "automatable", "technical_impact"):
+        ov, nv = (old.get(key) or {}).get("value"), (new.get(key) or {}).get("value")
+        if ov != nv:
+            out.append(f"{key} {ov} -> {nv} (source {(new.get(key) or {}).get('source')})")
+    if old.get("ssvc_decision") != new.get("ssvc_decision"):
+        out.append(f"SSVC {old.get('ssvc_decision')} -> {new.get('ssvc_decision')}")
+    if (old.get("cve_updated") or "") != (new.get("cve_updated") or "") and new.get("cve_updated"):
+        out.append(f"CVE record updated on {new['cve_updated'][:10]}")
+    return out
+
+
+def _why_new(row: dict[str, Any], since: str) -> list[str]:
+    out = []
+    first = row.get("first_seen") or ""
+    if first and first >= since:
+        sources = ", ".join(sorted(row.get("seen_by") or {})) or row.get("finding_source") or "a source"
+        out.append(f"first detected on {first[:10]} by {sources}")
+    if (row.get("cve_published") or "") >= since and row.get("cve_published"):
+        out.append(f"CVE published on {row['cve_published'][:10]}")
+    elif (row.get("cve_updated") or "") >= since and row.get("cve_updated"):
+        out.append(f"CVE record updated on {row['cve_updated'][:10]}")
+    if (row.get("kev_date_added") or "") >= since[:10] and row.get("kev_date_added"):
+        out.append(f"added to CISA KEV on {row['kev_date_added'][:10]}")
+    return out or ["present in this run, not in the earlier one (asset, record or matching changed)"]
+
+
+def changes(older: RunIndex, newer: RunIndex, query: dict[str, str]) -> dict[str, Any]:
+    """What changed between two runs: decisions new, gone, or at another level, each with its reasons."""
+    kinds = {k.strip() for k in query.get("kind", "new,gone,changed").split(",") if k.strip()}
+    if not kinds or not kinds <= {"new", "gone", "changed"}:
+        raise QueryError("kind: new, gone, changed, comma-separated")
+    levels = {lv.strip().upper() for lv in query.get("level", ",".join(LEVELS)).split(",") if lv.strip()}
+    if not levels or not levels <= set(LEVELS):
+        raise QueryError("level: ACT, ATTEND, TRACK, comma-separated")
+    asset = query.get("asset", "").strip().lower()
+    since = older.receipt["generated_at"]
+    items: list[dict[str, Any]] = []
+    for rid, row in newer.by_id.items():
+        if asset and asset not in asset_names(row):
+            continue
+        before = older.by_id.get(rid)
+        if before is None:
+            if "new" in kinds and row["delivery_decision"] in levels:
+                items.append({"change": "new", **compact(row), "why": _why_new(row, since)})
+        elif (
+            "changed" in kinds
+            and before["delivery_decision"] != row["delivery_decision"]
+            and (row["delivery_decision"] in levels or before["delivery_decision"] in levels)
+        ):
+            items.append(
+                {
+                    "change": "changed",
+                    **compact(row),
+                    "from": before["delivery_decision"],
+                    "why": _reasons(before, row) or ["policy or rule changed"],
+                }
+            )
+    if "gone" in kinds:
+        for rid, row in older.by_id.items():
+            if (
+                rid not in newer.by_id
+                and row["delivery_decision"] in levels
+                and (not asset or asset in asset_names(row))
+            ):
+                items.append(
+                    {
+                        "change": "gone",
+                        **compact(row),
+                        "why": ["not in this run: fixed, or the asset or its source missing from this run"],
+                    }
+                )
+    order = {"changed": 0, "new": 1, "gone": 2}
+    items.sort(key=lambda i: (_level_rank(i["level"]), order[i["change"]], i["cve"], i["asset"]))
+    counts = Counter(i["change"] for i in items)
+    limit, offset = page(query)
+    return {
+        "run": newer.run,
+        "since": older.run,
+        "counts": {k: counts.get(k, 0) for k in ("new", "gone", "changed")},
+        **_paged(items, limit, offset),
+    }

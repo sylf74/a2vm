@@ -316,11 +316,11 @@ agent.
 
 | Object | Role | Produced by | Consumed by |
 | --- | --- | --- | --- |
-| Vulnerability record | Everything known about one CVE: description, CWE, CVSS, affected products, CISA ADP decision points, KEV, EPSS, GTI view | Pillar 1 | Pillars 2, 3, 5 |
+| Vulnerability record | Everything known about one CVE: description, CWE, CVSS, affected products, CISA ADP decision points, KEV, EPSS, GTI view, and their dates (published, updated, added to KEV, EPSS day) | Pillar 1 | Pillars 2, 3, 5 |
 | Asset observation | One sighting of an asset by one source | Pillar 2 | Pillar 3 (asset context) |
 | Asset | One consolidated element of a client's estate, each attribute with its source | Pillar 3 (asset context) | Pillar 3 (decision), pillars 1, 4, 5 (read only) |
 | Finding | One asset affected by one CVE, one observation per source and package; stable id `<client>:<asset>:<CVE>` | Pillar 2, re-keyed by pillar 3 | Pillars 3, 4 |
-| Decision | The verdict on a finding: level, SSVC outcome, timeline, each input with its source, rationale, review flag | Pillar 3 | Reports, pillar 4, indicators |
+| Decision | The verdict on a finding: level, SSVC outcome, timeline, each input with its source, rationale, review flag, the dates of its facts and of the first observation | Pillar 3 | Reports, pillar 4, indicators |
 
 Every field carries its source (kev, gti, cisa-adp, scanner, declared, rule, llm, default), so an
 estimated or assumed value stays visible end to end; the schemas are JSON Schema, versioned in the
@@ -485,7 +485,8 @@ release.
 | v0.13.3 | Large detections: a retry answered from its idempotency key before any validation, the gzip body stored as received, clients waiting 10 minutes (`timeout_seconds`), size and time of each push logged; one daily run at a time on a tenant's volume (lock taken by `collect`) | 2 |
 | v0.14.0 | D15 step 3, read side first: decision service of each tenant (`verdict serve`, API `verdict.v1`), the last runs pushed by the daily run's `publish` step (`verdict push`, `triage.json` as `a2vm.triage/1`), decisions with their rationale and SSVC inputs, CVEs and assets behind filtered and paged reads; inside the cluster only, files on its own volume until PostgreSQL; release notes in `CHANGELOG.md` | 3 |
 | v0.15.0 | Conversational search for analysts (§8): Open WebUI in the tenant's namespace on the tenant's approved LLM endpoints, a read-only tool server on `verdict serve` (`verdict tools`), answers as text and tables; several LLM endpoints per tenant (LLM gateway for the chat, failover for the daily run) | 3 |
-| v0.15.1 (current) | Chat: assets found by id, host name or short name; Word, PowerPoint and CSV documents built by the tool server from the data (download link of one hour); retention of the chats per tenant; answers end with their run | 3 |
+| v0.15.1 | Chat: assets found by id, host name or short name; Word, PowerPoint and CSV documents built by the tool server from the data (download link of one hour); retention of the chats per tenant; answers end with their run | 3 |
+| v0.15.2 (current) | The analysts' daily questions in the chat: what changed since the run before and why, dates of the facts behind a decision (CVE published and updated, added to KEV, EPSS, first observation), fix plan of an asset, due this week and overdue, concerned or not by a CVE (versions outside the range); dates added to the records and the decisions | 1, 3 |
 | v0.16.0 (to confirm) | `A2VM_RUN_MODE` (`gitlab` or `kubernetes`) in the tenant's `.gitlab-ci.yml`; the watch as a CronJob, the analysts' validation still a manual GitLab job until a review page | 1 |
 | v0.17.0 (to confirm) | PostgreSQL (CloudNativePG) behind `detect serve` and `verdict serve`: history between runs, finding lifecycle, several replicas, row-level security per tenant | 2, 3 |
 | Next (to confirm) | Client portal VM (Grafana) in service; review page of the alerts on `verdict serve`; decisions asked by the watch (D15 step 3, write side) | 1, 3, 4 |

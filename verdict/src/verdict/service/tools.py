@@ -97,6 +97,8 @@ _SEARCH: list[dict[str, Any]] = [
     _q("q", "string", "Free text found in the CVE id, the asset or the description"),
     _q("min_epss", "number", "Lowest EPSS probability, 0 to 1"),
     _q("min_cvss", "number", "Lowest CVSS base score, 0 to 10"),
+    _q("due_before", "string", "Only decisions due on or before this day, YYYY-MM-DD (e.g. the end of this week)"),
+    _q("overdue", "boolean", "true: only decisions past their due date"),
     _q(
         "sort",
         "string",
@@ -138,8 +140,10 @@ OPERATIONS: list[tuple[str, str, str, list[dict[str, Any]], str]] = [
     (
         "/cves/{cve}",
         "get_cve",
-        "One CVE as the run knows it (description, CVSS, EPSS, KEV, SSVC inputs, fixes) and the assets it "
-        "concerns, paged.",
+        "Is the tenant concerned by a CVE? The CVE as the run knows it (description, CVSS, EPSS, KEV, SSVC "
+        "inputs, fixes, dates: published, last updated, added to KEV, KEV due date, EPSS day), the assets it "
+        "concerns (paged) and the assets that have the product in a version outside the vulnerable range "
+        "(not_affected). A 404 means no asset of the tenant is concerned.",
         [_p("cve", "CVE id, e.g. CVE-2024-3094"), *_PAGE, _RUN],
         "cves/{cve}",
     ),
@@ -193,6 +197,36 @@ OPERATIONS: list[tuple[str, str, str, list[dict[str, Any]], str]] = [
             _RUN,
         ],
         "exports",
+    ),
+    (
+        "/changes",
+        "what_changed",
+        "What changed since the run before (or since a given run): decisions new, gone (fixed or no longer "
+        "detected) or at another level, each with why (first detected by a source on a day, CVE published or "
+        "updated, added to KEV, EPSS, exposure, SSVC inputs). Use it for 'what is new since yesterday' and "
+        "'why do I see this only today'.",
+        [
+            _q("since", "string", "`previous` (default: the run kept just before) or the id of a run from list_runs"),
+            _q("kind", "string", "new, gone, changed, comma-separated (default: all)"),
+            _q("level", "string", "ACT, ATTEND or TRACK, comma-separated"),
+            _q("asset", "string", "Only this asset: its id, host name or short name"),
+            *_PAGE,
+            _RUN,
+        ],
+        "changes",
+    ),
+    (
+        "/assets/{asset}/fixes",
+        "get_fix_plan",
+        "What to apply on one asset, in order: its decisions grouped by the fix that clears them (package and "
+        "version), the fix that clears most ACT first, with the KEV count and the earliest due date; and how "
+        "many decisions have no known fix.",
+        [
+            _p("asset", "The asset: its id from list_assets (host:web01.example.org), its host name or short name"),
+            *_PAGE,
+            _RUN,
+        ],
+        "assets/{asset}/fixes",
     ),
     (
         "/runs",
@@ -324,7 +358,7 @@ class Tools:
                         raise ValueError
                 except ValueError as exc:
                     raise Problem(HTTPStatus.BAD_REQUEST, f"limit: 1 to {PAGE_MAX}") from exc
-            elif upstream in ("decisions", "assets", "cves/{cve}", "assets/{asset}"):
+            elif upstream in ("decisions", "assets", "cves/{cve}", "assets/{asset}", "changes", "assets/{asset}/fixes"):
                 query["limit"] = "10"
             if upstream == "exports":
                 return self.export(query)
