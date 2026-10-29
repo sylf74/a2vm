@@ -21,6 +21,8 @@ files:
   profile: ""     # client.yaml
   targets: ""     # targets.yaml: without it, declared inventory only
   settings: ""    # settings.yaml: without it, the defaults of the version
+  contacts: ""    # contacts.yaml: who receives the alerts, by level (watch.enabled)
+  watchSources: ""  # watch-sources.yaml: without it, the catalogue of the version (watch.enabled)
 
 # First step of the daily run (LLD detection §8.4):
 # - local: the run collects itself from the cluster (targets.yaml: SSH, OpenVAS), as in v0.12;
@@ -174,6 +176,42 @@ chat:
     ingressNamespace: kube-system   # namespace of the ingress controller
     dnsNamespace: kube-system       # namespace of the cluster DNS
 
+# The watch of the tenant on Kubernetes (HLD D15, LLD intelligence §3.7), with A2VM_RUN_MODE=kubernetes:
+# the watch service (`via serve`) keeps the state, the last inventory, the alerts and their journal;
+# a CronJob runs the watch; the analyst's validation starts a send Job from a GitLab pipeline.
+watch:
+  enabled: false
+  schedule: "*/10 * * * *"
+  # Secret with the key `digests`: `run <sha256>` (the tenant's jobs) and `read <sha256>` (tools).
+  digestsSecret: ""
+  digestsChecksum: ""
+  keepDays: 30          # alerts and their sheets kept
+  # Where the analysts' mail sends them to validate an alert: a new pipeline of the tenant project
+  # (deploy-k8s: <project URL>/-/pipelines/new), on this branch.
+  sendPipelineUrl: ""
+  sendRef: main
+  # Name of a ConfigMap with the key alert.docx: the tenant's Word template (deploy-k8s makes it from
+  # templates/alert.docx); empty: the neutral template of the version.
+  alertTemplate: ""
+  storage:
+    size: 1Gi
+    storageClass: ""
+  resources:
+    requests: {cpu: 20m, memory: 64Mi}
+    limits: {memory: 256Mi}
+  run:
+    activeDeadlineSeconds: 900
+    resources:
+      requests: {cpu: 100m, memory: 256Mi}
+      limits: {memory: 1Gi}
+  # The send Job, rendered only by the pipeline's send job (helm template --show-only).
+  send:
+    job: ""             # the Job's name
+    only: ""            # alert ids, space-separated (empty: the pending alerts of the latest watch)
+    editsConfigMap: ""  # the analysts' edited sheets, from edits/ of the tenant project
+  networkPolicy:
+    enabled: true
+
 daily:
   schedule: "45 5 * * *"
   timeZone: Europe/Paris
@@ -200,6 +238,9 @@ daily:
 #   chat-secret-key   session key of Open WebUI (chat.enabled)
 #   chat-admin-password   password of its first admin (chat.enabled)
 #   chat-tools-token   token Open WebUI gives the tool server (chat.enabled)
+#   via-run-token   token of the tenant's jobs on the watch service (watch.enabled)
+#   via-read-token   token of the tool server on the watch service (watch.enabled, chat.enabled)
+#   smtp-password, graph-client-secret   the mail of the watch (A2VM_SMTP_PASSWORD, A2VM_GRAPH_CLIENT_SECRET)
 secret:
   name: ""
 

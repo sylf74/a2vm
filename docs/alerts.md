@@ -197,12 +197,20 @@ CERT-FR summary or the vendor's description.
 The first run records what already exists and alerts on nothing. The state lives in the GitLab
 cache (`.watch/state.json`); if the cache is cleared, the next run records a new baseline.
 
+## On Kubernetes (v0.16.0)
+
+With `A2VM_RUN_MODE: kubernetes` in the tenant's `.gitlab-ci.yml`, the watch runs every 10 minutes
+in the tenant's namespace and its journal, its alerts and its state are kept by the watch service
+`via serve`: nothing is lost when a runner cache is cleared. The analysts' mail links to a
+prefilled *Run pipeline* (`A2VM_JOB=send`, `A2VM_SEND_ONLY=<alert id>`) instead of the watch's
+pipeline; the rest (edits, recipients, Word file) is unchanged. `docs/kubernetes.md` §4.
+
 ## Limits (to address with the PostgreSQL storage)
 
 - An edited sheet is plain Markdown: tables and lists as the watch writes them; the mail
   renders headings, paragraphs, lists and tables only.
-- The journal is a file in the runner cache: clearing the cache empties it (the artifacts of past
-  jobs keep their copies until they expire).
+- In the GitLab mode the journal is a file in the runner cache: clearing the cache empties it (the
+  artifacts of past jobs keep their copies until they expire). On Kubernetes it is kept by `via serve`.
 - Without on-call duty, alerts found at night wait for the first analyst in the morning: the gain
   is that they are drafted, matched and one click away when the analyst arrives.
 - Scanned hosts are used through the last daily findings only (see above): a brand-new CVE is not

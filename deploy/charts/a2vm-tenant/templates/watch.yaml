@@ -1,0 +1,321 @@
+{{- /*
+The watch of the tenant on Kubernetes (LLD vulnerability-intelligence §3.7), with A2VM_RUN_MODE=kubernetes:
+- via: `via serve`, the watch service, one replica on a volume of its own; the only writer of the
+  watch's state, the last inventory, the alerts and their journal; reached inside the namespace only;
+- watch: a CronJob, every 10 minutes: `via service watch` (state and inventory from the service,
+  the same `via watch` as the pipeline, alerts and events back), the analysts' mail;
+- send: a Job made by the tenant pipeline's send job when an analyst validates (`helm template
+  --show-only templates/watch.yaml` with watch.send.job): `via service send`.
+*/ -}}
+{{- define "a2vm-tenant.watchPod" -}}
+{{- $root := .root -}}
+restartPolicy: Never
+automountServiceAccountToken: false
+enableServiceLinks: false
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+{{- if $root.Values.image.pullSecret }}
+imagePullSecrets:
+  - name: {{ $root.Values.image.pullSecret }}
+{{- end }}
+{{- with $root.Values.nodeSelector }}
+nodeSelector:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- with $root.Values.tolerations }}
+tolerations:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+containers:
+  - name: {{ .container }}
+    image: {{ include "a2vm-tenant.image" (dict "root" $root "pillar" "via") }}
+    imagePullPolicy: {{ $root.Values.image.pullPolicy }}
+    command: ["/bin/sh", "-ec"]
+    args:
+      - |
+        echo "A2VM {{ $root.Chart.AppVersion }}, tenant {{ $root.Values.tenant }}, {{ .container }}"
+        {{- include "a2vm-tenant.watchFiles" $root | nindent 8 }}
+        {{- .script | nindent 8 }}
+    env:
+      {{- include "a2vm-tenant.env" $root | nindent 6 }}
+      - name: A2VM_CACHE_DIR
+        value: /tmp/cache
+      - name: A2VM_SEND_PIPELINE_URL
+        value: {{ $root.Values.watch.sendPipelineUrl | quote }}
+      - name: A2VM_SEND_REF
+        value: {{ $root.Values.watch.sendRef | quote }}
+    volumeMounts:
+      - name: config
+        mountPath: /config
+        readOnly: true
+      - name: home
+        mountPath: /home/a2vm
+      - name: tmp
+        mountPath: /tmp
+      - name: secrets
+        mountPath: /secrets
+        readOnly: true
+      - name: template
+        mountPath: /alert-template
+        readOnly: true
+      {{- if .edits }}
+      - name: edits
+        mountPath: /edits
+        readOnly: true
+      {{- end }}
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop: [ALL]
+    {{- with $root.Values.watch.run.resources }}
+    resources:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+volumes:
+  - name: config
+    configMap:
+      name: {{ include "a2vm-tenant.name" $root }}-config
+  - name: home
+    emptyDir: {}
+  - name: tmp
+    emptyDir: {}
+  - name: secrets
+    secret:
+      secretName: {{ $root.Values.secret.name }}
+      defaultMode: 0440
+      optional: true
+  - name: template
+    {{- if $root.Values.watch.alertTemplate }}
+    configMap:
+      name: {{ $root.Values.watch.alertTemplate }}
+      optional: true
+    {{- else }}
+    emptyDir: {}
+    {{- end }}
+  {{- if .edits }}
+  - name: edits
+    configMap:
+      name: {{ .edits }}
+      optional: true
+  {{- end }}
+{{- end }}
+
+{{- if .Values.watch.enabled }}
+{{- include "a2vm-tenant.checks" . }}
+{{- $name := include "a2vm-tenant.name" . }}
+{{- $w := .Values.watch }}
+{{- if not $w.send.job }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $name }}-watch
+  labels:
+    {{- include "a2vm-tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: via
+  annotations:
+    # The alerts, their journal and the watch's state survive an uninstall: delete the claim by hand.
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: [ReadWriteOnce]
+  {{- if $w.storage.storageClass }}
+  storageClassName: {{ $w.storage.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ $w.storage.size | quote }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}-via
+  labels:
+    {{- include "a2vm-tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: via
+spec:
+  replicas: 1             # one writer on a ReadWriteOnce volume
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "a2vm-tenant.selector" (dict "root" . "component" "via") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "a2vm-tenant.labels" . | nindent 8 }}
+        app.kubernetes.io/component: via
+      annotations:
+        checksum/digests: {{ $w.digestsChecksum | quote }}
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      {{- if .Values.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.image.pullSecret }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: via
+          image: {{ include "a2vm-tenant.image" (dict "root" . "pillar" "via") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["via", "serve"]
+          args:
+            - --tenant={{ .Values.tenant }}
+            - --digests=/via-secret/digests
+            - --store=/data/watch
+            - --keep-days={{ $w.keepDays }}
+            - --port=8080
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet: {path: /readyz, port: http}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 30
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: digests
+              mountPath: /via-secret
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          {{- with $w.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ $name }}-watch
+        - name: digests
+          secret:
+            secretName: {{ $w.digestsSecret }}
+            defaultMode: 0440
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}-via
+  labels:
+    {{- include "a2vm-tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: via
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "a2vm-tenant.selector" (dict "root" . "component" "via") | nindent 4 }}
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ $name }}-watch
+  labels:
+    {{- include "a2vm-tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: watch
+spec:
+  schedule: {{ $w.schedule | quote }}
+  {{- if .Values.daily.timeZone }}
+  timeZone: {{ .Values.daily.timeZone | quote }}
+  {{- end }}
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    metadata:
+      labels:
+        {{- include "a2vm-tenant.labels" . | nindent 8 }}
+        app.kubernetes.io/component: watch
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: {{ $w.run.activeDeadlineSeconds }}
+      template:
+        metadata:
+          labels:
+            {{- include "a2vm-tenant.labels" . | nindent 12 }}
+            app.kubernetes.io/component: watch
+        spec:
+          {{- $script := printf "rc=0\nvia service watch --url %s --tenant %s --token-file /secrets/via-run-token \\\n  /tmp/cfg/client.yaml --settings \"$SETTINGS\" --sources \"$SOURCES\" --contacts /tmp/cfg/contacts.yaml || rc=$?\n# 3: a source down or a mail not sent, said in the log; the passage is kept.\nif [ \"$rc\" -eq 3 ]; then echo \"WARN passage done with warnings\"; exit 0; fi\nexit \"$rc\"" (include "a2vm-tenant.viaUrl" . | quote) (.Values.tenant | quote) }}
+          {{- include "a2vm-tenant.watchPod" (dict "root" . "container" "watch" "script" $script) | nindent 10 }}
+{{- if $w.networkPolicy.enabled }}
+---
+# The watch service: from the tenant's jobs (daily run, watch, send) and the analysts' tools only; no egress.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $name }}-via
+  labels:
+    {{- include "a2vm-tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: via
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "a2vm-tenant.selector" (dict "root" . "component" "via") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        {{- range list "daily" "watch" "send" "tools" }}
+        - podSelector:
+            matchLabels:
+              {{- include "a2vm-tenant.selector" (dict "root" $ "component" .) | nindent 14 }}
+        {{- end }}
+      ports:
+        - {port: 8080, protocol: TCP}
+  egress: []
+{{- end }}
+{{- else }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $w.send.job }}
+  labels:
+    {{- include "a2vm-tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: send
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 600
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        {{- include "a2vm-tenant.labels" . | nindent 8 }}
+        app.kubernetes.io/component: send
+    spec:
+      {{- $edits := "" }}
+      {{- if $w.send.editsConfigMap }}{{- $edits = "--edits /edits" }}{{- end }}
+      {{- $script := printf "via service send --url %s --tenant %s --token-file /secrets/via-run-token \\\n  /tmp/cfg/client.yaml --contacts /tmp/cfg/contacts.yaml %s --only %s" (include "a2vm-tenant.viaUrl" . | quote) (.Values.tenant | quote) $edits (regexReplaceAll "[^A-Za-z0-9._ -]" $w.send.only "") }}
+      {{- include "a2vm-tenant.watchPod" (dict "root" . "container" "send" "script" $script "edits" $w.send.editsConfigMap) | nindent 6 }}
+{{- end }}
+{{- end }}

@@ -22,6 +22,7 @@ import re
 import sys
 import tempfile
 from pathlib import Path
+from urllib.parse import quote
 
 from a2vm.config import describe_llm, env, load_settings
 from a2vm.extensions import ExtensionMissing, asset_matcher
@@ -103,6 +104,20 @@ def _word_template(profile, profile_path: str) -> Path | None:
         return base / named
     own = base / "templates" / "alert.docx"
     return own if own.exists() else word.default_template()
+
+
+def _send_link(alert_id: str) -> str:
+    """On Kubernetes (no pipeline of the watch): a link to a new pipeline of the tenant project, its
+    variables filled in, that sends this alert (A2VM_SEND_PIPELINE_URL, set by the chart)."""
+    base = env("SEND_PIPELINE_URL")
+    if not base:
+        return ""
+    ref = env("SEND_REF", "main")
+    url = f"{base}?ref={quote(ref)}&var[A2VM_JOB]=send&var[A2VM_SEND_ONLY]={quote(alert_id)}"
+    return (
+        f"Pour l'envoyer : <a href=\"{url}\">lancer l'envoi de cette alerte</a> (formulaire prérempli, "
+        "bouton « Run pipeline »). Rien ne part sans ce geste."
+    )
 
 
 def cmd_watch(args: argparse.Namespace) -> int:
@@ -196,7 +211,7 @@ def cmd_watch(args: argparse.Namespace) -> int:
             f"Pour n'envoyer que celle-ci : variable <code>A2VM_SEND_ONLY</code> = <code>{number}</code> "
             "dans le formulaire du job (sans variable, toutes les alertes du pipeline partent)."
             if pipeline
-            else ""
+            else _send_link(a["id"])
         )
         note = (
             f'<p style="background:#fff4d6;padding:8px"><b>À valider avant envoi à {profile.name}</b> '

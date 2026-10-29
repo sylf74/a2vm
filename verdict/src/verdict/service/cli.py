@@ -95,6 +95,8 @@ def cmd_tools(args: argparse.Namespace) -> int:
         args.max_chars,
         public_url=args.public_url,
         export_ttl=args.export_minutes * 60,
+        via_url=args.via_url,
+        via_token=_read_secret(args.via_token_file) if args.via_token_file else "",
     )
     print(
         f"{args.tenant}: tool server on {args.verdict_url}, "
@@ -145,6 +147,8 @@ def main(argv: list[str]) -> int:
     t.add_argument("--max-chars", type=int, default=8000, help="longest answer, in characters of JSON")
     t.add_argument("--public-url", default="", help="address of the chat, for download links (https://chat-lab...)")
     t.add_argument("--export-minutes", type=int, default=60, help="how long a download link stays valid")
+    t.add_argument("--via-url", default="", help="watch service, for the alerts (watch on Kubernetes)")
+    t.add_argument("--via-token-file", default="", help="read token of the watch service")
     t.add_argument("--host", default="0.0.0.0")  # noqa: S104 - in a pod
     t.add_argument("--port", type=int, default=8080)
     t.set_defaults(func=cmd_tools)

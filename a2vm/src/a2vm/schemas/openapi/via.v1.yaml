@@ -1,0 +1,230 @@
+# Contract of the pillar 1 watch service (HLD D15, LLD vulnerability-intelligence §3.7).
+# Status: v1, as built in v0.16.0 (via serve). Within v1, fields and calls are only added. Kept small
+# on purpose: the alerts of the watch and what the tenant's jobs need, so that the VIA team's service
+# can answer the same calls or replace them.
+openapi: 3.1.0
+info:
+  title: A2VM watch service
+  version: "1.0.0"
+  description: >
+    Keeps, for one tenant, the watch's state, the last daily inventory, the alerts the watch drafted
+    with their sheets and the journal of their events (drafted, mailed to the analysts, sent to the
+    client). The tenant's jobs (daily run, watch, send) hold the run token; the analysts' tools hold
+    the read token. The service sends nothing. Every call carries the tenant; reached inside the
+    cluster only.
+servers:
+  - url: http://a2vm-lab-via:8080
+tags:
+  - name: jobs
+  - name: read
+  - name: operations
+paths:
+  /v1/tenants/{tenant}/inventory:
+    post:
+      tags: [jobs]
+      operationId: putInventory
+      summary: The daily run's assets and findings (vulnops.assets/1, vulnops.findings/2), for the watch
+      security:
+        - runToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [assets, findings]
+              properties:
+                assets: {$ref: "../assets.schema.json"}
+                findings: {$ref: "../findings.schema.json"}
+      responses:
+        "202": {description: Kept, content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/inventory/{file}:
+    get:
+      tags: [jobs]
+      operationId: getInventory
+      summary: The last inventory received, for the watch
+      security:
+        - runToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+        - {name: file, in: path, required: true, schema: {type: string, enum: [assets.json, findings.json]}}
+      responses:
+        "200": {description: The file, content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/watch/state:
+    get:
+      tags: [jobs]
+      operationId: getWatchState
+      summary: What the watch has already seen; 404 before its first passage (it then records the baseline)
+      security:
+        - runToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+      responses:
+        "200": {description: The state, opaque to the service, content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/watch/runs:
+    post:
+      tags: [jobs]
+      operationId: putWatchRun
+      summary: One passage of the watch, its new state, its journal events and, when it drafted alerts, their files
+      security:
+        - runToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+        - name: Content-Encoding
+          in: header
+          required: false
+          schema: {type: string, enum: [gzip]}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [state]
+              properties:
+                state: {type: object}
+                events: {type: array, items: {$ref: "#/components/schemas/Event"}}
+                files:
+                  type: object
+                  description: index.json and, for each alert, <id>.md, <id>.html and its Word file; base64
+                  additionalProperties: {type: string, contentEncoding: base64}
+      responses:
+        "202": {description: Kept, content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/events:
+    post:
+      tags: [jobs]
+      operationId: addEvents
+      summary: Events of the send job (sent, send-failed) to the journal
+      security:
+        - runToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [events]
+              properties:
+                events: {type: array, items: {$ref: "#/components/schemas/Event"}}
+      responses:
+        "202": {description: Added, content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/alerts:
+    get:
+      tags: [read]
+      operationId: listAlerts
+      summary: The alerts kept, newest first, with their status (pending, sent, failed)
+      security:
+        - readToken: []
+        - runToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+        - {name: status, in: query, schema: {type: string, enum: [all, pending, sent, failed]}}
+        - {name: cve, in: query, schema: {type: string}}
+        - {name: level, in: query, schema: {type: string}}
+        - {name: since, in: query, schema: {type: string, format: date}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 25}}
+        - {name: offset, in: query, schema: {type: integer, minimum: 0, default: 0}}
+      responses:
+        "200": {description: One page, content: {application/json: {schema: {type: object}}}}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/alerts/{alert}:
+    get:
+      tags: [read]
+      operationId: getAlert
+      summary: One alert, its status, its last events and its sheet (Markdown)
+      security:
+        - readToken: []
+        - runToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+        - {name: alert, in: path, required: true, schema: {type: string}}
+      responses:
+        "200": {description: The alert, content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/alerts/{alert}/files/{file}:
+    get:
+      tags: [jobs]
+      operationId: getAlertFile
+      summary: A file of an alert (its sheets, its Word file), for the send job
+      security:
+        - runToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+        - {name: alert, in: path, required: true, schema: {type: string}}
+        - {name: file, in: path, required: true, schema: {type: string}}
+      responses:
+        "200": {description: The file, content: {application/octet-stream: {schema: {type: string, contentEncoding: binary}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /healthz:
+    get:
+      tags: [operations]
+      operationId: healthz
+      security: []
+      responses:
+        "200": {description: Alive}
+  /readyz:
+    get:
+      tags: [operations]
+      operationId: readyz
+      security: []
+      responses:
+        "200": {description: Ready (store writable)}
+        "503": {description: Not ready}
+components:
+  securitySchemes:
+    runToken:
+      type: http
+      scheme: bearer
+      description: Token of the tenant's jobs (daily run, watch, send); the service keeps its digest only.
+    readToken:
+      type: http
+      scheme: bearer
+      description: Token of the analysts' tools; reads the alerts, never the state nor the files to send.
+  parameters:
+    tenant:
+      name: tenant
+      in: path
+      required: true
+      schema: {type: string, pattern: "^[a-z0-9][a-z0-9-]{0,62}$"}
+  responses:
+    Problem:
+      description: Error (RFC 9457)
+      content:
+        application/problem+json:
+          schema: {$ref: "#/components/schemas/Problem"}
+  schemas:
+    Event:
+      type: object
+      required: [event, alert]
+      properties:
+        at: {type: string}
+        event: {enum: [drafted, analysts, sent, send-failed]}
+        alert: {type: string}
+        level: {type: string}
+        title: {type: string}
+        to: {type: array, items: {type: string}}
+        result: {type: string}
+        error: {type: string}
+    Problem:
+      type: object
+      properties:
+        title: {type: string}
+        status: {type: integer}
+        detail: {type: string}

@@ -13,13 +13,13 @@ other files of `docs/`.
 | Path | What |
 | --- | --- |
 | `a2vm/` | Common contract: data model, JSON schemas of the exchange files, settings, profiles, LLM client and guard, extension points |
-| `via/` | Pillar 1, intelligence (records) and watch (alerts) |
+| `via/` | Pillar 1, intelligence (records) and watch (alerts); watch service on Kubernetes (`via serve`, `via service`) |
 | `detect/` | Pillar 2, detection: SSH collection, OpenVAS, declared inventory, external scan; collector agent and detection service (`detect agent`, `detect serve`, `detect fetch`) |
 | `verdict/` | Pillar 3, asset context, SSVC decision, restitution (reporting database, Grafana); decision service and tool server of the analysts' chat (`verdict serve`, `verdict push`, `verdict tools`) |
 | `templates/client-pipeline.yml` | The pipeline every tenant project includes at a version tag |
 | `examples/` | Fictitious tenants (`lab`, `demo-industrie`) |
 | `deploy/portal/` | Terraform and cloud-init of the reporting database and Grafana |
-| `deploy/charts/a2vm-tenant/` | Helm chart: a tenant's daily run as a Kubernetes CronJob (D15 step 1, `docs/kubernetes.md`), its detection service (D15 step 2, `docs/collectors.md`), its decision service (D15 step 3) and the analysts' chat (`docs/chat.md`) |
+| `deploy/charts/a2vm-tenant/` | Helm chart: a tenant's daily run as a Kubernetes CronJob (D15 step 1, `docs/kubernetes.md`), its detection service (D15 step 2, `docs/collectors.md`), its decision service (D15 step 3), the analysts' chat (`docs/chat.md`) and the watch on Kubernetes (`A2VM_RUN_MODE`) |
 | `deploy/intake/` | Script of the job `deploy-k8s` that turns the collectors' tokens into digests (stdlib and PyYAML only) |
 | `deploy/chat/` | Script of the job `deploy-k8s` that writes the chat's values (stdlib only) |
 | `deploy/collector/` | Install script of a collector on its VM (`docs/collectors.md` §2) |

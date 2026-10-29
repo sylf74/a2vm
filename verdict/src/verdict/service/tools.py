@@ -235,6 +235,29 @@ OPERATIONS: list[tuple[str, str, str, list[dict[str, Any]], str]] = [
         [],
         "runs",
     ),
+    (
+        "/alerts",
+        "list_alerts",
+        "The watch's alerts for the tenant (CERT-FR, KEV, critical CVEs matched to its assets), newest first, "
+        "with their status: pending (drafted, waiting for an analyst's validation), sent to the client, or "
+        "failed. Filters: status, CVE, level, since a day.",
+        [
+            _q("status", "string", "all (default), pending, sent or failed", enum=["all", "pending", "sent", "failed"]),
+            _q("cve", "string", "Only the alerts about this CVE"),
+            _q("level", "string", "Level of the alert, e.g. urgent, important, info"),
+            _q("since", "string", "Only the alerts drafted on or after this day, YYYY-MM-DD"),
+            *_PAGE,
+        ],
+        "via:alerts",
+    ),
+    (
+        "/alerts/{alert}",
+        "get_alert",
+        "One alert of the watch: its sheet as drafted for the client (product, CVSS, exploitation, "
+        "description, links), its status and its events (drafted, mailed to the analysts, sent).",
+        [_p("alert", "Alert id from list_alerts")],
+        "via:alerts/{alert}",
+    ),
 ]
 
 
@@ -322,8 +345,20 @@ class Tools:
         transport: httpx.BaseTransport | None = None,
         public_url: str = "",
         export_ttl: int = EXPORT_TTL,
+        via_url: str = "",
+        via_token: str = "",
     ):
         self.tenant = tenant
+        self._via = (
+            httpx.Client(
+                base_url=via_url.rstrip("/"),
+                headers={"Authorization": f"Bearer {via_token}", "User-Agent": "a2vm-tools"},
+                timeout=httpx.Timeout(30.0, connect=5.0),
+                transport=transport,
+            )
+            if via_url and via_token
+            else None
+        )
         self.public_url = public_url.rstrip("/")
         self.export_ttl = export_ttl
         self._exports: dict[str, tuple[float, str, str, bytes]] = {}
@@ -362,6 +397,8 @@ class Tools:
                 query["limit"] = "10"
             if upstream == "exports":
                 return self.export(query)
+            if upstream.startswith("via:"):
+                return self._alerts(upstream[4:].format(**{k: quote(v, safe="") for k, v in ids.items()}), query)
             target = upstream.format(**{k: quote(v, safe=":@") for k, v in ids.items()})
             return self._get(target, query)
         raise Problem(HTTPStatus.NOT_FOUND, "no such tool")
@@ -380,6 +417,26 @@ class Tools:
             raise Problem(status, detail or f"decision service answered {r.status_code}")
         answer = copy.deepcopy(r.json())
         answer["source"] = "A2VM decision service: decisions of the run named in `run`"
+        return fit(answer, self.max_chars)
+
+    def _alerts(self, target: str, query: dict[str, str]) -> Any:
+        if self._via is None:
+            raise Problem(
+                HTTPStatus.SERVICE_UNAVAILABLE, "the watch of this tenant does not run on Kubernetes: no alerts here"
+            )
+        try:
+            r = self._via.get(f"/v1/tenants/{self.tenant}/{target}", params=query)
+        except httpx.HTTPError as exc:
+            raise Problem(HTTPStatus.BAD_GATEWAY, "the watch service cannot be reached") from exc
+        if r.status_code != 200:
+            try:
+                detail = r.json().get("detail", "")
+            except ValueError:
+                detail = ""
+            status = HTTPStatus(r.status_code) if r.status_code in (400, 404) else HTTPStatus.BAD_GATEWAY
+            raise Problem(status, detail or f"watch service answered {r.status_code}")
+        answer = copy.deepcopy(r.json())
+        answer["source"] = "A2VM watch service: alerts drafted by the watch and their journal"
         return fit(answer, self.max_chars)
 
     # -- documents ------------------------------------------------------------------------------
@@ -474,6 +531,8 @@ class Tools:
 
     def close(self) -> None:
         self._http.close()
+        if self._via is not None:
+            self._via.close()
 
 
 def make_handler(tools: Tools) -> type[JsonHandler]:

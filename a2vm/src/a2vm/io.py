@@ -63,6 +63,21 @@ def validate_detection(data: dict[str, Any], where: str = "<detection>") -> None
     _validate(DETECTION, data, where)
 
 
+def validate_assets(data: dict[str, Any], where: str = "<assets>") -> None:
+    """An asset inventory received over an API (the watch service, v0.16.0)."""
+    _validate_doc(ASSETS, data, where)
+
+
+def validate_findings(data: dict[str, Any], where: str = "<findings>") -> None:
+    _validate_doc(FINDINGS, data, where)
+
+
+def _validate_doc(kind: str, data: dict[str, Any], where: str) -> None:
+    if not isinstance(data, dict) or data.get("schema") != kind:
+        raise ExchangeError(f"{where}: expected a {kind} document")
+    _validate(kind, data, where)
+
+
 def validate_triage(data: dict[str, Any], where: str = "<triage>") -> None:
     """Check a triage document received from outside (decision service, LLD triage §15)."""
     if not isinstance(data, dict) or data.get("schema") != TRIAGE:

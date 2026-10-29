@@ -102,6 +102,7 @@ CI/CD variables of the tenant project (or of a subgroup):
 | `A2VM_K8S_SCHEDULE` | Optional, cron in Europe/Paris, default `45 5 * * *` | Visible |
 | `A2VM_IMAGE_REGISTRY` | Optional, default `<registry>/<code project path>` | Visible |
 | `A2VM_VERDICT_SERVICE` | Optional, `false` to deploy no decision service (default `true`, v0.14.0) | Visible |
+| `A2VM_RUN_MODE` | In the tenant's `.gitlab-ci.yml`: `gitlab` (default) or `kubernetes`, the daily run and the watch in the namespace only (§4) | — |
 | `A2VM_CHAT_HOST` | Optional: the analysts' chat on the decision service, at this host (v0.15.0, `chat.md`) | Visible |
 
 The other variables are the pipeline's (`docs/deployment.md`): the job copies the secret ones
@@ -111,7 +112,7 @@ namespace, never into the job log, and hands the others (`A2VM_LLM_*`, `A2VM_GTI
 `A2VM_EXTERNAL_PROJECT`) to the CronJob. External detection uses the GitLab API with
 `A2VM_GITLAB_TOKEN`, since a pod has no job token.
 
-Then move the tenant's `.gitlab-ci.yml` to `v0.15.2` (both `ref` and `A2VM_REF`) and push: the
+Then move the tenant's `.gitlab-ci.yml` to `v0.16.0` (both `ref` and `A2VM_REF`) and push: the
 pipeline runs `validate`, then `deploy-k8s`, which ends with the CronJob and its volume. Each
 later push to the default branch redeploys (new profile, new targets, new version).
 
@@ -168,9 +169,35 @@ kubectl -n $NS run verdict-reader --rm -i --restart=Never --image=curlimages/cur
 With `A2VM_CHAT_HOST`, `deploy-k8s` also deploys Open WebUI and the tool server `verdict tools` in
 the namespace, on the tenant's LLM endpoints: `chat.md`.
 
-## 4. Limits of this step
+## 4. The watch on Kubernetes (v0.16.0)
 
-- Watch and alert validation stay in GitLab pipelines.
+Set `A2VM_RUN_MODE: kubernetes` in the `variables:` of the tenant's `.gitlab-ci.yml` and push:
+`deploy-k8s` then also deploys the watch service `via serve` and the watch CronJob, and the
+scheduled pipelines of the project no longer run the daily jobs nor the watch (they can be switched
+off). The watch's mail settings come from the same CI/CD variables as in GitLab (`A2VM_MAIL_FROM`,
+`A2VM_SMTP_*` or `A2VM_GRAPH_*`, `A2VM_ANALYST_TO`); `contacts.yaml`, `watch-sources.yaml` and
+`templates/alert.docx` from the project. The first passage records the baseline (no alert), as a
+first watch in GitLab.
+
+```bash
+NS=a2vm-homelab
+kubectl -n $NS get deploy,cronjob -l 'app.kubernetes.io/component in (via,watch)'
+kubectl -n $NS logs job/$(kubectl -n $NS get jobs -l app.kubernetes.io/component=watch --sort-by=.metadata.creationTimestamp -o name | tail -1 | cut -d/ -f2)
+kubectl -n $NS logs deploy/a2vm-homelab-via --tail=20
+```
+
+Validation: the analysts' mail links to *Run pipeline* of the project with `A2VM_JOB=send` and the
+alert's id filled in; running it is the validation. The job `send-alerts-k8s` starts a send Job in
+the namespace and shows its log. Edited sheets: commit `edits/<alert id>.md` (or `.docx`) first,
+as in GitLab. A PDF attachment needs the GitLab mode (LibreOffice is not in the via image).
+
+Back to GitLab: `A2VM_RUN_MODE: gitlab` and push; the watch's state stays in the service's volume
+(`a2vm-<tenant>-watch`), the GitLab watch starts from its own cache.
+
+## 5. Limits of this step
+
+- With `A2VM_RUN_MODE=gitlab` (default) the watch and its validation stay in GitLab pipelines; with
+  `kubernetes` the validation is still started from a GitLab pipeline (a page on `via serve`: v0.16.1).
 - The run's report is read from the volume, the dashboards or the decision service; there are no job artifacts.
 - The decision service keeps the last runs as files, one replica, and is read with a token until
   service accounts; it answers reads only (D15 step 3, read side).

@@ -105,6 +105,15 @@ if [ "$rc" -eq 3 ]; then echo "WARN reporting database unreachable or refused: t
 exit "$rc"
 {{- end -}}
 
+{{- define "a2vm-tenant.step.inventory" -}}
+# The watch on Kubernetes names the machines of this run: its assets and findings to the watch service.
+if [ ! -s /secrets/via-run-token ]; then echo "WARN no via-run-token: the watch keeps the previous inventory"; exit 0; fi
+rc=0
+via service push-inventory --url {{ include "a2vm-tenant.viaUrl" . | quote }} --tenant {{ .Values.tenant | quote }} \
+  --token-file /secrets/via-run-token --assets-dir /data/work/assets/{{ .Values.tenant }} || rc=$?
+if [ "$rc" -ne 0 ]; then echo "WARN watch service not updated (exit $rc): the watch keeps the previous inventory"; fi
+{{- end -}}
+
 {{- define "a2vm-tenant.container" -}}
 {{- $root := .root -}}
 - name: {{ .name }}
@@ -186,6 +195,9 @@ spec:
             {{- include "a2vm-tenant.container" (dict "root" . "name" "detect" "pillar" "detect") | nindent 12 }}
             {{- include "a2vm-tenant.container" (dict "root" . "name" "assets" "pillar" "verdict") | nindent 12 }}
             {{- include "a2vm-tenant.container" (dict "root" . "name" "triage" "pillar" "verdict") | nindent 12 }}
+            {{- if .Values.watch.enabled }}
+            {{- include "a2vm-tenant.container" (dict "root" . "name" "inventory" "pillar" "via") | nindent 12 }}
+            {{- end }}
           containers:
             {{- include "a2vm-tenant.container" (dict "root" . "name" "publish" "pillar" "verdict") | nindent 12 }}
           volumes:
