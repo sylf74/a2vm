@@ -7,6 +7,9 @@ Conversational search of the tenant's analysts (HLD §8, LLD triage §16), all i
   it connects to the tool server, the LLM endpoint (or the gateway) and the DNS only;
 - llm (several endpoints only): nginx in front of the endpoints, round robin, failed endpoint left
   out and the request sent to the next; Open WebUI itself uses the first connection of a model only.
+With oidc.issuerUrl (v0.17.0), the analysts sign in with the tenant's identity provider: only the
+members of oidc.readers and oidc.validators get in (role user), oidc.admins become admins; without
+oidc.admins the local admin keeps the login form.
 */ -}}
 {{- if .Values.chat.enabled }}
 {{- include "a2vm-tenant.checks" . }}
@@ -19,6 +22,7 @@ Conversational search of the tenant's analysts (HLD §8, LLD triage §16), all i
 {{- $gateway := gt (len $chat.llm.endpoints) 1 }}
 {{- $configs := dict "0" (dict "enable" true "model_ids" (list $chat.llm.model)) }}
 {{- $tls := $ing.tlsSecret | default (ternary (printf "%s-chat-tls" $name) "" (ne $ing.clusterIssuer "")) }}
+{{- $o := .Values.oidc }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -213,6 +217,14 @@ spec:
               token="$(tr -cd '0-9a-f' < /chat-secrets/chat-tools-token)"
               export TOOL_SERVER_CONNECTIONS="${TOOL_SERVER_CONNECTIONS_TEMPLATE/__A2VM_TOOLS_TOKEN__/$token}"
               unset TOOL_SERVER_CONNECTIONS_TEMPLATE key token
+              {{- if $o.issuerUrl }}
+              if [ ! -s /chat-secrets/oidc-client-secret ]; then echo "missing key oidc-client-secret in Secret {{ .Values.secret.name }}" >&2; exit 2; fi
+              export OAUTH_CLIENT_SECRET="$(cat /chat-secrets/oidc-client-secret)"
+              {{- if $o.ca }}
+              cat "$(python -c 'import certifi; print(certifi.where())')" /chat-secrets/oidc-ca > /tmp/ca-bundle.pem
+              export SSL_CERT_FILE=/tmp/ca-bundle.pem REQUESTS_CA_BUNDLE=/tmp/ca-bundle.pem AIOHTTP_CLIENT_SSL_CERT_FILE=/tmp/ca-bundle.pem
+              {{- end }}
+              {{- end }}
               exec bash start.sh
           env:
             - {name: HOME, value: /tmp}
@@ -228,6 +240,22 @@ spec:
             - {name: ENABLE_SIGNUP, value: "false"}
             - {name: DEFAULT_USER_ROLE, value: pending}
             - {name: JWT_EXPIRES_IN, value: {{ printf "%vh" $chat.sessionHours | quote }}}
+            {{- if $o.issuerUrl }}
+            # Sign-in with the tenant's identity provider: its groups decide who gets in.
+            - {name: ENABLE_OAUTH_SIGNUP, value: "true"}
+            - {name: OAUTH_MERGE_ACCOUNTS_BY_EMAIL, value: "false"}
+            - {name: OAUTH_CLIENT_ID, value: {{ $o.clientId | quote }}}
+            - {name: OPENID_PROVIDER_URL, value: {{ printf "%s/.well-known/openid-configuration" (trimSuffix "/" $o.issuerUrl) | quote }}}
+            - {name: OPENID_REDIRECT_URI, value: {{ printf "https://%s/oauth/oidc/callback" $chat.host | quote }}}
+            - {name: OAUTH_PROVIDER_NAME, value: {{ $o.providerName | quote }}}
+            - {name: OAUTH_SCOPES, value: "openid email profile"}
+            - {name: OAUTH_CODE_CHALLENGE_METHOD, value: S256}
+            - {name: ENABLE_OAUTH_ROLE_MANAGEMENT, value: "true"}
+            - {name: OAUTH_ROLES_CLAIM, value: {{ $o.groupsClaim | quote }}}
+            - {name: OAUTH_ALLOWED_ROLES, value: {{ join "," (concat $o.readers $o.validators | uniq) | quote }}}
+            - {name: OAUTH_ADMIN_ROLES, value: {{ join "," $o.admins | quote }}}
+            - {name: ENABLE_LOGIN_FORM, value: {{ ternary "false" "true" (gt (len $o.admins) 0) | quote }}}
+            {{- end }}
             # The tenant's approved endpoints only, its model only.
             - {name: ENABLE_OLLAMA_API, value: "false"}
             - {name: ENABLE_OPENAI_API, value: "true"}
@@ -345,6 +373,12 @@ spec:
               - {key: chat-admin-password, path: chat-admin-password}
               - {key: chat-tools-token, path: chat-tools-token}
               - {key: llm-api-key, path: llm-api-key}
+              {{- if $o.issuerUrl }}
+              - {key: oidc-client-secret, path: oidc-client-secret}
+              {{- if $o.ca }}
+              - {key: oidc-ca, path: oidc-ca}
+              {{- end }}
+              {{- end }}
 ---
 apiVersion: v1
 kind: Service
@@ -521,6 +555,9 @@ spec:
       ports:
         - {port: {{ .port }}, protocol: TCP}
     {{- end }}
+    {{- end }}
+    {{- if $o.issuerUrl }}
+    {{- include "a2vm-tenant.oidcEgress" . | nindent 4 }}
     {{- end }}
     - to:
         - namespaceSelector:

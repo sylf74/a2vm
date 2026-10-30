@@ -107,8 +107,16 @@ def _word_template(profile, profile_path: str) -> Path | None:
 
 
 def _send_link(alert_id: str) -> str:
-    """On Kubernetes (no pipeline of the watch): a link to a new pipeline of the tenant project, its
-    variables filled in, that sends this alert (A2VM_SEND_PIPELINE_URL, set by the chart)."""
+    """On Kubernetes (no pipeline of the watch): a link to the alert on the review page
+    (A2VM_REVIEW_URL, v0.17.0), else to a new pipeline of the tenant project, its variables filled in,
+    that sends this alert (A2VM_SEND_PIPELINE_URL); both set by the chart."""
+    review = env("REVIEW_URL").rstrip("/")
+    if review:
+        url = f"{review}/alerts/{quote(alert_id, safe='')}"
+        return (
+            f"Pour la relire, la corriger et l'envoyer : <a href=\"{url}\">ouvrir l'alerte</a> (connexion avec "
+            "votre compte ; validation réservée aux valideurs). Rien ne part sans ce geste."
+        )
     base = env("SEND_PIPELINE_URL")
     if not base:
         return ""

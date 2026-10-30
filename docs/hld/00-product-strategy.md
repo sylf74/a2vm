@@ -289,7 +289,8 @@ Migration, each step usable on its own:
    pipeline on one tenant, outputs compared, then the pipeline's schedule is switched off.
    Execution leaves GitLab; the code does not change. Done in v0.12.0 for the daily run and in
    v0.16.0 for the watch (`A2VM_RUN_MODE=kubernetes`: the watch service `via serve`, the watch as a
-   CronJob); the analysts' validation is still started from a GitLab pipeline.
+   CronJob); since v0.17.0 the analysts validate on a review page of `via serve`, signed in with the
+   tenant's identity provider, and a sender mails what they validated: GitLab only deploys.
 2. **Collectors and detection intake** (v0.13.0): collectors near the networks push their
    detections to the detection service; the daily run reads them instead of collecting; the
    tenant project declares its collectors (LLD detection §8).
@@ -431,7 +432,7 @@ Clients are out of scope in the first version.
 | Model | The tenant's approved LLM endpoint, served with tool calling (vLLM: `--enable-auto-tool-choice --tool-call-parser hermes` for Qwen3) |
 | Tools | A read-only tool server (OpenAPI, `verdict tools`) on `verdict serve`: search a CVE, a finding, an asset; list decisions with filters; explain a decision (stored rationale and SSVC path); answers short and paged (under about 2,000 tokens) |
 | Deployment | All in the tenant's namespace (Open WebUI, tool server, decision service), configured from the chart only; the model outside the cluster on the tenant's approved endpoints, one VM or several (the chat through an LLM gateway in the namespace that spreads its calls and leaves a failed endpoint out, the daily run moving to the next endpoint when one is down); `docs/chat.md` |
-| Accounts and history | Local accounts made by the tenant's chat admin (GitLab sign-in later); chats on the chat's volume, deleted after the tenant's retention (`A2VM_CHAT_RETENTION_DAYS`, default 30 days, v0.15.1) |
+| Accounts and history | The tenant's identity provider since v0.17.0 (OIDC; the directory's groups decide who gets in, `docs/sign-in.md`), else local accounts made by the tenant's chat admin; chats on the chat's volume, deleted after the tenant's retention (`A2VM_CHAT_RETENTION_DAYS`, default 30 days, v0.15.1) |
 | Facts | Identifiers, numbers and levels come from the tools, never from the model's memory; each answer names the data it rests on |
 | Documents | Word, PowerPoint and CSV built by the tool server from the data, not written by the model, downloaded through a link of one hour on the chat's address (v0.15.1); the tenant's own templates later |
 | Decisions | Read only: no decision, review flag or exposure is changed through the chat |
@@ -516,8 +517,8 @@ release.
 | v0.15.2 | The analysts' daily questions in the chat: what changed since the run before and why, dates of the facts behind a decision (CVE published and updated, added to KEV, EPSS, first observation), fix plan of an asset, due this week and overdue, concerned or not by a CVE (versions outside the range); dates added to the records and the decisions | 1, 3 |
 | v0.16.0 | The watch on Kubernetes: `A2VM_RUN_MODE` (gitlab, kubernetes) per tenant; the watch service `via serve` (state, last inventory, alerts and journal, contract `via.v1`), the watch as a CronJob, the daily run's inventory pushed to it; validation from a prefilled GitLab pipeline that starts a send Job; the chat reads the alerts | 1, 3 |
 | v0.16.1 | The via image holds detect and verdict, which the watch needs (asset matching, remediation delay): the watch on Kubernetes no longer stops after its baseline | 1 |
-| v0.16.2 (current) | The watch runs with via and `a2vm` only: matching of declared assets (`a2vm.declared`, owned by pillar 2) and CISA SSVC tables (`a2vm.ssvc`, owned by pillar 3) are libraries of the common contract, the extension points between pillars are removed, each image holds one pillar again; the interfaces of each pillar (provided, consumed, behaviour when the other side is missing) in each LLD §1.1 and in §6, checked by a test | 1, 2, 3 |
-| v0.17.0 (to confirm) | Sign-in of the analysts with the tenant's identity provider (OIDC, Keycloak first, rights from the directory's groups) for the chat and the review and validation page of the alerts on `via serve`; GitLab only deploys | 1, 3 |
+| v0.16.2 | The watch runs with via and `a2vm` only: matching of declared assets (`a2vm.declared`, owned by pillar 2) and CISA SSVC tables (`a2vm.ssvc`, owned by pillar 3) are libraries of the common contract, the extension points between pillars are removed, each image holds one pillar again; the interfaces of each pillar (provided, consumed, behaviour when the other side is missing) in each LLD §1.1 and in §6, checked by a test | 1, 2, 3 |
+| v0.17.0 (current) | Sign-in of the analysts with the tenant's identity provider (OIDC, Keycloak first; the directory's groups give the rights: readers, validators, admins) in the chat, and the review page of the alerts on `via serve` behind oauth2-proxy: a validator corrects a sheet, validates it or dismisses it, journaled with who; a sender mails the validated alerts; GitLab only deploys | 1, 3 |
 | v0.18.0 (to confirm) | PostgreSQL (CloudNativePG) behind `detect serve`, `verdict serve` and `via serve`: history between runs, finding lifecycle, several replicas, row-level security per tenant | 2, 3 |
 | Next (to confirm) | Client portal VM (Grafana) in service; decisions asked by the watch (D15 step 3, write side); asset graph (Apache AGE in PostgreSQL or Neo4j, to settle) | 1, 3, 4 |
 | Then (to confirm) | Dispatch & Capitalization; Emergency Actions | 4, 5 |

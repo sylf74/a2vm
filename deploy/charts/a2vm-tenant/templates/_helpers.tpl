@@ -75,6 +75,23 @@ if [ -f /tmp/cfg/watch-sources.yaml ]; then SOURCES=/tmp/cfg/watch-sources.yaml;
 if [ ! -s /secrets/via-run-token ]; then echo "No via-run-token: the watch service cannot be used"; exit 1; fi
 {{- end -}}
 
+{{/* Egress to the identity provider (oidc.egress, or the cluster's ingress controller). */}}
+{{- define "a2vm-tenant.oidcEgress" -}}
+{{- range .Values.oidc.egress }}
+- to:
+    - ipBlock:
+        cidr: {{ .cidr | quote }}
+  ports:
+    - {port: {{ .port }}, protocol: TCP}
+{{- end }}
+{{- if .Values.oidc.inCluster }}
+- to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: {{ .Values.chat.networkPolicy.ingressNamespace | quote }}
+{{- end }}
+{{- end -}}
+
 {{/* Checks of the values that templates cannot express alone. */}}
 {{- define "a2vm-tenant.checks" -}}
 {{- if not (has .Values.collect.mode (list "local" "intake")) -}}
@@ -91,6 +108,17 @@ if [ ! -s /secrets/via-run-token ]; then echo "No via-run-token: the watch servi
 {{- if not .Values.secret.name -}}
 {{- fail "watch.enabled needs secret.name (key via-run-token)" -}}
 {{- end -}}
+{{- end -}}
+{{- if and .Values.watch.enabled .Values.watch.review.enabled -}}
+{{- $_ := required "watch.review.host is required" .Values.watch.review.host -}}
+{{- $_ := required "watch.review.enabled needs oidc.issuerUrl (the identity provider)" .Values.oidc.issuerUrl -}}
+{{- $_ := required "oidc.clientId is required" .Values.oidc.clientId -}}
+{{- if not .Values.oidc.validators -}}
+{{- fail "watch.review.enabled needs oidc.validators (the groups that validate the alerts)" -}}
+{{- end -}}
+{{- end -}}
+{{- if and .Values.oidc.issuerUrl (not .Values.oidc.inCluster) (not .Values.oidc.egress) -}}
+{{- fail "oidc.issuerUrl needs oidc.egress (or oidc.inCluster) for the NetworkPolicies" -}}
 {{- end -}}
 {{- if .Values.chat.enabled -}}
 {{- if not .Values.verdict.enabled -}}

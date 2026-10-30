@@ -5,11 +5,13 @@ The watch of the tenant on Kubernetes (LLD vulnerability-intelligence §3.7), wi
 - watch: a CronJob, every 10 minutes: `via service watch` (state and inventory from the service,
   the same `via watch` as the pipeline, alerts and events back), the analysts' mail;
 - send: a Job made by the tenant pipeline's send job when an analyst validates (`helm template
-  --show-only templates/watch.yaml` with watch.send.job): `via service send`.
+  --show-only templates/watch.yaml` with watch.send.job): `via service send`;
+- with watch.review.enabled, `via serve` also serves the review page on port 8081, to oauth2-proxy
+  only (review.yaml), and the analysts' mail links to it.
 */ -}}
 {{- define "a2vm-tenant.watchPod" -}}
 {{- $root := .root -}}
-restartPolicy: Never
+restartPolicy: {{ .restartPolicy | default "Never" }}
 automountServiceAccountToken: false
 enableServiceLinks: false
 securityContext:
@@ -49,6 +51,10 @@ containers:
         value: {{ $root.Values.watch.sendPipelineUrl | quote }}
       - name: A2VM_SEND_REF
         value: {{ $root.Values.watch.sendRef | quote }}
+      {{- if $root.Values.watch.review.enabled }}
+      - name: A2VM_REVIEW_URL
+        value: {{ printf "https://%s" $root.Values.watch.review.host | quote }}
+      {{- end }}
     volumeMounts:
       - name: config
         mountPath: /config
@@ -73,7 +79,7 @@ containers:
       readOnlyRootFilesystem: true
       capabilities:
         drop: [ALL]
-    {{- with $root.Values.watch.run.resources }}
+    {{- with (.resources | default $root.Values.watch.run.resources) }}
     resources:
       {{- toYaml . | nindent 6 }}
     {{- end }}
@@ -184,9 +190,20 @@ spec:
             - --store=/data/watch
             - --keep-days={{ $w.keepDays }}
             - --port=8080
+            {{- if $w.review.enabled }}
+            - --review-port=8081
+            - --review-url={{ printf "https://%s" $w.review.host }}
+            - --review-key=/review-secret/review-key
+            - --review-readers={{ join "," .Values.oidc.readers }}
+            - --review-validators={{ join "," .Values.oidc.validators }}
+            {{- end }}
           ports:
             - name: http
               containerPort: 8080
+            {{- if $w.review.enabled }}
+            - name: review
+              containerPort: 8081
+            {{- end }}
           readinessProbe:
             httpGet: {path: /readyz, port: http}
             periodSeconds: 10
@@ -204,6 +221,11 @@ spec:
             - name: digests
               mountPath: /via-secret
               readOnly: true
+            {{- if $w.review.enabled }}
+            - name: review-key
+              mountPath: /review-secret
+              readOnly: true
+            {{- end }}
             - name: tmp
               mountPath: /tmp
           {{- with $w.resources }}
@@ -218,6 +240,14 @@ spec:
           secret:
             secretName: {{ $w.digestsSecret }}
             defaultMode: 0440
+        {{- if $w.review.enabled }}
+        - name: review-key
+          secret:
+            secretName: {{ .Values.secret.name }}
+            defaultMode: 0440
+            items:
+              - {key: review-key, path: review-key}
+        {{- end }}
         - name: tmp
           emptyDir: {}
 ---
@@ -236,6 +266,11 @@ spec:
     - name: http
       port: 8080
       targetPort: http
+    {{- if $w.review.enabled }}
+    - name: review
+      port: 8081
+      targetPort: review
+    {{- end }}
 ---
 apiVersion: batch/v1
 kind: CronJob
@@ -271,7 +306,8 @@ spec:
           {{- include "a2vm-tenant.watchPod" (dict "root" . "container" "watch" "script" $script) | nindent 10 }}
 {{- if $w.networkPolicy.enabled }}
 ---
-# The watch service: from the tenant's jobs (daily run, watch, send) and the analysts' tools only; no egress.
+# The watch service: its API from the tenant's jobs (daily run, watch, send) and the analysts' tools
+# only; its review page from oauth2-proxy only (the page trusts the identity headers it passes); no egress.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -293,6 +329,14 @@ spec:
         {{- end }}
       ports:
         - {port: 8080, protocol: TCP}
+    {{- if $w.review.enabled }}
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "a2vm-tenant.selector" (dict "root" $ "component" "review") | nindent 14 }}
+      ports:
+        - {port: 8081, protocol: TCP}
+    {{- end }}
   egress: []
 {{- end }}
 {{- else }}

@@ -242,6 +242,7 @@ def test_contract_names_the_calls_the_service_answers():
         "/v1/tenants/{tenant}/events",
         "/v1/tenants/{tenant}/alerts",
         "/v1/tenants/{tenant}/alerts/{alert}",
+        "/v1/tenants/{tenant}/alerts/{alert}/edit",
         "/v1/tenants/{tenant}/alerts/{alert}/files/{file}",
         "/healthz",
         "/readyz",

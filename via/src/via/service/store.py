@@ -5,7 +5,9 @@
   <root>/<tenant>/inventory/<client>/assets.json, findings.json   the last daily inventory
   <root>/<tenant>/runs/<id>/                 one passage of the watch that drafted alerts: index.json
                                              and the alert sheets (Markdown, HTML, Word)
-  <root>/<tenant>/alerts-log.jsonl           the journal of the alerts (drafted, analysts, sent, send-failed)
+  <root>/<tenant>/edits/<alert id>.md        the sheet as a validator corrected it on the review page
+  <root>/<tenant>/alerts-log.jsonl           the journal of the alerts (drafted, analysts, edited,
+                                             validated, dismissed, sent, send-failed)
 
 One writer (the service), each file written to a temporary name then renamed. Runs older than
 `keep_days` are removed; the journal keeps its last lines (via.alert.journal).
@@ -29,7 +31,10 @@ RUN_ID = re.compile(r"^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{8}$")
 FILE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,150}$")
 ALERT_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,150}$")
 INVENTORY_FILES = ("assets.json", "findings.json")
-STATUSES = ("pending", "sent", "failed")
+STATUSES = ("pending", "validated", "dismissed", "sent", "failed")
+# The events that set the status of an alert; the last one wins (none: pending).
+STATUS_OF = {"validated": "validated", "dismissed": "dismissed", "sent": "sent", "send-failed": "failed"}
+EDIT_MAX = 100_000  # characters of a corrected sheet
 
 
 def _atomic(path: Path, data: bytes) -> None:
@@ -134,9 +139,24 @@ class WatchStore:
     def events(self, tenant: str) -> list[dict]:
         return journal.read(self._t(tenant) / "alerts-log.jsonl")
 
+    # -- corrected sheets ------------------------------------------------------------------------
+    def edit(self, tenant: str, alert_id: str) -> str | None:
+        if not ALERT_ID.match(alert_id):
+            return None
+        path = self._t(tenant) / "edits" / f"{alert_id}.md"
+        return path.read_text(encoding="utf-8") if path.is_file() else None
+
+    def put_edit(self, tenant: str, alert_id: str, text: str, event: dict) -> None:
+        """The sheet a validator corrected, and its journal event, together."""
+        if not ALERT_ID.match(alert_id):
+            raise ValueError("invalid alert id")
+        with self._lock:
+            _atomic(self._t(tenant) / "edits" / f"{alert_id}.md", text.encode("utf-8"))
+            journal.append(self._t(tenant) / "alerts-log.jsonl", [event])
+
     def alerts(self, tenant: str) -> list[dict[str, Any]]:
-        """Every alert of the runs kept, newest first, with its status from the journal: `sent` once
-        mailed to the client, `failed` when its last sending failed, else `pending`."""
+        """Every alert of the runs kept, newest first, with its status from the journal (STATUS_OF:
+        the last of validated, dismissed, sent, send-failed; none: pending)."""
         by_alert: dict[str, list[dict]] = {}
         for e in self.events(tenant):
             by_alert.setdefault(e.get("alert", ""), []).append(e)
@@ -153,9 +173,10 @@ class WatchStore:
                     continue
                 seen.add(aid)
                 evs = by_alert.get(aid, [])
-                sends = [e for e in evs if e.get("event") in ("sent", "send-failed")]
-                status = "sent" if any(e["event"] == "sent" for e in sends) else "failed" if sends else "pending"
-                out.append({**entry, "run": rid, "status": status, "events": evs[-10:]})
+                marks = [e for e in evs if e.get("event") in STATUS_OF]
+                status = STATUS_OF[marks[-1]["event"]] if marks else "pending"
+                edited = any(e.get("event") == "edited" for e in evs)
+                out.append({**entry, "run": rid, "status": status, "edited": edited, "events": evs[-10:]})
         return out
 
     def alert(self, tenant: str, alert_id: str) -> dict[str, Any] | None:

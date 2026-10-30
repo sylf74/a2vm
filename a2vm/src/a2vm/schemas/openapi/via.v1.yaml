@@ -1,5 +1,5 @@
 # Contract of the pillar 1 watch service (HLD D15, LLD vulnerability-intelligence §3.7).
-# Status: v1, as built in v0.16.0 (via serve). Within v1, fields and calls are only added. Kept small
+# Status: v1, as built in v0.17.0 (via serve). Within v1, fields and calls are only added. Kept small
 # on purpose: the alerts of the watch and what the tenant's jobs need, so that the VIA team's service
 # can answer the same calls or replace them.
 openapi: 3.1.0
@@ -11,7 +11,9 @@ info:
     with their sheets and the journal of their events (drafted, mailed to the analysts, sent to the
     client). The tenant's jobs (daily run, watch, send) hold the run token; the analysts' tools hold
     the read token. The service sends nothing. Every call carries the tenant; reached inside the
-    cluster only.
+    cluster only. Since v0.17.0 the analysts' review page (port 8081, behind oauth2-proxy, not part of
+    this API) adds edited, validated and dismissed events and the corrected sheets; the jobs' events
+    stay drafted, analysts, sent and send-failed.
 servers:
   - url: http://a2vm-lab-via:8080
 tags:
@@ -126,13 +128,13 @@ paths:
     get:
       tags: [read]
       operationId: listAlerts
-      summary: The alerts kept, newest first, with their status (pending, sent, failed)
+      summary: The alerts kept, newest first, with their status (pending, validated, dismissed, sent, failed)
       security:
         - readToken: []
         - runToken: []
       parameters:
         - $ref: "#/components/parameters/tenant"
-        - {name: status, in: query, schema: {type: string, enum: [all, pending, sent, failed]}}
+        - {name: status, in: query, schema: {type: string, enum: [all, pending, validated, dismissed, sent, failed]}}
         - {name: cve, in: query, schema: {type: string}}
         - {name: level, in: query, schema: {type: string}}
         - {name: since, in: query, schema: {type: string, format: date}}
@@ -146,7 +148,7 @@ paths:
     get:
       tags: [read]
       operationId: getAlert
-      summary: One alert, its status, its last events and its sheet (Markdown)
+      summary: One alert, its status, its last events and its sheet (Markdown; as corrected, when edited)
       security:
         - readToken: []
         - runToken: []
@@ -157,6 +159,20 @@ paths:
         "200": {description: The alert, content: {application/json: {schema: {type: object}}}}
         "401": {$ref: "#/components/responses/Problem"}
         "404": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/alerts/{alert}/edit:
+    get:
+      tags: [jobs]
+      operationId: getAlertEdit
+      summary: The sheet as a validator corrected it on the review page (since v0.17.0), for the sender
+      security:
+        - runToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+        - {name: alert, in: path, required: true, schema: {type: string}}
+      responses:
+        "200": {description: The corrected sheet, content: {text/markdown: {schema: {type: string}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "404": {description: No such alert, or its sheet was not corrected}
   /v1/tenants/{tenant}/alerts/{alert}/files/{file}:
     get:
       tags: [jobs]
@@ -215,13 +231,16 @@ components:
       required: [event, alert]
       properties:
         at: {type: string}
-        event: {enum: [drafted, analysts, sent, send-failed]}
+        event:
+          description: drafted, analysts, sent, send-failed from the jobs; edited, validated, dismissed from the review page (since v0.17.0)
+          enum: [drafted, analysts, edited, validated, dismissed, sent, send-failed]
         alert: {type: string}
         level: {type: string}
         title: {type: string}
         to: {type: array, items: {type: string}}
         result: {type: string}
         error: {type: string}
+        by: {type: string, description: The analyst who edited, validated or dismissed (review page)}
     Problem:
       type: object
       properties:

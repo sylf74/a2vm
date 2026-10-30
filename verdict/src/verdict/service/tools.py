@@ -239,10 +239,15 @@ OPERATIONS: list[tuple[str, str, str, list[dict[str, Any]], str]] = [
         "/alerts",
         "list_alerts",
         "The watch's alerts for the tenant (CERT-FR, KEV, critical CVEs matched to its assets), newest first, "
-        "with their status: pending (drafted, waiting for an analyst's validation), sent to the client, or "
-        "failed. Filters: status, CVE, level, since a day.",
+        "with their status: pending (drafted, waiting for an analyst's validation), validated (waiting for "
+        "the sender), dismissed, sent to the client, or failed. Filters: status, CVE, level, since a day.",
         [
-            _q("status", "string", "all (default), pending, sent or failed", enum=["all", "pending", "sent", "failed"]),
+            _q(
+                "status",
+                "string",
+                "all (default), pending, validated, dismissed, sent or failed",
+                enum=["all", "pending", "validated", "dismissed", "sent", "failed"],
+            ),
             _q("cve", "string", "Only the alerts about this CVE"),
             _q("level", "string", "Level of the alert, e.g. urgent, important, info"),
             _q("since", "string", "Only the alerts drafted on or after this day, YYYY-MM-DD"),
@@ -253,8 +258,9 @@ OPERATIONS: list[tuple[str, str, str, list[dict[str, Any]], str]] = [
     (
         "/alerts/{alert}",
         "get_alert",
-        "One alert of the watch: its sheet as drafted for the client (product, CVSS, exploitation, "
-        "description, links), its status and its events (drafted, mailed to the analysts, sent).",
+        "One alert of the watch: its sheet for the client (as corrected by a validator, if so: edited), its "
+        "status and its events (drafted, mailed to the analysts, edited, validated or dismissed and by whom, "
+        "sent).",
         [_p("alert", "Alert id from list_alerts")],
         "via:alerts/{alert}",
     ),

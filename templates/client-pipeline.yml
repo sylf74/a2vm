@@ -13,10 +13,10 @@
 #
 #     include:
 #       - project: vulnops/a2vm
-#         ref: v0.16.2
+#         ref: v0.17.0
 #         file: templates/client-pipeline.yml
 #     variables:
-#       A2VM_REF: v0.16.2        # same version as the include
+#       A2VM_REF: v0.17.0        # same version as the include
 #
 # Jobs:
 #   push to the default branch     validate (profile and targets)
@@ -35,6 +35,10 @@
 #   A2VM_VERDICT_SERVICE  false: no decision service in the cluster (default true; docs/kubernetes.md)
 #   A2VM_CHAT_HOST        the analysts' chat on the decision service (Open WebUI); A2VM_CHAT_ALLOW,
 #                            A2VM_CHAT_ADMIN_EMAIL, A2VM_CHAT_RETENTION_DAYS, A2VM_CHAT_LLM_EGRESS... (docs/chat.md)
+#   A2VM_OIDC_ISSUER, A2VM_OIDC_CLIENT_ID, A2VM_OIDC_CLIENT_SECRET (masked), A2VM_OIDC_READERS,
+#                            A2VM_OIDC_VALIDATORS, A2VM_OIDC_CA (File)...   sign-in of the analysts with
+#                            the tenant's identity provider; A2VM_ALERTS_HOST: the review page of the
+#                            alerts (A2VM_RUN_MODE=kubernetes) (docs/sign-in.md)
 #   A2VM_GVM_USER, A2VM_GVM_PASSWORD (masked)   OpenVAS (GMP) account, when targets.yaml has
 #                            an openvas section; A2VM_GVM_CA, A2VM_GVM_CERT, A2VM_GVM_KEY
 #                            (File) for a tls:// GMP endpoint with client certificates (docs/openvas.md)
@@ -248,6 +252,23 @@ deploy-k8s:
         if [ -f watch-sources.yaml ]; then WATCH="$WATCH --set-file files.watchSources=watch-sources.yaml"; fi
         echo "A2VM_RUN_MODE=kubernetes: the daily run and the watch run in $NS; the scheduled pipelines do nothing"
       fi
+    # Sign-in of the analysts with the tenant's identity provider (v0.17.0), when A2VM_OIDC_ISSUER is
+    # set: the chat and, with A2VM_ALERTS_HOST, the review page of the alerts behind oauth2-proxy. The
+    # proxy's cookie key and the key of the page's forms are made once and kept in the Secret a2vm-tenant.
+    - |
+      SIGNIN=""; O="$(mktemp -d)"; chmod 700 "$O"
+      if [ -n "${A2VM_OIDC_ISSUER:-}" ]; then
+        command -v python3 >/dev/null || apk add --no-cache -q python3
+        python3 .a2vm/deploy/chat/sign_in_values.py "$A2VM_RUN_MODE" "$O/values.json"
+        for k in oidc-cookie-secret review-key; do
+          kubectl -n "$NS" get secret a2vm-tenant -o jsonpath="{.data.$k}" 2>/dev/null | base64 -d > "$O/$k" 2>/dev/null || true
+        done
+        if [ "$(wc -c < "$O/oidc-cookie-secret")" -ne 32 ]; then od -An -tx1 -N16 /dev/urandom | tr -d ' \n' > "$O/oidc-cookie-secret"; fi
+        if [ "$(wc -c < "$O/review-key")" -lt 64 ]; then od -An -tx1 -N32 /dev/urandom | tr -d ' \n' > "$O/review-key"; fi
+        SIGNIN="-f $O/values.json"
+      elif [ -n "${A2VM_ALERTS_HOST:-}" ]; then
+        echo "WARN A2VM_ALERTS_HOST is set but not A2VM_OIDC_ISSUER: no review page (the analysts must sign in)"
+      fi
     # The tenant's secrets, from its CI/CD variables (File or text), into one Secret; never printed.
     - |
       umask 077; S="$(mktemp -d)"
@@ -274,6 +295,12 @@ deploy-k8s:
       put via-read-token "$(cat "$W/via-read-token" 2>/dev/null)"
       put smtp-password "${A2VM_SMTP_PASSWORD:-}"
       put graph-client-secret "${A2VM_GRAPH_CLIENT_SECRET:-}"
+      if [ -n "$SIGNIN" ]; then
+        put oidc-client-secret "${A2VM_OIDC_CLIENT_SECRET:-}"
+        put oidc-ca "${A2VM_OIDC_CA:-}"
+        put oidc-cookie-secret "$(cat "$O/oidc-cookie-secret" 2>/dev/null)"
+        put review-key "$(cat "$O/review-key" 2>/dev/null)"
+      fi
       kubectl -n "$NS" create secret generic a2vm-tenant --from-file="$S" --dry-run=client -o yaml | kubectl apply -f -
       echo "secret a2vm-tenant: $(ls "$S" | tr '\n' ' ')"
       rm -rf "$S"
@@ -305,13 +332,14 @@ deploy-k8s:
         --set image.tag="$A2VM_REF" \
         --set secret.name=a2vm-tenant \
         --set daily.schedule="${A2VM_K8S_SCHEDULE:-45 5 * * *}" \
-        $PULL $FILES $INTAKE $VERDICT $CHAT $WATCH -f "$ENVF"
-      rm -rf "$I" "$V" "$C" "$W"
+        $PULL $FILES $INTAKE $VERDICT $CHAT $WATCH $SIGNIN -f "$ENVF"
+      rm -rf "$I" "$V" "$C" "$W" "$O"
       kubectl -n "$NS" get cronjob,pvc
       if [ -n "$INTAKE" ]; then kubectl -n "$NS" get deployment,service,ingress -l app.kubernetes.io/component=detect; fi
       if [ -n "$VERDICT" ]; then kubectl -n "$NS" get deployment,service -l app.kubernetes.io/component=verdict; fi
       if [ -n "$CHAT" ]; then kubectl -n "$NS" get deployment,ingress -l 'app.kubernetes.io/component in (chat,tools)'; fi
       if [ -n "$WATCH" ]; then kubectl -n "$NS" get deployment,cronjob -l 'app.kubernetes.io/component in (via,watch)'; fi
+      if [ -n "$SIGNIN" ] && [ -n "${A2VM_ALERTS_HOST:-}" ]; then kubectl -n "$NS" get deployment,ingress -l 'app.kubernetes.io/component in (review,send)'; fi
 
 # Exit code 3 = collection incomplete: the job shows as a warning and the pipeline goes on with
 # what was collected (plus the declared inventory).
