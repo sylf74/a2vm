@@ -205,10 +205,19 @@ in the tenant's namespace and its journal, its alerts and its state are kept by 
 prefilled *Run pipeline* (`A2VM_JOB=send`, `A2VM_SEND_ONLY=<alert id>`) instead of the watch's
 pipeline; the rest (edits, recipients, Word file) is unchanged. `docs/kubernetes.md` §4.
 
+## Review page (v0.17.0)
+
+With the analysts' sign-in and `A2VM_ALERTS_HOST` (`docs/sign-in.md`), the analysts' mail links to
+the alert on the review page: a validator corrects the sheet in the page, then *Valider et envoyer
+au client*; the sender mails it within a minute. *Écarter* closes an alert that does not concern
+the client. Readers see the alerts and their sheets only. Every step is in the alert's history,
+with who did it. No pipeline, no commit of `edits/`.
+
 ## Limits (to address with the PostgreSQL storage)
 
 - An edited sheet is plain Markdown: tables and lists as the watch writes them; the mail
-  renders headings, paragraphs, lists and tables only.
+  renders headings, paragraphs, lists and tables only. On the review page, the text is corrected,
+  not the Word file: the client gets the watch's Word file.
 - In the GitLab mode the journal is a file in the runner cache: clearing the cache empties it (the
   artifacts of past jobs keep their copies until they expire). On Kubernetes it is kept by `via serve`.
 - Without on-call duty, alerts found at night wait for the first analyst in the morning: the gain

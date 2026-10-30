@@ -3,10 +3,11 @@
 
 Plain HTTP inside the cluster, one service per tenant namespace; every call names the tenant and
 the service refuses another one. Roles:
-  run    the tenant's own jobs: the daily run (inventory), the watch (state, runs), the send job
-         (alerts and their files, events)
+  run    the tenant's own jobs: the daily run (inventory), the watch (state, runs), the sender
+         (alerts, their files and corrected sheets, events)
   read   the analysts' tools: the alerts and their sheets, never the files to send nor the state
-Nothing is sent from here: the service keeps, the jobs act.
+Nothing is sent from here: the service keeps, the jobs act. The analysts' review page is served on a
+port of its own (`review.py`), behind oauth2-proxy.
 """
 
 from __future__ import annotations
@@ -168,6 +169,16 @@ class WatchService:
             raise Problem(HTTPStatus.NOT_FOUND, "no such file of this alert")
         return data
 
+    def get_edit(self, tenant: str, token: str | None, alert_id: str) -> bytes:
+        """The sheet as a validator corrected it on the review page, for the sender."""
+        self._check(tenant, token, ("run",))
+        if self.store.alert(tenant, alert_id) is None:
+            raise Problem(HTTPStatus.NOT_FOUND, "no such alert kept")
+        text = self.store.edit(tenant, alert_id)
+        if text is None:
+            raise Problem(HTTPStatus.NOT_FOUND, "the sheet was not corrected")
+        return text.encode("utf-8")
+
     # -- readers -------------------------------------------------------------------------------
     def list_alerts(self, tenant: str, token: str | None, query: dict[str, str]) -> dict[str, Any]:
         self._check(tenant, token, ("read", "run"))
@@ -203,8 +214,13 @@ class WatchService:
         alert = self.store.alert(tenant, alert_id)
         if alert is None:
             raise Problem(HTTPStatus.NOT_FOUND, "no such alert kept")
-        sheet = self.store.file(tenant, alert["run"], f"{alert_id}.md") or b""
-        return {**alert, "sheet": sheet.decode("utf-8", "replace")[:SHEET_MAX]}
+        edited = self.store.edit(tenant, alert_id)
+        sheet = (
+            edited
+            if edited is not None
+            else (self.store.file(tenant, alert["run"], f"{alert_id}.md") or b"").decode("utf-8", "replace")
+        )
+        return {**alert, "sheet": sheet[:SHEET_MAX]}
 
 
 def make_handler(service: WatchService) -> type[JsonHandler]:
@@ -244,6 +260,8 @@ def make_handler(service: WatchService) -> type[JsonHandler]:
                     self.send_json(HTTPStatus.OK, service.list_alerts(tenant, token, query))
                 elif len(parts) == 2 and parts[0] == "alerts":
                     self.send_json(HTTPStatus.OK, service.get_alert(tenant, token, unquote(parts[1])))
+                elif len(parts) == 3 and parts[0] == "alerts" and parts[2] == "edit":
+                    self._bytes(service.get_edit(tenant, token, unquote(parts[1])), "text/markdown; charset=utf-8")
                 elif len(parts) == 4 and parts[0] == "alerts" and parts[2] == "files":
                     self._bytes(
                         service.get_file(tenant, token, unquote(parts[1]), unquote(parts[3])),

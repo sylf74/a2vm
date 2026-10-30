@@ -5,6 +5,35 @@ analyst and, under **Upgrade**, what a tenant must do when it moves to that tag 
 `A2VM_REF` in its `.gitlab-ci.yml`). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
 §11) and the LLDs. A release adds its entry here in the same merge request (CLAUDE.md, Releasing).
 
+## v0.17.0 — 2026-10-30
+
+The analysts sign in with the tenant's identity provider; the alerts are validated on a page, no
+longer in GitLab.
+
+- Sign-in (OIDC; Keycloak described in `docs/sign-in.md`, any provider with discovery): the chat
+  (Open WebUI: role from the groups claim, members of the readers' and validators' groups only,
+  optional admins' group, no account joined by e-mail, PKCE) and the review page.
+- Review page of the alerts on `via serve` (port 8081), behind oauth2-proxy v7.15.5 (allowed
+  groups, PKCE, cookie key made by `deploy-k8s`); reached from the proxy only. Readers read; a
+  validator corrects the sheet (no CVE the alert does not concern), validates it or dismisses it.
+  Forms signed per analyst and alert, same origin only, no script on the page. Journal events
+  `edited`, `validated`, `dismissed` with `by`; statuses `validated` and `dismissed`.
+- Sender (`via service send --validated --every 30`, one replica): mails the validated alerts with
+  their corrected sheet, once; a failure waits for a new validation. `via serve` and the page hold
+  no mail secret and no Kubernetes right.
+- The analysts' mail links to the alert on the page (`A2VM_REVIEW_URL`); without the page, to the
+  prefilled pipeline as in v0.16.0.
+- Contract `via.v1`: `GET …/alerts/{alert}/edit`, the new statuses and events (fields added).
+- Chat: `get_alert` gives the corrected sheet, `list_alerts` the new statuses.
+- `deploy-k8s`: `A2VM_OIDC_*` and `A2VM_ALERTS_HOST` (`deploy/chat/sign_in_values.py`), keys
+  `oidc-client-secret`, `oidc-ca`, `oidc-cookie-secret`, `review-key` in the Secret.
+- `docs/sign-in.md`; LLD intelligence §3.8, LLD triage §16.4 (the Open WebUI settings of the
+  sign-in), HLD chapter 10 and D15, `docs/kubernetes.md`, `docs/chat.md`, `docs/alerts.md`.
+
+**Upgrade**: move `ref` and `A2VM_REF` to `v0.17.0`; nothing changes without `A2VM_OIDC_ISSUER`.
+To sign in with the provider: create the client (`docs/sign-in.md` §1), set the `A2VM_OIDC_*`
+variables and, with `A2VM_RUN_MODE: kubernetes`, `A2VM_ALERTS_HOST`, then push.
+
 ## v0.16.2 — 2026-10-30
 
 The watch runs with via and a2vm only; the interfaces between pillars are documented and checked.

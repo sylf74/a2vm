@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 """`via serve` (the watch service of one tenant) and `via service …` (the tenant's jobs on Kubernetes):
 
-  via serve                 keeps the watch's state, the last inventory, the alerts and their journal
+  via serve                 keeps the watch's state, the last inventory, the alerts and their journal;
+                            with --review-port, the analysts' review page (behind oauth2-proxy)
   via service watch …       one passage of the watch: state and inventory from the service, `via watch`,
                             alerts, events and the new state back to it
-  via service send …        the analyst's validation: the chosen alerts from the service, `via send`,
-                            the events back to it
+  via service send …        the chosen alerts from the service, `via send`, the events back to it;
+                            with --validated, the alerts validated on the review page (--every: a loop)
   via service push-inventory …   the daily run's assets and findings, for the watch
 
 The watch and the send of the GitLab pipelines (`via watch`, `via send`) are unchanged; these commands
@@ -19,6 +20,8 @@ import json
 import logging
 import sys
 import tempfile
+import threading
+import time
 from pathlib import Path
 
 from a2vm.config import env
@@ -56,9 +59,31 @@ def cmd_serve(args: argparse.Namespace) -> int:
         print(exc, file=sys.stderr)
         return 2
     store = WatchStore(args.store, args.keep_days)
+    review_httpd = None
+    if args.review_port:
+        from a2vm.service import serve as plain_serve
+
+        from .review import Review, make_handler
+
+        try:
+            key = Path(args.review_key).read_bytes().strip() if args.review_key else b""
+            review = Review(
+                args.tenant,
+                store,
+                key,
+                {g for g in args.review_readers.split(",") if g.strip()},
+                {g for g in args.review_validators.split(",") if g.strip()},
+                args.review_url,
+            )
+        except (OSError, ValueError) as exc:
+            print(f"review page: {exc}", file=sys.stderr)
+            return 2
+        review_httpd = plain_serve(make_handler(review), args.host, args.review_port)
+        threading.Thread(target=review_httpd.serve_forever, daemon=True).start()
     roles = ", ".join(f"{r} {'set' if r in tokens.digests else 'MISSING'}" for r in sorted(ROLES))
     kept = store.alerts(args.tenant)
-    print(f"{args.tenant}: tokens {roles}; store {args.store}; {len(kept)} alert(s) kept", flush=True)
+    page = f"; review page on port {args.review_port} ({args.review_url})" if review_httpd else ""
+    print(f"{args.tenant}: tokens {roles}; store {args.store}; {len(kept)} alert(s) kept{page}", flush=True)
     httpd = serve(WatchService(args.tenant, tokens, store, args.max_mb * 1024 * 1024), args.host, args.port)
     try:
         httpd.serve_forever()
@@ -66,6 +91,8 @@ def cmd_serve(args: argparse.Namespace) -> int:
         pass
     finally:
         httpd.server_close()
+        if review_httpd:
+            review_httpd.shutdown()
     return 0
 
 
@@ -118,6 +145,8 @@ def cmd_watch(args: argparse.Namespace) -> int:
 
 
 def cmd_send(args: argparse.Namespace) -> int:
+    if args.validated:
+        return _send_validated(args)
     from via.alert.cli import cmd_send as send
 
     client = _client(args)
@@ -173,6 +202,59 @@ def cmd_send(args: argparse.Namespace) -> int:
         client.close()
 
 
+def _send_chosen(args: argparse.Namespace, client: WatchClient, chosen: list[dict]) -> int:
+    """`via send` of the chosen alerts, with the sheets corrected on the review page; events back."""
+    from via.alert.cli import cmd_send as send
+
+    with tempfile.TemporaryDirectory() as tmp:
+        alerts, edits = Path(tmp) / "alerts", Path(tmp) / "edits"
+        edits.mkdir()
+        for a in chosen:
+            client.fetch(a, alerts)
+            text = client.edit(a["id"])
+            if text is not None:
+                (edits / f"{a['id']}.md").write_text(text, encoding="utf-8")
+        index = [
+            {k: v for k, v in a.items() if k not in ("run", "status", "events", "sheet", "edited")} for a in chosen
+        ]
+        (alerts / "index.json").write_text(json.dumps(index, ensure_ascii=False), encoding="utf-8")
+        log = Path(tmp) / "events.jsonl"
+        code = send(
+            argparse.Namespace(
+                profile=args.profile, contacts=args.contacts, alerts=str(alerts), only=None, journal=str(log),
+                edits=str(edits),
+            )
+        )  # fmt: skip
+        events = _new_events(log)
+        if events:
+            client.add_events(events)
+        return code
+
+
+def _send_validated(args: argparse.Namespace) -> int:
+    """The sender: the alerts validated on the review page, once (`--every 0`) or in a loop."""
+    client = _client(args)
+    code = 0
+    try:
+        while True:
+            try:
+                chosen = client.alerts("validated")
+                if chosen:
+                    print(
+                        f"{args.tenant}: sending {len(chosen)} validated alert(s): {', '.join(a['id'] for a in chosen)}"
+                    )
+                    code = _send_chosen(args, client, chosen)
+            except ServiceError as exc:
+                print(f"{args.tenant}: {exc}: tried again at the next pass", file=sys.stderr, flush=True)
+                code = 1
+            sys.stdout.flush()
+            if args.every <= 0:
+                return code
+            time.sleep(args.every)
+    finally:
+        client.close()
+
+
 def cmd_push_inventory(args: argparse.Namespace) -> int:
     base = Path(args.assets_dir)
     try:
@@ -215,6 +297,11 @@ def main(argv: list[str]) -> int:
     s.add_argument("--max-mb", type=int, default=50)
     s.add_argument("--host", default="0.0.0.0")  # noqa: S104 - in a pod
     s.add_argument("--port", type=int, default=8080)
+    s.add_argument("--review-port", type=int, default=0, help="serve the review page on this port (0: none)")
+    s.add_argument("--review-url", default="", help="public https URL of the review page")
+    s.add_argument("--review-key", help="file of the key that signs the page's forms (32 bytes at least)")
+    s.add_argument("--review-readers", default="", help="groups that read the alerts, comma-separated")
+    s.add_argument("--review-validators", default="", help="groups that also correct, validate and dismiss")
     s.set_defaults(func=cmd_serve)
 
     svc = sub.add_parser("service", help="the tenant's jobs on Kubernetes, with the watch service")
@@ -237,6 +324,8 @@ def main(argv: list[str]) -> int:
     d.add_argument("--edits", help="the analysts' edited sheets (edits/<alert id>.md or .docx)")
     d.add_argument("--contacts", default="contacts.yaml")
     d.add_argument("--again", action="store_true", help="send an alert already sent once more")
+    d.add_argument("--validated", action="store_true", help="send the alerts validated on the review page")
+    d.add_argument("--every", type=int, default=0, help="with --validated: seconds between passes (0: once)")
     d.set_defaults(func=cmd_send)
     i = ss.add_parser("push-inventory", help="the daily run's assets and findings, for the watch")
     _common(i)

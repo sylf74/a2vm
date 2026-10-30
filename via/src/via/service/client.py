@@ -107,6 +107,11 @@ class WatchClient:
         for name in _files_of(alert):
             (dest / name).write_bytes(self._call("GET", f"/alerts/{alert['id']}/files/{name}").content)
 
+    def edit(self, alert_id: str) -> str | None:
+        """The sheet a validator corrected on the review page, or None."""
+        r = self._call("GET", f"/alerts/{alert_id}/edit", missing_ok=True)
+        return r.text if r is not None else None
+
     def add_events(self, events: list[dict]) -> dict[str, Any]:
         return self._call("POST", "/events", {"events": events}).json()
 

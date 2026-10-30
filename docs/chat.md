@@ -52,6 +52,10 @@ keeps them in the Secret `a2vm-tenant` (`chat-secret-key`, `chat-admin-password`
 
 ## 3. First sign-in, analysts' accounts
 
+With the tenant's identity provider (`A2VM_OIDC_ISSUER`, v0.17.0), the analysts sign in with their
+directory account and their groups decide who gets in: `docs/sign-in.md`. The local admin below
+stays for the first set-up, unless `A2VM_OIDC_ADMINS` names the admins' group.
+
 After the deployment (`kubectl -n <namespace> get pods -l 'app.kubernetes.io/component in (chat,tools)'`:
 both `Running`), read the first admin's password from its Secret and sign in at `https://<host>`:
 
@@ -144,6 +148,7 @@ v0.14.0 or later. The dates appear for the runs made with v0.15.2 or later.
 
 ## 9. Limits
 
-- Local accounts made by the admin; sign-in with the tenant's identity provider (OIDC) in v0.17.0.
+- Without `A2VM_OIDC_ISSUER`, local accounts made by the admin; with it, the provider's accounts
+  (`docs/sign-in.md`).
 - Documents in a neutral layout; the tenant's own Word and PowerPoint templates later.
 - One replica on a volume (SQLite); PostgreSQL with the decision service (v0.18.0).

@@ -1,9 +1,9 @@
 # Client project pipeline: everything comes from the A2VM code project (vulnops/a2vm), at a fixed version.
 include:
   - project: vulnops/a2vm
-    ref: v0.16.2
+    ref: v0.17.0
     file: templates/client-pipeline.yml
 
 variables:
-  A2VM_REF: v0.16.2   # keep equal to the include ref
+  A2VM_REF: v0.17.0   # keep equal to the include ref
   A2VM_RUN_MODE: gitlab   # kubernetes: the daily run and the watch in the cluster (docs/kubernetes.md §4)

@@ -60,7 +60,7 @@ def test_the_cronjob_runs_the_commands_of_the_daily_pipeline():
 
 def test_every_secret_the_job_writes_is_read_by_the_chart_and_documented():
     script = "\n".join(_deploy_job()["script"])
-    written = set(re.findall(r"^put ([a-z-]+) ", script, re.MULTILINE))
+    written = set(re.findall(r"^\s*put ([a-z-]+) ", script, re.MULTILINE))
     chart = _chart_text()
     read = set(re.findall(r"/secrets/([a-z-]+)", chart)) | set(re.findall(r'"([a-z]+(?:-[a-z]+)+)" ?}}?', chart))
     read |= set(re.findall(r'"[A-Z0-9_]+" "([a-z-]+)"', chart))

@@ -167,7 +167,8 @@ kubectl -n $NS run verdict-reader --rm -i --restart=Never --image=curlimages/cur
 ### Analysts' chat (v0.15.0)
 
 With `A2VM_CHAT_HOST`, `deploy-k8s` also deploys Open WebUI and the tool server `verdict tools` in
-the namespace, on the tenant's LLM endpoints: `chat.md`.
+the namespace, on the tenant's LLM endpoints: `chat.md`. With `A2VM_OIDC_ISSUER` (v0.17.0) the
+analysts sign in with the tenant's identity provider: `sign-in.md`.
 
 ## 4. The watch on Kubernetes (v0.16.0)
 
@@ -191,13 +192,18 @@ alert's id filled in; running it is the validation. The job `send-alerts-k8s` st
 the namespace and shows its log. Edited sheets: commit `edits/<alert id>.md` (or `.docx`) first,
 as in GitLab. A PDF attachment needs the GitLab mode (LibreOffice is not in the via image).
 
+With the analysts' sign-in and `A2VM_ALERTS_HOST` (v0.17.0, `docs/sign-in.md`), the mail links to
+the review page instead: a validator corrects, validates or dismisses there, and the sender
+(`a2vm-<tenant>-sender`) mails the validated alerts; GitLab then only deploys.
+
 Back to GitLab: `A2VM_RUN_MODE: gitlab` and push; the watch's state stays in the service's volume
 (`a2vm-<tenant>-watch`), the GitLab watch starts from its own cache.
 
 ## 5. Limits of this step
 
 - With `A2VM_RUN_MODE=gitlab` (default) the watch and its validation stay in GitLab pipelines; with
-  `kubernetes` the validation is still started from a GitLab pipeline (a page on `via serve`, with the analysts' sign-in: v0.17.0).
+  `kubernetes` the validation is started from a GitLab pipeline, or, with the analysts' sign-in
+  and `A2VM_ALERTS_HOST` (v0.17.0), from the review page (`docs/sign-in.md`).
 - The run's report is read from the volume, the dashboards or the decision service; there are no job artifacts.
 - The decision service keeps the last runs as files, one replica, and is read with a token until
   service accounts; it answers reads only (D15 step 3, read side).

@@ -192,6 +192,7 @@ docs/gti.md                                Google Threat Intelligence connector
 docs/kubernetes.md                         daily run, detection and decision services on Kubernetes
 docs/collectors.md                         collectors near the networks and the detection service
 docs/chat.md                               analysts' conversational search (Open WebUI) in the tenant's namespace
+docs/sign-in.md                            analysts' sign-in (OIDC, Keycloak) and the review page of the alerts
 CHANGELOG.md                               release notes, one entry per tag
 tests/                                     tests and offline fixtures
 scripts/run-pipeline.sh                    the CI pipeline, locally

@@ -1,0 +1,264 @@
+{{- /*
+The review page of the alerts (v0.17.0, LLD vulnerability-intelligence §3.8), with watch.review.enabled:
+- review: oauth2-proxy, behind the ingress, signs the analysts in with the tenant's identity provider
+  (oidc.*), lets in the members of oidc.readers and oidc.validators only, and passes who they are to
+  the review page of `via serve` (port 8081), which only it can reach;
+- sender: `via service send --validated`, every watch.review.sender.everySeconds, mails the alerts a
+  validator validated; it holds the mail secrets, `via serve` and the page hold none.
+*/ -}}
+{{- if and .Values.watch.enabled .Values.watch.review.enabled }}
+{{- include "a2vm-tenant.checks" . }}
+{{- $name := include "a2vm-tenant.name" . }}
+{{- $r := .Values.watch.review }}
+{{- $o := .Values.oidc }}
+{{- $ing := $r.ingress }}
+{{- $tls := $ing.tlsSecret | default (ternary (printf "%s-review-tls" $name) "" (ne $ing.clusterIssuer "")) }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}-review
+  labels:
+    {{- include "a2vm-tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: review
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "a2vm-tenant.selector" (dict "root" . "component" "review") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "a2vm-tenant.labels" . | nindent 8 }}
+        app.kubernetes.io/component: review
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: oauth2-proxy
+          image: {{ $r.proxy.image | quote }}
+          imagePullPolicy: IfNotPresent
+          args:
+            - --http-address=0.0.0.0:4180
+            - --provider=oidc
+            - --provider-display-name={{ $o.providerName }}
+            - --oidc-issuer-url={{ $o.issuerUrl }}
+            - --client-id={{ $o.clientId }}
+            - --client-secret-file=/secrets/oidc-client-secret
+            - --cookie-secret-file=/secrets/oidc-cookie-secret
+            - --cookie-name=_a2vm_review
+            - --cookie-secure=true
+            - --cookie-samesite=lax
+            - --cookie-expire={{ $r.proxy.cookieHours }}h
+            - --redirect-url={{ printf "https://%s/oauth2/callback" $r.host }}
+            - --upstream={{ printf "http://%s-via:8081/" $name }}
+            - --scope=openid email profile
+            - --code-challenge-method=S256
+            - --oidc-groups-claim={{ $o.groupsClaim }}
+            - --email-domain=*
+            {{- range (concat $o.readers $o.validators | uniq) }}
+            - --allowed-group={{ . }}
+            {{- end }}
+            - --pass-user-headers=true
+            - --skip-provider-button=true
+            - --reverse-proxy=true
+            - --silence-ping-logging=true
+            {{- if $o.ca }}
+            - --provider-ca-file=/oidc-ca/ca.crt
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: 4180
+          readinessProbe:
+            httpGet: {path: /ready, port: http}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /ping, port: http}
+            periodSeconds: 30
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: secrets
+              mountPath: /secrets
+              readOnly: true
+            {{- if $o.ca }}
+            - name: ca
+              mountPath: /oidc-ca
+              readOnly: true
+            {{- end }}
+          {{- with $r.proxy.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: secrets
+          secret:
+            secretName: {{ .Values.secret.name }}
+            defaultMode: 0444
+            items:
+              - {key: oidc-client-secret, path: oidc-client-secret}
+              - {key: oidc-cookie-secret, path: oidc-cookie-secret}
+        {{- if $o.ca }}
+        - name: ca
+          secret:
+            secretName: {{ .Values.secret.name }}
+            defaultMode: 0444
+            items:
+              - {key: oidc-ca, path: ca.crt}
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}-review
+  labels:
+    {{- include "a2vm-tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: review
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "a2vm-tenant.selector" (dict "root" . "component" "review") | nindent 4 }}
+  ports:
+    - name: http
+      port: 4180
+      targetPort: http
+{{- if and (eq $ing.controller "traefik") $ing.allowFrom }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ $name }}-review-allow
+  labels:
+    {{- include "a2vm-tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: review
+spec:
+  ipAllowList:
+    sourceRange:
+      {{- range $ing.allowFrom }}
+      - {{ . | quote }}
+      {{- end }}
+{{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $name }}-review
+  labels:
+    {{- include "a2vm-tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: review
+  annotations:
+    {{- if eq $ing.controller "nginx" }}
+    nginx.ingress.kubernetes.io/proxy-body-size: "1m"
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "16k"
+    {{- if $ing.allowFrom }}
+    nginx.ingress.kubernetes.io/whitelist-source-range: {{ join "," $ing.allowFrom | quote }}
+    {{- end }}
+    {{- else if and (eq $ing.controller "traefik") $ing.allowFrom }}
+    traefik.ingress.kubernetes.io/router.middlewares: {{ printf "%s-%s-review-allow@kubernetescrd" .Release.Namespace $name | quote }}
+    {{- end }}
+    {{- if $ing.clusterIssuer }}
+    cert-manager.io/cluster-issuer: {{ $ing.clusterIssuer | quote }}
+    {{- end }}
+    {{- with $ing.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  {{- if $ing.className }}
+  ingressClassName: {{ $ing.className | quote }}
+  {{- end }}
+  tls:
+    - hosts: [{{ $r.host | quote }}]
+      {{- if $tls }}
+      secretName: {{ $tls | quote }}
+      {{- end }}
+  rules:
+    - host: {{ $r.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $name }}-review
+                port:
+                  name: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}-sender
+  labels:
+    {{- include "a2vm-tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: send
+spec:
+  replicas: 1             # one sender: an alert is mailed once
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "a2vm-tenant.selector" (dict "root" . "component" "send") | nindent 6 }}
+      a2vm/role: sender
+  template:
+    metadata:
+      labels:
+        {{- include "a2vm-tenant.labels" . | nindent 8 }}
+        app.kubernetes.io/component: send
+        a2vm/role: sender
+    spec:
+      {{- $script := printf "exec via service send --url %s --tenant %s --token-file /secrets/via-run-token \\\n  /tmp/cfg/client.yaml --contacts /tmp/cfg/contacts.yaml --validated --every %d" (include "a2vm-tenant.viaUrl" . | quote) (.Values.tenant | quote) (int $r.sender.everySeconds) }}
+      {{- include "a2vm-tenant.watchPod" (dict "root" . "container" "sender" "script" $script "restartPolicy" "Always" "resources" $r.sender.resources) | nindent 6 }}
+{{- if .Values.watch.networkPolicy.enabled }}
+---
+# oauth2-proxy: from the ingress controller only; to the identity provider, the review page and the DNS.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $name }}-review
+  labels:
+    {{- include "a2vm-tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: review
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "a2vm-tenant.selector" (dict "root" . "component" "review") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.chat.networkPolicy.ingressNamespace | quote }}
+      ports:
+        - {port: 4180, protocol: TCP}
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "a2vm-tenant.selector" (dict "root" . "component" "via") | nindent 14 }}
+      ports:
+        - {port: 8081, protocol: TCP}
+    {{- include "a2vm-tenant.oidcEgress" . | nindent 4 }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.chat.networkPolicy.dnsNamespace | quote }}
+      ports:
+        - {port: 53, protocol: UDP}
+        - {port: 53, protocol: TCP}
+{{- end }}
+{{- end }}

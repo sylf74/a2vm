@@ -3,7 +3,7 @@
 | Item | Value |
 | --- | --- |
 | Building block | Pillar 3 package `verdict` (command `verdict`): Asset context (`verdict.assets`, `verdict assets build`), Decision (`verdict run`) Restitution (`verdict.restitution`: `verdict publish`, `verdict db`, `verdict grafana`) and Decision service (`verdict.service`: `verdict serve`, `verdict push`, `verdict tools`) |
-| Status | v0.16.2 as built (decision logic unchanged since v0.9.0) |
+| Status | v0.17.0 as built (decision logic unchanged since v0.9.0) |
 | Place in the set | C4 level 3 of pillar 3 of the HLD ([`../hld/30-triage-prioritization.md`](../hld/30-triage-prioritization.md)): Decision (sections 1 to 12), Restitution (section 13), Asset context (section 14), Decision service (section 15), Tool server of the conversational search (section 16). Goals, constraints and contracts: HLD. Servers, zones and flows: DAT |
 | Code | `verdict/src/verdict/`, shared model in `a2vm/src/a2vm/models.py` |
 
@@ -941,13 +941,23 @@ variable of the chart is missing from this table.
 | `CONTENT_SECURITY_POLICY` | `chat.ingress.contentSecurityPolicy` | Images, scripts, requests and frames from the site only: an answer that writes an image or a link with data in its URL cannot make the browser send it (with §16.2) |
 | `XFRAME_OPTIONS`, `REFERRER_POLICY`, `XCONTENT_TYPE` | `DENY`, `no-referrer`, `nosniff` | Not framed by another site; no address of the chat leaks in a referrer; no type sniffing |
 | `HOME`, `DATA_DIR`, `STATIC_DIR` | `/tmp`, `/app/backend/data`, `/app/static` | Writable paths on volumes (data on the chat's claim, the rest on empty dirs), so the image runs read-only |
+| `OAUTH_CLIENT_ID`, `OPENID_PROVIDER_URL`, `OPENID_REDIRECT_URI` | `oidc.clientId`, `<oidc.issuerUrl>/.well-known/openid-configuration`, `https://<chat.host>/oauth/oidc/callback` | Sign-in with the tenant's identity provider (v0.17.0, with `oidc.issuerUrl` only) |
+| `OAUTH_CLIENT_SECRET` | from `oidc-client-secret`, at start | The client secret never in the pod's spec |
+| `OAUTH_PROVIDER_NAME`, `OAUTH_SCOPES`, `OAUTH_CODE_CHALLENGE_METHOD` | `oidc.providerName`, `openid email profile`, `S256` | Standard scopes; PKCE on the code flow |
+| `ENABLE_OAUTH_SIGNUP`, `OAUTH_MERGE_ACCOUNTS_BY_EMAIL` | `true`, `false` | An account is made at the first sign-in of an allowed member; never attached to an existing local account by its e-mail (a provider account could take over a local one) |
+| `ENABLE_OAUTH_ROLE_MANAGEMENT`, `OAUTH_ROLES_CLAIM` | `true`, `oidc.groupsClaim` (`groups`) | The groups of the ID token decide the role at every sign-in |
+| `OAUTH_ALLOWED_ROLES` | `oidc.readers` and `oidc.validators` | Their members get the role `user`; anyone else is refused (Open WebUI answers 403 when the token's groups match none) |
+| `OAUTH_ADMIN_ROLES` | `oidc.admins` (may be empty) | Members become admins; empty: no admin from the provider, the local admin stays the only one |
+| `ENABLE_LOGIN_FORM` | `false` with `oidc.admins`, else `true` | The local login form disappears once admins come from the provider; kept for the local admin otherwise (sign-up stays closed) |
+| `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE`, `AIOHTTP_CLIENT_SSL_CERT_FILE` | `/tmp/ca-bundle.pem`, at start, with `oidc.ca` only | The public CAs of the image and the provider's CA (`oidc-ca`), for the server's calls to the provider |
 
 The pod runs as user 10001, not as root (the image's default), with a read-only root file system,
 no capability, no privilege escalation and no service-account token. It reads from the Secret of
 the tenant four keys only (`chat-secret-key`, `chat-admin-password`, `chat-tools-token`,
-`llm-api-key`), never the others (scan key, reporting DSN). Its NetworkPolicy (§16.3) is the last
-line: even a setting missed here cannot reach anything but the tool server, the LLM endpoint or
-the gateway, and the DNS.
+`llm-api-key`), and with sign-in through the provider `oidc-client-secret` and `oidc-ca`, never the
+others (scan key, reporting DSN). Its NetworkPolicy (§16.3) is the last line: even a setting missed
+here cannot reach anything but the tool server, the LLM endpoint or the gateway, the identity
+provider (`oidc.egress`) and the DNS.
 
 ### 16.5 LLM gateway of the chat (several endpoints)
 
@@ -1021,7 +1031,7 @@ stops the container with an error (Open WebUI changed: checked again with a new 
 | Item | Status |
 | --- | --- |
 | The admin account | Trusted: it creates accounts, can read the analysts' chats (`ENABLE_ADMIN_CHAT_ACCESS`, Open WebUI default) and can add functions (Python run by the server), which live in the database, not in the configuration, and survive a restart. The admin is one person of the team, its password changed at first sign-in |
-| Sign-in | Local accounts; the tenant's identity provider (OIDC) in v0.17.0 |
+| Sign-in | Local accounts; with `oidc.issuerUrl` (v0.17.0), the tenant's identity provider, its groups deciding who gets in (§16.4, `docs/sign-in.md`) |
 | Replicas | One, SQLite on the claim; PostgreSQL with the decision service (v0.18.0) |
 | Documents | Neutral layout; the tenant's own Word and PowerPoint templates later |
 

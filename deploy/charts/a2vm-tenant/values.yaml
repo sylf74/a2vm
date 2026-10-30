@@ -204,6 +204,31 @@ watch:
     resources:
       requests: {cpu: 100m, memory: 256Mi}
       limits: {memory: 1Gi}
+  # The review page of the alerts (v0.17.0, LLD intelligence §3.8): served by via serve on port 8081,
+  # behind oauth2-proxy, which signs the analysts in with the tenant's identity provider (oidc.*).
+  # Readers read the alerts; validators also correct, validate and dismiss. A sender mails the
+  # validated alerts. Without it, the analysts' mail links to a prefilled GitLab pipeline.
+  review:
+    enabled: false
+    host: ""            # e.g. alerts-lab.apps.example.org
+    proxy:
+      image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.5
+      cookieHours: 8    # analysts sign in again after
+      resources:
+        requests: {cpu: 10m, memory: 32Mi}
+        limits: {memory: 128Mi}
+    sender:
+      everySeconds: 30  # how often the sender looks for validated alerts
+      resources:
+        requests: {cpu: 20m, memory: 128Mi}
+        limits: {memory: 512Mi}
+    ingress:
+      className: ""
+      tlsSecret: ""     # empty: the controller's default, or with clusterIssuer <release>-<tenant>-review-tls
+      clusterIssuer: ""
+      controller: nginx # nginx, traefik or other, as chat.ingress.controller
+      allowFrom: []     # optional: the analysts' networks (CIDR)
+      annotations: {}
   # The send Job, rendered only by the pipeline's send job (helm template --show-only).
   send:
     job: ""             # the Job's name
@@ -211,6 +236,23 @@ watch:
     editsConfigMap: ""  # the analysts' edited sheets, from edits/ of the tenant project
   networkPolicy:
     enabled: true
+
+# Sign-in of the analysts with the tenant's identity provider (OIDC, v0.17.0; Keycloak first, any
+# provider with discovery): the chat (Open WebUI) and the review page of the alerts. Empty issuerUrl:
+# the chat keeps its local accounts. The client secret is the key oidc-client-secret of secret.name.
+oidc:
+  issuerUrl: ""         # e.g. https://auth.example.org/realms/a2vm
+  clientId: ""
+  providerName: SSO     # label of the sign-in button of the chat
+  groupsClaim: groups   # claim of the ID token with the user's groups (Keycloak: Group Membership mapper)
+  readers: []           # groups that use the chat and read the alerts
+  validators: []        # groups that also correct, validate and send the alerts
+  admins: []            # optional: groups that administer the chat; empty: the local admin only
+  ca: false             # true: secret.name has the key oidc-ca, the CA of the provider's certificate
+  # Where the provider is, for the NetworkPolicies: one {cidr, port} per address (deploy-k8s resolves
+  # the issuer's host). inCluster: the provider is reached through the cluster's ingress controller.
+  egress: []
+  inCluster: false
 
 daily:
   schedule: "45 5 * * *"
@@ -238,6 +280,10 @@ daily:
 #   chat-secret-key   session key of Open WebUI (chat.enabled)
 #   chat-admin-password   password of its first admin (chat.enabled)
 #   chat-tools-token   token Open WebUI gives the tool server (chat.enabled)
+#   oidc-client-secret   secret of the OIDC client of the tenant (oidc.issuerUrl)
+#   oidc-cookie-secret   key of oauth2-proxy's session cookie (watch.review.enabled)
+#   oidc-ca         CA of the identity provider's certificate (oidc.ca)
+#   review-key      key that signs the review page's forms (watch.review.enabled)
 #   via-run-token   token of the tenant's jobs on the watch service (watch.enabled)
 #   via-read-token   token of the tool server on the watch service (watch.enabled, chat.enabled)
 #   smtp-password, graph-client-secret   the mail of the watch (A2VM_SMTP_PASSWORD, A2VM_GRAPH_CLIENT_SECRET)
