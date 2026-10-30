@@ -24,6 +24,9 @@ English reference and translations of the alerts (HLD D16).
   `templates/alert.<lang>.docx` (else the client's `templates/alert.docx`, else the neutral template
   of the language: `alert.en.docx`, `alert.fr.docx`).
 - `a2vm.ssvc.remediation_delay` in English by default (`lang="fr"` for French).
+- Chat: `BYPASS_MODEL_ACCESS_CONTROL=true`. An analyst signed in through the provider (role `user`)
+  saw no model in v0.17.0: Open WebUI shows a user only the models granted to them; the tenant's
+  model is the only one configured.
 - Contract `via.v1`: the translations' calls, the new status and events (added only).
 - LLD intelligence §3.5 and §3.9, HLD D16 and chapter 10, `docs/alerts.md`, `docs/alert-word.md`,
   `docs/sign-in.md`.
