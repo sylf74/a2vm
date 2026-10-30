@@ -250,3 +250,12 @@ def test_contract_names_the_calls_the_service_answers():
         for op in item.values():
             if path.startswith("/v1/tenants/{tenant}"):
                 assert {"$ref": "#/components/parameters/tenant"} in op["parameters"] and op["security"], path
+
+
+def test_the_via_image_holds_what_the_watch_needs():
+    """v0.16.1: the watch on Kubernetes runs in the via image; it needs detect and verdict (extensions)."""
+    dockerfile = (ROOT / "images" / "Dockerfile").read_text()
+    assert 'via) pkgs="/src/via /src/detect /src/verdict"' in dockerfile
+    assert "group='a2vm.asset_matcher'" in dockerfile and "group='a2vm.remediation_timeline'" in dockerfile
+    for pillar in ("via", "detect", "verdict"):
+        assert f"COPY {pillar} /src/{pillar}" in dockerfile

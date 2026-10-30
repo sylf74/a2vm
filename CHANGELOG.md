@@ -5,6 +5,21 @@ analyst and, under **Upgrade**, what a tenant must do when it moves to that tag 
 `A2VM_REF` in its `.gitlab-ci.yml`). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
 §11) and the LLDs. A release adds its entry here in the same merge request (CLAUDE.md, Releasing).
 
+## v0.16.1 — 2026-10-30
+
+Fix of the watch on Kubernetes.
+
+- The via image now also holds detect and verdict. The watch matches the alerts to the client's
+  assets with detect (`a2vm.asset_matcher`) and dates their remediation with verdict
+  (`a2vm.remediation_timeline`); without them, every passage after the baseline stopped with
+  `no installed pillar offers a2vm.asset_matcher (install detect)`. The image build checks both
+  are there.
+- LLD intelligence §3.7.
+
+**Upgrade**: move `ref` and `A2VM_REF` to `v0.16.1` and push. A tenant in `A2VM_RUN_MODE:
+kubernetes` loses no alert: the failed passages kept the state, the first passage with v0.16.1
+sees every item since the baseline.
+
 ## v0.16.0 — 2026-10-29
 
 The watch on Kubernetes: a tenant no longer needs GitLab to run, only to deploy and validate.

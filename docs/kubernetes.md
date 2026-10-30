@@ -197,7 +197,7 @@ Back to GitLab: `A2VM_RUN_MODE: gitlab` and push; the watch's state stays in the
 ## 5. Limits of this step
 
 - With `A2VM_RUN_MODE=gitlab` (default) the watch and its validation stay in GitLab pipelines; with
-  `kubernetes` the validation is still started from a GitLab pipeline (a page on `via serve`: v0.16.1).
+  `kubernetes` the validation is still started from a GitLab pipeline (a page on `via serve`: v0.16.2).
 - The run's report is read from the volume, the dashboards or the decision service; there are no job artifacts.
 - The decision service keeps the last runs as files, one replica, and is read with a token until
   service accounts; it answers reads only (D15 step 3, read side).

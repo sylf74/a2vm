@@ -2,8 +2,11 @@
 #
 #   docker build -f images/Dockerfile --build-arg PILLAR=verdict -t <registry>/verdict:<tag> .
 #
-# PILLAR is via, detect or verdict. The image holds the common contract (a2vm), that pillar only
-# (D12), and the default configuration of the version (/opt/a2vm/config). It runs as an
+# PILLAR is via, detect or verdict. The image holds the common contract (a2vm), that pillar (D12)
+# and the default configuration of the version (/opt/a2vm/config). The via image also holds detect
+# and verdict, as the watch's pipeline does: the watch matches the alerts to the client's assets
+# with detect's a2vm.asset_matcher and dates their remediation with verdict's
+# a2vm.remediation_timeline (a2vm.extensions); without them the watch on Kubernetes stops. It runs as an
 # unprivileged user and keeps no data: the chart deploy/charts/a2vm-tenant mounts the tenant's
 # configuration, secrets and working volume.
 ARG PYTHON_IMAGE=python:3.12-slim
@@ -24,11 +27,21 @@ RUN case "$PILLAR" in via|detect|verdict) ;; *) echo "PILLAR must be via, detect
     fi
 
 COPY a2vm /src/a2vm
-COPY ${PILLAR} /src/${PILLAR}
+COPY via /src/via
+COPY detect /src/detect
+COPY verdict /src/verdict
 COPY config /opt/a2vm/config
 
-RUN extra=""; [ "$PILLAR" = detect ] && extra="[openvas]"; \
-    pip install --quiet /src/a2vm "/src/${PILLAR}${extra}" \
+RUN case "$PILLAR" in \
+      via) pkgs="/src/via /src/detect /src/verdict" ;; \
+      detect) pkgs="/src/detect[openvas]" ;; \
+      *) pkgs="/src/$PILLAR" ;; \
+    esac \
+ && pip install --quiet /src/a2vm $pkgs \
+ && if [ "$PILLAR" = via ]; then \
+      python -c "from importlib.metadata import entry_points as e; \
+assert e(group='a2vm.asset_matcher') and e(group='a2vm.remediation_timeline'), 'watch extensions missing'"; \
+    fi \
  && rm -rf /src \
  && useradd --uid 10001 --create-home --home-dir /home/a2vm --shell /usr/sbin/nologin a2vm
 
