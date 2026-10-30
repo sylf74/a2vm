@@ -5,6 +5,29 @@ analyst and, under **Upgrade**, what a tenant must do when it moves to that tag 
 `A2VM_REF` in its `.gitlab-ci.yml`). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
 §11) and the LLDs. A release adds its entry here in the same merge request (CLAUDE.md, Releasing).
 
+## v0.16.2 — 2026-10-30
+
+The watch runs with via and a2vm only; the interfaces between pillars are documented and checked.
+
+- The matching of declared assets (`detect inventory`'s code) is `a2vm.declared`, with
+  `a2vm.matching` and `a2vm.versions`; the CISA SSVC tables and the BOD 26-04 delay are
+  `a2vm.ssvc` (data files in `a2vm/src/a2vm/data/`). Owned by pillars 2 and 3, run by the watch
+  too. The extension points `a2vm.extensions` (`a2vm.asset_matcher`, `a2vm.remediation_timeline`)
+  are removed, and each image holds one pillar again: the via image no longer carries detect and
+  verdict.
+- The watch's recommended delay takes Automatable and Technical Impact from the CISA ADP, else the
+  CVSS vector, else `policy.unknown_inputs` (no LLM estimate in the watch; the triage still makes
+  one).
+- A test runs the watch with detect and verdict absent, as in its image.
+- Each LLD has a §1.1 *Interfaces with the other pillars* (provided, consumed, contract, access,
+  behaviour when the other side is missing) and HLD §6 a table of every interface;
+  `tests/test_interfaces.py` checks that every JSON Schema and OpenAPI file is in both. Schema ids
+  named as written (`vulnops.records/1`, `vulnops.detection/1`). D12 reworded.
+- Roadmap: sign-in through the tenant's identity provider (OIDC) with the review page of the
+  alerts in v0.17.0, PostgreSQL in v0.18.0.
+
+**Upgrade**: move `ref` and `A2VM_REF` to `v0.16.2` and push; nothing else.
+
 ## v0.16.1 — 2026-10-30
 
 Fix of the watch on Kubernetes.

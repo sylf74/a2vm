@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 """The pillars stay independent: each imports a2vm (the common contract) and itself, never another
-pillar; a2vm imports no pillar. Capabilities shared across pillars go through a2vm.extensions."""
+pillar; a2vm imports no pillar. What several pillars run is a library of a2vm; what a pillar keeps
+for itself is reached through its HTTP API (contracts in a2vm/schemas/openapi/)."""
 
 from __future__ import annotations
 

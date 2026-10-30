@@ -91,10 +91,10 @@ The code project's own pipeline only runs lint, tests and the offline examples.
 ```yaml
 include:
   - project: vulnops/a2vm
-    ref: v0.16.1
+    ref: v0.16.2
     file: templates/client-pipeline.yml
 variables:
-  A2VM_REF: v0.16.1
+  A2VM_REF: v0.16.2
   A2VM_RUN_MODE: gitlab   # or kubernetes: docs/kubernetes.md §4
 ```
 

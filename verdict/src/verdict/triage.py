@@ -22,6 +22,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
+from a2vm import ssvc
 from a2vm.config import Settings
 from a2vm.gti import RANK, gti_unconfirmed, ssvc_exploitation
 from a2vm.io import now
@@ -41,34 +42,9 @@ from a2vm.models import (
     exposure_value,
 )
 
-from . import ssvc
 from .llm_tasks import assess_ssvc_inputs
 from .policy import Policy, delivery_decision
 from .rationale import llm_rationale, template_rationale
-
-
-def _cvss_fields(metric: CvssMetric) -> dict[str, str]:
-    fields = {}
-    for part in metric.vector.split("/"):
-        if ":" in part:
-            k, v = part.split(":", 1)
-            fields[k] = v
-    return fields
-
-
-def cvss_heuristic(metric: CvssMetric) -> tuple[str, str]:
-    """(automatable, technical_impact) derived from a CVSS v2 / v3.x / v4.0 vector."""
-    f = _cvss_fields(metric)
-    if metric.version == "2.0":  # no user-interaction metric in v2; complete loss of C and I = total
-        auto = all(f.get(k) == v for k, v in {"AV": "N", "AC": "L", "Au": "N"}.items())
-        total = f.get("C") == "C" and f.get("I") == "C"
-    elif metric.version == "4.0":
-        auto = all(f.get(k) == v for k, v in {"AV": "N", "AC": "L", "AT": "N", "PR": "N", "UI": "N"}.items())
-        total = f.get("VC") == "H" and f.get("VI") == "H"
-    else:
-        auto = all(f.get(k) == v for k, v in {"AV": "N", "AC": "L", "PR": "N", "UI": "N"}.items())
-        total = f.get("C") == "H" and f.get("I") == "H"
-    return ("yes" if auto else "no"), ("total" if total else "partial")
 
 
 def scanner_metrics(findings: list[Finding]) -> dict[str, CvssMetric]:
@@ -149,7 +125,7 @@ class Triage:
         else:
             metric = record.best_cvss() or scanner_cvss
             if metric:
-                a, t = cvss_heuristic(metric)
+                a, t = ssvc.cvss_heuristic(metric)
                 note = f"CVSS {metric.version} {metric.vector}"
                 if metric is scanner_cvss:
                     note += f" ({metric.source})"

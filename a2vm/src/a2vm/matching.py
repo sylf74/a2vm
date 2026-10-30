@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 
-from a2vm.models import AffectedEntry, CveFacts, DeclaredAsset, Match
+from .models import AffectedEntry, CveFacts, DeclaredAsset, Match
 
 
 def norm(value: str) -> str:

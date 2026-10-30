@@ -144,6 +144,6 @@ v0.14.0 or later. The dates appear for the runs made with v0.15.2 or later.
 
 ## 9. Limits
 
-- Local accounts made by the admin; sign-in with GitLab (OIDC) later.
+- Local accounts made by the admin; sign-in with the tenant's identity provider (OIDC) in v0.17.0.
 - Documents in a neutral layout; the tenant's own Word and PowerPoint templates later.
-- One replica on a volume (SQLite); PostgreSQL with the decision service (v0.17.0).
+- One replica on a volume (SQLite); PostgreSQL with the decision service (v0.18.0).

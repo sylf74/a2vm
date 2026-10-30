@@ -197,7 +197,7 @@ deterministic rules and people decide. Decisions that concern one pillar only ar
 | D9 | Business-oriented internal data model, STIX only at interfaces | Simpler core, interoperability where needed |
 | D10 | Asset context belongs to Triage & Prioritization: Detection supplies observations, Triage turns them into context (exposure, criticality, zone, each with its source) | The pillar that defines the model owns it; detection stays factual |
 | D11 | AI proposes, never decides: every AI output is a proposal or a text, with a deterministic fallback, shown with its source and reviewed | Accountability stays with rules and people; the platform works without an LLM |
-| D12 | Pillars are independent packages, each with its own command (`via`, `detect`, `verdict`); they depend only on the common contract (package `a2vm`) and never import one another; a capability needed across pillars is offered through an a2vm extension point | Each pillar can evolve, be owned and later be deployed on its own; a test enforces the rule |
+| D12 | Pillars are independent packages, each with its own command (`via`, `detect`, `verdict`); they depend only on the common contract (package `a2vm`) and never import one another; what several pillars run is a library of `a2vm` owned by one pillar, what a pillar keeps for itself is reached through its API (§6; extension points until v0.16.1) | Each pillar can evolve, be owned and later be deployed on its own; a test enforces the rule |
 | D13 | Client restitution through a Grafana portal that reads the reporting database only, with a read-only role per tenant; the portal runs on its own VM, always on, internal by default, its publication to the client decided per client | Clients get a readable view without access to GitLab; dashboards depend on a stable schema, not on the pipeline internals nor on GitLab; isolation per tenant is kept |
 | D14 | Restitution is modular and independent of GitLab: each run publishes its reporting dataset (`reporting.json`) into a reporting database (PostgreSQL), one row set per run, so history and trends come for free; dashboarding and reporting tools read that database (Grafana first, Qlik Sense next), or receive files a connector derives from it. Restitution belongs to pillar 3, which takes the decisions it shows (`verdict.restitution`, since v0.11.6) | The dataset stays the single contract; a new tool means a new reader or connector, never a change of the pipeline; GitLab, which in production holds code and configuration only, is never on the restitution path; the pillar that decides answers for what the dashboards show |
 | D15 | **Under evaluation.** Target architecture: each pillar runs as its own service on Kubernetes and exposes versioned APIs to the others (records by pillar 1, detection intake by pillar 2, decisions and asset context by pillar 3, actions by pillar 4); questions go through synchronous APIs, changes propagate as events on a message bus; collectors stay close to the client networks and push their results to the detection API; every request and event carries the tenant; a shared cluster with logical separation for the clients who accept it, otherwise a cluster per client, run by the MSSP or by the client itself; secrets in Kubernetes first, an HSM later; GitLab builds and deploys (GitOps) and the GitLab pipelines remain the mode for development and the homelab. Details: Target architecture below | One team per pillar delivers and runs its own service against a published contract; one decision service answers the daily run, the watch and the alert review tool alike, so they never disagree; events keep a pillar's outage from blocking the others; execution and client data leave GitLab (D3); the same charts serve a shared and a dedicated cluster, so the isolation is a choice per client, not a separate product. Open: the platform that runs the cluster, the message bus, the service mesh |
@@ -330,6 +330,32 @@ Finding and CISA SSVC; STIX 2.1 is used only at the interfaces.
 
 A change to an object of this table is a change to this chapter: it is reviewed by the product
 owner of every pillar that produces or consumes it.
+
+### Interfaces between pillars
+
+Three kinds, and nothing else: no pillar imports another (D12), so each pillar runs in its own
+image with `a2vm` only.
+
+| Interface | Kind | Contract | Provided by | Used by |
+| --- | --- | --- | --- | --- |
+| Vulnerability records | Exchange file | `vulnerability_records.schema.json` (`vulnops.records/1`) | Pillar 1 (`via collect`) | Pillars 2, 3 |
+| Detection files | Exchange file | `detection.schema.json` (`vulnops.detection/1`) | Pillar 2 | Pillar 3 (asset context) |
+| Assets, findings | Exchange file | `assets.schema.json` (`vulnops.assets/1`), `findings.schema.json` (`vulnops.findings/2`) | Pillar 3 (asset context) | Pillar 3 (decision), pillar 1 (watch) |
+| Triage of a run | Exchange file | `triage.schema.json` (`a2vm.triage/1`) | Pillar 3 (decision) | Decision service, reports |
+| Reporting dataset | Exchange file | `reporting.schema.json` (`a2vm.reporting/1`) | Pillar 3 (decision) | Reporting database, client portal |
+| Client profile, contacts | Exchange file (tenant project) | `client_profile.schema.json`, `contacts.schema.json` | Tenant project | All pillars |
+| Detection service | API | `detect.v1.yaml` | Pillar 2 (`detect serve`) | Collectors, daily run |
+| Decision service | API | `verdict.v1.yaml` | Pillar 3 (`verdict serve`) | Daily run, tool server of the chat |
+| Watch service | API | `via.v1.yaml` | Pillar 1 (`via serve`) | Daily run, watch and send jobs, tool server of the chat |
+| Matching of declared assets | Library of `a2vm` | `a2vm.declared` | Owned by pillar 2 | Pillars 2 (declared inventory), 1 (watch) |
+| CISA SSVC tables, BOD 26-04 delay | Library of `a2vm` | `a2vm.ssvc` | Owned by pillar 3 | Pillars 3 (decision), 1 (watch's delay) |
+
+Exchange files are JSON Schema of `a2vm/src/a2vm/schemas/`, APIs OpenAPI files of
+`a2vm/src/a2vm/schemas/openapi/`; within a version fields and calls are only added. A library of
+`a2vm` is code several pillars run, owned by one pillar whose product owner reviews its changes.
+Each LLD lists, in its §1.1, what its pillar provides and consumes, with what happens when the
+other side is missing; `tests/test_interfaces.py` checks that every contract is in this table and in
+its LLDs. The Python entry points between pillars (`a2vm.extensions`, until v0.16.1) are removed.
 
 ### Shared building blocks
 
@@ -489,9 +515,10 @@ release.
 | v0.15.1 | Chat: assets found by id, host name or short name; Word, PowerPoint and CSV documents built by the tool server from the data (download link of one hour); retention of the chats per tenant; answers end with their run | 3 |
 | v0.15.2 | The analysts' daily questions in the chat: what changed since the run before and why, dates of the facts behind a decision (CVE published and updated, added to KEV, EPSS, first observation), fix plan of an asset, due this week and overdue, concerned or not by a CVE (versions outside the range); dates added to the records and the decisions | 1, 3 |
 | v0.16.0 | The watch on Kubernetes: `A2VM_RUN_MODE` (gitlab, kubernetes) per tenant; the watch service `via serve` (state, last inventory, alerts and journal, contract `via.v1`), the watch as a CronJob, the daily run's inventory pushed to it; validation from a prefilled GitLab pipeline that starts a send Job; the chat reads the alerts | 1, 3 |
-| v0.16.1 (current) | The via image holds detect and verdict, which the watch needs (asset matching, remediation delay): the watch on Kubernetes no longer stops after its baseline | 1 |
-| v0.16.2 (to confirm) | The review and validation page of the alerts on `via serve`, sign-in of the analysts (GitLab OIDC, shared with the chat); GitLab only deploys | 1 |
-| v0.17.0 (to confirm) | PostgreSQL (CloudNativePG) behind `detect serve`, `verdict serve` and `via serve`: history between runs, finding lifecycle, several replicas, row-level security per tenant | 2, 3 |
+| v0.16.1 | The via image holds detect and verdict, which the watch needs (asset matching, remediation delay): the watch on Kubernetes no longer stops after its baseline | 1 |
+| v0.16.2 (current) | The watch runs with via and `a2vm` only: matching of declared assets (`a2vm.declared`, owned by pillar 2) and CISA SSVC tables (`a2vm.ssvc`, owned by pillar 3) are libraries of the common contract, the extension points between pillars are removed, each image holds one pillar again; the interfaces of each pillar (provided, consumed, behaviour when the other side is missing) in each LLD §1.1 and in §6, checked by a test | 1, 2, 3 |
+| v0.17.0 (to confirm) | Sign-in of the analysts with the tenant's identity provider (OIDC, Keycloak first, rights from the directory's groups) for the chat and the review and validation page of the alerts on `via serve`; GitLab only deploys | 1, 3 |
+| v0.18.0 (to confirm) | PostgreSQL (CloudNativePG) behind `detect serve`, `verdict serve` and `via serve`: history between runs, finding lifecycle, several replicas, row-level security per tenant | 2, 3 |
 | Next (to confirm) | Client portal VM (Grafana) in service; decisions asked by the watch (D15 step 3, write side); asset graph (Apache AGE in PostgreSQL or Neo4j, to settle) | 1, 3, 4 |
 | Then (to confirm) | Dispatch & Capitalization; Emergency Actions | 4, 5 |
 | v1.0 (target) | The architecture of D15 in production: each pillar a service on Kubernetes with its APIs and events, the decision service of pillar 3 shared by the daily run, the watch and the alert review, collectors near the client networks; the GitLab pipeline mode kept for development | All |

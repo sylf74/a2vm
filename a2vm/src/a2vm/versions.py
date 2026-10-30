@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from a2vm.models import AffectedEntry
+from .models import AffectedEntry
 
 _TOKEN = re.compile(r"\d+|[a-z]+")
 _PRERELEASE = {"alpha", "a", "beta", "b", "rc", "pre", "preview", "dev", "snapshot", "m"}

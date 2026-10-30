@@ -8,7 +8,7 @@ writes — it fills flagged gaps, proposes uncertain matches and writes rational
 decides.
 
 ```
-a2vm/        common contract              model, schemas, settings, profiles, LLM client, extension points
+a2vm/        common contract              model, schemas, settings, profiles, LLM client, SSVC tables, matching
 via/        1. VIA (Vulnerability Intelligence: Advanced, AI-assisted, Alerting)
               via collect                public sources + CTI                              -> work/records.json
               via watch / send           watch on each client's estate, alert sheets       -> alerts/
@@ -20,10 +20,10 @@ remediate/  4. Dispatch & Capitalization (not started)
 ```
 
 The pillars never import one another (a test checks it): each reads and writes only the common
-model, and every exchange file is validated against its JSON Schema on write and on read. When a
-pillar needs a capability of another one (the watch needs asset matching from detect and the
-remediation delay from verdict), it asks `a2vm.extensions`, which the owner fills through a
-Python entry point. The design is described in `docs/hld/` (high level) and `docs/lld/` (per
+model, and every exchange file is validated against its JSON Schema on write and on read. What
+several pillars run is a library of `a2vm` (the CISA SSVC tables in `a2vm.ssvc`, the matching of
+declared assets in `a2vm.declared`, which the watch also runs); what a pillar keeps for itself is
+reached through its HTTP API (`a2vm/src/a2vm/schemas/openapi/`). The design is described in `docs/hld/` (high level) and `docs/lld/` (per
 pillar).
 
 ## Quick start
@@ -116,7 +116,7 @@ Mission/Well-being asset attributes        Publicly exposed   asset attribute ex
         -> rationale: LLM text behind a guard, template fallback
 ```
 
-The SSVC tables are the official CERT/CC data files (`verdict/src/verdict/data/`,
+The SSVC tables are the official CERT/CC data files (`a2vm/src/a2vm/data/`,
 MIT (SEI)-style license, see `LICENSE-SSVC`). The LLM never decides; it writes rationales for ACT
 and ATTEND decisions only (`llm.rationale_for`), the template covers TRACK. Rationales name the
 fixed packages reported by scanners.

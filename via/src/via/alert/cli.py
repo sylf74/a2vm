@@ -25,7 +25,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 from a2vm.config import describe_llm, env, load_settings
-from a2vm.extensions import ExtensionMissing, asset_matcher
+from a2vm.declared import DeclaredMatcher
 from a2vm.llm import LlmClient
 from a2vm.profile import ProfileError, load_profile
 from via.intel.sources import Sources
@@ -149,11 +149,7 @@ def cmd_watch(args: argparse.Namespace) -> int:
             state.save()
             (out / "index.json").write_text("[]", encoding="utf-8")
             return 0
-        try:
-            matcher = asset_matcher(settings, llm)
-        except ExtensionMissing as exc:
-            print(exc, file=sys.stderr)
-            return 2
+        matcher = DeclaredMatcher(settings, llm)
         inventory = _inventory(args.inventory, profile.id)
         alerts = relevant(items, profile, sources, settings, matcher, state, catalogue, inventory)
         index = []
