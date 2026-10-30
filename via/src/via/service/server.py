@@ -169,6 +169,47 @@ class WatchService:
             raise Problem(HTTPStatus.NOT_FOUND, "no such file of this alert")
         return data
 
+    def get_translation(self, tenant: str, token: str | None, alert_id: str, lang: str) -> bytes:
+        """A translation of the reference, for the sender (as validated on the review page)."""
+        self._check(tenant, token, ("run",))
+        if self.store.alert(tenant, alert_id) is None:
+            raise Problem(HTTPStatus.NOT_FOUND, "no such alert kept")
+        text, _ = self.store.translation(tenant, alert_id, lang)
+        if text is None:
+            raise Problem(HTTPStatus.NOT_FOUND, "no translation in this language")
+        return text.encode("utf-8")
+
+    def put_translation(self, tenant: str, token: str | None, alert_id: str, body: bytes, gzipped: bool) -> dict:
+        """The sender's translation of the reference (or why it failed), for the analysts to validate."""
+        from via.alert import journal
+
+        self._check(tenant, token, ("run",))
+        alert = self.store.alert(tenant, alert_id)
+        if alert is None:
+            raise Problem(HTTPStatus.NOT_FOUND, "no such alert kept")
+        doc = self._json(body, gzipped)
+        lang = str((doc or {}).get("language", "")) if isinstance(doc, dict) else ""
+        if not re.match(r"^[a-z]{2}$", lang) or lang == "en":
+            raise Problem(HTTPStatus.UNPROCESSABLE_ENTITY, "language: ISO 639-1, other than en")
+        text, error = doc.get("text"), doc.get("error")
+        if (text is None) == (error is None) or not isinstance(text or error, str):
+            raise Problem(HTTPStatus.UNPROCESSABLE_ENTITY, "text or error, one of them")
+        if text is not None and len(text) > 100_000:
+            raise Problem(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "translation longer than 100,000 characters")
+        meta = {
+            "source": str(doc.get("source", ""))[:200],
+            "source_hash": str(doc.get("source_hash", ""))[:64],
+            "at": journal.event("x", alert)["at"],
+        }
+        if error is not None:
+            meta["error"] = error[:500]
+        kind = "translation-failed" if error is not None else "translated"
+        event = journal.event(kind, alert, language=lang, source=meta["source"], error=meta.get("error"))
+        event.pop("pipeline", None)
+        self.store.put_translation(tenant, alert_id, lang, text, meta, event)
+        log.info("translation tenant=%s alert=%s language=%s %s", tenant, alert_id, lang, kind)
+        return {"language": lang, "state": kind}
+
     def get_edit(self, tenant: str, token: str | None, alert_id: str) -> bytes:
         """The sheet as a validator corrected it on the review page, for the sender."""
         self._check(tenant, token, ("run",))
@@ -214,13 +255,8 @@ class WatchService:
         alert = self.store.alert(tenant, alert_id)
         if alert is None:
             raise Problem(HTTPStatus.NOT_FOUND, "no such alert kept")
-        edited = self.store.edit(tenant, alert_id)
-        sheet = (
-            edited
-            if edited is not None
-            else (self.store.file(tenant, alert["run"], f"{alert_id}.md") or b"").decode("utf-8", "replace")
-        )
-        return {**alert, "sheet": sheet[:SHEET_MAX]}
+        sheet = self.store.reference(tenant, alert)
+        return {**self.store.detail(tenant, alert), "sheet": sheet[:SHEET_MAX]}
 
 
 def make_handler(service: WatchService) -> type[JsonHandler]:
@@ -260,6 +296,9 @@ def make_handler(service: WatchService) -> type[JsonHandler]:
                     self.send_json(HTTPStatus.OK, service.list_alerts(tenant, token, query))
                 elif len(parts) == 2 and parts[0] == "alerts":
                     self.send_json(HTTPStatus.OK, service.get_alert(tenant, token, unquote(parts[1])))
+                elif len(parts) == 4 and parts[0] == "alerts" and parts[2] == "translations":
+                    text = service.get_translation(tenant, token, unquote(parts[1]), unquote(parts[3]))
+                    self._bytes(text, "text/markdown; charset=utf-8")
                 elif len(parts) == 3 and parts[0] == "alerts" and parts[2] == "edit":
                     self._bytes(service.get_edit(tenant, token, unquote(parts[1])), "text/markdown; charset=utf-8")
                 elif len(parts) == 4 and parts[0] == "alerts" and parts[2] == "files":
@@ -287,6 +326,8 @@ def make_handler(service: WatchService) -> type[JsonHandler]:
                     out = service.put_run(tenant, token, body, gz)
                 elif rest == "events":
                     out = service.add_events(tenant, token, body, gz)
+                elif rest.startswith("alerts/") and rest.endswith("/translations") and rest.count("/") == 2:
+                    out = service.put_translation(tenant, token, unquote(rest.split("/")[1]), body, gz)
                 else:
                     raise Problem(HTTPStatus.NOT_FOUND, "no such route")
                 self.send_json(HTTPStatus.ACCEPTED, out)

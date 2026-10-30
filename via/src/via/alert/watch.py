@@ -140,7 +140,7 @@ class Alert:
     findings: list[Finding]  # declared assets matched through the CVE records
     product_matches: list[str]  # assets or watchlist entries matched by product name
     assets: dict[str, DeclaredAsset]
-    reasons: list[str] = field(default_factory=list)
+    reasons: list[str] = field(default_factory=list)  # codes, worded by i18n.reason
     detected: list[tuple[Asset, Finding]] = field(default_factory=list)  # from the last daily inventory
     inventory_as_of: str = ""
 
@@ -220,7 +220,7 @@ def discover(
                     continue
                 state.kev.add(cve)
                 if not state.new and cve not in in_items:
-                    title = entry.get("vulnerabilityName") or f"{cve} ajoutée au catalogue KEV"
+                    title = entry.get("vulnerabilityName") or f"{cve} added to the KEV catalog"
                     items.append(
                         Item(f"KEV:{cve}", "kev", title, [cve], entry.get("dateAdded", ""), kev=entry,
                              source=kev_src.name, category=kev_src.category, urgent_source=True)
@@ -355,17 +355,17 @@ def relevant(
                 it.source, it.category = label, "vendor"
         reasons = []
         if it.origin == "kev" or any(r.in_kev for r in recs):
-            reasons.append("exploitation active (catalogue KEV de la CISA)")
+            reasons.append("kev")
         elif any(ssvc_exploitation(r.gti)[0] == "active" for r in recs):  # often before KEV
-            reasons.append("exploitation confirmée par Google Threat Intelligence")
+            reasons.append("gti_active")
         if it.urgent_source and it.origin != "kev":
-            reasons.append(f"publication {it.source}")
+            reasons.append(f"source:{it.source}")
         if any((r.adp_ssvc or {}).get("exploitation") in {"poc", "active"} for r in recs):
-            reasons.append("exploitation ou preuve de concept signalée par la CISA")
+            reasons.append("cisa_poc")
         exposed = [f.asset_ref for f in findings if exposure(profile, assets.get(f.asset_ref)) == "open"]
         exposed += [a.id for a, _ in detected if "exposure" in a.attributes and _open(a)]
         if exposed and any(_critical(r) for r in recs):
-            reasons.append("vulnérabilité critique sur un actif exposé à Internet")
+            reasons.append("exposed_critical")
         level = "urgent" if reasons else "info"
         if level == "info" and level_wanted != "all":
             continue

@@ -76,14 +76,14 @@ def _edit_help(a: dict) -> str:
     text = f"{job}/artifacts/raw/alerts/{a['id']}.md"
     new = f"{project}/-/new/{branch}?file_name=edits/{a['id']}.md"
     out = (
-        f'<br>Pour la modifier avant envoi : copier <a href="{text}">le texte de la fiche</a>, le coller dans '
-        f'<a href="{new}">edits/{a["id"]}.md</a>, le corriger, valider (commit sur {branch}), puis lancer send-alerts.'
+        f'<br>To change it before sending: copy <a href="{text}">the text of the sheet</a>, paste it into '
+        f'<a href="{new}">edits/{a["id"]}.md</a>, correct it, commit on {branch}, then run send-alerts.'
     )
     if a.get("docx"):
         docx = f"{job}/artifacts/raw/alerts/{a['docx']}"
         out += (
-            f' Pour le Word : corriger <a href="{docx}">{a["docx"]}</a> et le déposer sous '
-            f"<code>edits/{a['docx']}</code> du projet."
+            f' For the Word file: correct <a href="{docx}">{a["docx"]}</a> and put it under '
+            f"<code>edits/{a['docx']}</code> of the project."
         )
     return out
 
@@ -94,16 +94,21 @@ def _today() -> str:
     return dt.date.today().strftime("%d/%m/%Y")
 
 
-def _word_template(profile, profile_path: str) -> Path | None:
-    """The Word template when the client wants the sheet attached (`alerts.attach`: docx and/or pdf)."""
+def _word_template(profile, profile_path: str, lang: str = "en") -> Path | None:
+    """The Word template of `lang` when the client wants the sheet attached (`alerts.attach`: docx
+    and/or pdf): templates/alert.<lang>.docx of the project, else `alerts.word_template`, else
+    templates/alert.docx, else the neutral template of the language."""
     if not {"docx", "pdf"} & set(profile.alerts.get("attach") or []):
         return None
     base = Path(profile_path).resolve().parent
+    own = base / "templates" / f"alert.{lang}.docx"
+    if own.exists():
+        return own
     named = profile.alerts.get("word_template")
     if named:
         return base / named
-    own = base / "templates" / "alert.docx"
-    return own if own.exists() else word.default_template()
+    common = base / "templates" / "alert.docx"
+    return common if common.exists() else word.default_template(lang)
 
 
 def _send_link(alert_id: str) -> str:
@@ -114,8 +119,8 @@ def _send_link(alert_id: str) -> str:
     if review:
         url = f"{review}/alerts/{quote(alert_id, safe='')}"
         return (
-            f"Pour la relire, la corriger et l'envoyer : <a href=\"{url}\">ouvrir l'alerte</a> (connexion avec "
-            "votre compte ; validation réservée aux valideurs). Rien ne part sans ce geste."
+            f'To review, enrich, translate and send it: <a href="{url}">open the alert</a> (sign in with your '
+            "account; validation by the validators only). Nothing is sent without it."
         )
     base = env("SEND_PIPELINE_URL")
     if not base:
@@ -123,8 +128,8 @@ def _send_link(alert_id: str) -> str:
     ref = env("SEND_REF", "main")
     url = f"{base}?ref={quote(ref)}&var[A2VM_JOB]=send&var[A2VM_SEND_ONLY]={quote(alert_id)}"
     return (
-        f"Pour l'envoyer : <a href=\"{url}\">lancer l'envoi de cette alerte</a> (formulaire prérempli, "
-        "bouton « Run pipeline »). Rien ne part sans ce geste."
+        f'To send it: <a href="{url}">start the sending of this alert</a> (prefilled form, button '
+        "\u201cRun pipeline\u201d). Nothing is sent without it."
     )
 
 
@@ -162,6 +167,11 @@ def cmd_watch(args: argparse.Namespace) -> int:
         alerts = relevant(items, profile, sources, settings, matcher, state, catalogue, inventory)
         index = []
         template = _word_template(profile, args.profile)
+        try:
+            contacts = load_contacts(args.contacts) if args.contacts and Path(args.contacts).exists() else []
+        except ContactsError:
+            contacts = []  # reported below, with the analysts' mail
+        languages = sorted({c.language for c in contacts if c.active} | {"en"})
         for alert in alerts:
             fiche = build(alert, settings, llm)
             (out / f"{alert.id}.md").write_text(fiche.markdown(), encoding="utf-8")
@@ -177,6 +187,15 @@ def cmd_watch(args: argparse.Namespace) -> int:
                 try:
                     path = word.render(template, word.context(fiche, today=_today()), out / word.filename(alert.id))
                     entry["docx"] = path.name
+                    # The facts of the Word file in each language of the contacts; the sender adds the
+                    # prose of the sheet validated in that language (word.with_text).
+                    entry["ctx"] = {}
+                    for lang in languages:
+                        laid = fiche if lang == "en" else build(alert, settings, None, lang, fiche.facts["prose"])
+                        name = f"{word.SAFE.sub('-', alert.id)}.ctx.{lang}.json"
+                        ctx = word.context(laid, today=_today(), lang=lang)
+                        (out / name).write_text(json.dumps(ctx, ensure_ascii=False), encoding="utf-8")
+                        entry["ctx"][lang] = name
                 except Exception as exc:  # a broken template must not stop the watch: mail without the file
                     sheet_errors.append(f"Word sheet of {alert.id} ({template}): {exc}")
             index.append(entry)
@@ -209,22 +228,25 @@ def cmd_watch(args: argparse.Namespace) -> int:
         if not analysts:
             break
         fiche_html = (out / f"{a['id']}.html").read_text(encoding="utf-8")
-        to = ", ".join(c.label() for c in recipients(a["level"], contacts, profile)) or "aucun destinataire configuré"
+        to = (
+            ", ".join(f"{c.label()} [{c.language}]" for c in recipients(a["level"], contacts, profile))
+            or "no recipient configured"
+        )
         how = (
-            f'Pour l\'envoyer : <a href="{pipeline}">ouvrir le pipeline</a>, job « send-alerts », bouton ▶. '
-            f"Pour n'envoyer que celle-ci : variable <code>A2VM_SEND_ONLY</code> = <code>{number}</code> "
-            "dans le formulaire du job (sans variable, toutes les alertes du pipeline partent)."
+            f'To send it: <a href="{pipeline}">open the pipeline</a>, job \u201csend-alerts\u201d, button \u25b6. '
+            f"To send this one only: variable <code>A2VM_SEND_ONLY</code> = <code>{number}</code> "
+            "in the job's form (without it, every alert of the pipeline is sent)."
             if pipeline
             else _send_link(a["id"])
         )
         note = (
-            f'<p style="background:#fff4d6;padding:8px"><b>À valider avant envoi à {profile.name}</b> '
-            f"(destinataires : {to}).<br>Alerte n° {number} sur {len(index)} de ce pipeline, "
-            f"identifiant <code>{a['id']}</code>.<br>{how}{_edit_help(a)}</p>"
+            f'<p style="background:#fff4d6;padding:8px"><b>To validate before sending to {profile.name}</b> '
+            f"(recipients: {to}).<br>Alert {number} of {len(index)} of this run, "
+            f"id <code>{a['id']}</code>.<br>{how}{_edit_help(a)}</p>"
         )
         attachments = [out / a["docx"]] if a.get("docx") else []
         msg = message(
-            f"[CERT Alert][{profile.id}] À valider — {a['title']}",
+            f"[CERT Alert][{profile.id}] To validate — {a['title']}",
             note + fiche_html,
             (out / f"{a['id']}.md").read_text(encoding="utf-8"),
             analysts,
@@ -379,10 +401,10 @@ def cmd_test_mail(args: argparse.Namespace) -> int:
         return 2
     where = os.environ.get("CI_PROJECT_PATH", "local run")
     body = (
-        f"Message de test A2VM ({where}).\n\nSi vous le lisez, les alertes de la veille arriveront par le même "
-        "chemin : expéditeur, relais et destinataires sont corrects."
+        f"A2VM test message ({where}).\n\nIf you read it, the watch's alerts will come the same way: "
+        "sender, relay and recipients are right."
     )
-    msg = message(f"[CERT Alert] Test d'envoi — {where}", f"<p>{body}</p>".replace("\n\n", "</p><p>"), body, to)
+    msg = message(f"[CERT Alert] Sending test — {where}", f"<p>{body}</p>".replace("\n\n", "</p><p>"), body, to)
     print(f"From: {msg['From']}  To: {msg['To']}  transport: {env('MAIL_TRANSPORT', 'smtp')}")
     try:
         print(send(msg, Path(args.out) if args.out else None))

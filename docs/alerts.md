@@ -17,7 +17,7 @@ every 10 min   the sources of config/watch-sources.yaml, in three categories:
                - the client's last daily inventory found the CVE on one of its hosts
                - a CVE already alerted in the last 14 days is skipped, unless it becomes KEV
       v
-               alert sheet (French, team layout): why now and from which source, table of the
+               alert sheet (English reference, team layout): why now and from which source, table of the
                assets concerned, CVE, product, type, CVSS, main impact, exploitation status, fixes,
                description, delay, links
       v
@@ -108,7 +108,8 @@ start from. An edited sheet that cites a CVE the alert does not is refused. See
 `docs/alert-word.md`.
 
 **Word and PDF (v0.11.4):** with `alerts.attach` in `client.yaml`, every alert also comes as a
-Word file, filled from the client's template (`templates/alert.docx`) or the neutral one. The
+Word file, filled from the client's template (`templates/alert.<lang>.docx`, `templates/alert.docx`)
+or the neutral one of the language. The
 analysts receive the Word file; the client receives it (`docx`), or a PDF made from it at sending
 time (`pdf`), or both (`docs/alert-word.md`).
 
@@ -208,10 +209,31 @@ pipeline; the rest (edits, recipients, Word file) is unchanged. `docs/kubernetes
 ## Review page (v0.17.0)
 
 With the analysts' sign-in and `A2VM_ALERTS_HOST` (`docs/sign-in.md`), the analysts' mail links to
-the alert on the review page: a validator corrects the sheet in the page, then *Valider et envoyer
-au client*; the sender mails it within a minute. *Écarter* closes an alert that does not concern
-the client. Readers see the alerts and their sheets only. Every step is in the alert's history,
-with who did it. No pipeline, no commit of `edits/`.
+the alert on the review page: a validator enriches the English reference, chooses the recipients,
+checks the translation made for each of their languages (v0.17.1), then *Validate and send*; the
+sender mails each language its version within a minute. *Dismiss* closes an alert that does not
+concern the client. Readers see the alerts, their reference and translations only. Every step is in
+the alert's history, with who did it. No pipeline, no commit of `edits/`.
+
+## Languages (v0.17.1)
+
+A2VM writes the sheet in English. A contact gets another language with `language` in
+`contacts.yaml`:
+
+```yaml
+schema_version: 1
+contacts:
+  - {name: CERT client, role: CERT, email: cert@client.example}                # English
+  - {name: Jeanne Martin, role: RSSI, email: rssi@client.example, language: fr} # French
+```
+
+On the review page, the translation into French is made by the tenant's LLM when the recipients are
+chosen, checked by code (no fact lost or added, the structure kept, the headings from the
+catalogue), then read and corrected by the validator; only then can the alert be validated. The
+Word file of a French contact is filled in French (`templates/alert.fr.docx`, else the client's
+`templates/alert.docx`, else the neutral French template). English and French have their labels in
+A2VM; another language gets the translated text and an English Word file. Through GitLab
+(`send-alerts`), every recipient gets the English reference. Detail: LLD intelligence §3.9.
 
 ## Limits (to address with the PostgreSQL storage)
 

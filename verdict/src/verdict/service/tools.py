@@ -239,14 +239,15 @@ OPERATIONS: list[tuple[str, str, str, list[dict[str, Any]], str]] = [
         "/alerts",
         "list_alerts",
         "The watch's alerts for the tenant (CERT-FR, KEV, critical CVEs matched to its assets), newest first, "
-        "with their status: pending (drafted, waiting for an analyst's validation), validated (waiting for "
+        "with their status: pending (drafted, waiting for an analyst's validation), translating (recipients "
+        "chosen, translations to check), validated (waiting for "
         "the sender), dismissed, sent to the client, or failed. Filters: status, CVE, level, since a day.",
         [
             _q(
                 "status",
                 "string",
-                "all (default), pending, validated, dismissed, sent or failed",
-                enum=["all", "pending", "validated", "dismissed", "sent", "failed"],
+                "all (default), pending, translating, validated, dismissed, sent or failed",
+                enum=["all", "pending", "translating", "validated", "dismissed", "sent", "failed"],
             ),
             _q("cve", "string", "Only the alerts about this CVE"),
             _q("level", "string", "Level of the alert, e.g. urgent, important, info"),

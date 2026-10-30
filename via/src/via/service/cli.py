@@ -74,6 +74,8 @@ def cmd_serve(args: argparse.Namespace) -> int:
                 {g for g in args.review_readers.split(",") if g.strip()},
                 {g for g in args.review_validators.split(",") if g.strip()},
                 args.review_url,
+                contacts=args.review_contacts,
+                profile=args.review_profile,
             )
         except (OSError, ValueError) as exc:
             print(f"review page: {exc}", file=sys.stderr)
@@ -202,48 +204,35 @@ def cmd_send(args: argparse.Namespace) -> int:
         client.close()
 
 
-def _send_chosen(args: argparse.Namespace, client: WatchClient, chosen: list[dict]) -> int:
-    """`via send` of the chosen alerts, with the sheets corrected on the review page; events back."""
-    from via.alert.cli import cmd_send as send
-
-    with tempfile.TemporaryDirectory() as tmp:
-        alerts, edits = Path(tmp) / "alerts", Path(tmp) / "edits"
-        edits.mkdir()
-        for a in chosen:
-            client.fetch(a, alerts)
-            text = client.edit(a["id"])
-            if text is not None:
-                (edits / f"{a['id']}.md").write_text(text, encoding="utf-8")
-        index = [
-            {k: v for k, v in a.items() if k not in ("run", "status", "events", "sheet", "edited")} for a in chosen
-        ]
-        (alerts / "index.json").write_text(json.dumps(index, ensure_ascii=False), encoding="utf-8")
-        log = Path(tmp) / "events.jsonl"
-        code = send(
-            argparse.Namespace(
-                profile=args.profile, contacts=args.contacts, alerts=str(alerts), only=None, journal=str(log),
-                edits=str(edits),
-            )
-        )  # fmt: skip
-        events = _new_events(log)
-        if events:
-            client.add_events(events)
-        return code
-
-
 def _send_validated(args: argparse.Namespace) -> int:
-    """The sender: the alerts validated on the review page, once (`--every 0`) or in a loop."""
+    """The sender of the review page, once (`--every 0`) or in a loop: the translations asked for,
+    then the validated alerts, one mail per language (via.service.sender)."""
+    from a2vm.config import load_settings
+    from a2vm.llm import LlmClient
+    from a2vm.profile import ProfileError, load_profile
+    from via.alert.contacts import ContactsError, load_contacts
+
+    from .sender import send_validated, translate_requested
+
+    try:
+        profile = load_profile(args.profile)
+        contacts = load_contacts(args.contacts) if args.contacts and Path(args.contacts).exists() else []
+        settings = load_settings(args.settings) if args.settings else None
+    except (ProfileError, ContactsError, OSError, ValueError) as exc:
+        print(f"{args.tenant}: {exc}", file=sys.stderr)
+        return 2
+    llm = LlmClient(settings.llm) if settings and settings.llm.enabled else None
+    languages = sorted({c.language for c in contacts if c.active})
+    how = f"by {settings.llm.model}" if llm else "not available (no LLM)"
+    print(f"{args.tenant}: sender ready; contacts in {', '.join(languages) or 'en'}; translation {how}", flush=True)
     client = _client(args)
     code = 0
     try:
         while True:
             try:
-                chosen = client.alerts("validated")
-                if chosen:
-                    print(
-                        f"{args.tenant}: sending {len(chosen)} validated alert(s): {', '.join(a['id'] for a in chosen)}"
-                    )
-                    code = _send_chosen(args, client, chosen)
+                translate_requested(client, llm, args.tenant)
+                _, failed = send_validated(client, profile, args.profile, contacts, args.tenant)
+                code = 1 if failed else 0
             except ServiceError as exc:
                 print(f"{args.tenant}: {exc}: tried again at the next pass", file=sys.stderr, flush=True)
                 code = 1
@@ -253,6 +242,8 @@ def _send_validated(args: argparse.Namespace) -> int:
             time.sleep(args.every)
     finally:
         client.close()
+        if llm:
+            llm.close()
 
 
 def cmd_push_inventory(args: argparse.Namespace) -> int:
@@ -302,6 +293,8 @@ def main(argv: list[str]) -> int:
     s.add_argument("--review-key", help="file of the key that signs the page's forms (32 bytes at least)")
     s.add_argument("--review-readers", default="", help="groups that read the alerts, comma-separated")
     s.add_argument("--review-validators", default="", help="groups that also correct, validate and dismiss")
+    s.add_argument("--review-contacts", help="contacts.yaml: the recipients a validator chooses from, their language")
+    s.add_argument("--review-profile", help="client.yaml: its alerts.recipients also receive (in English)")
     s.set_defaults(func=cmd_serve)
 
     svc = sub.add_parser("service", help="the tenant's jobs on Kubernetes, with the watch service")
@@ -326,6 +319,7 @@ def main(argv: list[str]) -> int:
     d.add_argument("--again", action="store_true", help="send an alert already sent once more")
     d.add_argument("--validated", action="store_true", help="send the alerts validated on the review page")
     d.add_argument("--every", type=int, default=0, help="with --validated: seconds between passes (0: once)")
+    d.add_argument("--settings", help="with --validated: settings of the LLM that translates (config/settings.yaml)")
     d.set_defaults(func=cmd_send)
     i = ss.add_parser("push-inventory", help="the daily run's assets and findings, for the watch")
     _common(i)

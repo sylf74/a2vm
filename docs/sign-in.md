@@ -7,7 +7,7 @@ validates it for sending or dismisses it. Their rights come from the directory's
 | Group | Chat | Review page |
 | --- | --- | --- |
 | Readers (`A2VM_OIDC_READERS`) | Yes | Read the alerts and their sheets |
-| Validators (`A2VM_OIDC_VALIDATORS`) | Yes | Also correct, validate (the sender mails the alert within a minute) and dismiss |
+| Validators (`A2VM_OIDC_VALIDATORS`) | Yes | Also enrich the English reference, choose the recipients, check and correct the translations, validate (the sender mails each language its version within a minute) and dismiss |
 | Admins (`A2VM_OIDC_ADMINS`, optional) | Admin of Open WebUI | — |
 | Anyone else | Refused | Refused |
 
@@ -82,8 +82,9 @@ kubectl -n $NS logs deploy/a2vm-lab-review --tail=20
   else gets "access prohibited". The accounts made by the admin before v0.17.0 stay; an analyst
   signing in with the provider gets an account of their own.
 - **Review page** (`https://<review host>`): the list of the alerts to process; a validator sees
-  *Corriger la fiche*, *Valider et envoyer au client*, *Écarter*. After a validation the sender's
-  log shows the sending within a minute:
+  *Enrich the reference*, the recipients with their language, *Choose these recipients and
+  translate*, then *Validate and send* once each translation is checked (v0.17.1), and *Dismiss*.
+  After a validation the sender's log shows the sending within a minute:
 
   ```bash
   kubectl -n $NS logs deploy/a2vm-lab-sender --tail=20

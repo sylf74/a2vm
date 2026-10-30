@@ -196,6 +196,8 @@ spec:
             - --review-key=/review-secret/review-key
             - --review-readers={{ join "," .Values.oidc.readers }}
             - --review-validators={{ join "," .Values.oidc.validators }}
+            - --review-contacts=/config/contacts.yaml
+            - --review-profile=/config/client.yaml
             {{- end }}
           ports:
             - name: http
@@ -225,6 +227,9 @@ spec:
             - name: review-key
               mountPath: /review-secret
               readOnly: true
+            - name: config
+              mountPath: /config
+              readOnly: true
             {{- end }}
             - name: tmp
               mountPath: /tmp
@@ -247,6 +252,9 @@ spec:
             defaultMode: 0440
             items:
               - {key: review-key, path: review-key}
+        - name: config
+          configMap:
+            name: {{ $name }}-config
         {{- end }}
         - name: tmp
           emptyDir: {}

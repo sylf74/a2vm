@@ -65,16 +65,16 @@ def test_watch_with_catalogue(tmp_path, monkeypatch):
 
     vendor = index["example-client-psirt-FG-IR-99-001"]  # watchlist match in a vendor RSS feed
     md = (tmp_path / "alerts" / f"{vendor['id']}.md").read_text()
-    assert "Source : Vendor PSIRT (éditeur / constructeur)" in md and "Fortinet FortiOS" in md
+    assert "Source: Vendor PSIRT (vendor / manufacturer)" in md and "Fortinet FortiOS" in md
     assert "example-client-psirt-FG-IR-99-002" not in index  # FortiClient: not on the watchlist
 
     csaf = index["example-client-pcert-SSA-0001"]
     md = (tmp_path / "alerts" / f"{csaf['id']}.md").read_text()
-    assert "Correctif : disponible — Update to V5.5 or later" in md and "sévérité éditeur : critical" in md
+    assert "Fix: available — Update to V5.5 or later" in md and "vendor severity: critical" in md
 
     assert any(k.startswith("example-client-inst-") for k in index)  # declared asset named in the Atom entry
     cna = next(a for k, a in index.items() if k.endswith("CVE-CVE-2099-10002"))
-    assert "Source : Acme (CNA) (éditeur / constructeur)" in (tmp_path / "alerts" / f"{cna['id']}.md").read_text()
+    assert "Source: Acme (CNA) (vendor / manufacturer)" in (tmp_path / "alerts" / f"{cna['id']}.md").read_text()
 
     # The same CVEs are not alerted again from another source within 14 days.
     state = State.load(tmp_path / "state.json")

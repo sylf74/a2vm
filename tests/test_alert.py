@@ -40,11 +40,11 @@ def test_first_run_records_a_baseline_then_alerts_on_news(tmp_path, monkeypatch)
     assert len(pan) == 1 and pan[0]["level"] == "urgent"
     assert not any(a["id"].endswith("KEV-CVE-2024-3400") for a in index)
     md = (tmp_path / "alerts" / f"{pan[0]['id']}.md").read_text()
-    for heading in ("## CVE", "## Produit concerné", "## Type de vulnérabilité", "## CVSS", "## Impact principal",
-                    "## État d'exploitation", "## Description", "## Liens"):  # fmt: skip
+    for heading in ("## CVE", "## Affected product", "## Vulnerability type", "## CVSS", "## Main impact",
+                    "## Exploitation status", "## Description", "## Links"):  # fmt: skip
         assert heading in md
-    assert "| **Internet-facing firewalls with GlobalProtect VPN portal** |" in md and "| exposé à Internet |" in md
-    assert "oui — catalogue KEV de la CISA" in md and "10 (critique)" in md
+    assert "| **Internet-facing firewalls with GlobalProtect VPN portal** |" in md and "| internet-facing |" in md
+    assert "yes — CISA KEV catalog" in md and "10 (critical)" in md
     assert "Exécution de code arbitraire à distance" in md
     assert "https://www.cert.ssi.gouv.fr/alerte/CERTFR-2024-ALE-006/" in md
 
@@ -204,13 +204,13 @@ def test_watch_names_the_assets_of_the_last_daily_inventory(tmp_path, monkeypatc
     found = _second_run(tmp_path / "b", "--inventory", str(tmp_path / "inv"))
     alert = next(i for i in found if "CVE-2099-10001" in i)
     md = (tmp_path / "b" / "alerts" / f"{alert}.md").read_text()
-    row = "| **web01** | dmz | ouverte (Internet), scan externe | httpd 2.4.57 | 2.4.62 | web-team "
-    row += "| détecté (scan des paquets) |"
+    row = "| **web01** | dmz | open (internet), external scan | httpd 2.4.57 | 2.4.62 | web-team "
+    row += "| detected (package scan) |"
     assert row in md
-    assert f"Inventaire du {seen[:10]}" in md
+    assert f"Inventory of {seen[:10]}" in md
     html = (tmp_path / "b" / "alerts" / f"{alert}.html").read_text()
     assert "<table" in html and "<td" in html and "web-team" in html
-    assert "- Vulnérabilité critique sur un actif exposé à Internet" in md
+    assert "- Critical vulnerability on an internet-facing asset" in md
 
 
 def test_inventory_fetch_reads_the_triage_artifacts_and_flags_an_old_one(tmp_path):
@@ -275,7 +275,7 @@ def test_analysts_mail_numbers_the_alerts_and_the_journal_keeps_every_event(tmp_
 
     first = email.message_from_bytes(outbox[0].read_bytes(), policy=policy.default)
     html = first.get_body(("html",)).get_content()
-    assert "A2VM_SEND_ONLY" in html and "sur 2 de ce pipeline" in html
+    assert "A2VM_SEND_ONLY" in html and "of 2 of this run" in html
 
     log = journal.read(tmp_path / "alerts-log.jsonl")  # next to --state
     assert [e["event"] for e in log].count("drafted") == 2
@@ -324,4 +324,4 @@ def test_test_mail_without_smtp_writes_the_message(tmp_path, monkeypatch):
     from email import policy
 
     msg = email.message_from_bytes(next(tmp_path.glob("*.eml")).read_bytes(), policy=policy.default)
-    assert "Test d'envoi" in msg["Subject"]
+    assert "Sending test" in msg["Subject"]

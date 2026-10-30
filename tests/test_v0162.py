@@ -8,7 +8,7 @@ import sys
 import textwrap
 
 from a2vm.models import CvssMetric, VulnRecord
-from a2vm.ssvc import BOD_FR, remediation_delay
+from a2vm.ssvc import BOD_EN, BOD_FR, remediation_delay
 
 from .conftest import FIXTURES, ROOT
 
@@ -57,7 +57,7 @@ def test_the_watch_runs_without_detect_nor_verdict(tmp_path):
     [pan] = [a for a in index if "CERTFR-2024-ALE-006" in a["id"]]
     assert pan["level"] == "urgent"
     md = (tmp_path / "alerts" / f"{pan['id']}.md").read_text()
-    assert "## Délai de remédiation recommandé" in md and "(référentiel CISA BOD 26-04)" in md
+    assert "## Recommended remediation delay" in md and "(CISA BOD 26-04)" in md
 
 
 def _record(in_kev=False, adp_ssvc=None, cvss=None) -> VulnRecord:
@@ -77,13 +77,17 @@ def _record(in_kev=False, adp_ssvc=None, cvss=None) -> VulnRecord:
 
 def test_remediation_delay_from_the_common_tables():
     adp = {"automatable": "yes", "technical_impact": "total"}
-    assert remediation_delay(_record(in_kev=True, adp_ssvc=adp), True) == BOD_FR["3 days & forensic investigation"]
+    assert remediation_delay(_record(in_kev=True, adp_ssvc=adp), True) == BOD_EN["3 days & forensic investigation"]
+    assert (
+        remediation_delay(_record(in_kev=True, adp_ssvc=adp), True, lang="fr")
+        == BOD_FR["3 days & forensic investigation"]
+    )
     vector = "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
     cvss = [CvssMetric("3.1", vector, 9.8, "CRITICAL", "cna")]
-    assert remediation_delay(_record(cvss=cvss), True) == BOD_FR["3 days"]
+    assert remediation_delay(_record(cvss=cvss), True) == BOD_EN["3 days"]
     # Nothing known: the policy's default for unknown inputs.
-    assert remediation_delay(_record(), False, "optimistic") == BOD_FR["fix on system upgrade"]
-    assert remediation_delay(_record(), True) == BOD_FR["3 days"]
+    assert remediation_delay(_record(), False, "optimistic") == BOD_EN["fix on system upgrade"]
+    assert remediation_delay(_record(), True) == BOD_EN["3 days"]
 
 
 def test_the_images_hold_one_pillar_and_no_pillar_offers_extensions():

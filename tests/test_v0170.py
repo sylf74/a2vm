@@ -23,6 +23,11 @@ from .test_alert import PROFILE
 from .test_v0160 import READ, RUN, TENANT, _service, _watch, service  # noqa: F401 - fixture
 
 CHART = ROOT / "deploy" / "charts" / "a2vm-tenant"
+CONTACTS = """schema_version: 1
+contacts:
+  - {name: IT, email: it@example.org}
+  - {name: RSSI, role: RSSI, email: rssi@example.org, language: fr}
+"""
 URL = "https://alerts-lab.apps.example.org"
 KEY = b"k" * 32
 
@@ -47,11 +52,15 @@ def _alerts(svc, url, token):
 
 
 @pytest.fixture
-def page(service, monkeypatch):  # noqa: F811 - the fixture of test_v0160
+def page(service, monkeypatch, tmp_path):  # noqa: F811 - the fixture of test_v0160
     svc, url, token = service
     monkeypatch.delenv("A2VM_ANALYST_TO", raising=False)
     alerts = _alerts(svc, url, token)
-    review = Review(TENANT, svc.store, KEY, {"A2VM-Readers"}, {"A2VM-Validators"}, URL)
+    contacts = tmp_path / "contacts.yaml"
+    contacts.write_text(CONTACTS)
+    review = Review(
+        TENANT, svc.store, KEY, {"A2VM-Readers"}, {"A2VM-Validators"}, URL, contacts=contacts, profile=PROFILE
+    )
     from a2vm.service import serve as plain_serve
 
     httpd = plain_serve(make_handler(review), "127.0.0.1", 0)
@@ -87,12 +96,12 @@ def test_who_may_read_and_who_may_act(page):
         and "default-src 'none'" in headers["Content-Security-Policy"]
     )
     status, body, _ = _call(base, f"/alerts/{q}")
-    assert status == 200 and "Lecture seule" in body and "Valider" not in body
+    assert status == 200 and "Read only" in body and "Validate" not in body
     assert _call(base, f"/alerts/{q}/edit")[0] == 403
     assert _call(base, f"/alerts/{q}/validate", form={"token": review.token("ana@example.org", a["id"])})[0] == 403
     # A Keycloak full group path names the same group.
     status, body, _ = _call(base, f"/alerts/{q}", user="val@example.org", groups="/A2VM-Validators")
-    assert status == 200 and "Valider et envoyer au client" in body
+    assert status == 200 and "Choose these recipients and translate" in body and "rssi@example.org" in body
 
 
 def test_forms_need_their_token_and_the_page_origin(page):
@@ -105,11 +114,15 @@ def test_forms_need_their_token_and_the_page_origin(page):
     assert _call(base, f"/alerts/{q}/validate", form=good, origin="https://evil.example", **val)[0] == 403
     other = {"token": review.token("someone@example.org", a["id"])}  # another analyst's token
     assert _call(base, f"/alerts/{q}/validate", form=other, **val)[0] == 403
+    assert _call(base, f"/alerts/{q}/validate", form=good, **val)[0] == 409  # no recipient chosen yet
+    assert _call(base, f"/alerts/{q}/prepare", form={**good, "to": "nobody@example.org"}, **val)[0] == 422
+    assert _call(base, f"/alerts/{q}/prepare", form={**good, "to": "it@example.org"}, **val)[0] == 303
+    assert svc.store.alert(TENANT, a["id"])["status"] == "translating"  # English only: ready at once
     status, _, headers = _call(base, f"/alerts/{q}/validate", form=good, **val)
     assert status == 303 and headers["Location"] == f"/alerts/{q}"
     assert svc.store.alert(TENANT, a["id"])["status"] == "validated"
     [e] = [e for e in svc.store.events(TENANT) if e["event"] == "validated"]
-    assert e["by"] == "val@example.org" and e["alert"] == a["id"]
+    assert e["by"] == "val@example.org" and e["alert"] == a["id"] and e["to"] == ["it@example.org"]
     assert _call(base, f"/alerts/{q}/validate", form=good, **val)[0] == 409  # already validated
     assert _call(base, f"/alerts/{q}/dismiss", form=good, **val)[0] == 303
     assert svc.store.alert(TENANT, a["id"])["status"] == "dismissed"
@@ -125,30 +138,29 @@ def test_a_validator_corrects_the_sheet_within_its_cves(page):
     status, body, _ = _call(base, f"/alerts/{q}/edit", form={**good, "text": original + "\nCVE-2001-0001\n"}, **val)
     assert status == 422 and "CVE-2001-0001" in body
     assert svc.store.edit(TENANT, a["id"]) is None
-    fixed = original.replace("## Description", "## Description\n\nNote de l'analyste : correctif publié.", 1)
+    fixed = original.replace("## Description", "## Description\n\nAnalyst's note: fix published.", 1)
     assert _call(base, f"/alerts/{q}/edit", form={**good, "text": fixed}, **val)[0] == 303
-    assert "Note de l'analyste" in svc.store.edit(TENANT, a["id"])
+    assert "Analyst's note" in svc.store.edit(TENANT, a["id"])
     assert svc.store.alert(TENANT, a["id"])["edited"] is True
-    assert "Note de l'analyste" in svc.get_alert(TENANT, READ, a["id"])["sheet"]  # the chat reads the correction
-    assert "Note de l'analyste" in svc.get_edit(TENANT, RUN, a["id"]).decode()
+    assert "Analyst's note" in svc.get_alert(TENANT, READ, a["id"])["sheet"]  # the chat reads the correction
+    assert "Analyst's note" in svc.get_edit(TENANT, RUN, a["id"]).decode()
 
 
 def test_the_sender_mails_the_validated_alerts_once_with_the_correction(page, tmp_path, monkeypatch):
     review, base, alerts, svc, url, token = page
     monkeypatch.delenv("A2VM_SMTP_HOST", raising=False)
     a = alerts[0]
-    review.save_edit(a, "val@example.org", review.original(a) + "\nNote de l'analyste : vu.\n")
-    review.act(svc.store.alert(TENANT, a["id"]), "val@example.org", "validate")
-    data = yaml.safe_load(Path(PROFILE).read_text())
-    data.setdefault("alerts", {})["recipients"] = ["it@example.org"]
-    profile = tmp_path / "client.yaml"
-    profile.write_text(yaml.safe_dump(data, allow_unicode=True))
-    assert _service(url, token, "send", str(profile), "--contacts", "none.yaml", "--validated") == 0
+    review.save_edit(review.alert(a["id"]), "val@example.org", review.original(a) + "\nAnalyst's note: seen.\n")
+    review.prepare(review.alert(a["id"]), "val@example.org", ["it@example.org"])
+    review.act(review.alert(a["id"]), "val@example.org", "validate")
+    contacts = tmp_path / "contacts.yaml"
+    assert _service(url, token, "send", PROFILE, "--contacts", str(contacts), "--validated") == 0
     after = svc.store.alert(TENANT, a["id"])
     assert after["status"] == "sent"
     sent = [e for e in svc.store.events(TENANT) if e["event"] == "sent"]
-    assert [e["alert"] for e in sent] == [a["id"]] and sent[0]["edited"] == ["text"]
-    assert _service(url, token, "send", str(profile), "--contacts", "none.yaml", "--validated") == 0
+    assert [e["alert"] for e in sent] == [a["id"]] and sent[0]["to"] == ["it@example.org"]
+    assert sent[0]["language"] == "en"
+    assert _service(url, token, "send", PROFILE, "--contacts", str(contacts), "--validated") == 0
     assert len([e for e in svc.store.events(TENANT) if e["event"] == "sent"]) == 1  # nothing validated left
     others = [x for x in svc.store.alerts(TENANT) if x["id"] != a["id"]]
     assert all(x["status"] == "pending" for x in others)  # never sent without a validation

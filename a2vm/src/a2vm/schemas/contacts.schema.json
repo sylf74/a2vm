@@ -26,6 +26,11 @@
             "description": "Alert levels this contact receives. Default: both."
           },
           "active": {"type": "boolean", "description": "false keeps the contact listed without sending to it. Default: true."},
+          "language": {
+            "type": "string",
+            "pattern": "^[a-z]{2}$",
+            "description": "ISO 639-1 language of the sheet this contact receives (since v0.17.1). Default: en, the reference; another language is a translation validated by an analyst."
+          },
           "notes": {"type": "string"}
         }
       }
