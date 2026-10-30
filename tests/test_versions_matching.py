@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 import json
 
+from a2vm.matching import match_assets
 from a2vm.models import AffectedEntry, DeclaredAsset
-from detect.matching import match_assets
-from detect.versions import evaluate, version_key
+from a2vm.versions import evaluate, version_key
 from via.intel.record import parse_record
 
 from .conftest import FIXTURES

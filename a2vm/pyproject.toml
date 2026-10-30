@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "a2vm"
-version = "0.16.1"
-description = "A2VM common contract: data model, exchange files and their schemas, settings, client profiles, LLM client, extension points between pillars."
+version = "0.16.2"
+description = "A2VM common contract: data model, exchange files and their schemas, service contracts, settings, client profiles, LLM client, SSVC tables, declared-asset matching."
 requires-python = ">=3.11"
 license = {text = "LicenseRef-a2vm-proprietary"}
 dependencies = ["httpx>=0.27", "PyYAML>=6.0", "jsonschema>=4.20"]
@@ -17,4 +17,4 @@ a2vm = "a2vm.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-"a2vm" = ["schemas/*.json", "schemas/openapi/*.yaml"]
+"a2vm" = ["schemas/*.json", "schemas/openapi/*.yaml", "data/*"]

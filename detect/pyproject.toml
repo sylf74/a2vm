@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "detect"
-version = "0.16.1"
+version = "0.16.2"
 description = "Pillar 2 (Vulnerability Detection): asset and vulnerability observations (inventory matching, scanner connectors)."
 requires-python = ">=3.11"
 license = {text = "LicenseRef-a2vm-proprietary"}
@@ -15,10 +15,6 @@ openvas = ["python-gvm>=26"]
 
 [project.scripts]
 detect = "detect.cli:main"
-
-# Offered to the other pillars through the a2vm extension points (a2vm.extensions).
-[project.entry-points."a2vm.asset_matcher"]
-detect = "detect.inventory:InventoryScanner"
 
 [tool.setuptools.packages.find]
 where = ["src"]

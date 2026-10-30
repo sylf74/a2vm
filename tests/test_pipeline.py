@@ -14,10 +14,11 @@ from a2vm.io import (
 )
 from a2vm.llm import LlmClient
 from a2vm.models import Finding
+from a2vm.ssvc import cvss_heuristic
 from detect.inventory import InventoryScanner
 from verdict.assets.build import build_inventory
 from verdict.report import render_markdown, write_all
-from verdict.triage import Triage, cvss_heuristic
+from verdict.triage import Triage
 from via.intel.collect import collect, select_cve_ids
 
 from .conftest import fake_llm_transport

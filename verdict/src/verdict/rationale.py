@@ -8,6 +8,7 @@ import json
 from a2vm.llm import LlmClient, LlmError
 from a2vm.llm.guard import unsupported_tokens
 from a2vm.models import TriageRow
+from a2vm.ssvc import BOD_FR
 
 from .llm_tasks import write_rationale
 
@@ -19,13 +20,6 @@ EXPLOITATION_FR = {
 AUTOMATABLE_FR = {"yes": "exploitation automatisable", "no": "exploitation non automatisable"}
 IMPACT_FR = {"partial": "impact technique partiel", "total": "impact technique total"}
 MWI_FR = {"low": "faible", "medium": "moyen", "high": "élevé"}
-BOD_FR = {
-    "fix on system upgrade": "à la prochaine mise à niveau majeure",
-    "60 days": "60 jours",
-    "14 days": "14 jours",
-    "3 days": "3 jours",
-    "3 days & forensic investigation": "3 jours, avec investigation forensique",
-}
 SOURCE_FR = {
     "kev": "catalogue KEV de la CISA",
     "gti": "Google Threat Intelligence",

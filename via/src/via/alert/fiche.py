@@ -18,11 +18,11 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from a2vm.config import Settings
-from a2vm.extensions import remediation_timeline
 from a2vm.gti import gti_unconfirmed, ssvc_exploitation
 from a2vm.llm import LlmClient, LlmError
 from a2vm.llm.guard import unsupported_tokens
 from a2vm.models import AffectedEntry, VulnRecord, exposure_value
+from a2vm.ssvc import remediation_delay
 
 from .watch import Alert, exposure
 
@@ -276,10 +276,9 @@ def build(alert: Alert, settings: Settings, llm: LlmClient | None = None) -> Fic
     fiche.sections.append(("Description", [p.strip() for p in description.split("\n\n") if p.strip()]))
 
     # Recommended delay (CISA BOD 26-04) for the most exposed asset.
-    # Offered by pillar 3 through a2vm.extensions; the section is left out when it is not installed.
-    timeline = remediation_timeline()
-    if first and alert.findings and timeline:
-        delay = timeline(settings, first, worst_exposed)
+    # The CISA tables are common (a2vm.ssvc); the triage of the next daily run may refine the inputs.
+    if first and alert.findings:
+        delay = remediation_delay(first, worst_exposed, settings.policy.get("unknown_inputs", "conservative"))
         fiche.sections.append(("Délai de remédiation recommandé", [f"{delay} (référentiel CISA BOD 26-04)."]))
         fiche.facts["delai"] = delay
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "verdict"
-version = "0.16.1"
+version = "0.16.2"
 description = "Pillar 3 (Triage & Prioritization): asset context, deterministic SSVC decisions, LLM-written rationale, restitution (reporting database, Grafana)."
 requires-python = ">=3.11"
 license = {text = "LicenseRef-a2vm-proprietary"}
@@ -13,13 +13,8 @@ dependencies = ["a2vm", "psycopg[binary]>=3.1", "python-docx>=1.1", "python-pptx
 [project.scripts]
 verdict = "verdict.cli:main"
 
-# Offered to the other pillars through the a2vm extension points (a2vm.extensions).
-[project.entry-points."a2vm.remediation_timeline"]
-verdict = "verdict.timeline:remediation_timeline"
-
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-"verdict" = ["data/*"]
 "verdict.restitution" = ["sql/*.sql", "grafana/*.json"]

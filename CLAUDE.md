@@ -12,7 +12,7 @@ other files of `docs/`.
 
 | Path | What |
 | --- | --- |
-| `a2vm/` | Common contract: data model, JSON schemas of the exchange files, settings, profiles, LLM client and guard, extension points |
+| `a2vm/` | Common contract: data model, JSON schemas of the exchange files and OpenAPI contracts of the services, settings, profiles, LLM client and guard, CISA SSVC tables, matching of declared assets |
 | `via/` | Pillar 1, intelligence (records) and watch (alerts); watch service on Kubernetes (`via serve`, `via service`) |
 | `detect/` | Pillar 2, detection: SSH collection, OpenVAS, declared inventory, external scan; collector agent and detection service (`detect agent`, `detect serve`, `detect fetch`) |
 | `verdict/` | Pillar 3, asset context, SSVC decision, restitution (reporting database, Grafana); decision service and tool server of the analysts' chat (`verdict serve`, `verdict push`, `verdict tools`) |
@@ -26,8 +26,11 @@ other files of `docs/`.
 | `images/` | Dockerfile of the pillar images (one per pillar, built by the `images` job on tags) |
 | `scripts/` | Generators of committed files: dashboards, decision diagrams, neutral Word template |
 
-Pillars import only `a2vm` and themselves, never another pillar (D12, `tests/test_architecture.py`);
-a capability shared across pillars goes through `a2vm.extensions`.
+Pillars import only `a2vm` and themselves, never another pillar (D12, `tests/test_architecture.py`).
+What several pillars run is a library of `a2vm` (e.g. `a2vm.ssvc`, `a2vm.declared`); what a pillar
+keeps for itself is reached through its HTTP API, whose contract is in `a2vm/schemas/openapi/`.
+Each LLD lists, in its §1.1, the interfaces its pillar provides and consumes, and HLD §6 all of
+them (`tests/test_interfaces.py`).
 
 ## Rules that are not negotiable
 

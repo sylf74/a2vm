@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Any
 
 from a2vm.config import Settings
-from a2vm.extensions import AssetMatcher
+from a2vm.declared import DeclaredMatcher
 from a2vm.gti import ssvc_exploitation
 from a2vm.models import Asset, ClientProfile, DeclaredAsset, Finding, VulnRecord, exposure_value
 from via.intel.collect import collect
@@ -318,7 +318,7 @@ def relevant(
     profile: ClientProfile,
     sources: Sources,
     settings: Settings,
-    scanner: AssetMatcher,
+    scanner: DeclaredMatcher,
     state: State | None = None,
     catalogue: list[Source] | None = None,
     inventory: Inventory | None = None,
