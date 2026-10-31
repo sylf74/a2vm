@@ -21,6 +21,7 @@ from __future__ import annotations
 import re
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
+from typing import Any
 
 from a2vm import ssvc
 from a2vm.config import Settings
@@ -74,6 +75,25 @@ class CveInputs:
     automatable: Assessed
     technical_impact: Assessed
     review_reasons: list[str] = field(default_factory=list)
+
+
+def run_asset(asset: Asset) -> dict[str, Any]:
+    """An asset as the triage document lists it (v0.18.1): with or without a finding."""
+    zone = asset.attributes.get("zone")
+    exposure = asset.attr("exposure")
+    return {
+        "id": asset.id,
+        "name": asset.name,
+        "kind": asset.kind,
+        "description": asset.description,
+        "owner": asset.attr("owner").value,
+        "exposure": exposure_value(exposure.value),
+        "exposure_source": exposure_source(exposure),
+        "zone": zone.value if zone else "",
+        "os": asset.os,
+        "scans": dict(sorted((asset.scans or {s: asset.last_seen for s in asset.sources}).items())),
+        "last_seen": asset.last_seen,
+    }
 
 
 class Triage:
@@ -190,6 +210,7 @@ class Triage:
             if cve not in known:
                 run.errors.append({"cve": cve, "error": f"no vulnerability record for {n} finding(s)"})
 
+        run.assets = [run_asset(a) for a in sorted(assets.values(), key=lambda a: a.id)]
         self._llm_rationales(run.rows)
         order = {"ACT": 0, "ATTEND": 1, "TRACK": 2}
         run.rows.sort(key=lambda r: (order[r.delivery_decision], -(r.epss or 0), r.cve_id, r.asset_id))

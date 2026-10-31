@@ -112,6 +112,7 @@ def build(run: TriageRun, policy: dict[str, Any] | None = None, today: dt.date |
                 "product": r.match.product,
                 "product_type": r.product_type or "unknown",
                 "sources": _sources(r),
+                "seen_by": dict(r.seen_by),
             }
         )
 
@@ -140,6 +141,22 @@ def build(run: TriageRun, policy: dict[str, Any] | None = None, today: dt.date |
         }
         for asset_id, rs in sorted(by_asset.items())
     ]
+    # Every asset of the run, a finding or not, with its scans (v0.18.1): a fix is told from a scan
+    # that did not run.
+    listed = {a["id"]: a for a in assets}
+    for entry in run.assets:
+        a = listed.get(entry["id"])
+        if a is None:
+            a = listed[entry["id"]] = {
+                "id": entry["id"],
+                "name": entry["name"],
+                "zone": entry.get("zone", ""),
+                "exposure": entry.get("exposure", ""),
+                "owner": entry.get("owner", ""),
+                "counts": dict.fromkeys(LEVELS, 0),
+            }
+        a.update(kind=entry.get("kind", ""), scans=entry.get("scans") or {}, last_seen=entry.get("last_seen", ""))
+    assets = [listed[k] for k in sorted(listed)]
 
     zones = sorted({r.zone for r in rows if r.zone})
     return {

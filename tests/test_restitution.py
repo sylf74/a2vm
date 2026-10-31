@@ -62,7 +62,7 @@ def test_connection_uri_and_pasted_certificate_are_accepted_and_errors_never_quo
         db.dsn("host=h", environ={"A2VM_REPORTING_CA": "not a certificate"})
 
 
-@pytest.mark.parametrize("name", ["overview", "assets", "cves"])
+@pytest.mark.parametrize("name", ["overview", "assets", "cves", "remediation"])
 def test_grafana_dashboards_read_the_reporting_database_only(capsys, name):
     assert main(["grafana", "dashboard", name]) == 0
     dash = json.loads(capsys.readouterr().out)
@@ -116,7 +116,7 @@ def test_publish_twice_keeps_one_run_and_readers_see_their_tenants_only(
 
     run, data, path = _dataset(settings, sources, profile, tmp_path)
     as_writer, reader = reporting_db["as_writer"], reporting_db["reader"]
-    assert db.init(ADMIN, reporting_db["writer"]).startswith("schema a2vm version 2")
+    assert db.init(ADMIN, reporting_db["writer"]).startswith("schema a2vm version 3")
     assert main(["publish", str(path), "--dsn", as_writer]) == 0
     assert main(["publish", str(path), "--dsn", as_writer]) == 0  # replaced, not doubled
     password = db.grant(ADMIN, reader, ["another-tenant"])
@@ -170,7 +170,7 @@ def test_a_version_1_database_is_upgraded_in_place(settings, sources, profile, t
         )
     password = db.grant(ADMIN, reader, ["*"])
     assert main(["publish", str(path), "--dsn", as_writer]) == 3  # refused: schema version 1
-    assert db.init(ADMIN, reporting_db["writer"]).startswith("schema a2vm version 2")
+    assert db.init(ADMIN, reporting_db["writer"]).startswith("schema a2vm version 3")
     assert main(["publish", str(path), "--dsn", as_writer]) == 0
     as_reader = psycopg.conninfo.make_conninfo(ADMIN, user=reader, password=password)
     with psycopg.connect(as_reader) as conn:  # granted before the upgrade, reads the new view
@@ -190,7 +190,7 @@ def _grafana(sql: str, values: dict[str, list[str]], texts: dict[str, str] | Non
     sql = re.sub(r"\$\{(\w+):sqlstring\}", lambda m: quoted(m.group(1)), sql)
     sql = re.sub(r"\$\{(\w+):text\}", lambda m: texts.get(m.group(1), values[m.group(1)][0]), sql)
     sql = re.sub(r"\$\{(\w+)\}", lambda m: values[m.group(1)][0], sql)
-    return re.sub(r"\$__timeFilter\((\w+)\)", r"\1 BETWEEN '1970-01-01' AND '2100-01-01'", sql)
+    return re.sub(r"\$__timeFilter\(([\w.]+)\)", r"\1 BETWEEN '1970-01-01' AND '2100-01-01'", sql)
 
 
 @needs_db

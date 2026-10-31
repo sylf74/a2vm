@@ -1201,7 +1201,7 @@
       "options": {
         "stacking": "normal",
         "orientation": "horizontal",
-        "xField": "Zone · exposure",
+        "xField": "Zone · exposition",
         "legend": {
           "displayMode": "list",
           "placement": "bottom",

@@ -162,6 +162,42 @@ class RunIndex:
         for r in self.rows:
             self.by_cve.setdefault(r["cve_id"], []).append(r)
             self.by_asset.setdefault(_asset(r), []).append(r)
+        # Every asset of the run, a finding or not (v0.18.1; a triage of an earlier version lists
+        # the assets of its findings only).
+        self.inventory: dict[str, dict[str, Any]] = {a["id"]: a for a in document.get("assets") or []}
+
+    def _card(self, asset: str) -> dict[str, Any]:
+        """What the run knows of an asset: from its inventory entry, else from its first decision."""
+        known = self.inventory.get(asset)
+        rows = self.by_asset.get(asset, [])
+        first = rows[0] if rows else {}
+        counts = Counter(r["delivery_decision"] for r in rows)
+        card = {
+            "asset": asset,
+            "name": (known or {}).get("name") or first.get("asset_id", asset),
+            "owner": (known or {}).get("owner", first.get("owner", "")),
+            "zone": (known or {}).get("zone", first.get("zone", "")),
+            "exposure": (known or {}).get("exposure", first.get("exposure", "")),
+            "counts": {lv: counts.get(lv, 0) for lv in LEVELS},
+        }
+        if known:
+            card["scans"] = known.get("scans") or {}
+            card["last_seen"] = known.get("last_seen", "")
+        return card
+
+    def _find_asset(self, asset: str) -> str | None:
+        if asset in self.by_asset or asset in self.inventory:
+            return asset
+        name = asset.strip().lower()
+        for a, rows in self.by_asset.items():
+            if name in asset_names(rows[0]):
+                return a
+        for a, entry in self.inventory.items():
+            names = {a.lower(), a.split(":", 1)[-1].lower(), str(entry.get("name", "")).lower()}
+            names.add(a.split(":", 1)[-1].split(".")[0].lower())
+            if name in names:
+                return a
+        return None
 
     @property
     def run(self) -> dict[str, Any]:
@@ -179,7 +215,8 @@ class RunIndex:
             "llm_model": self.document.get("llm_model"),
             "cve_count": self.document["cve_count"],
             "findings": {lv: counts.get(lv, 0) for lv in LEVELS},
-            "assets": len(self.by_asset),
+            "assets": len(set(self.by_asset) | set(self.inventory)),
+            "assets_with_findings": len(self.by_asset),
             "kev": {lv: sum(1 for r in self.rows if r["delivery_decision"] == lv and r.get("in_kev")) for lv in LEVELS},
             "by_exposure": {
                 e: {
@@ -322,20 +359,7 @@ class RunIndex:
         }
 
     def assets(self, query: dict[str, str]) -> dict[str, Any]:
-        items = []
-        for asset, rows in sorted(self.by_asset.items()):
-            first = rows[0]
-            counts = Counter(r["delivery_decision"] for r in rows)
-            items.append(
-                {
-                    "asset": asset,
-                    "name": first["asset_id"],
-                    "owner": first.get("owner", ""),
-                    "zone": first.get("zone", ""),
-                    "exposure": first.get("exposure", ""),
-                    "counts": {lv: counts.get(lv, 0) for lv in LEVELS},
-                }
-            )
+        items = [self._card(a) for a in sorted(set(self.by_asset) | set(self.inventory))]
         if "q" in query:
             q = query["q"].lower()
             items = [a for a in items if q in a["asset"].lower() or q in a["name"].lower()]
@@ -347,26 +371,20 @@ class RunIndex:
         return {"run": self.run, **_paged(items, limit, offset)}
 
     def asset(self, asset: str, query: dict[str, str]) -> dict[str, Any] | None:
-        rows = self.by_asset.get(asset)
-        if rows is None:
-            name = asset.strip().lower()
-            rows = next((rs for rs in self.by_asset.values() if name in asset_names(rs[0])), None)
-        if not rows:
+        """One asset and its decisions; an asset scanned without a finding has none (v0.18.1)."""
+        found = self._find_asset(asset)
+        if found is None:
             return None
-        first = rows[0]
-        counts = Counter(r["delivery_decision"] for r in rows)
+        rows = self.by_asset.get(found, [])
+        first = rows[0] if rows else {}
+        known = self.inventory.get(found, {})
         limit, offset = page(query)
         ordered = sorted(rows, key=_sort_key("level"))
         return {
             "run": self.run,
-            "asset": _asset(first),
-            "name": first["asset_id"],
-            "description": first.get("asset_description", ""),
-            "owner": first.get("owner", ""),
-            "zone": first.get("zone", ""),
-            "exposure": first.get("exposure", ""),
-            "exposure_source": first.get("exposure_source", ""),
-            "counts": {lv: counts.get(lv, 0) for lv in LEVELS},
+            **self._card(found),
+            "description": known.get("description") or first.get("asset_description", ""),
+            "exposure_source": known.get("exposure_source") or first.get("exposure_source", ""),
             "decisions": _paged([compact(r) for r in ordered], limit, offset),
         }
 

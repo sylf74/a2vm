@@ -242,6 +242,9 @@ class Asset:
     first_seen: str
     last_seen: str
     os: str | None = None
+    # When each source last observed the asset (v0.18.1): a scan that found nothing still says the
+    # asset was looked at, so a finding gone from it was fixed rather than left unchecked.
+    scans: dict[str, str] = field(default_factory=dict)
 
     def attr(self, name: str) -> Attribute:
         return self.attributes[name]
@@ -401,3 +404,5 @@ class TriageRun:
     llm_model: str | None = None
     ignored: list[dict[str, str]] = field(default_factory=list)  # rejected CVE ids cited by a source
     exposure_gaps: list[dict[str, str]] = field(default_factory=list)  # from the assets stage (v0.11.4)
+    # Every asset of the run, with or without a finding (v0.18.1): who scanned it and when.
+    assets: list[dict[str, Any]] = field(default_factory=list)

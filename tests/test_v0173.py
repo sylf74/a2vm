@@ -104,7 +104,7 @@ def test_the_french_dashboards_are_current_and_only_relabel():
     spec = importlib.util.spec_from_file_location("mgd", ROOT / "scripts" / "make_grafana_dashboards.py")
     mgd = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mgd)
-    builders = {"overview": mgd.overview_dashboard, "assets": mgd.assets_dashboard, "cves": mgd.cves_dashboard}
+    builders = mgd.BUILDERS
     for name in DASHBOARDS:
         en, fr = json.loads(dashboard(name)), json.loads(dashboard(name, "fr"))
         assert en == builders[name]() and fr == mgd.french(builders[name]()), f"run make_grafana_dashboards ({name})"

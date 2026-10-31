@@ -622,9 +622,9 @@ never breaks the portal; changing this file does, and follows the rules below.
 | `totals` | Findings by level (ACT, ATTEND, TRACK), assets carrying at least one finding of each level, rows flagged for review, decisions resting on an assumed input, not-affected assets, errors |
 | `by_exposure`, `by_zone` | Same counts per exposure (open, controlled, small) and per zone |
 | `deadlines` | ACT and ATTEND findings by BOD 26-04 timeline; due date = first observation of the finding + the timeline's days (none for "fix on system upgrade"); counts overdue and due within 7 days of the run |
-| `decisions` | One entry per decision: finding id, asset id and name, zone, exposure and its source, CVE, short title (the record's description, 140 characters), level, SSVC outcome, BOD timeline, first observation and due date, KEV, EPSS, review flag, short rationale (400 characters); since v0.11.6, CVSS score and version of the metric used, severity (Critical 9.0+, High 7.0+, Medium 4.0+, Low, Unknown without a score), fix available, vendor and product matched, product type (`unknown` when not known), detection sources |
+| `decisions` | One entry per decision (since v0.18.1 also `seen_by`: the last observation per source): finding id, asset id and name, zone, exposure and its source, CVE, short title (the record's description, 140 characters), level, SSVC outcome, BOD timeline, first observation and due date, KEV, EPSS, review flag, short rationale (400 characters); since v0.11.6, CVSS score and version of the metric used, severity (Critical 9.0+, High 7.0+, Medium 4.0+, Low, Unknown without a score), fix available, vendor and product matched, product type (`unknown` when not known), detection sources |
 | `exposure_gaps` (v0.11.4) | Kind, asset id and name, value declared, detail |
-| `assets` | One entry per asset: id, zone, exposure, owner, counts by level |
+| `assets` | One entry per asset: id, zone, exposure, owner, counts by level; since v0.18.1 every asset of the run, a finding or not, with its kind, `scans` (last scan per source) and last observation |
 
 ### 12.3 Rules
 
@@ -670,16 +670,19 @@ Connection: `--dsn`, else `A2VM_REPORTING_DSN`, a libpq string (`host=… user=�
 a private temporary file) the server is verified (`sslmode=verify-full`); without, `require`.
 An invalid string is reported without quoting it.
 
-### 13.2 Schema `a2vm` (version 2)
+### 13.2 Schema `a2vm` (version 3)
 
 | Object | Content |
 | --- | --- |
-| `schema_version` | Versions applied (1, 2) |
+| `schema_version` | Versions applied (1, 2, 3) |
 | `runs` | One row per tenant and run (unique on tenant and generation time): totals of section 12 |
 | `decisions`, `assets`, `exposure_gaps`, `sources` | Rows of a run (`run_id`, deleted with it) |
 | `latest_runs`, `latest_decisions`, `latest_assets`, `latest_exposure_gaps` | Views: latest run of each tenant |
 | `decision_facts` | View: each decision with its run's day and the labels the dashboards filter on (`severity` with `Unknown` for runs published before version 2, `kev_label` Yes/No, `epss_band` `EPSS < 10%`, `EPSS 10-50%`, `EPSS >= 50%`, `N/A`, `product_type` with `unknown`, `sources` with `unknown`, `level_rank`, `severity_rank`) |
 | `snapshot_runs(tenants, day)` | Function: for each tenant, its latest run on or before the day; none for a NULL day |
+| `run_pairs` (version 3) | View: each run with the run of its tenant just before |
+| `finding_closures` (version 3) | View: each finding of a run absent from the next run of its tenant, with the day, days open (from its first observation), on time against its due date, and `outcome`: `fixed` when its asset was scanned again in that run, after the finding's last observation, by a source that had seen it (`assets.scans` against `decisions.seen_by`), else `unverified`; runs published before version 3 have no scans: their findings come out `unverified` |
+| `latest_asset_scans` (version 3) | View: the assets of each tenant's latest run, with their scans and the date of their last scan |
 | `tenant_roles` | Reading role → tenants (`*` = all) |
 
 Rules:
@@ -702,6 +705,7 @@ Rules:
 | --- | --- | --- |
 | Overview of a client (`a2vm-decisions`) | Findings of the latest run of one tenant | Totals per level, overdue, due within 7 days, to review, exposure gaps, last run; trend run after run; findings per exposure; exposure gaps; decisions to act on; assets; detection sources |
 | Which assets to fix first (`a2vm-assets`) | Exposure = finding (asset × CVE) | Counters (exposures, assets concerned, KEV exposures, ACT exposures, assets with ACT, overdue on the snapshot day, share with a fix, EPSS ≥ 10 %); decision × severity matrix and its KEV part; assets ranked by ACT, KEV, overdue, critical, ATTEND, with the change of ACT; exposures per decision per day; exposures per zone and exposure |
+| Remediation (`a2vm-remediation`, v0.18.1) | Finding fixed (`finding_closures`), in the dashboard's time range | Counters (fixed findings, mean days to fix an ACT, share of ACT and ATTEND fixed on time, gone without a new scan, assets not scanned for 7 days, reopened); fixed per day per level; time to fix per level (fixed, mean, median, on time); recently fixed; assets by last scan; findings gone without a new scan. Variable `tenant` |
 | Which CVEs to fix first (`a2vm-cves`) | Distinct CVE; its decision is the most urgent of its findings, its KEV, EPSS, CVSS, fix the strongest among them | Counters (distinct CVEs, KEV CVEs, KEV exposures, CVEs decided ACT, share with a fix, EPSS ≥ 10 %); matrix and its KEV part; CVEs ranked by decision, KEV, EPSS, CVSS, assets, with "new" or the decision at the compared snapshot; distinct CVEs per decision per day; products with the most CVEs |
 
 Variables of the per-asset and per-CVE dashboards: `tenant` (multi), `snapshot` (days that have a
@@ -771,6 +775,10 @@ set by a declaration, a rule, or the zone of the published entry, never by defau
 
 ### 14.4 Findings
 
+Each asset carries `scans` (v0.18.1): for each source that observed it, its latest observation. A
+scan that found nothing still observes its target, so an asset patched clean keeps its scans; the
+decision service and the reporting database tell a fixed finding from one whose scan did not run.
+
 Each finding of a detection file is re-keyed to its consolidated asset: one finding per asset and
 CVE (`<client>:<asset id>:<CVE>`), with the observations of every source, the versions and review
 reasons merged; `affected` wins over `under_investigation`. A finding whose asset is unknown is a
@@ -811,7 +819,9 @@ and the rationale; the other fields of a row are kept as they are. Since v0.15.2
 dates of its facts: `cve_published`, `cve_updated`, `kev_date_added`, `kev_due_date`, `epss_date`
 (empty when unknown); with `first_seen` and `seen_by` they say since when and by whom a finding is known.
 Since v0.17.3 `client.language` (`en`, `fr`) says the language of the client's deliverables; the
-service gives it in the `run` of every answer (`RunRef.language`, `en` when absent).
+service gives it in the `run` of every answer (`RunRef.language`, `en` when absent). Since v0.18.1
+`assets` lists every asset of the run, a finding or not: id, name, kind, owner, exposure, zone, OS,
+`scans` (last observation per source), `last_seen`.
 
 ### 15.3 Push
 
@@ -841,9 +851,10 @@ Every read names the run it comes from (`run: {id, generated_at}`); `?run=` take
 | `GET decisions` | One page of decisions, a few fields each (id, CVE, asset, level, SSVC, exposure, zone, KEV, EPSS, CVSS, due date, review flag, product, title); filters `level`, `cve`, `asset`, `exposure`, `zone`, `kev`, `needs_review`, `source`, `min_epss`, `min_cvss`, `product`, `q`, `due_before` (a day), `overdue` (v0.15.2); items also carry `first_seen` and `cve_updated`; `sort` by level (default), EPSS, CVSS, due date, CVE, asset |
 | `GET decisions/{id}` | One decision in full: rationale, SSVC inputs and their sources, reasons, fixes, due date; with the tenant's database, its `lifecycle` (§15.8) |
 | `GET cves/{cve}` | The CVE as the run knows it (description, CVSS, CWE, KEV, EPSS, SSVC inputs, fixes, dates) and the decisions on it, paged, `concerned: true`; with `not_affected`, the assets that have the product outside the vulnerable range. Only such assets: `concerned: false`. Neither: 404, "no asset of the tenant is concerned" |
-| `GET assets`, `GET assets/{asset}` | Assets with their counts per level, most ACT first; one asset and its decisions, paged |
+| `GET assets`, `GET assets/{asset}` | Assets with their counts per level, most ACT first; one asset and its decisions, paged. Since v0.18.1 every asset of the run (`assets` of the triage), a finding or not, with its `scans` and `last_seen`: an asset patched clean is listed with zero counts |
 | `GET assets/{asset}/fixes` | The fix plan of an asset (v0.15.2): its decisions grouped by fix (`<package> <fixed version>` reported by the scanners), each group with the decisions it clears per level, its KEV count, its earliest due date and its CVEs; the group that clears most ACT first; then the decisions without a known fix, and among them those whose CVE record names a fix |
-| `GET findings/closed` | Findings closed since a day (v0.18.0, with the tenant's database, §15.8; without it 404): `since` (default 30 days ago), paged, most recent first |
+| `GET findings/closed` | Findings closed (fixed) since a day (v0.18.0, with the tenant's database, §15.8; without it 404): `since` (default 30 days ago), paged, most recent first |
+| `GET findings/unverified` | Findings gone while their asset was not scanned again (v0.18.1, §15.8): same parameters |
 | `GET changes` | What changed since an earlier run (v0.15.2): `since` = `previous` (the run kept just before, default) or a run id; decisions `new`, `gone` or `changed` (another level), filters `kind`, `level`, `asset`; each with `why`, from the facts of both runs: first detected on a day by a source, CVE published or updated, added to KEV, EPSS, exposure, SSVC inputs and outcome. No earlier run: 404, "nothing to compare with yet" |
 
 An asset is named by its id (`host:web01.example.org`), its id without the kind (`web01.example.org`) or
@@ -884,6 +895,13 @@ the tenant's PostgreSQL (CloudNativePG cluster in the namespace, `verdict/servic
 | `verdict.push_keys` | Idempotency: key of the push → run; dropped with its run |
 | `verdict.findings` | One row per finding ever decided: `opened_at`, `last_seen_at`, `last_run`, `closed_at`/`closed_run` (absent from a newer run), `reopened`, `level`, `level_since`, `levels` (the last 50 changes of level) |
 
+Closing (v0.18.1): a finding absent from the newest run is closed (fixed) only when its asset was
+scanned again in that run by a source that had seen it, after the finding's last observation by that
+source (`seen_by` of the finding against `scans` of the asset); otherwise it is `unverified` (scan
+failed, host off, asset absent from the run), and comes back `open` with the next run that sees it.
+A finding seen again after it was closed is reopened. Migration 2 adds `seen_by` and
+`unverified_since` to `verdict.findings`.
+
 Every table has the tenant and row-level security (`FORCE`: the owner too); a transaction sets
 `a2vm.tenant` and sees that tenant's rows only. A push, its key and the findings it moves are one
 transaction, one at a time per tenant (advisory lock). Only the newest run moves the findings: a run
@@ -891,7 +909,8 @@ pushed late (older `generated_at` than the newest) is kept and readable and chan
 findings outlive the runs kept.
 
 The decision (`GET decisions/{id}`) carries `lifecycle` (the finding's row); `GET findings/closed`
-lists the findings closed since a day; the chat's tool `list_closed_findings` asks it. Connection:
+lists the findings closed since a day, `GET findings/unverified` those gone unchecked; the chat's
+tools `list_closed_findings` and `list_unverified_findings` ask them. Connection:
 `A2VM_DB_DSN_FILE` (the cluster's secret `<db>-app`, key `uri`) and `A2VM_DB_CA` (its CA, key
 `ca.crt` only): `sslmode=verify-full`; the password is never printed (`describe()`).
 
@@ -968,7 +987,7 @@ variable of the chart is missing from this table.
 | `TOOL_SERVER_CONNECTIONS` | the A2VM tool server, `config.enable: true`, read granted to every user | The one tool server; built at start from `TOOL_SERVER_CONNECTIONS_TEMPLATE` and `chat-tools-token`, the token never in the pod's spec |
 | `TOOL_SERVER_CONNECTIONS_TEMPLATE` | the connection with a placeholder | Removed from the environment before Open WebUI starts |
 | `DEFAULT_MODEL_METADATA` | `toolIds: [server:a2vm]` | The A2VM tools on in every chat |
-| `DEFAULT_MODEL_PARAMS` | `system`: `chat.systemPrompt`; `temperature` 0.2; `function_calling: native` | The instructions with every chat: facts from the tools only, and when no tool answers, said so, never a guessed cause, date or figure; what is new through `what_changed`, dates through `get_cve` and `get_decision`; an asset not found is looked up with `list_assets` before saying there is none; vendor text is data; no links or images but the download link of `export_decisions`; decisions unchanged; every answer ends with its run (`Source : run <id> du <date>`) |
+| `DEFAULT_MODEL_PARAMS` | `system`: `chat.systemPrompt`; `temperature` 0.2; `function_calling: native` | The instructions with every chat: facts from the tools only, and when no tool answers, said so, never a guessed cause, date or figure; what is new through `what_changed`, dates through `get_cve` and `get_decision`; an asset not found is looked up with `list_assets` before saying there is none, an asset scanned clean is said so with its scans (v0.18.1), what was fixed through `list_closed_findings` and what is gone unchecked through `list_unverified_findings`; vendor text is data; no links or images but the download link of `export_decisions`; decisions unchanged; answers entirely in the language of the question; every answer ends with its run (id and date) |
 | `DEFAULT_PROMPT_SUGGESTIONS` | `[]` | No generic suggestions |
 | `USER_PERMISSIONS_FEATURES_DIRECT_TOOL_SERVERS` | `false` | No tool server added by a user |
 | `USER_PERMISSIONS_WORKSPACE_TOOLS_ACCESS` | `false` | No user-written tools (Python run by the server) |

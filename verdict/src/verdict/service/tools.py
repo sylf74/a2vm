@@ -150,7 +150,8 @@ OPERATIONS: list[tuple[str, str, str, list[dict[str, Any]], str]] = [
     (
         "/assets",
         "list_assets",
-        "Assets of the tenant with their counts of decisions per level, most ACT first.",
+        "Assets of the tenant with their counts of decisions per level, most ACT first; an asset scanned "
+        "without any finding is listed too, with zero counts and its scans (source and date of the last scan).",
         [
             _q("q", "string", "Part of the asset id or name"),
             _q("exposure", "string", "open, controlled or small", enum=["open", "controlled", "small"]),
@@ -231,11 +232,21 @@ OPERATIONS: list[tuple[str, str, str, list[dict[str, Any]], str]] = [
     (
         "/findings/closed",
         "list_closed_findings",
-        "Findings closed since a day: decided in a run and absent from a newer one (fixed, or no longer "
-        "detected), most recent first, each with when it was opened, closed, reopened and its levels. Use it for "
-        "'what was fixed this month'. Needs the tenant's database: without it, say the history is not kept.",
+        "Findings fixed since a day: decided in a run and absent from a newer one in which their asset was "
+        "scanned again by the source that had seen them, most recent first, each with when it was opened, "
+        "closed, reopened and its levels. Use it for 'what was fixed this month'. Needs the tenant's "
+        "database: without it, say the history is not kept.",
         [_q("since", "string", "A day YYYY-MM-DD (default: 30 days ago)"), *_PAGE],
         "findings/closed",
+    ),
+    (
+        "/findings/unverified",
+        "list_unverified_findings",
+        "Findings gone from the newest runs while their asset was not scanned again by the source that had seen "
+        "them (scan failed, host off): not known to be fixed. Use it before saying something was fixed, and to "
+        "find the assets whose scans are missing. Needs the tenant's database.",
+        [_q("since", "string", "A day YYYY-MM-DD (default: 30 days ago)"), *_PAGE],
+        "findings/unverified",
     ),
     (
         "/runs",
@@ -417,6 +428,7 @@ class Tools:
                 "changes",
                 "assets/{asset}/fixes",
                 "findings/closed",
+                "findings/unverified",
             ):
                 query["limit"] = "10"
             if upstream == "exports":

@@ -72,7 +72,7 @@ the admin's password in *Settings > Account*; the Secret's value only serves the
 
 In a new chat, the model is preselected and the tool **A2VM** is on (the wrench icon under the
 input box). Ask for instance "Quels sont les ACT KEV du dernier run ?": the answer ends with the
-run it rests on (`Source : run …`), and the tool server's log shows the calls:
+run it rests on (its id and date, in the language of the answer), and the tool server's log shows the calls:
 
 ```bash
 kubectl -n $NS logs deploy/a2vm-lab-tools --tail=20

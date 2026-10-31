@@ -207,7 +207,7 @@ def test_chart_publishes_the_downloads_only_and_runs_the_retention():
     values = yaml.safe_load((CHART / "values.yaml").read_text())["chat"]
     assert values["retentionDays"] == 30 and values["exportMinutes"] == 60
     prompt = values["systemPrompt"]
-    assert "list_assets" in prompt and "export_decisions" in prompt and "Source : run" in prompt
+    assert "list_assets" in prompt and "export_decisions" in prompt and "the run it rests on" in prompt
 
 
 def test_chat_values_take_the_retention(tmp_path):

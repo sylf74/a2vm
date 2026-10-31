@@ -74,6 +74,7 @@ def write_json(run: TriageRun, path: Path) -> None:
         "errors": run.errors,
         "ignored": run.ignored,
         "exposure_gaps": run.exposure_gaps,
+        "assets": run.assets,
     }
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 

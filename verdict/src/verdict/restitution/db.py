@@ -20,7 +20,7 @@ from typing import Any
 
 from a2vm.config import env
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 PEM = "-----BEGIN CERTIFICATE-----"
 
 
@@ -137,7 +137,9 @@ DECISION_COLUMNS = (
     "finding_id", "asset", "asset_name", "zone", "exposure", "exposure_source", "cve", "title", "level", "ssvc",
     "bod_timeline", "first_seen", "due_date", "kev", "epss", "needs_review", "rationale",
     "cvss_score", "cvss_version", "severity", "fix_available", "vendor", "product", "product_type", "sources",
+    "seen_by",
 )  # fmt: skip
+JSON_COLUMNS = {"seen_by"}
 
 
 def run_row(data: dict[str, Any]) -> dict[str, Any]:
@@ -196,9 +198,13 @@ def publish(conninfo: str, data: dict[str, Any]) -> tuple[int, dict[str, int]]:
                     f"INSERT INTO a2vm.runs ({cols}) VALUES ({marks}) RETURNING run_id", row
                 ).fetchone()[0]
                 with conn.cursor() as cur:
+                    from psycopg.types.json import Jsonb
+
                     decisions = [
-                        (run_id, tenant, *[d.get(c) for c in DECISION_COLUMNS]) for d in data.get("decisions", [])
-                    ]
+                        (run_id, tenant, *[Jsonb(d.get(c) or {}) if c in JSON_COLUMNS else d.get(c)
+                                           for c in DECISION_COLUMNS])
+                        for d in data.get("decisions", [])
+                    ]  # fmt: skip
                     cur.executemany(
                         f"INSERT INTO a2vm.decisions (run_id, tenant, {', '.join(DECISION_COLUMNS)}) "
                         f"VALUES (%s, %s, {', '.join(['%s'] * len(DECISION_COLUMNS))})",
@@ -207,12 +213,13 @@ def publish(conninfo: str, data: dict[str, Any]) -> tuple[int, dict[str, int]]:
                     counts["decisions"] = len(decisions)
                     assets = [
                         (run_id, tenant, a["id"], a.get("name"), a.get("zone"), a.get("exposure"), a.get("owner"),
-                         a["counts"]["ACT"], a["counts"]["ATTEND"], a["counts"]["TRACK"])
+                         a["counts"]["ACT"], a["counts"]["ATTEND"], a["counts"]["TRACK"], a.get("kind") or None,
+                         Jsonb(a["scans"]) if "scans" in a else None, a.get("last_seen") or None)
                         for a in data.get("assets", [])
                     ]  # fmt: skip
                     cur.executemany(
                         "INSERT INTO a2vm.assets (run_id, tenant, asset, name, zone, exposure, owner, act, attend,"
-                        " track) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                        " track, kind, scans, last_seen) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
                         assets,
                     )
                     counts["assets"] = len(assets)
