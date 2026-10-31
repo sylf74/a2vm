@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "a2vm"
-version = "0.17.1"
+version = "0.17.2"
 description = "A2VM common contract: data model, exchange files and their schemas, service contracts, settings, client profiles, LLM client, SSVC tables, declared-asset matching."
 requires-python = ">=3.11"
 license = {text = "LicenseRef-a2vm-proprietary"}
