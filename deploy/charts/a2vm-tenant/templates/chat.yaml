@@ -262,6 +262,8 @@ spec:
             - {name: OPENAI_API_BASE_URLS, value: {{ include "a2vm-tenant.chatLlmUrl" . | quote }}}
             - {name: OPENAI_API_CONFIGS, value: {{ toJson $configs | quote }}}
             - {name: DEFAULT_MODELS, value: {{ $chat.llm.model | quote }}}
+            # The tenant's model is the only one: every analyst sees it (else only the admin does).
+            - {name: BYPASS_MODEL_ACCESS_CONTROL, value: "true"}
             - {name: ENABLE_DIRECT_CONNECTIONS, value: "false"}
             - {name: ENABLE_OPENAI_API_PASSTHROUGH, value: "false"}
             # The A2VM tools, selected in every chat; the instructions with every chat.

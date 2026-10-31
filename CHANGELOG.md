@@ -5,6 +5,16 @@ analyst and, under **Upgrade**, what a tenant must do when it moves to that tag 
 `A2VM_REF` in its `.gitlab-ci.yml`). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
 §11) and the LLDs. A release adds its entry here in the same merge request (CLAUDE.md, Releasing).
 
+## v0.17.2 — 2026-10-31
+
+Fix of the chat with the analysts' sign-in.
+
+- Chat: `BYPASS_MODEL_ACCESS_CONTROL=true`. An analyst signed in through the provider (role `user`)
+  saw no model since v0.17.0: Open WebUI shows a user only the models granted to them; the tenant's
+  model is the only one configured. Meant for v0.17.1, tagged without it.
+
+**Upgrade**: move `ref` and `A2VM_REF` to `v0.17.2` and push.
+
 ## v0.17.1 — 2026-10-30
 
 English reference and translations of the alerts (HLD D16).

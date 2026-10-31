@@ -918,6 +918,7 @@ variable of the chart is missing from this table.
 | `OPENAI_API_CONFIGS` | `model_ids: [<model>]` | The tenant's model only; the model list is not asked from the endpoints |
 | `OPENAI_API_KEYS` | from `llm-api-key`, at start | The key never in the pod's spec |
 | `DEFAULT_MODELS` | the model | Preselected in every chat |
+| `BYPASS_MODEL_ACCESS_CONTROL` | `true` | Open WebUI shows a user (not an admin) only the models granted to them; the only model configured is the tenant's, so every analyst gets it without a grant made in the admin panel (which `ENABLE_PERSISTENT_CONFIG=false` would not keep). Since v0.17.2: an analyst signed in through the provider saw no model |
 | `ENABLE_DIRECT_CONNECTIONS` | `false` | No endpoint added by a user from the browser |
 | `ENABLE_OPENAI_API_PASSTHROUGH` | `false` | No raw proxy to the endpoints |
 | `TOOL_SERVER_CONNECTIONS` | the A2VM tool server, `config.enable: true`, read granted to every user | The one tool server; built at start from `TOOL_SERVER_CONNECTIONS_TEMPLATE` and `chat-tools-token`, the token never in the pod's spec |

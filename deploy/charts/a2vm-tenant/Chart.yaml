@@ -3,5 +3,5 @@ name: a2vm-tenant
 description: One A2VM tenant on Kubernetes - the daily run (collect, intelligence, detection, assets, triage, publish) as a CronJob (HLD D15 step 1) and its detection service (step 2)
 type: application
 # Same version as the packages: the release job checks it.
-version: 0.17.1
-appVersion: "0.17.1"
+version: 0.17.2
+appVersion: "0.17.2"

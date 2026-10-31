@@ -3,9 +3,9 @@
 # A2VM_PROJECT to the same path, on the group of the tenants).
 include:
   - project: group/subgroup/a2vm
-    ref: v0.17.1
+    ref: v0.17.2
     file: templates/client-pipeline.yml
 
 variables:
-  A2VM_REF: v0.17.1   # keep equal to the include ref
+  A2VM_REF: v0.17.2   # keep equal to the include ref
   A2VM_RUN_MODE: gitlab   # kubernetes: the daily run and the watch in the cluster (docs/kubernetes.md §4)

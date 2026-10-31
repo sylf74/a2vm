@@ -13,10 +13,10 @@
 #
 #     include:
 #       - project: vulnops/a2vm
-#         ref: v0.17.1
+#         ref: v0.17.2
 #         file: templates/client-pipeline.yml
 #     variables:
-#       A2VM_REF: v0.17.1        # same version as the include
+#       A2VM_REF: v0.17.2        # same version as the include
 #
 # Jobs:
 #   push to the default branch     validate (profile and targets)
@@ -254,7 +254,7 @@ deploy-k8s:
         if [ -f watch-sources.yaml ]; then WATCH="$WATCH --set-file files.watchSources=watch-sources.yaml"; fi
         echo "A2VM_RUN_MODE=kubernetes: the daily run and the watch run in $NS; the scheduled pipelines do nothing"
       fi
-    # Sign-in of the analysts with the tenant's identity provider (v0.17.1), when A2VM_OIDC_ISSUER is
+    # Sign-in of the analysts with the tenant's identity provider (v0.17.2), when A2VM_OIDC_ISSUER is
     # set: the chat and, with A2VM_ALERTS_HOST, the review page of the alerts behind oauth2-proxy. The
     # proxy's cookie key and the key of the page's forms are made once and kept in the Secret a2vm-tenant.
     - |
