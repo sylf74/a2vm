@@ -177,7 +177,7 @@ Set `A2VM_RUN_MODE: kubernetes` in the `variables:` of the tenant's `.gitlab-ci.
 scheduled pipelines of the project no longer run the daily jobs nor the watch (they can be switched
 off). The watch's mail settings come from the same CI/CD variables as in GitLab (`A2VM_MAIL_FROM`,
 `A2VM_SMTP_*` or `A2VM_GRAPH_*`, `A2VM_ANALYST_TO`); `contacts.yaml`, `watch-sources.yaml` and
-`templates/alert.docx` from the project. The first passage records the baseline (no alert), as a
+`templates/alert*.docx` from the project. The first passage records the baseline (no alert), as a
 first watch in GitLab.
 
 ```bash

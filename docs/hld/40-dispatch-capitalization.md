@@ -28,7 +28,15 @@ pillar 4.
 
 ## 3. Building blocks
 
-To define.
+| Block | Responsibility | Status |
+| --- | --- | --- |
+| Dispatch channels | Where a validated alert, and later an ACT decision, goes for a tenant and for each of its contacts: mail (the sender of the review page today), or an ITSM tool through a connector | Planned v0.19.0 |
+| ITSM connectors | One interface (create, update, read the state of a ticket), one connector per tool: TheHive first (case or alert, API v1), ServiceNow (incident or security incident, REST Table API), others later; the ticket's reference and state kept with the alert; credentials in the tenant's secrets, never in its project files; the tool reached only from the tenant's namespace, by its NetworkPolicy | Planned v0.19.0 |
+
+The channels are configured with the contacts (`contacts.yaml`: a contact is a mailbox or a
+queue of an ITSM tool) so that the analyst still chooses the recipients on the review page, and
+the language of each recipient still applies (D16). A connector proposes nothing and decides
+nothing: it carries what an analyst validated.
 
 ## 4. Flows
 
@@ -52,4 +60,4 @@ verified closure.
 | Item | Content |
 | --- | --- |
 | Status | Not started. v0.11.5 had put the reporting database in a package named `dispatch`; v0.11.6 moved it to pillar 3, which restitutes its own decisions, and removed the package: the name stays for this pillar |
-| Open points | Dispatch channels per client (ticketing tool, mail, API); finding lifecycle with the history database; indicators of remediation (time to fix, reopened findings) |
+| Open points | Dispatch channels per client: mail and ITSM connectors (TheHive, ServiceNow) planned in v0.19.0 (§3), their mapping of fields and severities to settle with each tool; finding lifecycle with the history database; indicators of remediation (time to fix, reopened findings) |

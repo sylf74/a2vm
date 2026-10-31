@@ -34,6 +34,13 @@ BOD_TIMELINES = (
     "3 days",
     "3 days & forensic investigation",
 )
+BOD_EN = {
+    "fix on system upgrade": "at the next major upgrade",
+    "60 days": "60 days",
+    "14 days": "14 days",
+    "3 days": "3 days",
+    "3 days & forensic investigation": "3 days, with a forensic investigation",
+}
 BOD_FR = {
     "fix on system upgrade": "à la prochaine mise à niveau majeure",
     "60 days": "60 jours",
@@ -117,8 +124,10 @@ def cvss_heuristic(metric: CvssMetric) -> tuple[str, str]:
     return ("yes" if auto else "no"), ("total" if total else "partial")
 
 
-def remediation_delay(record: VulnRecord, publicly_exposed: bool, unknown_inputs: str = "conservative") -> str:
-    """CISA BOD 26-04 delay of one record, in French, for an asset exposed or not.
+def remediation_delay(
+    record: VulnRecord, publicly_exposed: bool, unknown_inputs: str = "conservative", lang: str = "en"
+) -> str:
+    """CISA BOD 26-04 delay of one record, in English (or French, `lang="fr"`), for an asset exposed or not.
 
     Automatable and Technical Impact from the CISA ADP, else the CVSS heuristic, else the policy's
     default for unknown inputs (`policy.unknown_inputs`). The triage may refine them later (LLM
@@ -134,4 +143,5 @@ def remediation_delay(record: VulnRecord, publicly_exposed: bool, unknown_inputs
         automatable, impact = "no", "partial"
     else:
         automatable, impact = "yes", "total"
-    return BOD_FR[bod_timeline(record.in_kev, publicly_exposed, automatable, impact)]
+    labels = BOD_FR if lang == "fr" else BOD_EN
+    return labels[bod_timeline(record.in_kev, publicly_exposed, automatable, impact)]

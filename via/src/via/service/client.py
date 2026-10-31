@@ -112,6 +112,17 @@ class WatchClient:
         r = self._call("GET", f"/alerts/{alert_id}/edit", missing_ok=True)
         return r.text if r is not None else None
 
+    def translation(self, alert_id: str, lang: str) -> str | None:
+        r = self._call("GET", f"/alerts/{alert_id}/translations/{lang}", missing_ok=True)
+        return r.text if r is not None else None
+
+    def put_translation(
+        self, alert_id: str, lang: str, source_hash: str, source: str, text: str | None = None, error: str | None = None
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {"language": lang, "source_hash": source_hash, "source": source}
+        body.update({"text": text} if text is not None else {"error": error or "failed"})
+        return self._call("POST", f"/alerts/{alert_id}/translations", body).json()
+
     def add_events(self, events: list[dict]) -> dict[str, Any]:
         return self._call("POST", "/events", {"events": events}).json()
 
@@ -120,4 +131,5 @@ def _files_of(entry: dict[str, Any]) -> list[str]:
     names = [f"{entry['id']}.md", f"{entry['id']}.html"]
     if entry.get("docx"):
         names.append(entry["docx"])
+    names += [n for n in (entry.get("ctx") or {}).values() if isinstance(n, str)]
     return names

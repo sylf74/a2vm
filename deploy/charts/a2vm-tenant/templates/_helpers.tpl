@@ -68,7 +68,7 @@ app.kubernetes.io/component: {{ .component }}
 {{- define "a2vm-tenant.watchFiles" -}}
 mkdir -p /tmp/cfg/templates
 cp /config/*.yaml /tmp/cfg/ 2>/dev/null || true
-if [ -s /alert-template/alert.docx ]; then cp /alert-template/alert.docx /tmp/cfg/templates/alert.docx; fi
+for t in /alert-template/alert*.docx; do if [ -s "$t" ]; then cp "$t" /tmp/cfg/templates/; fi; done
 {{ include "a2vm-tenant.settings" . }}
 SOURCES=/opt/a2vm/config/watch-sources.yaml
 if [ -f /tmp/cfg/watch-sources.yaml ]; then SOURCES=/tmp/cfg/watch-sources.yaml; fi

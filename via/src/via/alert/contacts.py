@@ -5,11 +5,13 @@
   contacts:
     - {name: Jeanne Martin, role: RSSI, email: rssi@client.example}
     - {name: CERT client, role: CERT, email: cert@client.example}
-    - {name: Paul Durand, role: DSI, email: dsi@client.example, receive: [urgent]}
+    - {name: Paul Durand, role: DSI, email: dsi@client.example, receive: [urgent], language: fr}
     - {role: chef du SOC, email: soc@client.example, active: false, notes: "congés jusqu'au 3/11"}
 
 `receive` (default: urgent and info) filters by alert level; `active: false` keeps a contact on
-file without sending to it. The `alerts.recipients` of client.yaml still receive every alert.
+file without sending to it; `language` (default `en`, ISO 639-1) is the language of the sheet the
+contact receives: another language than English is a translation an analyst validated (v0.17.1).
+The `alerts.recipients` of client.yaml still receive every alert, in English.
 """
 
 from __future__ import annotations
@@ -36,6 +38,7 @@ class Contact:
     receive: list[str] = field(default_factory=lambda: ["urgent", "info"])
     active: bool = True
     notes: str = ""
+    language: str = "en"
 
     def label(self) -> str:
         who = self.name or self.email

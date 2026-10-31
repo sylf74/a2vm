@@ -6,4 +6,4 @@ sheets. VIA depends on a2vm only: asset matching (a2vm.declared) and the remedia
 (a2vm.ssvc) are common libraries, so the watch runs in the via image alone.
 """
 
-__version__ = "0.17.0"
+__version__ = "0.17.1"

@@ -5,6 +5,34 @@ analyst and, under **Upgrade**, what a tenant must do when it moves to that tag 
 `A2VM_REF` in its `.gitlab-ci.yml`). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
 §11) and the LLDs. A release adds its entry here in the same merge request (CLAUDE.md, Releasing).
 
+## v0.17.1 — 2026-10-30
+
+English reference and translations of the alerts (HLD D16).
+
+- The watch writes the alert sheet in English: headings and labels from a catalogue per language
+  (`via.alert.i18n`: English, French), the title, main impact and description by the LLM in English;
+  the analysts' mail and the review page are in English.
+- `contacts.yaml`: `language` per contact (ISO 639-1, default `en`).
+- Review page: a validator enriches the English reference, chooses the recipients (with their
+  language), checks and corrects the translation made for each language, then validates. Enriching
+  the reference outdates its translations. Status `translating`; events `translation-requested`,
+  `translated`, `translation-failed`, `translation-edited`.
+- The sender translates with the tenant's LLM (`via.alert.translate`): same structure, every CVE id
+  and URL kept, no version, score or CVE id added, headings and table header from the catalogue;
+  refused otherwise, with the reason, and a validator can write the translation. It mails each
+  language its validated version, with its Word file in that language: templates
+  `templates/alert.<lang>.docx` (else the client's `templates/alert.docx`, else the neutral template
+  of the language: `alert.en.docx`, `alert.fr.docx`).
+- `a2vm.ssvc.remediation_delay` in English by default (`lang="fr"` for French).
+- Contract `via.v1`: the translations' calls, the new status and events (added only).
+- LLD intelligence §3.5 and §3.9, HLD D16 and chapter 10, `docs/alerts.md`, `docs/alert-word.md`,
+  `docs/sign-in.md`.
+
+**Upgrade**: move `ref` and `A2VM_REF` to `v0.17.1`. The sheets are now in English: give
+`language: fr` to the contacts who read French, and, for a French Word layout, name the client's
+template `templates/alert.fr.docx` (a `templates/alert.docx` serves every language). Sending through
+GitLab (`send-alerts`) sends the English reference to everyone.
+
 ## v0.17.0 — 2026-10-30
 
 The analysts sign in with the tenant's identity provider; the alerts are validated on a page, no

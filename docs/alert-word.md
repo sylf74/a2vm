@@ -12,7 +12,7 @@ receives the Word file, or a PDF made from it when the alert is sent, or both.
    ```yaml
    alerts:
      attach: [pdf]          # the client gets a PDF of the sheet; [docx]: the Word file; [docx, pdf]: both
-     # word_template: templates/alert.docx   # default: this file when present, else the neutral one
+     # word_template: templates/alert.docx   # for every language without templates/alert.<lang>.docx
    ```
 
    The PDF is made by LibreOffice in the `send-alerts` job, from the final Word file (the analyst's
@@ -21,11 +21,16 @@ receives the Word file, or a PDF made from it when the alert is sent, or both.
    asked for (about a minute, in this manual job only); the PDFs sent are kept in its artifacts
    (`alerts/pdf/`, 90 days). A sheet whose PDF cannot be made is not sent: the job says why.
 
-2. Optional: the client's template in its project, `templates/alert.docx`. Start from a sheet the
-   team already sends to that client and replace its content with the tags below, keeping its
-   layout, styles, header and footer. Without it, the neutral template shipped with A2VM is used
-   (`via/src/via/alert/templates/alert.docx`, built by `scripts/make_alert_template.py`).
-3. The `validate` job checks the template (`via check-template templates/alert.docx`): it fails
+2. Optional: the client's templates in its project, one per language of its contacts
+   (`templates/alert.en.docx`, `templates/alert.fr.docx`; v0.17.1), or one for every language
+   (`templates/alert.docx`). Start from a sheet the team already sends to that client and replace
+   its content with the tags below, keeping its layout, styles, header and footer. Without them,
+   the neutral template of the language shipped with A2VM is used
+   (`via/src/via/alert/templates/alert.<lang>.docx`, English and French, built by
+   `scripts/make_alert_template.py`). The values A2VM puts in the tags are in the language of the
+   contact (English, French); the title, main impact and description are those of the sheet the
+   analyst validated in that language.
+3. The `validate` job checks every template (`via check-template templates/alert*.docx`): it fails
    on a tag A2VM does not fill, or on a broken tag.
 
 A client's template carries its branding and classification marks: it stays in the client project,

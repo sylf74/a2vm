@@ -200,7 +200,7 @@ def parse_csaf(doc: dict[str, Any], url: str, source: Source) -> Publication:
     )
     severity = ((d.get("aggregate_severity") or {}).get("text") or "").lower()
     if severity:
-        pub.risks.append(f"sévérité éditeur : {severity}")
+        pub.risks.append(f"vendor severity: {severity}")
     pub.vendor_advisories = [{"title": f"{source.name} — {pub.ref}", "url": pub.link}]
     return pub
 

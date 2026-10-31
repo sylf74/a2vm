@@ -1,10 +1,12 @@
 # SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 """The alert sheet as a Word file, from a template with tags (docxtpl).
 
-The client's template lives in its project (`templates/alert.docx`, built from the client's own
-sheet); without one, the neutral template shipped here is used. The context is computed from the
-same facts as the mail (`Fiche.facts`, the CVE records), so the Word sheet and the mail never say
-different things. Tags: `docs/alert-word.md`.
+The client's template lives in its project (`templates/alert.<lang>.docx`, else
+`templates/alert.docx`, built from the client's own sheet); without one, the neutral template of
+the language shipped here is used. The context is computed from the same facts as the mail
+(`Fiche.facts`, the CVE records), in the language of the contact (labels of `i18n.py`); its prose
+(title, main impact, description) is taken from the sheet the analyst validated in that language
+(`with_text`), so the Word sheet and the mail never say different things. Tags: `docs/alert-word.md`.
 """
 
 from __future__ import annotations
@@ -17,16 +19,10 @@ from typing import Any
 from a2vm.models import CvssMetric, VulnRecord
 
 from .fiche import Fiche, _versions
+from .i18n import LABELS, heading_key, known, t
 
-AV = {"N": "Réseau", "A": "Réseau adjacent", "L": "Local", "P": "Physique"}
-AC = {"L": "Faible", "H": "Élevée"}
-PR = {"N": "Aucun", "L": "Authentification utilisateur simple", "H": "Privilèges élevés"}
-UI = {"N": "Non", "R": "Oui", "P": "Oui (passive)", "A": "Oui (active)"}
-IMPACT_RISKS = (
-    (("C", "VC"), "Atteinte à la confidentialité des données"),
-    (("I", "VI"), "Atteinte à l'intégrité des données"),
-    (("A", "VA"), "Déni de service"),
-)
+IMPACT_RISKS = ((("C", "VC"), "w.risk.c"), (("I", "VI"), "w.risk.i"), (("A", "VA"), "w.risk.a"))
+_KEYS = set(LABELS["en"])
 # Every tag A2VM fills; `via check-template` refuses a template naming another one.
 KNOWN = {
     "titre", "niveau", "date", "source", "pourquoi", "produit_description", "poc", "risques",
@@ -35,8 +31,11 @@ KNOWN = {
 }  # fmt: skip
 
 
-def default_template() -> Path:
-    return Path(str(resources.files("via.alert").joinpath("templates", "alert.docx")))
+def default_template(lang: str = "en") -> Path:
+    """The neutral template of `lang`, else the English one."""
+    base = resources.files("via.alert").joinpath("templates")
+    own = base.joinpath(f"alert.{lang}.docx")
+    return Path(str(own if own.is_file() else base.joinpath("alert.en.docx")))
 
 
 def _vector(m: CvssMetric | None) -> dict[str, str]:
@@ -56,12 +55,17 @@ def calculator_url(m: CvssMetric | None) -> str:
     return ""
 
 
-def _cve(record: VulnRecord) -> dict[str, Any]:
+def _w(lang: str, prefix: str, code: str, default_key: str) -> str:
+    key = f"w.{prefix}.{code}"
+    return t(lang, key) if code and key in _KEYS else t(lang, default_key)
+
+
+def _cve(record: VulnRecord, lang: str = "en") -> dict[str, Any]:
     m = record.best_cvss()
     v = _vector(m)
-    complexity = AC.get(v.get("AC", ""), "")
+    complexity = _w(lang, "ac", v.get("AC", ""), "w.unspecified") if v.get("AC") else ""
     if v.get("AT") == "P" and complexity:
-        complexity = "Élevée"  # CVSS 4.0: attack requirements present
+        complexity = t(lang, "w.ac.H")  # CVSS 4.0: attack requirements present
     technical = (record.adp_ssvc or {}).get("technical_impact")
     if technical is None and v:
         keys = ("VC", "VI") if m and m.version == "4.0" else ("C", "I")
@@ -69,28 +73,30 @@ def _cve(record: VulnRecord) -> dict[str, Any]:
     components = []
     entries = [e for e in record.affected if e.source == "cna"] or record.affected  # ADP repeats the CNA
     for e in entries[:12]:
-        versions = _versions(e)
-        components.append(f"{e.vendor} {e.product}".strip() + (f" : {versions}" if versions else ""))
+        versions = _versions(e, lang)
+        components.append(f"{e.vendor} {e.product}".strip() + (f": {versions}" if versions else ""))
+    privileged = {"total": t(lang, "w.yes"), "partial": t(lang, "w.no")}.get(technical or "", t(lang, "w.unspecified"))
     return {
         "id": record.cve_id,
         "cvss_version": m.version if m else "",
-        "cvss_score": f"{m.score:g}" if m and m.score is not None else "non publié",
+        "cvss_score": f"{m.score:g}" if m and m.score is not None else t(lang, "w.unpublished"),
         "lien_cve": f"https://www.cve.org/CVERecord?id={record.cve_id}",
         "lien_cvss": calculator_url(m),
-        "vecteur": AV.get(v.get("AV", ""), "Non précisé"),
-        "complexite": complexity or "Non précisée",
-        "privileges": PR.get(v.get("PR", ""), "Non précisés"),
-        "interaction": UI.get(v.get("UI", ""), "Non précisé"),
-        "droits_privilegies": {"total": "Oui", "partial": "Non"}.get(technical or "", "Non précisé"),
+        "vecteur": _w(lang, "av", v.get("AV", ""), "w.unspecified"),
+        "complexite": complexity or t(lang, "w.unspecified"),
+        "privileges": _w(lang, "pr", v.get("PR", ""), "w.unspecified"),
+        "interaction": _w(lang, "ui", v.get("UI", ""), "w.unspecified"),
+        "droits_privilegies": privileged,
         "composants": components,
     }
 
 
-def context(fiche: Fiche, today: str = "") -> dict[str, Any]:
-    """Values for every tag of KNOWN; links are plain URLs here, made clickable at render time."""
+def context(fiche: Fiche, today: str = "", lang: str = "en") -> dict[str, Any]:
+    """Values for every tag of KNOWN, in `lang` (the fiche built in that language); links are plain
+    URLs here, made clickable at render time."""
     alert = fiche.alert
-    facts, recs, item = fiche.facts, alert.records, alert.item
-    cves = [_cve(r) for r in recs]
+    facts, recs = fiche.facts, alert.records
+    cves = [_cve(r, lang) for r in recs]
     best = max(
         (r.best_cvss() for r in recs if r.best_cvss() and r.best_cvss().score is not None),
         key=lambda m: m.score,
@@ -99,7 +105,7 @@ def context(fiche: Fiche, today: str = "") -> dict[str, Any]:
     risks = list(facts.get("risques") or [])
     if not risks and best:
         v = _vector(best)
-        risks = [label for keys, label in IMPACT_RISKS if any(v.get(k) == "H" for k in keys)]
+        risks = [t(lang, label) for keys, label in IMPACT_RISKS if any(v.get(k) == "H" for k in keys)]
     cwes = []
     for r in recs:
         for c in r.cwes:
@@ -114,31 +120,31 @@ def context(fiche: Fiche, today: str = "") -> dict[str, Any]:
                 )
     fixes = list(facts.get("correctifs") or [])
     fixes += [
-        f"{r['nom']} : mise à jour vers {r['version_corrigee']}"
+        t(lang, "fix.update", name=r["nom"], version=r["version_corrigee"])
         for r in facts.get("actifs", [])
         if r.get("version_corrigee")
     ]
     fix_status = facts.get("correctif", "")
-    if not fixes and fix_status.startswith("disponible"):
-        fixes = [fix_status[0].upper() + fix_status[1:]]  # e.g. "Disponible — voir les avis éditeur en lien"
+    if not fixes and facts.get("correctif_disponible"):
+        fixes = [fix_status[:1].upper() + fix_status[1:]]  # e.g. "Available — see the vendor advisories"
+    why = [s for heading, body in fiche.sections if heading == t(lang, "h.why") for s in body]
     return {
-        "titre": item.title,
-        "niveau": {"urgent": "URGENT", "info": "INFORMATION"}.get(alert.level, alert.level),
+        "titre": fiche.title.split("] ", 1)[-1],
+        "niveau": t(lang, f"level.{alert.level}") if alert.level in ("urgent", "info") else alert.level,
         "date": today,
-        "source": item.source,
-        "pourquoi": [r[0].upper() + r[1:] for r in alert.reasons],
-        "produit_description": facts.get("produit", ""),
+        "source": alert.item.source,
+        "pourquoi": [line[2:] for line in why if line.startswith("- ")],
+        "produit_description": facts.get("produit", "") if lang == "en" else "",
         "poc": bool(facts.get("poc")),
         "risques": risks,
         "cvss_version": best.version if best else "",
-        "cvss_score": f"{best.score:g}" if best else "non publié",
-        "exploitee": "Oui" if facts.get("exploitee") else "Non",
-        "correctif_existe": "Oui" if fixes else "Non précisé",
-        "contournement_existe": "Non précisé",
+        "cvss_score": f"{best.score:g}" if best else t(lang, "w.unpublished"),
+        "exploitee": t(lang, "w.yes") if facts.get("exploitee") else t(lang, "w.no"),
+        "correctif_existe": t(lang, "w.yes") if fixes else t(lang, "w.unspecified"),
+        "contournement_existe": t(lang, "w.unspecified"),
         "cwes": cwes,
         "cves": cves,
-        "correctifs": fixes
-        or ([fix_status[0].upper() + fix_status[1:]] if fix_status.startswith("disponible") else []),
+        "correctifs": fixes,
         "contournements": [],
         "references": list(dict.fromkeys(facts.get("liens", []))),
         "actifs": facts.get("actifs", []),
@@ -146,6 +152,39 @@ def context(fiche: Fiche, today: str = "") -> dict[str, Any]:
         "description": facts.get("description", ""),
         "delai": facts.get("delai", ""),
     }
+
+
+def sections(markdown: str) -> tuple[str, dict[str, str]]:
+    """The title and the sections of a sheet in the watch's Markdown, keyed by the catalogue's
+    heading keys (`h.impact`...); a heading outside the catalogue is left out."""
+    title, out, key = "", {}, None
+    for line in markdown.splitlines():
+        if line.startswith("# ") and not title:
+            title = line[2:].strip()
+        elif line.startswith("## "):
+            key = heading_key(line[3:])
+            if key:
+                out[key] = ""
+        elif key:
+            out[key] = (out[key] + "\n" + line).strip("\n")
+    return title, {k: v.strip() for k, v in out.items()}
+
+
+def with_text(ctx: dict[str, Any], markdown: str, lang: str) -> dict[str, Any]:
+    """The context of a language with the prose of the sheet the analyst validated in it: title,
+    main impact, description (paragraphs). In a language outside the catalogue the headings are not
+    known: the context is left as it is (an English Word file)."""
+    if not known(lang):
+        return ctx
+    title, parts = sections(markdown)
+    out = dict(ctx)
+    if title:
+        out["titre"] = title.split("] ", 1)[-1]
+    if parts.get("h.impact"):
+        out["impact"] = parts["h.impact"]
+    if parts.get("h.description"):
+        out["description"] = parts["h.description"]
+    return out
 
 
 URL_KEYS = {"lien_cve", "lien_cvss", "lien"}

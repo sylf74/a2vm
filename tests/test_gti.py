@@ -170,6 +170,6 @@ def test_alert_fiche_uses_gti_facts_not_prose(gti_settings):
     item = Item("CVE:CVE-2099-10001", "cve", "CVE-2099-10001", ["CVE-2099-10001"], "")
     [alert] = relevant([item], profile, src, gti_settings, InventoryScanner(gti_settings))
     text = build(alert, gti_settings).markdown()
-    assert "exploitation confirmée (Google Threat Intelligence), première exploitation observée le 2100-01-02" in text
+    assert "confirmed exploitation (Google Threat Intelligence), first exploitation seen on 2100-01-02" in text
     assert "Licensed analyst prose" not in text
-    assert "exploitation confirmée par Google Threat Intelligence" in alert.reasons and alert.level == "urgent"
+    assert "gti_active" in alert.reasons and alert.level == "urgent"

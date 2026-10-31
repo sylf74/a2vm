@@ -13,10 +13,10 @@
 #
 #     include:
 #       - project: vulnops/a2vm
-#         ref: v0.17.0
+#         ref: v0.17.1
 #         file: templates/client-pipeline.yml
 #     variables:
-#       A2VM_REF: v0.17.0        # same version as the include
+#       A2VM_REF: v0.17.1        # same version as the include
 #
 # Jobs:
 #   push to the default branch     validate (profile and targets)
@@ -133,7 +133,7 @@ validate:
     - if [ -f "$A2VM_TARGETS" ]; then detect plan "$A2VM_TARGETS" --profile "$A2VM_PROFILE"; fi
     - if [ -f "$A2VM_COLLECTORS" ]; then detect collectors "$A2VM_COLLECTORS" --tenant "$(echo "$CI_PROJECT_NAME" | tr 'A-Z_' 'a-z-')" --profile "$A2VM_PROFILE"; fi
     - if [ -f contacts.yaml ]; then via contacts "$A2VM_PROFILE" --contacts contacts.yaml; fi
-    - if [ -f templates/alert.docx ]; then via check-template templates/alert.docx; fi
+    - for t in templates/alert*.docx; do if [ -f "$t" ]; then via check-template "$t" || exit 1; fi; done
 
 # -- Kubernetes (HLD D15, step 1): the daily run as a CronJob in the cluster -----------------------
 # When A2VM_K8S_CONTEXT names a GitLab agent context allowed for this project (e.g.
@@ -230,7 +230,8 @@ deploy-k8s:
       fi
     # The watch on Kubernetes (A2VM_RUN_MODE=kubernetes): the watch service and the watch CronJob. Its
     # run and read tokens are made once and kept in the Secret a2vm-tenant, their digests in the Secret
-    # a2vm-via; the Word template of the alerts goes in the ConfigMap a2vm-alert-template.
+    # a2vm-via; the Word templates of the alerts (alert.docx, alert.<lang>.docx) go in the ConfigMap
+    # a2vm-alert-template.
     - |
       WATCH=""; W="$(mktemp -d)"; chmod 700 "$W"
       if [ "$A2VM_RUN_MODE" = "kubernetes" ]; then
@@ -244,15 +245,16 @@ deploy-k8s:
         WATCH="--set watch.enabled=true --set watch.digestsSecret=a2vm-via"
         WATCH="$WATCH --set watch.digestsChecksum=$(sha256sum "$W/digests" | cut -d' ' -f1)"
         WATCH="$WATCH --set watch.sendPipelineUrl=$CI_PROJECT_URL/-/pipelines/new --set watch.sendRef=$CI_DEFAULT_BRANCH"
-        if [ -f templates/alert.docx ]; then
-          kubectl -n "$NS" create configmap a2vm-alert-template --from-file=alert.docx=templates/alert.docx --dry-run=client -o yaml | kubectl apply -f -
+        TPL=""; for t in templates/alert*.docx; do if [ -f "$t" ]; then TPL="$TPL --from-file=$(basename "$t")=$t"; fi; done
+        if [ -n "$TPL" ]; then
+          kubectl -n "$NS" create configmap a2vm-alert-template $TPL --dry-run=client -o yaml | kubectl apply -f -
           WATCH="$WATCH --set watch.alertTemplate=a2vm-alert-template"
         fi
         if [ -f contacts.yaml ]; then WATCH="$WATCH --set-file files.contacts=contacts.yaml"; fi
         if [ -f watch-sources.yaml ]; then WATCH="$WATCH --set-file files.watchSources=watch-sources.yaml"; fi
         echo "A2VM_RUN_MODE=kubernetes: the daily run and the watch run in $NS; the scheduled pipelines do nothing"
       fi
-    # Sign-in of the analysts with the tenant's identity provider (v0.17.0), when A2VM_OIDC_ISSUER is
+    # Sign-in of the analysts with the tenant's identity provider (v0.17.1), when A2VM_OIDC_ISSUER is
     # set: the chat and, with A2VM_ALERTS_HOST, the review page of the alerts behind oauth2-proxy. The
     # proxy's cookie key and the key of the page's forms are made once and kept in the Secret a2vm-tenant.
     - |

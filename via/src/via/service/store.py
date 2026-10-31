@@ -5,7 +5,9 @@
   <root>/<tenant>/inventory/<client>/assets.json, findings.json   the last daily inventory
   <root>/<tenant>/runs/<id>/                 one passage of the watch that drafted alerts: index.json
                                              and the alert sheets (Markdown, HTML, Word)
-  <root>/<tenant>/edits/<alert id>.md        the sheet as a validator corrected it on the review page
+  <root>/<tenant>/edits/<alert id>.md        the English reference as a validator enriched it (review page)
+  <root>/<tenant>/translations/<alert id>.<lang>.md, .json   a translation of the reference and its
+                                             metadata (source, reference hash, who edited it)
   <root>/<tenant>/alerts-log.jsonl           the journal of the alerts (drafted, analysts, edited,
                                              validated, dismissed, sent, send-failed)
 
@@ -31,9 +33,18 @@ RUN_ID = re.compile(r"^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{8}$")
 FILE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,150}$")
 ALERT_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,150}$")
 INVENTORY_FILES = ("assets.json", "findings.json")
-STATUSES = ("pending", "validated", "dismissed", "sent", "failed")
-# The events that set the status of an alert; the last one wins (none: pending).
-STATUS_OF = {"validated": "validated", "dismissed": "dismissed", "sent": "sent", "send-failed": "failed"}
+STATUSES = ("pending", "translating", "validated", "dismissed", "sent", "failed")
+# The events that set the status of an alert; the last one wins (none: pending). A change of the
+# English reference (`edited`) takes the alert back to pending: its translations are outdated.
+STATUS_OF = {
+    "edited": "pending",
+    "translation-requested": "translating",
+    "validated": "validated",
+    "dismissed": "dismissed",
+    "sent": "sent",
+    "send-failed": "failed",
+}
+LANG = re.compile(r"^[a-z]{2}$")
 EDIT_MAX = 100_000  # characters of a corrected sheet
 
 
@@ -154,6 +165,68 @@ class WatchStore:
             _atomic(self._t(tenant) / "edits" / f"{alert_id}.md", text.encode("utf-8"))
             journal.append(self._t(tenant) / "alerts-log.jsonl", [event])
 
+    # -- translations --------------------------------------------------------------------------
+    def reference(self, tenant: str, alert: dict[str, Any]) -> str:
+        """The English reference of an alert: as enriched by a validator, else as the watch wrote it."""
+        edited = self.edit(tenant, alert["id"])
+        if edited is not None:
+            return edited
+        return (self.file(tenant, alert["run"], f"{alert['id']}.md") or b"").decode("utf-8", "replace")
+
+    def translation(self, tenant: str, alert_id: str, lang: str) -> tuple[str | None, dict[str, Any] | None]:
+        if not ALERT_ID.match(alert_id) or not LANG.match(lang):
+            return None, None
+        base = self._t(tenant) / "translations"
+        meta_path, text_path = base / f"{alert_id}.{lang}.json", base / f"{alert_id}.{lang}.md"
+        meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.is_file() else None
+        text = text_path.read_text(encoding="utf-8") if text_path.is_file() else None
+        return text, meta
+
+    def put_translation(
+        self, tenant: str, alert_id: str, lang: str, text: str | None, meta: dict[str, Any], event: dict
+    ) -> None:
+        """A translation (or why it failed: `meta["error"]`, no text) and its journal event, together."""
+        if not ALERT_ID.match(alert_id) or not LANG.match(lang):
+            raise ValueError("invalid alert id or language")
+        base = self._t(tenant) / "translations"
+        with self._lock:
+            if text is not None:
+                _atomic(base / f"{alert_id}.{lang}.md", text.encode("utf-8"))
+            _atomic(base / f"{alert_id}.{lang}.json", json.dumps(meta, ensure_ascii=False).encode("utf-8"))
+            journal.append(self._t(tenant) / "alerts-log.jsonl", [event])
+
+    def detail(self, tenant: str, alert: dict[str, Any]) -> dict[str, Any]:
+        """An alert with its reference hash, its last request of translations (recipients, languages)
+        and the state of each translation: fresh (made from the current reference), outdated, failed."""
+        from via.alert.translate import text_hash
+
+        ref_hash = text_hash(self.reference(tenant, alert))
+        evs = [e for e in self.events(tenant) if e.get("alert") == alert["id"]]
+        request = next((e for e in reversed(evs) if e.get("event") == "translation-requested"), None)
+        langs = list((request or {}).get("languages") or [])
+        asked_now = bool(request) and request.get("reference") == ref_hash  # asked for the current reference
+        translations = {}
+        for lang in langs:
+            _, meta = self.translation(tenant, alert["id"], lang)
+            if meta is None:
+                translations[lang] = {"state": "waiting"}
+            elif meta.get("error"):
+                retried = asked_now and str(request.get("at", "")) > str(meta.get("at", ""))
+                state = "failed" if meta.get("source_hash") == ref_hash and not retried else "waiting"
+                translations[lang] = {**meta, "state": state}
+            else:
+                fresh = meta.get("source_hash") == ref_hash
+                state = "fresh" if fresh else "waiting" if asked_now else "outdated"
+                translations[lang] = {**meta, "state": state}
+        ready = request is not None and all(v["state"] == "fresh" for v in translations.values())
+        return {
+            **alert,
+            "reference_hash": ref_hash,
+            "request": {k: request[k] for k in ("to", "languages", "by", "at") if k in request} if request else None,
+            "translations": translations,
+            "ready": ready,
+        }
+
     def alerts(self, tenant: str) -> list[dict[str, Any]]:
         """Every alert of the runs kept, newest first, with its status from the journal (STATUS_OF:
         the last of validated, dismissed, sent, send-failed; none: pending)."""
@@ -196,4 +269,5 @@ class WatchStore:
         names = [f"{entry['id']}.md", f"{entry['id']}.html"]
         if entry.get("docx"):
             names.append(entry["docx"])
+        names += [n for n in (entry.get("ctx") or {}).values() if isinstance(n, str)]
         return names

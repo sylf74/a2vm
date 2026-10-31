@@ -221,7 +221,7 @@ spec:
         app.kubernetes.io/component: send
         a2vm/role: sender
     spec:
-      {{- $script := printf "exec via service send --url %s --tenant %s --token-file /secrets/via-run-token \\\n  /tmp/cfg/client.yaml --contacts /tmp/cfg/contacts.yaml --validated --every %d" (include "a2vm-tenant.viaUrl" . | quote) (.Values.tenant | quote) (int $r.sender.everySeconds) }}
+      {{- $script := printf "exec via service send --url %s --tenant %s --token-file /secrets/via-run-token \\\n  /tmp/cfg/client.yaml --contacts /tmp/cfg/contacts.yaml --settings \"$SETTINGS\" --validated --every %d" (include "a2vm-tenant.viaUrl" . | quote) (.Values.tenant | quote) (int $r.sender.everySeconds) }}
       {{- include "a2vm-tenant.watchPod" (dict "root" . "container" "sender" "script" $script "restartPolicy" "Always" "resources" $r.sender.resources) | nindent 6 }}
 {{- if .Values.watch.networkPolicy.enabled }}
 ---
