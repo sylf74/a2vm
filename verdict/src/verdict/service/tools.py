@@ -229,6 +229,15 @@ OPERATIONS: list[tuple[str, str, str, list[dict[str, Any]], str]] = [
         "assets/{asset}/fixes",
     ),
     (
+        "/findings/closed",
+        "list_closed_findings",
+        "Findings closed since a day: decided in a run and absent from a newer one (fixed, or no longer "
+        "detected), most recent first, each with when it was opened, closed, reopened and its levels. Use it for "
+        "'what was fixed this month'. Needs the tenant's database: without it, say the history is not kept.",
+        [_q("since", "string", "A day YYYY-MM-DD (default: 30 days ago)"), *_PAGE],
+        "findings/closed",
+    ),
+    (
         "/runs",
         "list_runs",
         "The runs kept by the service, newest first, with their date and counts: to compare with an earlier run.",
@@ -400,7 +409,15 @@ class Tools:
                         raise ValueError
                 except ValueError as exc:
                     raise Problem(HTTPStatus.BAD_REQUEST, f"limit: 1 to {PAGE_MAX}") from exc
-            elif upstream in ("decisions", "assets", "cves/{cve}", "assets/{asset}", "changes", "assets/{asset}/fixes"):
+            elif upstream in (
+                "decisions",
+                "assets",
+                "cves/{cve}",
+                "assets/{asset}",
+                "changes",
+                "assets/{asset}/fixes",
+                "findings/closed",
+            ):
                 query["limit"] = "10"
             if upstream == "exports":
                 return self.export(query)

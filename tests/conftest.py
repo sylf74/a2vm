@@ -14,6 +14,8 @@ from via.intel.sources import Sources
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests" / "fixtures"
+# An administrator connection to a disposable PostgreSQL (read before the environment is cleared).
+TEST_DSN = __import__("os").environ.get("A2VM_TEST_DSN", "")
 
 
 @pytest.fixture(autouse=True)
@@ -59,3 +61,34 @@ def fake_llm_transport(answer: Callable[[str, dict], dict]) -> httpx.MockTranspo
     transport = httpx.MockTransport(handler)
     transport.calls = calls  # type: ignore[attr-defined]
     return transport
+
+
+@pytest.fixture
+def tenant_db():
+    """A new database owned by a new role, as a tenant's CloudNativePG cluster gives its services
+    (the role owns the tables, is no superuser: row-level security applies); its connection string."""
+    import uuid
+
+    import psycopg
+    from psycopg import sql
+
+    if not TEST_DSN:
+        pytest.skip("A2VM_TEST_DSN not set (disposable PostgreSQL)")
+    name = f"t_{uuid.uuid4().hex[:10]}"
+    with psycopg.connect(TEST_DSN, autocommit=True) as conn:
+        conn.execute(sql.SQL("CREATE ROLE {} LOGIN PASSWORD 'app'").format(sql.Identifier(name)))
+        conn.execute(sql.SQL("CREATE DATABASE {} OWNER {}").format(sql.Identifier(name), sql.Identifier(name)))
+    try:
+        yield psycopg.conninfo.make_conninfo(TEST_DSN, user=name, password="app", dbname=name, sslmode="disable")
+    finally:
+        with psycopg.connect(TEST_DSN, autocommit=True) as conn:
+            conn.execute(sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(sql.Identifier(name)))
+            conn.execute(sql.SQL("DROP ROLE IF EXISTS {}").format(sql.Identifier(name)))
+
+
+@pytest.fixture(params=["files", "postgres"])
+def backend(request):
+    """Where a service keeps its data: None (files on its volume) or the tenant database's DSN."""
+    if request.param == "files":
+        return None
+    return request.getfixturevalue("tenant_db")

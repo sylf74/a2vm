@@ -25,11 +25,23 @@ RUN, READ = "run-token-0123456789abcdef0123456789", "read-token-0123456789abcdef
 TENANT = "example-client"
 
 
+def watch_store(tmp_path, dsn):
+    """The watch service's store: files, or the tenant's PostgreSQL (v0.18.0)."""
+    if dsn is None:
+        return WatchStore(tmp_path / "store")
+    from a2vm.db import Database
+    from via.service.pgstore import MIGRATIONS, PgWatchStore
+
+    db = Database(dsn, "via", MIGRATIONS)
+    db.init()
+    return PgWatchStore(db)
+
+
 @pytest.fixture
-def service(tmp_path):
+def service(tmp_path, backend):
     digests = tmp_path / "digests"
     digests.write_text(f"run {digest(RUN)}\nread {digest(READ)}\n")
-    svc = WatchService(TENANT, TokenSet.load(digests, {"run", "read"}), WatchStore(tmp_path / "store"))
+    svc = WatchService(TENANT, TokenSet.load(digests, {"run", "read"}), watch_store(tmp_path, backend))
     httpd = serve(svc, "127.0.0.1", 0)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     token = tmp_path / "run-token"
@@ -37,6 +49,20 @@ def service(tmp_path):
     yield svc, f"http://127.0.0.1:{httpd.server_address[1]}", token
     httpd.shutdown()
     httpd.server_close()
+
+
+def forget_alert(svc, alert: str = "CERTFR-2024-ALE-006") -> None:
+    """The watch forgets an alert it has seen, so that its next passage drafts it again (files or
+    database: through the store, as the watch does)."""
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "state.json"
+        path.write_bytes(svc.store.state(TENANT))
+        state = State.load(path)
+        state.certfr.discard(alert)
+        state.save()
+        svc.store.put_run(TENANT, path.read_bytes(), [], {})
 
 
 def _service(url, token, job, *extra):
@@ -59,10 +85,7 @@ def test_the_watch_runs_from_the_service_and_names_the_inventory(service, tmp_pa
 
     assert _watch(url, token) == 0  # first passage: the baseline, kept by the service
     assert svc.store.state(TENANT) is not None and svc.store.alerts(TENANT) == []
-    state_path = svc.store.root / TENANT / "state.json"
-    state = State.load(state_path)
-    state.certfr.discard("CERTFR-2024-ALE-006")
-    state.save()
+    forget_alert(svc)
 
     assert _watch(url, token) == 0
     alerts = svc.store.alerts(TENANT)
@@ -83,9 +106,7 @@ def test_the_validated_alert_is_sent_once_and_journaled(service, tmp_path, monke
     monkeypatch.delenv("A2VM_SMTP_HOST", raising=False)
     monkeypatch.delenv("A2VM_SEND_ONLY", raising=False)
     assert _watch(url, token) == 0
-    state = State.load(svc.store.root / TENANT / "state.json")
-    state.certfr.discard("CERTFR-2024-ALE-006")
-    state.save()
+    forget_alert(svc)
     assert _watch(url, token) == 0
     first = svc.store.alerts(TENANT)[0]
 
@@ -199,18 +220,16 @@ def test_chart_runs_the_watch_beside_a_closed_service():
     assert values["watch"]["enabled"] is False and values["watch"]["schedule"] == "*/10 * * * *"
 
 
-def test_the_chat_reads_the_alerts_of_the_watch(service, monkeypatch):
+def test_the_chat_reads_the_alerts_of_the_watch(service, monkeypatch, tmp_path):
     from verdict.service.tools import Tools
 
     svc, url, token = service
     monkeypatch.delenv("A2VM_ANALYST_TO", raising=False)
     assert _watch(url, token) == 0
-    state = State.load(svc.store.root / TENANT / "state.json")
-    state.certfr.discard("CERTFR-2024-ALE-006")
-    state.save()
+    forget_alert(svc)
     assert _watch(url, token) == 0
     chat = "chat-token-0123456789abcdef0123456789"
-    digests = svc.store.root / "chat-digests"
+    digests = tmp_path / "chat-digests"
     digests.write_text(f"chat {digest(chat)}\n")
     tools = Tools(TENANT, TokenSet.load(digests, {"chat"}), "http://127.0.0.1:9", "unused", via_url=url, via_token=READ)
     page = tools.call(chat, "/alerts", {"status": "pending"})

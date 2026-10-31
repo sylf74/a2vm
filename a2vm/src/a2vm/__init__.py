@@ -3,4 +3,4 @@
 client profiles, LLM client, and the libraries every pillar runs alone: the CISA SSVC tables
 (a2vm.ssvc) and the matching of declared assets (a2vm.declared)."""
 
-__version__ = "0.17.3"
+__version__ = "0.18.0"

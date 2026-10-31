@@ -26,7 +26,7 @@ from a2vm.io import ExchangeError, validate_triage
 from a2vm.service import JsonHandler, Problem, TokenSet
 from a2vm.service import serve as _serve
 
-from .index import QueryError, RunIndex, changes
+from .index import QueryError, RunIndex, changes, page
 from .store import RunStore, parse_time
 
 log = logging.getLogger("verdict.serve")
@@ -141,10 +141,31 @@ class Service:
             raise Problem(HTTPStatus.NOT_FOUND, "no earlier run kept: nothing to compare with yet")
         return earlier[-1].id  # receipts are oldest first
 
+    def closed(self, query: dict[str, str]) -> dict[str, Any]:
+        """Findings closed since a day (absent from the newer runs: fixed or no longer detected)."""
+        if not self.store.history:
+            raise Problem(HTTPStatus.NOT_FOUND, "the history of the findings needs the tenant's database (v0.18.0)")
+        since = query.get("since") or (dt.datetime.now(dt.UTC) - dt.timedelta(days=30)).date().isoformat()
+        try:
+            start = dt.datetime.fromisoformat(since).replace(tzinfo=dt.UTC)
+        except ValueError as exc:
+            raise Problem(HTTPStatus.BAD_REQUEST, "since: a day YYYY-MM-DD") from exc
+        try:
+            limit, offset = page(query)
+        except QueryError as exc:
+            raise Problem(HTTPStatus.BAD_REQUEST, str(exc)) from exc
+        total, items = self.store.closed(self.tenant, start, limit, offset)
+        out: dict[str, Any] = {"since": start.date().isoformat(), "total": total, "items": items}
+        if offset + limit < total:
+            out["next_offset"] = offset + limit
+        return out
+
     def read(self, tenant: str, token: str | None, rest: str, query: dict[str, str]) -> Any:
         self._reader(tenant, token)
         if rest == "runs":
             return {"items": [r.to_dict() for r in reversed(self.store.receipts(tenant))]}
+        if rest == "findings/closed":
+            return self.closed(query)
         idx = self.index(query.pop("run", "latest"))
         try:
             if rest == "changes":
@@ -182,6 +203,10 @@ class Service:
                     )
                 if found is None:
                     raise Problem(HTTPStatus.NOT_FOUND, f"no such {kind[:-1]} in this run")
+                if kind == "decisions" and self.store.history:
+                    life = self.store.lifecycle(self.tenant, ident)
+                    if life is not None:
+                        found = {**found, "lifecycle": life}
                 return found
         except QueryError as exc:
             raise Problem(HTTPStatus.BAD_REQUEST, str(exc)) from exc

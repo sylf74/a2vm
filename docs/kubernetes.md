@@ -104,6 +104,8 @@ CI/CD variables of the tenant project (or of a subgroup):
 | `A2VM_VERDICT_SERVICE` | Optional, `false` to deploy no decision service (default `true`, v0.14.0) | Visible |
 | `A2VM_RUN_MODE` | In the tenant's `.gitlab-ci.yml`: `gitlab` (default) or `kubernetes`, the daily run and the watch in the namespace only (§4) | — |
 | `A2VM_CHAT_HOST` | Optional: the analysts' chat on the decision service, at this host (v0.15.0, `chat.md`) | Visible |
+| `A2VM_DATABASE` | Optional, `true`: the tenant's PostgreSQL (CloudNativePG) for the watch, detection and decision services instead of their volumes (v0.18.0, §5) | Visible |
+| `A2VM_DATABASE_SIZE`, `A2VM_DATABASE_STORAGE_CLASS`, `A2VM_DATABASE_INSTANCES` | Optional: the database's volume (default `5Gi`, the cluster's default class) and its instances (default `1`, `3` for a standby) | Visible |
 
 The other variables are the pipeline's (`docs/deployment.md`): the job copies the secret ones
 (`A2VM_SSH_KEY`, `LLM_API_KEY`, `GTI_API_KEY`, `A2VM_GVM_USER`, `A2VM_GVM_PASSWORD`,
@@ -199,18 +201,64 @@ the review page instead: a validator corrects, validates or dismisses there, and
 Back to GitLab: `A2VM_RUN_MODE: gitlab` and push; the watch's state stays in the service's volume
 (`a2vm-<tenant>-watch`), the GitLab watch starts from its own cache.
 
-## 5. Limits of this step
+## 5. The tenant's database (v0.18.0)
+
+With `A2VM_DATABASE=true`, `deploy-k8s` gives the tenant a PostgreSQL cluster of its own in its
+namespace, made and run by the CloudNativePG operator (`Cluster a2vm-<tenant>-db`), and the watch
+service, the detection service and the decision service keep their data there instead of their
+volumes. Each pillar creates its schema (`via`, `detect`, `verdict`) at start; every row carries the
+tenant and row-level security keeps each transaction to its tenant. With their data in the database
+the services have no volume of their own: they restart without a pause (rolling update) and can run
+several replicas (`database.serviceReplicas`). The decision service also keeps the life of each
+finding across runs (opened, closed, reopened, levels): `GET …/findings/closed` and the
+`lifecycle` of a decision (LLD triage §15.8), and the chat's tool `list_closed_findings`.
+
+```
+namespace a2vm-<tenant>
+  Cluster a2vm-<tenant>-db (CloudNativePG) ── database app, role app (no superuser)
+    Secret a2vm-<tenant>-db-app  key uri ──▶ file /var/run/a2vm-db/uri   (A2VM_DB_DSN_FILE)
+    Secret a2vm-<tenant>-db-ca   key ca.crt ─▶ file /var/run/a2vm-db-ca/ca.crt (A2VM_DB_CA, verify-full)
+  via serve, detect serve, verdict serve ── 5432 ──▶ a2vm-<tenant>-db-rw   (NetworkPolicy both ways)
+```
+
+**Once per Kubernetes cluster**, install the operator (`deploy/cnpg/README.md`):
+
+```bash
+kubectl apply --server-side -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.29/releases/cnpg-1.29.3.yaml
+kubectl rollout status deployment -n cnpg-system cnpg-controller-manager
+```
+
+**Per tenant**: set `A2VM_DATABASE=true` on the project and push. `deploy-k8s` checks that the
+operator is there (the API group `postgresql.cnpg.io`), else it stops and says so. Then:
+
+```bash
+NS=a2vm-lab
+kubectl -n $NS get cluster,pods -l cnpg.io/cluster=a2vm-lab-db
+kubectl -n $NS logs deploy/a2vm-lab-verdict --tail=5
+```
+
+The services' first line says `store postgresql a2vm-lab-db-rw.a2vm-lab/app (TLS verified)`. The data
+start empty: what the volumes held is not moved (the next daily run, watch passage and pushes of
+the collectors fill the database). The old claims (`a2vm-<tenant>-watch`, `-detections`, `-runs`)
+are kept by Helm; delete them by hand once the services run on the database. The cluster and its
+volumes are kept by an uninstall too (resource policy `keep`).
+
+Backups are the operator's (a `ScheduledBackup` to an object store, `deploy/cnpg/README.md`); A2VM
+sets none in this version. Without `A2VM_DATABASE`, nothing changes: the volumes, one replica each.
+
+## 6. Limits of this step
 
 - With `A2VM_RUN_MODE=gitlab` (default) the watch and its validation stay in GitLab pipelines; with
   `kubernetes` the validation is started from a GitLab pipeline, or, with the analysts' sign-in
   and `A2VM_ALERTS_HOST` (v0.17.0), from the review page (`docs/sign-in.md`).
 - The run's report is read from the volume, the dashboards or the decision service; there are no job artifacts.
-- The decision service keeps the last runs as files, one replica, and is read with a token until
-  service accounts; it answers reads only (D15 step 3, read side).
+- Without the tenant's database (§5), the decision service keeps the last runs as files, one
+  replica; it is read with a token until service accounts and answers reads only (D15 step 3, read
+  side).
 - Without `collectors.yaml`, collection runs where the CronJob runs: the cluster must reach the
   targets (SSH, OpenVAS). With it (v0.13.0), collectors near the networks push and the cluster
   connects to no client machine (`collectors.md`).
-- The detection service keeps its detections on a volume, one replica, until PostgreSQL (D15
-  step 3); its read calls use a token of the daily run until service accounts.
+- Without the tenant's database (§5), the detection service keeps its detections on a volume, one
+  replica; its read calls use a token of the daily run until service accounts.
 - One namespace per tenant in a shared cluster; a client that requires a physical separation
   gets a cluster of its own, with the same chart (HLD D15, Tenant isolation).

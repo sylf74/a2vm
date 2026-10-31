@@ -230,3 +230,65 @@ if [ ! -s /secrets/via-run-token ]; then echo "No via-run-token: the watch servi
 SETTINGS=/opt/a2vm/config/settings.yaml
 if [ -f /config/settings.yaml ]; then SETTINGS=/config/settings.yaml; fi
 {{- end -}}
+
+{{/* The tenant's PostgreSQL cluster (CloudNativePG, v0.18.0): its name, and what a service needs to
+reach it: the connection string (the cluster's secret <db>-app, key uri) and the cluster's CA
+(secret <db>-ca, key ca.crt only), as files; egress to its pods and the DNS. */}}
+{{- define "a2vm-tenant.dbName" -}}
+{{- printf "%s-db" (include "a2vm-tenant.name" .) -}}
+{{- end -}}
+
+{{- define "a2vm-tenant.dbEnv" -}}
+{{- if .Values.database.enabled }}
+- name: A2VM_DB_DSN_FILE
+  value: /var/run/a2vm-db/uri
+- name: A2VM_DB_CA
+  value: /var/run/a2vm-db-ca/ca.crt
+{{- end }}
+{{- end -}}
+
+{{- define "a2vm-tenant.dbMounts" -}}
+{{- if .Values.database.enabled }}
+- name: db
+  mountPath: /var/run/a2vm-db
+  readOnly: true
+- name: db-ca
+  mountPath: /var/run/a2vm-db-ca
+  readOnly: true
+{{- end }}
+{{- end -}}
+
+{{- define "a2vm-tenant.dbVolumes" -}}
+{{- if .Values.database.enabled }}
+- name: db
+  secret:
+    secretName: {{ include "a2vm-tenant.dbName" . }}-app
+    defaultMode: 0440
+    items:
+      - {key: uri, path: uri}
+- name: db-ca
+  secret:
+    secretName: {{ include "a2vm-tenant.dbName" . }}-ca
+    defaultMode: 0440
+    items:
+      - {key: ca.crt, path: ca.crt}
+{{- end }}
+{{- end -}}
+
+{{- define "a2vm-tenant.dbEgress" -}}
+{{- if .Values.database.enabled }}
+- to:
+    - podSelector:
+        matchLabels:
+          cnpg.io/cluster: {{ include "a2vm-tenant.dbName" . }}
+  ports:
+    - {port: 5432, protocol: TCP}
+- to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: {{ .Values.database.dnsNamespace | quote }}
+  ports:
+    - {port: 53, protocol: UDP}
+    - {port: 53, protocol: TCP}
+{{- end }}
+{{- end -}}

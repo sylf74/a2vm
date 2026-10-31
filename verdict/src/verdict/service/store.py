@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 """Where the decision service keeps the runs it received (LLD triage-prioritization §15).
 
-Files on the service's volume until PostgreSQL (D15), one folder per tenant:
+Files on the service's volume when the tenant has no database (`pgstore.PgRunStore` otherwise,
+v0.18.0), one folder per tenant:
 
   <root>/<tenant>/runs/<id>.json.gz     the triage document as received (gzip)
   <root>/<tenant>/runs/<id>.meta.json   its receipt: generated_at, received_at, digest, counts
@@ -57,10 +58,15 @@ def parse_time(value: str) -> dt.datetime:
 
 
 class RunStore:
+    history = False  # the life of the findings needs the database
+
     def __init__(self, root: str | Path, keep: int = 7):
         self.root = Path(root)
         self.keep = max(1, keep)
         self._lock = threading.Lock()
+
+    def describe(self) -> str:
+        return f"files {self.root}"
 
     def ready(self) -> bool:
         return self.root.is_dir() and os.access(self.root, os.W_OK)

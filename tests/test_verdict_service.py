@@ -34,10 +34,32 @@ def triage(settings, sources, profile, tmp_path):
     return run, path
 
 
+_DSN: list[str | None] = [None]
+
+
+@pytest.fixture(autouse=True)
+def _store_backend(backend):
+    """Every test runs on the files and, with A2VM_TEST_DSN, on PostgreSQL (v0.18.0)."""
+    _DSN[0] = backend
+    yield
+    _DSN[0] = None
+
+
+def _store(tmp_path: Path, keep: int):
+    if _DSN[0] is None:
+        return RunStore(tmp_path / "store", keep)
+    from a2vm.db import Database
+    from verdict.service.pgstore import MIGRATIONS, PgRunStore
+
+    db = Database(_DSN[0], "verdict", MIGRATIONS)
+    db.init()
+    return PgRunStore(db, keep)
+
+
 def _service(tmp_path: Path, tenant: str, keep: int = 7) -> Service:
     digests = tmp_path / "digests"
     digests.write_text(f"publish {digest(PUBLISH)}\nread {digest(READ)}\n")
-    return Service(tenant, TokenSet.load(digests, {"publish", "read"}), RunStore(tmp_path / "store", keep))
+    return Service(tenant, TokenSet.load(digests, {"publish", "read"}), _store(tmp_path, keep))
 
 
 def _push(service: Service, path: Path, key: str = "k1", **changes) -> dict:

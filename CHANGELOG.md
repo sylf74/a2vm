@@ -5,6 +5,33 @@ analyst and, under **Upgrade**, what a tenant must do when it moves to that tag 
 `A2VM_REF` in its `.gitlab-ci.yml`). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
 §11) and the LLDs. A release adds its entry here in the same merge request (CLAUDE.md, Releasing).
 
+## v0.18.0 — 2026-10-31
+
+The tenant's PostgreSQL behind the watch, detection and decision services (HLD D15).
+
+- `A2VM_DATABASE=true` on a tenant project: `deploy-k8s` gives the tenant a CloudNativePG cluster in
+  its namespace (`a2vm-<tenant>-db`: database and role `app`, no superuser) and `via serve`,
+  `detect serve` and `verdict serve` keep their data there instead of their volumes. The operator is
+  installed once per Kubernetes cluster (`deploy/cnpg/README.md`); without it the job stops and says
+  so. Without the variable nothing changes.
+- `a2vm.db`: connection from a file (`A2VM_DB_DSN_FILE`, the cluster's secret) verified against the
+  cluster's CA (`A2VM_DB_CA`, `verify-full`), a schema per pillar (`via`, `detect`, `verdict`) created
+  at start under an advisory lock, row-level security per tenant on every table (owner included).
+- Services on the database: no volume, rolling update, `database.serviceReplicas` replicas; their
+  NetworkPolicies open the database (5432) and the DNS only; the database's lets in the three
+  services and the operator.
+- Decision service: the life of each finding across runs (opened, last seen, closed, reopened, levels).
+  `GET …/findings/closed` (findings fixed or no longer detected since a day) and `lifecycle` in
+  `GET …/decisions/{id}` (contract `verdict.v1`, added only); chat tool `list_closed_findings`.
+- Tests: the tests of the three services run on their files and on PostgreSQL.
+- LLD triage §15.8, detection §8.7, intelligence §3.7; HLD roadmap and D15 step 3;
+  `docs/kubernetes.md` §5.
+
+**Upgrade**: move `ref` and `A2VM_REF` to `v0.18.0` and push: the services stay on their volumes.
+For the database: install the operator once (`deploy/cnpg/README.md`), set `A2VM_DATABASE=true` on
+the project and push. The services start empty (what the volumes held is not moved); delete the old
+claims (`a2vm-<tenant>-watch`, `-detections`, `-runs`) by hand once satisfied.
+
 ## v0.17.3 — 2026-10-31
 
 The rest of A2VM in English (HLD D16), with French labels for the tenants that want them.

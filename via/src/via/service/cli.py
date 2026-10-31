@@ -52,13 +52,19 @@ def cmd_serve(args: argparse.Namespace) -> int:
     from .store import WatchStore
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    from a2vm.db import DatabaseError, open_database
+
+    from .pgstore import MIGRATIONS, PgWatchStore
+
     try:
         tokens = TokenSet.load(args.digests, ROLES)
-        Path(args.store).mkdir(parents=True, exist_ok=True)
-    except (ValueError, OSError) as exc:
+        db = open_database("via", MIGRATIONS)
+        if db is None:
+            Path(args.store).mkdir(parents=True, exist_ok=True)
+    except (ValueError, OSError, DatabaseError) as exc:
         print(exc, file=sys.stderr)
         return 2
-    store = WatchStore(args.store, args.keep_days)
+    store = PgWatchStore(db, args.keep_days) if db else WatchStore(args.store, args.keep_days)
     review_httpd = None
     if args.review_port:
         from a2vm.service import serve as plain_serve
@@ -85,7 +91,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
     roles = ", ".join(f"{r} {'set' if r in tokens.digests else 'MISSING'}" for r in sorted(ROLES))
     kept = store.alerts(args.tenant)
     page = f"; review page on port {args.review_port} ({args.review_url})" if review_httpd else ""
-    print(f"{args.tenant}: tokens {roles}; store {args.store}; {len(kept)} alert(s) kept{page}", flush=True)
+    print(f"{args.tenant}: tokens {roles}; store {store.describe()}; {len(kept)} alert(s) kept{page}", flush=True)
     httpd = serve(WatchService(args.tenant, tokens, store, args.max_mb * 1024 * 1024), args.host, args.port)
     try:
         httpd.serve_forever()

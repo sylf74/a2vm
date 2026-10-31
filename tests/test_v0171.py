@@ -17,14 +17,13 @@ from docx import Document
 from a2vm.config import LlmSettings
 from a2vm.llm import LlmClient
 from via.alert import i18n, translate
-from via.alert.watch import State
 from via.service import sender
 from via.service.client import WatchClient
 from via.service.review import Review
 
 from .conftest import FIXTURES, ROOT, fake_llm_transport
 from .test_alert import PROFILE
-from .test_v0160 import RUN, TENANT, _service, service  # noqa: F401 - fixture
+from .test_v0160 import RUN, TENANT, _service, forget_alert, service  # noqa: F401 - fixture
 
 URL = "https://alerts-lab.apps.example.org"
 CONTACTS = """schema_version: 1
@@ -92,9 +91,7 @@ def flow(service, tmp_path, monkeypatch):  # noqa: F811 - the fixture of test_v0
     settings = ["--settings", str(ROOT / "config" / "settings.yaml"), "--no-llm", "--fixtures", str(FIXTURES)]
     watch = ["watch", str(profile), *settings, "--contacts", str(contacts)]
     assert _service(url, token, *watch) == 0
-    state = State.load(svc.store.root / TENANT / "state.json")
-    state.certfr.discard("CERTFR-2024-ALE-006")
-    state.save()
+    forget_alert(svc)
     assert _service(url, token, *watch) == 0
     review = Review(TENANT, svc.store, b"k" * 32, set(), {"V"}, URL, contacts=contacts, profile=profile)
     alert = next(a for a in svc.store.alerts(TENANT) if "CERTFR-2024-ALE-006" in a["id"])
@@ -152,7 +149,7 @@ def test_translate_validate_and_send_one_mail_per_language(flow, monkeypatch):
     assert "Analyst's note." in en and "## Main impact" in en
     assert "## Impact principal" in fr and "Relu." in fr
     [docx] = [p for p in fr_msg.iter_attachments() if p.get_filename().endswith(".docx")]
-    path = Path(review.store.root) / "fr.docx"
+    path = profile.parent / "fr.docx"
     path.write_bytes(docx.get_content())
     word = "\n".join(p.text for p in Document(str(path)).paragraphs)
     assert "Impact traduit en français." in word and "Vecteur d’attaque : Réseau" in word
