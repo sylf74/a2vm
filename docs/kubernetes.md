@@ -239,7 +239,10 @@ kubectl -n $NS logs deploy/a2vm-lab-verdict --tail=5
 
 The services' first line says `store postgresql a2vm-lab-db-rw.a2vm-lab/app (TLS verified)`. The data
 start empty: what the volumes held is not moved (the next daily run, watch passage and pushes of
-the collectors fill the database). The old claims (`a2vm-<tenant>-watch`, `-detections`, `-runs`)
+the collectors fill the database). With collectors (`collect.mode: intake`), a daily run before
+their next push stops at `collect` ("no detection received from the collectors"): run each
+connector once on its collector (`sudo systemctl start a2vm-collector@<connector>.service`,
+`docs/collectors.md` §2), then the daily run. The watch's first passage records a new baseline. The old claims (`a2vm-<tenant>-watch`, `-detections`, `-runs`)
 are kept by Helm; delete them by hand once the services run on the database. The cluster and its
 volumes are kept by an uninstall too (resource policy `keep`).
 
