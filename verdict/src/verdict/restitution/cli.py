@@ -4,7 +4,8 @@
   verdict publish reporting.json …          load a run's reporting dataset into the reporting database (jobs)
   verdict db init --dsn …                   create or update the schema (administrator, once per version)
   verdict db grant ROLE TENANT… --dsn …     reading role for a tool (Grafana, Qlik Sense), limited to tenants
-  verdict grafana dashboard NAME            print a Grafana dashboard (JSON, to import): overview, assets, cves
+  verdict grafana dashboard NAME            print a Grafana dashboard (JSON, to import): overview, assets, cves;
+                                            --language fr for its French version
 
 The jobs read the connection from A2VM_REPORTING_DSN and the server's certificate from
 A2VM_REPORTING_CA. Exit codes: 0 done, 2 bad input, 3 database unreachable or refused (warning).
@@ -71,12 +72,18 @@ def cmd_db_grant(args: argparse.Namespace) -> int:
 DASHBOARDS = ("overview", "assets", "cves")
 
 
-def dashboard(name: str) -> str:
-    return resources.files("verdict.restitution").joinpath("grafana", f"{name}.json").read_text(encoding="utf-8")
+LANGUAGES = ("en", "fr")
+
+
+def dashboard(name: str, language: str = "en") -> str:
+    """A dashboard in English, or its French version (v0.17.3: its own uid, `<uid>-fr`)."""
+    suffix = "" if language == "en" else f".{language}"
+    path = resources.files("verdict.restitution").joinpath("grafana", f"{name}{suffix}.json")
+    return path.read_text(encoding="utf-8")
 
 
 def cmd_grafana(args: argparse.Namespace) -> int:
-    sys.stdout.write(dashboard(args.name))
+    sys.stdout.write(dashboard(args.name, args.language))
     return 0
 
 
@@ -108,6 +115,8 @@ def main(argv: list[str] | None = None) -> int:
     gr.add_argument("what", choices=["dashboard"])
     gr.add_argument("name", nargs="?", default="overview", choices=DASHBOARDS,
                     help="overview (default), assets (per asset), cves (per CVE)")  # fmt: skip
+    gr.add_argument("--language", default="en", choices=LANGUAGES,
+                    help="language of the titles, descriptions and columns (default en)")  # fmt: skip
     gr.set_defaults(func=cmd_grafana)
 
     args = parser.parse_args(argv)

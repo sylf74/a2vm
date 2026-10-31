@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-a2vm-proprietary
-"""French explanation of each triage row: a deterministic template, optionally rephrased by the LLM."""
+"""English explanation of each triage row: a deterministic template, optionally rephrased by the LLM
+(v0.17.3, HLD D16: A2VM writes in English; deliverables in another language translate their labels,
+not these texts)."""
 
 from __future__ import annotations
 
@@ -8,50 +10,50 @@ import json
 from a2vm.llm import LlmClient, LlmError
 from a2vm.llm.guard import unsupported_tokens
 from a2vm.models import TriageRow
-from a2vm.ssvc import BOD_FR
+from a2vm.ssvc import BOD_EN
 
 from .llm_tasks import write_rationale
 
-EXPLOITATION_FR = {
-    "none": "aucune exploitation connue",
-    "poc": "preuve de concept publique",
-    "active": "exploitation active",
+EXPLOITATION_EN = {
+    "none": "no known exploitation",
+    "poc": "public proof of concept",
+    "active": "active exploitation",
 }
-AUTOMATABLE_FR = {"yes": "exploitation automatisable", "no": "exploitation non automatisable"}
-IMPACT_FR = {"partial": "impact technique partiel", "total": "impact technique total"}
-MWI_FR = {"low": "faible", "medium": "moyen", "high": "élevé"}
-SOURCE_FR = {
-    "kev": "catalogue KEV de la CISA",
+AUTOMATABLE_EN = {"yes": "automatable exploitation", "no": "exploitation not automatable"}
+IMPACT_EN = {"partial": "partial technical impact", "total": "total technical impact"}
+MWI_EN = {"low": "low", "medium": "medium", "high": "high"}
+SOURCE_EN = {
+    "kev": "CISA KEV catalog",
     "gti": "Google Threat Intelligence",
-    "cisa-adp": "évaluation CISA Vulnrichment",
-    "references": "lien d'exploit dans les références",
-    "cvss-heuristic": "déduit du vecteur CVSS",
-    "llm": "estimé par LLM",
-    "default": "valeur par défaut",
-    "asset-profile": "profil client",
-    "asset-inventory": "inventaire des actifs",
+    "cisa-adp": "CISA Vulnrichment assessment",
+    "references": "exploit link in the references",
+    "cvss-heuristic": "derived from the CVSS vector",
+    "llm": "estimated by the LLM",
+    "default": "default value",
+    "asset-profile": "client profile",
+    "asset-inventory": "asset inventory",
 }
 
 
 def template_rationale(row: TriageRow) -> str:
-    exposure = "exposé à Internet" if row.publicly_exposed else "non exposé à Internet"
+    exposure = "internet-facing" if row.publicly_exposed else "not internet-facing"
     parts = [
-        f"{row.delivery_decision} — {row.asset_description} : actif {exposure}, "
-        f"impact mission {MWI_FR[row.mission_wellbeing.value]}.",
-        f"{EXPLOITATION_FR[row.exploitation.value].capitalize()} ({SOURCE_FR[row.exploitation.source]}), "
-        f"{AUTOMATABLE_FR[row.automatable.value]} ({SOURCE_FR[row.automatable.source]}), "
-        f"{IMPACT_FR[row.technical_impact.value]} ({SOURCE_FR[row.technical_impact.source]}).",
-        f"Décision SSVC CISA : {row.ssvc_decision} ; délai de remédiation BOD 26-04 : {BOD_FR[row.bod_timeline]}.",
+        f"{row.delivery_decision} — {row.asset_description}: {exposure} asset, "
+        f"{MWI_EN[row.mission_wellbeing.value]} mission impact.",
+        f"{EXPLOITATION_EN[row.exploitation.value].capitalize()} ({SOURCE_EN[row.exploitation.source]}), "
+        f"{AUTOMATABLE_EN[row.automatable.value]} ({SOURCE_EN[row.automatable.source]}), "
+        f"{IMPACT_EN[row.technical_impact.value]} ({SOURCE_EN[row.technical_impact.source]}).",
+        f"CISA SSVC decision: {row.ssvc_decision}; BOD 26-04 remediation delay: {BOD_EN[row.bod_timeline]}.",
     ]
     if len(row.reasons) > 1:
-        parts.append("Politique : " + " ; ".join(row.reasons[1:]) + ".")
+        parts.append("Policy: " + "; ".join(row.reasons[1:]) + ".")
     if row.fixes:
-        more = f" (+{len(row.fixes) - 4} autres)" if len(row.fixes) > 4 else ""
-        parts.append("Correctif disponible : " + ", ".join(row.fixes[:4]) + more + ".")
+        more = f" (+{len(row.fixes) - 4} more)" if len(row.fixes) > 4 else ""
+        parts.append("Fix available: " + ", ".join(row.fixes[:4]) + more + ".")
     if row.assumptions:
-        parts.append("Hypothèses : " + " ; ".join(row.assumptions) + ".")
+        parts.append("Assumptions: " + "; ".join(row.assumptions) + ".")
     if row.version_status == "unknown":
-        parts.append("Version déployée non confirmée comme vulnérable : à vérifier.")
+        parts.append("Deployed version not confirmed as vulnerable: to check.")
     return " ".join(parts)
 
 
@@ -60,17 +62,17 @@ def rationale_facts(row: TriageRow, affected_assets: list[str] | None = None) ->
         "cve": row.cve_id,
         "decision": row.delivery_decision,
         "ssvc_decision": row.ssvc_decision,
-        "bod_timeline": BOD_FR[row.bod_timeline],
+        "bod_timeline": BOD_EN[row.bod_timeline],
         "asset": row.asset_description,
         "owner": row.owner,
         "internet_exposed": row.publicly_exposed,
         "deployed_versions_affected": row.affected_versions,
         "version_status": row.version_status,
-        "exploitation": EXPLOITATION_FR[row.exploitation.value],
+        "exploitation": EXPLOITATION_EN[row.exploitation.value],
         "in_kev": row.in_kev,
         "automatable": row.automatable.value,
         "technical_impact": row.technical_impact.value,
-        "mission_impact": MWI_FR[row.mission_wellbeing.value],
+        "mission_impact": MWI_EN[row.mission_wellbeing.value],
         "epss": None if row.epss is None else round(row.epss, 3),
         "cvss": None if not row.cvss else {"score": row.cvss.score, "vector": row.cvss.vector},
         "cwe": row.cwes,

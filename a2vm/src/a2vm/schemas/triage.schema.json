@@ -13,7 +13,8 @@
       "properties": {
         "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,62}$"},
         "name": {"type": "string"},
-        "profile_updated": {"type": ["string", "null"]}
+        "profile_updated": {"type": ["string", "null"]},
+        "language": {"enum": ["en", "fr"], "description": "Language of the client's deliverables (v0.17.3)"}
       }
     },
     "generated_at": {"type": "string", "minLength": 10},

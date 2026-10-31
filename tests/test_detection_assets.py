@@ -189,7 +189,7 @@ def test_lab_end_to_end(lab, settings, sources):
     rows = {(r.cve_id, r.asset_id): r for r in run.rows}
     edge01 = rows[("CVE-2026-4802", "edge01")]
     assert edge01.publicly_exposed and edge01.delivery_decision == "ATTEND" and edge01.bod_timeline == "14 days"
-    assert edge01.fixes[0] == "cockpit-bridge 356.2-1.el10_2.rocky.0.1" and "Correctif disponible" in edge01.rationale
+    assert edge01.fixes[0] == "cockpit-bridge 356.2-1.el10_2.rocky.0.1" and "Fix available" in edge01.rationale
     assert edge01.finding_source == "dnf-updateinfo" and edge01.asset_id_full == "host:edge01.lab.example"
     assert not run.errors
 
@@ -201,8 +201,8 @@ def test_assumed_attributes_flag_review(lab, settings, sources):
     inv = build_inventory(lab, [d])
     [row] = Triage(settings).run(lab, {record.cve_id: record}, {a.id: a for a in inv.assets}, inv.findings).rows
     assert row.publicly_exposed and row.needs_review
-    assert any(a.startswith("exposition supposée : open (pire cas)") for a in row.assumptions)
-    assert "Hypothèses :" in row.rationale
+    assert any(a.startswith("assumed exposure: open (worst case)") for a in row.assumptions)
+    assert "Assumptions:" in row.rationale
 
 
 # -- client profile v2 ----------------------------------------------------------------------------
@@ -286,4 +286,5 @@ def test_zone_and_exposure_source_reach_the_decision(lab, settings, sources):
     assert (row.exposure, row.exposure_source, row.zone, row.publicly_exposed) == ("open", "rule", "dmz", True)
     from verdict.report import _exposure_cell
 
-    assert _exposure_cell(row) == "dmz · ouverte (Internet), règle"
+    assert _exposure_cell(row) == "dmz · open (internet), rule"
+    assert _exposure_cell(row, "fr") == "dmz · ouverte (Internet), règle"

@@ -165,7 +165,8 @@ class RunIndex:
 
     @property
     def run(self) -> dict[str, Any]:
-        return {"id": self.receipt["id"], "generated_at": self.receipt["generated_at"]}
+        language = (self.document.get("client") or {}).get("language") or "en"
+        return {"id": self.receipt["id"], "generated_at": self.receipt["generated_at"], "language": language}
 
     def summary(self) -> dict[str, Any]:
         counts = Counter(r["delivery_decision"] for r in self.rows)

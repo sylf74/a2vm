@@ -6,7 +6,7 @@
     - {name: Jeanne Martin, role: RSSI, email: rssi@client.example}
     - {name: CERT client, role: CERT, email: cert@client.example}
     - {name: Paul Durand, role: DSI, email: dsi@client.example, receive: [urgent], language: fr}
-    - {role: chef du SOC, email: soc@client.example, active: false, notes: "congés jusqu'au 3/11"}
+    - {role: SOC lead, email: soc@client.example, active: false, notes: "on leave until 3/11"}
 
 `receive` (default: urgent and info) filters by alert level; `active: false` keeps a contact on
 file without sending to it; `language` (default `en`, ISO 639-1) is the language of the sheet the

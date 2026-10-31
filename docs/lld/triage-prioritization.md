@@ -92,8 +92,8 @@ Written to `<out>/<client id>/<YYYY-MM-DD>/`:
 | --- | --- | --- |
 | `triage.json` | Every `TriageRow` in full, not-affected assets, errors, ignored CVEs, LLM model | Tools, history database (P1) |
 | `triage.csv` | One row per CVE and asset, `;`-separated: decision, CVE, asset, owner, exposed, KEV, EPSS, CVSS, SSVC outcome, BOD timeline, exploitation, version status, affected versions, needs review, rationale | Analysts, spreadsheets |
-| `report.md` | French report: counts, work per asset, ACT detail, ATTEND table (200 CVEs at most; rationales when 30 CVEs or fewer), not-affected assets, errors | Analysts, client after review |
-| `dashboard.html` | Self-contained French dashboard | Analysts, client after review |
+| `report.md` | Report labelled in the client's language (`client.language`, section 2.5): counts, work per asset, ACT detail, ATTEND table (200 CVEs at most; rationales when 30 CVEs or fewer), not-affected assets, errors | Analysts, client after review |
+| `dashboard.html` | Self-contained dashboard, labelled in the client's language | Analysts, client after review |
 | `reporting.json` (v0.11.3) | Reporting dataset of the run, the only file the client portal reads (section 12); also copied to `<out>/<client id>/reporting.json` so that its path never changes | Client portal (Grafana) |
 
 Rows are sorted ACT, ATTEND, TRACK, then by decreasing EPSS, CVE id and asset.
@@ -108,9 +108,9 @@ Rows are sorted ACT, ATTEND, TRACK, then by decreasing EPSS, CVE id and asset.
 | `ssvc_decision` | `track`, `track*`, `attend`, `act` | CISA Coordinator table |
 | `bod_timeline` | `fix on system upgrade`, `60 days`, `14 days`, `3 days`, `3 days & forensic investigation` | BOD 26-04 table |
 | `delivery_decision` | `ACT`, `ATTEND`, `TRACK` | Delivery policy (section 4.4) |
-| `reasons` | French strings | First the SSVC mapping, then each escalation that fired |
-| `needs_review`, `review_reasons` | bool, French strings | Section 4.5 |
-| `assumptions` | French strings | Asset attributes taken from a default |
+| `reasons` | English strings | First the SSVC mapping, then each escalation that fired |
+| `needs_review`, `review_reasons` | bool, English strings | Section 4.5 |
+| `assumptions` | English strings | Asset attributes taken from a default |
 | `fixes` | `<package> <fixed version>` | Scanner observations |
 | `rationale`, `rationale_source` | text; `template`, `llm (<model>)` or `template (<why>)` | Section 7 |
 | `exposure`, `exposure_source`, `zone` | `open`, `controlled`, `small`; where it comes from; free label | Section 5 |
@@ -120,6 +120,16 @@ Rows are sorted ACT, ATTEND, TRACK, then by decreasing EPSS, CVE id and asset.
 `publicly_exposed` is kept, derived from `exposure`. `triage.csv` carries `exposure`,
 `exposure_source` and `zone`; the report's per-asset table shows them, e.g. "dmz · ouverte
 (Internet), règle".
+
+### 2.5 Language of the deliverables (v0.17.3)
+
+A2VM writes in English (HLD D16): the rationale (template and LLM prompt), the reasons, the review
+reasons and the assumptions of every decision. `client.language` in the client profile (`en` by
+default, `fr`) sets the labels of the client's deliverables: `report.md`, `dashboard.html` and the
+chat's documents (section 16.6). Labels come from the catalogue `verdict.i18n`, written by code,
+never by a model; a test keeps every language complete. The texts of the decisions are not
+translated: they are what the analysts validated. `triage.json` carries the language
+(`client.language`, section 15.2). The Grafana dashboards have a French version (section 13.3).
 
 ## 3. Processing
 
@@ -359,7 +369,7 @@ further.
 
 ### 4.5 Review flags
 
-A row needs review when any of these holds, and each reason is listed in French:
+A row needs review when any of these holds, and each reason is listed in English:
 
 - an exploitation value from a tagged reference, or no exploitation source at all;
 - an unconfirmed exploitation report from GTI;
@@ -506,7 +516,7 @@ The local LLM has two optional tasks; neither takes a decision.
 | Task | When | Output | Checks |
 | --- | --- | --- | --- |
 | `assess_ssvc_inputs` | No CISA ADP values and no CVSS vector (fresh CVEs), and a description exists | Automatable, Technical Impact, justification (JSON schema) | Schema; row always flagged for review |
-| `write_rationale` | Rows whose level is in `rationale_for`; one call per CVE and level, covering every asset with that pair | French summary and action (JSON schema) | Guard: every CVE id and dotted number (version, score) in the text must appear in the facts or the description, and no other level than the row's may be named; else the template is kept |
+| `write_rationale` | Rows whose level is in `rationale_for`; one call per CVE and level, covering every asset with that pair | English summary and action (JSON schema) | Guard: every CVE id and dotted number (version, score) in the text must appear in the facts or the description, and no other level than the row's may be named; else the template is kept |
 
 Order of rationale calls: ACT before ATTEND, then internet-exposed first, KEV first, highest EPSS
 first. Vendor text is passed inside `<untrusted>` tags; the model has no tools. Budget and circuit
@@ -645,7 +655,7 @@ it never reads `triage.json`, the records or the assets, and computes no rule.
 verdict publish <reporting.json>... [--dsn …]       (job publish; writer role)
 verdict db init [--dsn …] [--writer a2vm_writer]   (administrator, once per schema version)
 verdict db grant ROLE TENANT... [--dsn …] [--rotate]  (administrator; TENANT * = all)
-verdict grafana dashboard [overview|assets|cves]
+verdict grafana dashboard [overview|assets|cves] [--language en|fr]
 ```
 
 | Exit code | Meaning |
@@ -704,6 +714,12 @@ rises). On the per-CVE dashboard the decision filter applies to the CVE's decisi
 filters to its findings. The matrix colours are steps by order of magnitude (1, 10, 100, 1 000,
 10 000), the same for every column and every client size. The per-day trends take, for each
 client and day in the dashboard's time range, its latest run that day.
+
+Each dashboard has a French version (v0.17.3): `<name>.fr.json`, uid `<uid>-fr`, so both can be
+imported side by side. `scripts/make_grafana_dashboards.py` builds it from the English one by code:
+titles, descriptions, variable labels, column names (SQL aliases) and the overrides that match them;
+the queries, codes (ACT, CVE, EPSS, KEV…) and the values they compare are unchanged, and a string
+without a translation fails the build (`tests/test_v0173.py`).
 
 ## 14. Asset context (`verdict.assets`)
 
@@ -794,6 +810,8 @@ client id, `generated_at`, `cve_count` and per row the CVE, the asset, the level
 and the rationale; the other fields of a row are kept as they are. Since v0.15.2 a row also carries the
 dates of its facts: `cve_published`, `cve_updated`, `kev_date_added`, `kev_due_date`, `epss_date`
 (empty when unknown); with `first_seen` and `seen_by` they say since when and by whom a finding is known.
+Since v0.17.3 `client.language` (`en`, `fr`) says the language of the client's deliverables; the
+service gives it in the `run` of every answer (`RunRef.language`, `en` when absent).
 
 ### 15.3 Push
 
@@ -1003,8 +1021,9 @@ comes back after `failSeconds`.
 
 At most `max` decisions (default 200, at most 500), the most urgent first (the order of
 `search_decisions`); the document says when it is cut. Every call of an export reads one run (the
-run of the first page), so a run pushed meanwhile does not mix two runs. Labels are in French, as
-the reports of `verdict run`; text from vendors is written as text.
+run of the first page), so a run pushed meanwhile does not mix two runs. Labels are in the client's
+language, as the reports of `verdict run` (the run's `language`, section 2.5); the texts of the
+decisions stay in English; text from vendors is written as text.
 
 Delivery: the document is kept in the tool server's memory for `chat.exportMinutes` (60), at most
 50 at a time, under a random token of 256 bits; the answer gives the link

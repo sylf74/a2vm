@@ -81,6 +81,7 @@ def load_profile(path: str | Path) -> ClientProfile:
         warnings=warnings,
         external=ExternalScan(**data["external"]) if data.get("external") else None,
         published=[PublishedEndpoint(**p) for p in data.get("published", [])],
+        language=client.get("language", "en"),
     )
 
 

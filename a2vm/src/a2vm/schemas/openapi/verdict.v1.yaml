@@ -326,6 +326,7 @@ components:
       properties:
         id: {type: string}
         generated_at: {type: string}
+        language: {type: string, enum: [en, fr], description: "Language of the client's deliverables (v0.17.3)"}
     Problem:
       type: object
       properties:

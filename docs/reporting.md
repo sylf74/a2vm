@@ -88,6 +88,8 @@ string is reported without quoting it, since it holds a password.
 2. Dashboards > New > Import, once per dashboard: upload the output of
    `verdict grafana dashboard NAME` (or the file `verdict/src/verdict/restitution/grafana/NAME.json`),
    choose the data source of step 1. Importing again replaces the dashboard of the same uid.
+   For French readers: `verdict grafana dashboard NAME --language fr` (or `NAME.fr.json`), a
+   dashboard of its own (uid `<uid>-fr`) with the same queries and French titles and columns.
 
 | `NAME` | Dashboard | Counts | Content |
 | --- | --- | --- | --- |

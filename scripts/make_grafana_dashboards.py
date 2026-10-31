@@ -6,6 +6,7 @@
 - cves.json: "which CVEs to fix first?" - distinct CVEs of a snapshot, each decided by its most
   urgent finding.
 
+Each has a French version (`<name>.fr.json`, own uid `<uid>-fr`), translated by code below (v0.17.3).
 They read the reporting database only (PostgreSQL data source, chosen at import). A snapshot is,
 for each client chosen, its latest run on or before a day (a2vm.snapshot_runs); the counters
 compare it with an earlier snapshot. Filters are dashboard variables; every label they filter on
@@ -16,6 +17,7 @@ changing this script; the result is committed.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 OUT = Path(__file__).resolve().parents[1] / "verdict" / "src" / "verdict" / "restitution" / "grafana"
@@ -776,12 +778,228 @@ def overview_dashboard() -> dict:
     return board
 
 
+# -- French version (v0.17.3, HLD D16) ------------------------------------------------------------
+# The dashboards are built in English, then translated here by code: titles, descriptions, labels,
+# column names (SQL aliases) and the overrides that match them. Codes (ACT, CVE, EPSS, KEV…) and the
+# values the queries compare stay as they are. A string with no translation fails the build.
+FR_TEXT = {
+    "": "",
+    "A2VM": "A2VM",
+    "A2VM — overview of a client": "A2VM — vue d'ensemble d'un client",
+    "A2VM — which CVEs to fix first": "A2VM — quelles CVE corriger d'abord",
+    "A2VM — which assets to fix first": "A2VM — quels actifs corriger d'abord",
+    "A2VM reporting database": "Base de restitution A2VM",
+    "ACT": "ACT",
+    "ATTEND": "ATTEND",
+    "TRACK": "TRACK",
+    "ACT exposures": "Expositions ACT",
+    "ACT and ATTEND findings past their BOD 26-04 due date on the snapshot day. Arrow: change since the "
+    "compared snapshot.": "Constats ACT et ATTEND dont l'échéance BOD 26-04 est dépassée le jour de l'instantané. "
+    "Flèche : évolution depuis l'instantané comparé.",
+    "ACT and ATTEND past their BOD 26-04 due date": "ACT et ATTEND dont l'échéance BOD 26-04 est dépassée",
+    "All": "Tous",
+    "Assets": "Actifs",
+    "Assets concerned": "Actifs concernés",
+    "Assets to fix first": "Actifs à corriger d'abord",
+    "Assets of the snapshot, most urgent first: findings to fix now, known exploited, overdue. ACT change: since "
+    "the compared snapshot.": "Actifs de l'instantané, les plus urgents d'abord : constats à corriger maintenant, "
+    "exploités, en retard. Évolution ACT : depuis l'instantané comparé.",
+    "Distinct CVEs of the snapshot, most urgent first: decision, known exploitation, EPSS, CVSS. Since: new since "
+    "the compared snapshot, or the decision it had then.": "CVE distinctes de l'instantané, les plus urgentes "
+    "d'abord : décision, exploitation connue, EPSS, CVSS. Depuis : nouvelle depuis l'instantané comparé, ou la "
+    "décision qu'elle avait alors.",
+    "Assets with ACT": "Actifs avec un ACT",
+    "Assets carrying a finding to fix now. Arrow: change since the compared snapshot.": "Actifs portant un "
+    "constat à corriger maintenant. Flèche : évolution depuis l'instantané comparé.",
+    "Assets with at least one finding. Arrow: change since the compared snapshot.": "Actifs avec au moins un "
+    "constat. Flèche : évolution depuis l'instantané comparé.",
+    "CPE part of the vulnerable product: application, os, hardware": "Partie CPE du produit vulnérable : "
+    "application, système, matériel",
+    "CVE record": "Fiche CVE",
+    "CVEs decided ACT": "CVE décidées ACT",
+    "CVEs listed in CISA KEV. Arrow: change since the compared snapshot.": "CVE inscrites au catalogue CISA KEV. "
+    "Flèche : évolution depuis l'instantané comparé.",
+    "CVEs to fix first": "CVE à corriger d'abord",
+    "CVEs to fix now somewhere. Arrow: change since the compared snapshot.": "CVE à corriger maintenant sur au "
+    "moins un actif. Flèche : évolution depuis l'instantané comparé.",
+    "CVEs with an exploitation probability of 10 % or more (EPSS, 30 days). Arrow: change since the compared "
+    "snapshot.": "CVE dont la probabilité d'exploitation est de 10 % ou plus (EPSS, 30 jours). Flèche : évolution "
+    "depuis l'instantané comparé.",
+    "Client": "Client",
+    "Compared with": "Comparé à",
+    "Decisions resting on an input to confirm": "Décisions reposant sur une donnée à confirmer",
+    "Decisions to act on (ACT, ATTEND)": "Décisions à traiter (ACT, ATTEND)",
+    "Detection sources (latest run)": "Sources de détection (dernier run)",
+    "Detection sources that observed the finding": "Sources de détection qui ont observé le constat",
+    "Distinct CVEs": "CVE distinctes",
+    "Distinct CVEs per decision, day after day": "CVE distinctes par décision, jour après jour",
+    "Distinct CVEs of the snapshot per decision (most urgent finding) and CVSS rating.": "CVE distinctes de "
+    "l'instantané par décision (constat le plus urgent) et sévérité CVSS.",
+    "Distinct CVEs of the snapshot per vulnerable product, most urgent first.": "CVE distinctes de l'instantané "
+    "par produit vulnérable, les plus urgentes d'abord.",
+    "Distinct vulnerabilities of the snapshot. Arrow: change since the compared snapshot.": "Vulnérabilités "
+    "distinctes de l'instantané. Flèche : évolution depuis l'instantané comparé.",
+    "Due within 7 days": "Échéance sous 7 jours",
+    "EPSS band": "Tranche EPSS",
+    "EPSS ≥ 10 %": "EPSS ≥ 10 %",
+    "Each client's latest run on or before this day": "Dernier run de chaque client à cette date ou avant",
+    "Each day: the CVEs of each client's latest run that day (dashboard time range).": "Chaque jour : les CVE du "
+    "dernier run de chaque client ce jour-là (période du tableau de bord).",
+    "Each day: the findings of each client's latest run that day (dashboard time range).": "Chaque jour : les "
+    "constats du dernier run de chaque client ce jour-là (période du tableau de bord).",
+    "Earlier snapshot the counters are compared with": "Instantané antérieur auquel les compteurs sont comparés",
+    "Exposure gaps": "Écarts d'exposition",
+    "Exposures": "Expositions",
+    "Exposures per decision, day after day": "Expositions par décision, jour après jour",
+    "Exposures per zone and exposure": "Expositions par zone et exposition",
+    "Exposures the client profile does not describe": "Expositions que le profil client ne décrit pas",
+    "Findings (asset × CVE) of the KEV CVEs. Arrow: change since the compared snapshot.": "Constats (actif × CVE) "
+    "des CVE KEV. Flèche : évolution depuis l'instantané comparé.",
+    "Findings (asset × CVE) of the snapshot. Arrow: change since the compared snapshot.": "Constats (actif × CVE) "
+    "de l'instantané. Flèche : évolution depuis l'instantané comparé.",
+    "Findings of a CVE in CISA KEV. Arrow: change since the compared snapshot.": "Constats d'une CVE inscrite au "
+    "catalogue CISA KEV. Flèche : évolution depuis l'instantané comparé.",
+    "Findings of a CVE with an exploitation probability of 10 % or more (EPSS, 30 days). Arrow: change since the "
+    "compared snapshot.": "Constats d'une CVE dont la probabilité d'exploitation est de 10 % ou plus (EPSS, "
+    "30 jours). Flèche : évolution depuis l'instantané comparé.",
+    "Findings of the snapshot per decision and CVSS rating.": "Constats de l'instantané par décision et sévérité CVSS.",
+    "Findings of the snapshot per zone (client label) and SSVC system exposure.": "Constats de l'instantané par "
+    "zone (libellé du client) et exposition du système (SSVC).",
+    "Findings per exposure (latest run)": "Constats par exposition (dernier run)",
+    "Findings per level, run after run": "Constats par niveau, run après run",
+    "Findings to fix now (latest run)": "Constats à corriger maintenant (dernier run)",
+    "Findings to fix now. Arrow: change since the compared snapshot.": "Constats à corriger maintenant. Flèche : "
+    "évolution depuis l'instantané comparé.",
+    "Findings to fix soon": "Constats à corriger bientôt",
+    "Findings to follow": "Constats à suivre",
+    "Fix available": "Correctif disponible",
+    "Hosts the external scan reaches that the client profile does not describe": "Hôtes atteints par le scan "
+    "externe que le profil client ne décrit pas",
+    "KEV CVEs": "CVE KEV",
+    "KEV exposures": "Expositions KEV",
+    "Known exploited (KEV)": "Exploitée (KEV)",
+    "Last run": "Dernier run",
+    "Overdue": "En retard",
+    "PostgreSQL data source of the reporting database": "Source de données PostgreSQL de la base de restitution",
+    "Product type": "Type de produit",
+    "Products with the most CVEs": "Produits avec le plus de CVE",
+    "SSVC decision": "Décision SSVC",
+    "SSVC decision × severity — CVEs": "Décision SSVC × sévérité — CVE",
+    "SSVC decision × severity — exposures": "Décision SSVC × sévérité — expositions",
+    "Scanner": "Scanner",
+    "Severity (CVSS)": "Sévérité (CVSS)",
+    "Share of CVEs for which a fixed version or a patch is known. Arrow: change since the compared snapshot.": "Part "
+    "des CVE pour lesquelles une version corrigée ou un correctif est connu. Flèche : évolution depuis "
+    "l'instantané comparé.",
+    "Share of findings for which a fixed version or a patch is known. Arrow: change since the compared "
+    "snapshot.": "Part des constats pour lesquels une version corrigée ou un correctif est connu. Flèche : "
+    "évolution depuis l'instantané comparé.",
+    "Snapshot": "Instantané",
+    "The same CVEs, limited to those listed in CISA KEV.": "Les mêmes CVE, limitées à celles du catalogue CISA KEV.",
+    "The same findings, limited to CVEs listed in CISA KEV.": "Les mêmes constats, limités aux CVE du catalogue "
+    "CISA KEV.",
+    "To review": "À revoir",
+    "… of which known exploited (KEV)": "… dont exploitées (KEV)",
+}
+FR_COLUMN = {
+    "ACT": "ACT",
+    "ATTEND": "ATTEND",
+    "TRACK": "TRACK",
+    "CVE": "CVE",
+    "CVSS": "CVSS",
+    "EPSS": "EPSS",
+    "KEV": "KEV",
+    "BOD 26-04": "BOD 26-04",
+    "ACT change": "Évolution ACT",
+    "Asset": "Actif",
+    "Assets": "Actifs",
+    "Client": "Client",
+    "Critical": "Critique",
+    "High": "Élevée",
+    "Medium": "Moyenne",
+    "Low": "Faible",
+    "Unknown": "Inconnue",
+    "Decision": "Décision",
+    "Declared": "Déclarée",
+    "Detail": "Détail",
+    "Due": "Échéance",
+    "Exposure": "Exposition",
+    "Exposures": "Expositions",
+    "Findings": "Constats",
+    "Fix": "Correctif",
+    "Gap": "Écart",
+    "Last observation": "Dernière observation",
+    "Level": "Niveau",
+    "Max EPSS": "EPSS max.",
+    "Overdue": "En retard",
+    "Owner": "Responsable",
+    "Product": "Produit",
+    "Review": "À revoir",
+    "SSVC decision": "Décision SSVC",
+    "Severity": "Sévérité",
+    "Since": "Depuis",
+    "Source": "Source",
+    "Vulnerability": "Vulnérabilité",
+    "With a fix": "Avec correctif",
+    "Zone": "Zone",
+    "Zone · exposure": "Zone · exposition",
+}
+FR_CONTENT = (
+    ("## Threats: which assets to fix first?", "## Menaces : quels actifs corriger d'abord ?"),
+    ("## Threats: which CVEs to fix first?", "## Menaces : quelles CVE corriger d'abord ?"),
+    ("Snapshot **", "Instantané **"),
+    ("**, compared with **", "**, comparé à **"),
+    ("** — clients: ", "** — clients : "),
+    ("Counted in **exposures**: one vulnerability (CVE) on one asset.",
+     "Compté en **expositions** : une vulnérabilité (CVE) sur un actif."),
+    ("Counted in **distinct CVEs**; a CVE takes the most urgent decision among its findings.",
+     "Compté en **CVE distinctes** ; une CVE prend la décision la plus urgente de ses constats."),
+)  # fmt: skip
+TEXT_KEYS = {"title", "description", "label", "text"}
+
+
+def _fr_sql(sql: str) -> str:
+    def alias(m: re.Match) -> str:
+        return f'{m.group(1)}"{FR_COLUMN[m.group(2)]}"'
+
+    return re.sub(r'(\b[Aa][Ss]\s+)"([^"]+)"', alias, sql)
+
+
+def french(board: dict) -> dict:
+    """The French version of an English dashboard: its own uid, translated texts and columns."""
+
+    def walk(o, key: str | None = None):
+        if isinstance(o, dict):
+            if o.get("id") == "byName" and isinstance(o.get("options"), str):
+                return {**o, "options": FR_COLUMN[o["options"]]}
+            return {k: walk(v, k) for k, v in o.items()}
+        if isinstance(o, list):
+            return [walk(v, key) for v in o]
+        if isinstance(o, str):
+            if key == "rawSql":
+                return _fr_sql(o)
+            if key == "content":
+                for en, fr in FR_CONTENT:
+                    o = o.replace(en, fr)
+                return o
+            if key in TEXT_KEYS:
+                return FR_TEXT[o]
+        return o
+
+    out = walk(board)
+    out["uid"] = board["uid"] + "-fr"
+    out["tags"] = [*board.get("tags", []), "fr"]
+    return out
+
+
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     for name, build in (("overview", overview_dashboard), ("assets", assets_dashboard), ("cves", cves_dashboard)):
-        path = OUT / f"{name}.json"
-        path.write_text(json.dumps(build(), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        print(path)
+        board = build()
+        for suffix, data in (("", board), (".fr", french(board))):
+            path = OUT / f"{name}{suffix}.json"
+            path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            print(path)
 
 
 if __name__ == "__main__":

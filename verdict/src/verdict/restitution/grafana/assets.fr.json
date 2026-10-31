@@ -1,0 +1,1274 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_A2VM",
+      "label": "Base de restitution A2VM",
+      "description": "Source de données PostgreSQL de la base de restitution",
+      "type": "datasource",
+      "pluginId": "grafana-postgresql-datasource",
+      "pluginName": "PostgreSQL"
+    }
+  ],
+  "__requires": [
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "11.0.0"
+    },
+    {
+      "type": "datasource",
+      "id": "grafana-postgresql-datasource",
+      "name": "PostgreSQL",
+      "version": "1.0.0"
+    },
+    {
+      "type": "panel",
+      "id": "text",
+      "name": "text",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "stat",
+      "name": "stat",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "table",
+      "name": "table",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "timeseries",
+      "name": "timeseries",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "barchart",
+      "name": "barchart",
+      "version": ""
+    }
+  ],
+  "title": "A2VM — quels actifs corriger d'abord",
+  "uid": "a2vm-assets-fr",
+  "tags": [
+    "a2vm",
+    "fr"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "graphTooltip": 1,
+  "time": {
+    "from": "now-90d",
+    "to": "now"
+  },
+  "refresh": "",
+  "links": [
+    {
+      "type": "dashboards",
+      "tags": [
+        "a2vm"
+      ],
+      "asDropdown": false,
+      "includeVars": true,
+      "keepTime": true,
+      "title": "A2VM"
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "tenant",
+        "label": "Client",
+        "description": "",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "${DS_A2VM}"
+        },
+        "query": "SELECT tenant AS __value, tenant_name AS __text FROM a2vm.latest_runs ORDER BY tenant_name",
+        "definition": "SELECT tenant AS __value, tenant_name AS __text FROM a2vm.latest_runs ORDER BY tenant_name",
+        "refresh": 1,
+        "sort": 0,
+        "multi": true,
+        "includeAll": true,
+        "current": {}
+      },
+      {
+        "name": "snapshot",
+        "label": "Instantané",
+        "description": "Dernier run de chaque client à cette date ou avant",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "${DS_A2VM}"
+        },
+        "query": "SELECT to_char(d, 'DD Mon YYYY') || ' · W' || to_char(d, 'IW') AS __text, d::text AS __value FROM (SELECT DISTINCT generated_at::date AS d FROM a2vm.runs WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[])) s ORDER BY d DESC",
+        "definition": "SELECT to_char(d, 'DD Mon YYYY') || ' · W' || to_char(d, 'IW') AS __text, d::text AS __value FROM (SELECT DISTINCT generated_at::date AS d FROM a2vm.runs WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[])) s ORDER BY d DESC",
+        "refresh": 1,
+        "sort": 0,
+        "multi": false,
+        "includeAll": false,
+        "current": {}
+      },
+      {
+        "name": "compare",
+        "label": "Comparé à",
+        "description": "Instantané antérieur auquel les compteurs sont comparés",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "${DS_A2VM}"
+        },
+        "query": "SELECT __text, __value FROM (SELECT to_char(d, 'DD Mon YYYY') || ' · W' || to_char(d, 'IW') AS __text, d::text AS __value FROM (SELECT DISTINCT generated_at::date AS d FROM a2vm.runs WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[])) s WHERE d < '${snapshot}'::date UNION ALL SELECT 'none', '') v ORDER BY __value = '', __value DESC",
+        "definition": "SELECT __text, __value FROM (SELECT to_char(d, 'DD Mon YYYY') || ' · W' || to_char(d, 'IW') AS __text, d::text AS __value FROM (SELECT DISTINCT generated_at::date AS d FROM a2vm.runs WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[])) s WHERE d < '${snapshot}'::date UNION ALL SELECT 'none', '') v ORDER BY __value = '', __value DESC",
+        "refresh": 1,
+        "sort": 0,
+        "multi": false,
+        "includeAll": false,
+        "current": {}
+      },
+      {
+        "name": "scanner",
+        "label": "Scanner",
+        "description": "Sources de détection qui ont observé le constat",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "${DS_A2VM}"
+        },
+        "query": "SELECT DISTINCT unnest(sources) FROM a2vm.decision_facts WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) ORDER BY 1",
+        "definition": "SELECT DISTINCT unnest(sources) FROM a2vm.decision_facts WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) ORDER BY 1",
+        "refresh": 1,
+        "sort": 0,
+        "multi": true,
+        "includeAll": true,
+        "current": {}
+      },
+      {
+        "name": "kev",
+        "label": "Exploitée (KEV)",
+        "description": "",
+        "type": "custom",
+        "query": "Yes,No",
+        "multi": true,
+        "includeAll": true,
+        "current": {
+          "selected": true,
+          "text": [
+            "Tous"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": []
+      },
+      {
+        "name": "decision",
+        "label": "Décision SSVC",
+        "description": "",
+        "type": "custom",
+        "query": "ACT,ATTEND,TRACK",
+        "multi": true,
+        "includeAll": true,
+        "current": {
+          "selected": true,
+          "text": [
+            "Tous"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": []
+      },
+      {
+        "name": "severity",
+        "label": "Sévérité (CVSS)",
+        "description": "",
+        "type": "custom",
+        "query": "Critical,High,Medium,Low,Unknown",
+        "multi": true,
+        "includeAll": true,
+        "current": {
+          "selected": true,
+          "text": [
+            "Tous"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": []
+      },
+      {
+        "name": "epss",
+        "label": "Tranche EPSS",
+        "description": "",
+        "type": "custom",
+        "query": "EPSS >= 50%,EPSS 10-50%,EPSS < 10%,N/A",
+        "multi": true,
+        "includeAll": true,
+        "current": {
+          "selected": true,
+          "text": [
+            "Tous"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": []
+      },
+      {
+        "name": "ptype",
+        "label": "Type de produit",
+        "description": "Partie CPE du produit vulnérable : application, système, matériel",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "${DS_A2VM}"
+        },
+        "query": "SELECT DISTINCT product_type FROM a2vm.decision_facts WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) ORDER BY 1",
+        "definition": "SELECT DISTINCT product_type FROM a2vm.decision_facts WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) ORDER BY 1",
+        "refresh": 1,
+        "sort": 0,
+        "multi": true,
+        "includeAll": true,
+        "current": {}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "text",
+      "title": "",
+      "transparent": true,
+      "options": {
+        "mode": "markdown",
+        "content": "## Menaces : quels actifs corriger d'abord ?\nInstantané **${snapshot:text}**, comparé à **${compare:text}** — clients : ${tenant:text}. Compté en **expositions** : une vulnérabilité (CVE) sur un actif."
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 3
+      },
+      "id": 1
+    },
+    {
+      "type": "stat",
+      "title": "Expositions",
+      "description": "Constats (actif × CVE) de l'instantané. Flèche : évolution depuis l'instantané comparé.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_A2VM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "WITH snap (ord, snap_day) AS (VALUES (1, NULLIF('${compare}', '')::date), (2, '${snapshot}'::date)),\nf AS (SELECT s.ord, s.snap_day, x.* FROM snap s\n  CROSS JOIN LATERAL a2vm.snapshot_runs(ARRAY[${tenant:sqlstring}]::text[], s.snap_day) r\n  JOIN a2vm.decision_facts x ON x.run_id = r.run_id\n  WHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label IN (${kev:sqlstring}) AND x.severity IN (${severity:sqlstring}) AND x.epss_band IN (${epss:sqlstring}) AND x.product_type IN (${ptype:sqlstring}) AND x.level IN (${decision:sqlstring}))\nSELECT s.snap_day::timestamptz AS time, count(f.finding_id) AS value\nFROM snap s LEFT JOIN f ON f.ord = s.ord\nWHERE s.snap_day IS NOT NULL GROUP BY s.ord, s.snap_day ORDER BY s.ord"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "none",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "showPercentChange": true,
+        "percentChangeColorMode": "inverted"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 3,
+        "w": 3,
+        "h": 4
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_A2VM}"
+      },
+      "id": 2
+    },
+    {
+      "type": "stat",
+      "title": "Actifs concernés",
+      "description": "Actifs avec au moins un constat. Flèche : évolution depuis l'instantané comparé.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_A2VM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "WITH snap (ord, snap_day) AS (VALUES (1, NULLIF('${compare}', '')::date), (2, '${snapshot}'::date)),\nf AS (SELECT s.ord, s.snap_day, x.* FROM snap s\n  CROSS JOIN LATERAL a2vm.snapshot_runs(ARRAY[${tenant:sqlstring}]::text[], s.snap_day) r\n  JOIN a2vm.decision_facts x ON x.run_id = r.run_id\n  WHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label IN (${kev:sqlstring}) AND x.severity IN (${severity:sqlstring}) AND x.epss_band IN (${epss:sqlstring}) AND x.product_type IN (${ptype:sqlstring}) AND x.level IN (${decision:sqlstring}))\nSELECT s.snap_day::timestamptz AS time, count(DISTINCT f.asset) AS value\nFROM snap s LEFT JOIN f ON f.ord = s.ord\nWHERE s.snap_day IS NOT NULL GROUP BY s.ord, s.snap_day ORDER BY s.ord"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "none",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "showPercentChange": true,
+        "percentChangeColorMode": "inverted"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 3,
+        "y": 3,
+        "w": 3,
+        "h": 4
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_A2VM}"
+      },
+      "id": 3
+    },
+    {
+      "type": "stat",
+      "title": "Expositions KEV",
+      "description": "Constats d'une CVE inscrite au catalogue CISA KEV. Flèche : évolution depuis l'instantané comparé.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_A2VM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "WITH snap (ord, snap_day) AS (VALUES (1, NULLIF('${compare}', '')::date), (2, '${snapshot}'::date)),\nf AS (SELECT s.ord, s.snap_day, x.* FROM snap s\n  CROSS JOIN LATERAL a2vm.snapshot_runs(ARRAY[${tenant:sqlstring}]::text[], s.snap_day) r\n  JOIN a2vm.decision_facts x ON x.run_id = r.run_id\n  WHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label IN (${kev:sqlstring}) AND x.severity IN (${severity:sqlstring}) AND x.epss_band IN (${epss:sqlstring}) AND x.product_type IN (${ptype:sqlstring}) AND x.level IN (${decision:sqlstring}))\nSELECT s.snap_day::timestamptz AS time, count(f.finding_id) FILTER (WHERE f.kev) AS value\nFROM snap s LEFT JOIN f ON f.ord = s.ord\nWHERE s.snap_day IS NOT NULL GROUP BY s.ord, s.snap_day ORDER BY s.ord"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "none",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "showPercentChange": true,
+        "percentChangeColorMode": "inverted"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 3,
+        "w": 3,
+        "h": 4
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_A2VM}"
+      },
+      "id": 4
+    },
+    {
+      "type": "stat",
+      "title": "Expositions ACT",
+      "description": "Constats à corriger maintenant. Flèche : évolution depuis l'instantané comparé.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_A2VM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "WITH snap (ord, snap_day) AS (VALUES (1, NULLIF('${compare}', '')::date), (2, '${snapshot}'::date)),\nf AS (SELECT s.ord, s.snap_day, x.* FROM snap s\n  CROSS JOIN LATERAL a2vm.snapshot_runs(ARRAY[${tenant:sqlstring}]::text[], s.snap_day) r\n  JOIN a2vm.decision_facts x ON x.run_id = r.run_id\n  WHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label IN (${kev:sqlstring}) AND x.severity IN (${severity:sqlstring}) AND x.epss_band IN (${epss:sqlstring}) AND x.product_type IN (${ptype:sqlstring}) AND x.level IN (${decision:sqlstring}))\nSELECT s.snap_day::timestamptz AS time, count(f.finding_id) FILTER (WHERE f.level = 'ACT') AS value\nFROM snap s LEFT JOIN f ON f.ord = s.ord\nWHERE s.snap_day IS NOT NULL GROUP BY s.ord, s.snap_day ORDER BY s.ord"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "none",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "showPercentChange": true,
+        "percentChangeColorMode": "inverted"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 9,
+        "y": 3,
+        "w": 3,
+        "h": 4
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_A2VM}"
+      },
+      "id": 5
+    },
+    {
+      "type": "stat",
+      "title": "Actifs avec un ACT",
+      "description": "Actifs portant un constat à corriger maintenant. Flèche : évolution depuis l'instantané comparé.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_A2VM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "WITH snap (ord, snap_day) AS (VALUES (1, NULLIF('${compare}', '')::date), (2, '${snapshot}'::date)),\nf AS (SELECT s.ord, s.snap_day, x.* FROM snap s\n  CROSS JOIN LATERAL a2vm.snapshot_runs(ARRAY[${tenant:sqlstring}]::text[], s.snap_day) r\n  JOIN a2vm.decision_facts x ON x.run_id = r.run_id\n  WHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label IN (${kev:sqlstring}) AND x.severity IN (${severity:sqlstring}) AND x.epss_band IN (${epss:sqlstring}) AND x.product_type IN (${ptype:sqlstring}) AND x.level IN (${decision:sqlstring}))\nSELECT s.snap_day::timestamptz AS time, count(DISTINCT f.asset) FILTER (WHERE f.level = 'ACT') AS value\nFROM snap s LEFT JOIN f ON f.ord = s.ord\nWHERE s.snap_day IS NOT NULL GROUP BY s.ord, s.snap_day ORDER BY s.ord"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "none",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "showPercentChange": true,
+        "percentChangeColorMode": "inverted"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 3,
+        "w": 3,
+        "h": 4
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_A2VM}"
+      },
+      "id": 6
+    },
+    {
+      "type": "stat",
+      "title": "En retard",
+      "description": "Constats ACT et ATTEND dont l'échéance BOD 26-04 est dépassée le jour de l'instantané. Flèche : évolution depuis l'instantané comparé.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_A2VM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "WITH snap (ord, snap_day) AS (VALUES (1, NULLIF('${compare}', '')::date), (2, '${snapshot}'::date)),\nf AS (SELECT s.ord, s.snap_day, x.* FROM snap s\n  CROSS JOIN LATERAL a2vm.snapshot_runs(ARRAY[${tenant:sqlstring}]::text[], s.snap_day) r\n  JOIN a2vm.decision_facts x ON x.run_id = r.run_id\n  WHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label IN (${kev:sqlstring}) AND x.severity IN (${severity:sqlstring}) AND x.epss_band IN (${epss:sqlstring}) AND x.product_type IN (${ptype:sqlstring}) AND x.level IN (${decision:sqlstring}))\nSELECT s.snap_day::timestamptz AS time, count(f.finding_id) FILTER (WHERE f.level IN ('ACT', 'ATTEND') AND f.due_date < s.snap_day) AS value\nFROM snap s LEFT JOIN f ON f.ord = s.ord\nWHERE s.snap_day IS NOT NULL GROUP BY s.ord, s.snap_day ORDER BY s.ord"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "none",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "showPercentChange": true,
+        "percentChangeColorMode": "inverted"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 15,
+        "y": 3,
+        "w": 3,
+        "h": 4
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_A2VM}"
+      },
+      "id": 7
+    },
+    {
+      "type": "stat",
+      "title": "Correctif disponible",
+      "description": "Part des constats pour lesquels une version corrigée ou un correctif est connu. Flèche : évolution depuis l'instantané comparé.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_A2VM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "WITH snap (ord, snap_day) AS (VALUES (1, NULLIF('${compare}', '')::date), (2, '${snapshot}'::date)),\nf AS (SELECT s.ord, s.snap_day, x.* FROM snap s\n  CROSS JOIN LATERAL a2vm.snapshot_runs(ARRAY[${tenant:sqlstring}]::text[], s.snap_day) r\n  JOIN a2vm.decision_facts x ON x.run_id = r.run_id\n  WHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label IN (${kev:sqlstring}) AND x.severity IN (${severity:sqlstring}) AND x.epss_band IN (${epss:sqlstring}) AND x.product_type IN (${ptype:sqlstring}) AND x.level IN (${decision:sqlstring}))\nSELECT s.snap_day::timestamptz AS time, round(100.0 * count(f.finding_id) FILTER (WHERE f.fix_available) / NULLIF(count(f.finding_id), 0), 1) AS value\nFROM snap s LEFT JOIN f ON f.ord = s.ord\nWHERE s.snap_day IS NOT NULL GROUP BY s.ord, s.snap_day ORDER BY s.ord"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "none",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "showPercentChange": true,
+        "percentChangeColorMode": "standard"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 3,
+        "w": 3,
+        "h": 4
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_A2VM}"
+      },
+      "id": 8
+    },
+    {
+      "type": "stat",
+      "title": "EPSS ≥ 10 %",
+      "description": "Constats d'une CVE dont la probabilité d'exploitation est de 10 % ou plus (EPSS, 30 jours). Flèche : évolution depuis l'instantané comparé.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_A2VM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "WITH snap (ord, snap_day) AS (VALUES (1, NULLIF('${compare}', '')::date), (2, '${snapshot}'::date)),\nf AS (SELECT s.ord, s.snap_day, x.* FROM snap s\n  CROSS JOIN LATERAL a2vm.snapshot_runs(ARRAY[${tenant:sqlstring}]::text[], s.snap_day) r\n  JOIN a2vm.decision_facts x ON x.run_id = r.run_id\n  WHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label IN (${kev:sqlstring}) AND x.severity IN (${severity:sqlstring}) AND x.epss_band IN (${epss:sqlstring}) AND x.product_type IN (${ptype:sqlstring}) AND x.level IN (${decision:sqlstring}))\nSELECT s.snap_day::timestamptz AS time, count(f.finding_id) FILTER (WHERE f.epss >= 0.1) AS value\nFROM snap s LEFT JOIN f ON f.ord = s.ord\nWHERE s.snap_day IS NOT NULL GROUP BY s.ord, s.snap_day ORDER BY s.ord"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "none",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "showPercentChange": true,
+        "percentChangeColorMode": "inverted"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 21,
+        "y": 3,
+        "w": 3,
+        "h": 4
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_A2VM}"
+      },
+      "id": 9
+    },
+    {
+      "type": "table",
+      "title": "Décision SSVC × sévérité — expositions",
+      "description": "Constats de l'instantané par décision et sévérité CVSS.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_A2VM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "WITH snap (ord, snap_day) AS (VALUES (2, '${snapshot}'::date)),\nf AS (SELECT s.ord, s.snap_day, x.* FROM snap s\n  CROSS JOIN LATERAL a2vm.snapshot_runs(ARRAY[${tenant:sqlstring}]::text[], s.snap_day) r\n  JOIN a2vm.decision_facts x ON x.run_id = r.run_id\n  WHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label IN (${kev:sqlstring}) AND x.severity IN (${severity:sqlstring}) AND x.epss_band IN (${epss:sqlstring}) AND x.product_type IN (${ptype:sqlstring}) AND x.level IN (${decision:sqlstring}))\nSELECT l.level AS \"Décision SSVC\",\n  count(f.finding_id) FILTER (WHERE f.severity = 'Critical') AS \"Critique\",\n  count(f.finding_id) FILTER (WHERE f.severity = 'High') AS \"Élevée\",\n  count(f.finding_id) FILTER (WHERE f.severity = 'Medium') AS \"Moyenne\",\n  count(f.finding_id) FILTER (WHERE f.severity = 'Low') AS \"Faible\",\n  count(f.finding_id) FILTER (WHERE f.severity = 'Unknown') AS \"Inconnue\"\nFROM (VALUES ('ACT', 1), ('ATTEND', 2), ('TRACK', 3)) l (level, o)\nLEFT JOIN f ON f.level = l.level AND f.ord = 2\nWHERE l.level IN (${decision:sqlstring})\nGROUP BY l.level, l.o ORDER BY l.o"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "lg",
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "center",
+            "cellOptions": {
+              "type": "color-background",
+              "mode": "basic"
+            }
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              },
+              {
+                "color": "#F6DDE2",
+                "value": 1
+              },
+              {
+                "color": "#E8A6B3",
+                "value": 10
+              },
+              {
+                "color": "#C9566E",
+                "value": 100
+              },
+              {
+                "color": "#A12843",
+                "value": 1000
+              },
+              {
+                "color": "#6E1428",
+                "value": 10000
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Décision SSVC"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "auto"
+                }
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.width",
+                "value": 130
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 7,
+        "w": 12,
+        "h": 6
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_A2VM}"
+      },
+      "id": 10
+    },
+    {
+      "type": "table",
+      "title": "… dont exploitées (KEV)",
+      "description": "Les mêmes constats, limités aux CVE du catalogue CISA KEV.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_A2VM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "WITH snap (ord, snap_day) AS (VALUES (2, '${snapshot}'::date)),\nf AS (SELECT s.ord, s.snap_day, x.* FROM snap s\n  CROSS JOIN LATERAL a2vm.snapshot_runs(ARRAY[${tenant:sqlstring}]::text[], s.snap_day) r\n  JOIN a2vm.decision_facts x ON x.run_id = r.run_id\n  WHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label IN (${kev:sqlstring}) AND x.severity IN (${severity:sqlstring}) AND x.epss_band IN (${epss:sqlstring}) AND x.product_type IN (${ptype:sqlstring}) AND x.level IN (${decision:sqlstring}))\nSELECT l.level AS \"Décision SSVC\",\n  count(f.finding_id) FILTER (WHERE f.severity = 'Critical' AND f.kev) AS \"Critique\",\n  count(f.finding_id) FILTER (WHERE f.severity = 'High' AND f.kev) AS \"Élevée\",\n  count(f.finding_id) FILTER (WHERE f.severity = 'Medium' AND f.kev) AS \"Moyenne\",\n  count(f.finding_id) FILTER (WHERE f.severity = 'Low' AND f.kev) AS \"Faible\",\n  count(f.finding_id) FILTER (WHERE f.severity = 'Unknown' AND f.kev) AS \"Inconnue\"\nFROM (VALUES ('ACT', 1), ('ATTEND', 2), ('TRACK', 3)) l (level, o)\nLEFT JOIN f ON f.level = l.level AND f.ord = 2\nWHERE l.level IN (${decision:sqlstring})\nGROUP BY l.level, l.o ORDER BY l.o"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "lg",
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "center",
+            "cellOptions": {
+              "type": "color-background",
+              "mode": "basic"
+            }
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              },
+              {
+                "color": "#F6DDE2",
+                "value": 1
+              },
+              {
+                "color": "#E8A6B3",
+                "value": 10
+              },
+              {
+                "color": "#C9566E",
+                "value": 100
+              },
+              {
+                "color": "#A12843",
+                "value": 1000
+              },
+              {
+                "color": "#6E1428",
+                "value": 10000
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Décision SSVC"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "auto"
+                }
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.width",
+                "value": 130
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 7,
+        "w": 12,
+        "h": 6
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_A2VM}"
+      },
+      "id": 11
+    },
+    {
+      "type": "table",
+      "title": "Actifs à corriger d'abord",
+      "description": "Actifs de l'instantané, les plus urgents d'abord : constats à corriger maintenant, exploités, en retard. Évolution ACT : depuis l'instantané comparé.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_A2VM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "WITH snap (ord, snap_day) AS (VALUES (1, NULLIF('${compare}', '')::date), (2, '${snapshot}'::date)),\nf AS (SELECT s.ord, s.snap_day, x.* FROM snap s\n  CROSS JOIN LATERAL a2vm.snapshot_runs(ARRAY[${tenant:sqlstring}]::text[], s.snap_day) r\n  JOIN a2vm.decision_facts x ON x.run_id = r.run_id\n  WHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label IN (${kev:sqlstring}) AND x.severity IN (${severity:sqlstring}) AND x.epss_band IN (${epss:sqlstring}) AND x.product_type IN (${ptype:sqlstring}) AND x.level IN (${decision:sqlstring}))\n,\ncur AS (SELECT f.asset, min(f.asset_name) AS name, min(f.tenant_name) AS client,\n  min(f.zone) AS zone, min(f.exposure) AS exposure,\n  count(*) FILTER (WHERE f.level = 'ACT') AS act, count(*) FILTER (WHERE f.level = 'ATTEND') AS attend,\n  count(*) FILTER (WHERE f.level = 'TRACK') AS track, count(*) FILTER (WHERE f.kev) AS kev,\n  count(*) FILTER (WHERE f.level IN ('ACT', 'ATTEND') AND f.due_date < f.snap_day) AS overdue,\n  count(*) FILTER (WHERE f.severity = 'Critical') AS critical, max(f.epss) AS epss,\n  count(*) FILTER (WHERE f.fix_available) AS fixable\n  FROM f WHERE f.ord = 2 GROUP BY f.asset),\nprev AS (SELECT f.asset, count(*) FILTER (WHERE f.level = 'ACT') AS act FROM f WHERE f.ord = 1 GROUP BY f.asset)\nSELECT cur.name AS \"Actif\", cur.client AS \"Client\", cur.zone AS \"Zone\", cur.exposure AS \"Exposition\",\n  cur.act AS \"ACT\", cur.attend AS \"ATTEND\", cur.track AS \"TRACK\", cur.kev AS \"KEV\",\n  cur.overdue AS \"En retard\", cur.critical AS \"Critique\", round(cur.epss::numeric, 3) AS \"EPSS max.\",\n  cur.fixable AS \"Avec correctif\",\n  CASE WHEN NULLIF('${compare}', '') IS NULL THEN NULL ELSE cur.act - coalesce(prev.act, 0) END AS \"Évolution ACT\"\nFROM cur LEFT JOIN prev USING (asset)\nORDER BY cur.act DESC, cur.kev DESC, cur.overdue DESC, cur.critical DESC, cur.attend DESC, cur.name\nLIMIT 500"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ACT"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "text",
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 1
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "KEV"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "text",
+                      "value": null
+                    },
+                    {
+                      "color": "dark-red",
+                      "value": 1
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "En retard"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "text",
+                      "value": null
+                    },
+                    {
+                      "color": "dark-orange",
+                      "value": 1
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Évolution ACT"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "text",
+                      "value": 0
+                    },
+                    {
+                      "color": "red",
+                      "value": 1
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 24,
+        "h": 11
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_A2VM}"
+      },
+      "id": 12
+    },
+    {
+      "type": "timeseries",
+      "title": "Expositions par décision, jour après jour",
+      "description": "Chaque jour : les constats du dernier run de chaque client ce jour-là (période du tableau de bord).",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_A2VM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "time_series",
+          "rawSql": "SELECT x.day::timestamptz AS time, count(*) FILTER (WHERE x.level = 'ACT') AS \"ACT\", count(*) FILTER (WHERE x.level = 'ATTEND') AS \"ATTEND\", count(*) FILTER (WHERE x.level = 'TRACK') AS \"TRACK\"\nFROM (SELECT DISTINCT ON (tenant, generated_at::date) run_id FROM a2vm.runs\n  WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND $__timeFilter(generated_at)\n  ORDER BY tenant, generated_at::date, generated_at DESC) r\nJOIN a2vm.decision_facts x ON x.run_id = r.run_id\nWHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label IN (${kev:sqlstring}) AND x.severity IN (${severity:sqlstring}) AND x.epss_band IN (${epss:sqlstring}) AND x.product_type IN (${ptype:sqlstring}) AND x.level IN (${decision:sqlstring})\nGROUP BY x.day ORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "always"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ACT"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ATTEND"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "TRACK"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "blue"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_A2VM}"
+      },
+      "id": 13
+    },
+    {
+      "type": "barchart",
+      "title": "Expositions par zone et exposition",
+      "description": "Constats de l'instantané par zone (libellé du client) et exposition du système (SSVC).",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_A2VM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "WITH snap (ord, snap_day) AS (VALUES (2, '${snapshot}'::date)),\nf AS (SELECT s.ord, s.snap_day, x.* FROM snap s\n  CROSS JOIN LATERAL a2vm.snapshot_runs(ARRAY[${tenant:sqlstring}]::text[], s.snap_day) r\n  JOIN a2vm.decision_facts x ON x.run_id = r.run_id\n  WHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label IN (${kev:sqlstring}) AND x.severity IN (${severity:sqlstring}) AND x.epss_band IN (${epss:sqlstring}) AND x.product_type IN (${ptype:sqlstring}) AND x.level IN (${decision:sqlstring}))\nSELECT coalesce(nullif(f.zone, ''), 'no zone') || ' · ' || coalesce(f.exposure, '?') AS \"Zone · exposition\",\ncount(*) FILTER (WHERE f.level = 'ACT') AS \"ACT\", count(*) FILTER (WHERE f.level = 'ATTEND') AS \"ATTEND\", count(*) FILTER (WHERE f.level = 'TRACK') AS \"TRACK\"\nFROM f GROUP BY 1 ORDER BY count(*) FILTER (WHERE f.level = 'ACT') DESC, count(*) DESC LIMIT 20"
+        }
+      ],
+      "options": {
+        "stacking": "normal",
+        "orientation": "horizontal",
+        "xField": "Zone · exposure",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        }
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ACT"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ATTEND"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "TRACK"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "blue"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_A2VM}"
+      },
+      "id": 14
+    }
+  ]
+}

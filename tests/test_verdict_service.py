@@ -102,7 +102,7 @@ def test_reads_are_short_paged_and_cite_their_run(triage, tmp_path):
     receipt = _push(service, path)
     tenant = run.client.id
     summary = service.read(tenant, READ, "summary", {})
-    assert summary["run"] == {"id": receipt["id"], "generated_at": receipt["generated_at"]}
+    assert summary["run"] == {"id": receipt["id"], "generated_at": receipt["generated_at"], "language": "en"}
     assert summary["findings"] == receipt["counts"]
 
     page = service.read(tenant, READ, "decisions", {"limit": "2"})

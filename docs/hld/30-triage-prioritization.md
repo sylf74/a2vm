@@ -78,7 +78,7 @@ client CMDB, when available, is the reference for context.
 | Use case | What the LLM does | Safeguard and fallback | Status |
 | --- | --- | --- | --- |
 | Missing SSVC inputs | Proposes Automatable and Technical Impact for a fresh CVE that has neither CISA ADP data nor a CVSS vector | Source "estimated by LLM", always flagged for review; without LLM, the value is assumed and flagged | In development |
-| Rationale | Writes in French the explanation of a decision already computed | Output guard: any version, score or CVE id absent from the facts rejects the text; template otherwise | In development |
+| Rationale | Writes in English the explanation of a decision already computed (D16) | Output guard: any version, score or CVE id absent from the facts rejects the text; template otherwise | In development |
 
 ## 7. Pillar decisions and principles
 

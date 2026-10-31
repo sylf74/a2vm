@@ -5,6 +5,28 @@ analyst and, under **Upgrade**, what a tenant must do when it moves to that tag 
 `A2VM_REF` in its `.gitlab-ci.yml`). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
 §11) and the LLDs. A release adds its entry here in the same merge request (CLAUDE.md, Releasing).
 
+## v0.17.3 — 2026-10-31
+
+The rest of A2VM in English (HLD D16), with French labels for the tenants that want them.
+
+- Decisions: the rationale (template and LLM prompt), the reasons of the policy, the review reasons
+  (exploitation source, GTI, CVSS heuristic, LLM, fuzzy product match, generic OpenVAS test) and the
+  assumptions are written in English. Runs made before keep their texts.
+- Client profile: `client.language` (`en` by default, `fr`). The daily report (`report.md`), the HTML
+  dashboard and the chat's Word, PowerPoint and CSV documents take their labels from the catalogue
+  `verdict.i18n` in that language; the texts of the decisions stay in English, as validated.
+- `triage.json` (`a2vm.triage/1`) carries `client.language`; the decision service gives it in the
+  `run` of its answers (`verdict.v1`, `RunRef.language`). Fields added only.
+- Grafana: a French version of each dashboard (`<name>.fr.json`, uid `<uid>-fr`), built by code from
+  the English one; `verdict grafana dashboard NAME --language fr`.
+- Watch sources named in English (e.g. `CERT-FR — alerts`); the count of consecutive failures of a
+  renamed source starts again from zero.
+- LLD triage §2.5, §13.3, §15.2, §16.6; HLD D16, chapter 30 and roadmap; `docs/reporting.md`.
+
+**Upgrade**: move `ref` and `A2VM_REF` to `v0.17.3` and push. For French deliverables, add
+`language: fr` under `client:` in `client.yaml`. For French Grafana dashboards, import
+`verdict grafana dashboard NAME --language fr` once per dashboard (they sit next to the English ones).
+
 ## v0.17.2 — 2026-10-31
 
 Fix of the chat with the analysts' sign-in.

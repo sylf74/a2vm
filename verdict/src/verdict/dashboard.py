@@ -4,6 +4,7 @@ can be opened from the job artifacts, attached to a mail or published with GitLa
 
 Decisions use the status palette (ACT critical, ATTEND serious, TRACK neutral), always with their
 label: colour never carries the meaning alone. Light and dark themes follow the reader's setting.
+Labels in the client's language (`client.language`, v0.17.3).
 """
 
 from __future__ import annotations
@@ -13,17 +14,17 @@ from collections import Counter, defaultdict
 
 from a2vm.models import TriageRun
 
-from .rationale import BOD_FR
+from .i18n import has, lang_of, t
 
 DECISIONS = ("ACT", "ATTEND", "TRACK")
 BOD_ORDER = ["3 days & forensic investigation", "3 days", "14 days", "60 days", "fix on system upgrade"]
-BOD_SHORT = {
-    "3 days & forensic investigation": "3 j + forensique",
-    "3 days": "3 jours",
-    "14 days": "14 jours",
-    "60 days": "60 jours",
-    "fix on system upgrade": "à la mise à niveau",
-}
+
+
+def _bod(lang: str, code: str, short: bool = False) -> str:
+    if short and has(f"bod.short.{code}"):
+        return t(lang, f"bod.short.{code}")
+    return t(lang, f"bod.{code}") if has(f"bod.{code}") else code
+
 
 CSS = """
 :root{--surface:#fcfcfb;--plane:#f9f9f7;--ink:#0b0b0b;--ink2:#52514e;--muted:#898781;--grid:#e1e0d9;
@@ -54,13 +55,15 @@ def _e(text: object) -> str:
     return html.escape(str(text))
 
 
-def _stacked_bars(rows: list[tuple[str, dict[str, int]]], width: int = 1000) -> str:
+def _stacked_bars(rows: list[tuple[str, dict[str, int]]], lang: str = "en", width: int = 1000) -> str:
     """Horizontal stacked bars, one per asset: findings by decision, with totals at the bar end."""
     label_w, bar_h, gap, value_w = 230, 18, 10, 70
     plot_w = width - label_w - value_w
     top = max((sum(c.values()) for _, c in rows), default=1) or 1
     height = len(rows) * (bar_h + gap) + 4
-    parts = [f'<svg viewBox="0 0 {width} {height}" width="100%" role="img" aria-label="Constats par actif">']
+    parts = [
+        f'<svg viewBox="0 0 {width} {height}" width="100%" role="img" aria-label="{_e(t(lang, "dash.by_asset"))}">'
+    ]
     for i, (name, counts) in enumerate(rows):
         y = i * (bar_h + gap) + 2
         short = name if len(name) <= 34 else name[:33] + "…"
@@ -75,7 +78,7 @@ def _stacked_bars(rows: list[tuple[str, dict[str, int]]], width: int = 1000) -> 
             w = max(plot_w * n / top - 2, 1.5)  # 2px surface gap between segments
             parts.append(
                 f'<rect x="{x:.1f}" y="{y}" width="{w:.1f}" height="{bar_h}" rx="3" fill="var(--{d.lower()})">'
-                f"<title>{_e(name)} — {d} : {n} constats</title></rect>"
+                f"<title>{_e(name)} — {d}: {_e(t(lang, 'dash.findings', n=n))}</title></rect>"
             )
             x += w + 2
         total = sum(counts.values())
@@ -84,21 +87,23 @@ def _stacked_bars(rows: list[tuple[str, dict[str, int]]], width: int = 1000) -> 
     return "".join(parts)
 
 
-def _bars(items: list[tuple[str, int]], width: int = 1000) -> str:
+def _bars(items: list[tuple[str, int]], lang: str = "en", width: int = 1000) -> str:
     """Single-series vertical bars (one hue): open ACT/ATTEND findings by remediation delay."""
     height, base, top_pad = 190, 160, 18
     n = max(len(items), 1)
     slot = width / n
     bar_w = min(90.0, slot * 0.55)
     top = max((v for _, v in items), default=1) or 1
-    parts = [f'<svg viewBox="0 0 {width} {height}" width="100%" role="img" aria-label="Constats par délai">']
+    parts = [
+        f'<svg viewBox="0 0 {width} {height}" width="100%" role="img" aria-label="{_e(t(lang, "dash.by_delay"))}">'
+    ]
     parts.append(f'<line x1="0" x2="{width}" y1="{base}" y2="{base}" stroke="var(--grid)"/>')
     for i, (label, v) in enumerate(items):
         cx = slot * i + slot / 2
         h = (base - top_pad) * v / top
         parts.append(
             f'<rect x="{cx - bar_w / 2:.1f}" y="{base - h:.1f}" width="{bar_w:.1f}" height="{max(h, 1):.1f}" rx="4" '
-            f'fill="var(--seq)"><title>{_e(label)} : {v} constats</title></rect>'
+            f'fill="var(--seq)"><title>{_e(label)}: {_e(t(lang, "dash.findings", n=v))}</title></rect>'
         )
         parts.append(f'<text class="val" x="{cx:.1f}" y="{base - h - 5:.1f}" text-anchor="middle">{v}</text>')
         parts.append(f'<text x="{cx:.1f}" y="{base + 18}" text-anchor="middle">{_e(label)}</text>')
@@ -106,18 +111,19 @@ def _bars(items: list[tuple[str, int]], width: int = 1000) -> str:
     return "".join(parts)
 
 
-def render_dashboard(run: TriageRun) -> str:
+def render_dashboard(run: TriageRun, language: str | None = None) -> str:
+    lang = lang_of(language or getattr(run.client, "language", "en"))
     rows = run.rows
     cves = {d: {r.cve_id for r in rows if r.delivery_decision == d} for d in DECISIONS}
     kev_open = {r.cve_id for r in rows if r.in_kev and r.delivery_decision in ("ACT", "ATTEND")}
     exposed_act = {r.asset_id for r in rows if r.publicly_exposed and r.delivery_decision == "ACT"}
 
     tiles = [
-        ("ACT", len(cves["ACT"]), "CVE à remédier maintenant", "var(--act)"),
-        ("ATTEND", len(cves["ATTEND"]), "CVE à planifier", "var(--attend)"),
-        ("TRACK", len(cves["TRACK"]), "CVE sous surveillance", "var(--track)"),
-        ("KEV", len(kev_open), "CVE exploitées activement (ACT ou ATTEND)", "var(--act)"),
-        ("Internet", len(exposed_act), "actifs exposés avec un ACT", "var(--act)"),
+        ("ACT", len(cves["ACT"]), t(lang, "dash.kpi.act"), "var(--act)"),
+        ("ATTEND", len(cves["ATTEND"]), t(lang, "dash.kpi.attend"), "var(--attend)"),
+        ("TRACK", len(cves["TRACK"]), t(lang, "dash.kpi.track"), "var(--track)"),
+        ("KEV", len(kev_open), t(lang, "dash.kpi.kev"), "var(--act)"),
+        (t(lang, "internet").capitalize(), len(exposed_act), t(lang, "dash.kpi.internet"), "var(--act)"),
     ]
     tile_html = "".join(
         f'<div class="tile"><span class="k"><span class="dot" style="background:{c}"></span>{_e(k)}</span>'
@@ -134,7 +140,7 @@ def render_dashboard(run: TriageRun) -> str:
     asset_rows = [(labels[a], c) for a, c in ranked]
 
     delays = Counter(r.bod_timeline for r in rows if r.delivery_decision in ("ACT", "ATTEND"))
-    delay_items = [(BOD_SHORT[b], delays[b]) for b in BOD_ORDER if delays.get(b)]
+    delay_items = [(_bod(lang, b, short=True), delays[b]) for b in BOD_ORDER if delays.get(b)]
 
     act_groups: dict[str, list] = defaultdict(list)
     for r in rows:
@@ -145,28 +151,28 @@ def render_dashboard(run: TriageRun) -> str:
         f"<tr><td>{_e(cve)}</td><td>{_e(', '.join(sorted({r.asset_id for r in rs})))}</td>"
         f"<td>{'<span class=tag>KEV</span>' if rs[0].in_kev else ''}</td>"
         f"<td class=n>{'' if rs[0].epss is None else f'{rs[0].epss:.3f}'}</td>"
-        f"<td>{_e(BOD_FR[rs[0].bod_timeline])}</td></tr>"
+        f"<td>{_e(_bod(lang, rs[0].bod_timeline))}</td></tr>"
         for cve, rs in act_rows
     )
-    head = "<table><tr><th>CVE</th><th>Actifs</th><th></th><th>EPSS</th><th>Délai</th></tr>"
-    act_html = head + table + "</table>" if table else "Aucune."
-    assets_html = _stacked_bars(asset_rows) if asset_rows else "Aucun constat."
+    act_html = "<table>" + t(lang, "dash.head") + table + "</table>" if table else _e(t(lang, "report.none"))
+    assets_html = _stacked_bars(asset_rows, lang) if asset_rows else _e(t(lang, "dash.none"))
     legend = "".join(
         f'<span><span class="dot" style="background:var(--{d.lower()})"></span> {d}</span>' for d in DECISIONS
     )
-    return f"""<!doctype html><html lang="fr"><head><meta charset="utf-8">
+    at = run.generated_at[:16].replace("T", " ")
+    sub = t(lang, "dash.sub", at=at, cves=run.cve_count, n=len(rows))
+    return f"""<!doctype html><html lang="{lang}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>A2VM — {_e(run.client.name)}</title>
 <style>{CSS}</style></head><body><main>
-<h1>Vulnérabilités — {_e(run.client.name)}</h1>
-<p class="sub">Triage du {_e(run.generated_at[:16].replace("T", " "))} UTC · {run.cve_count} CVE analysées ·
-{len(rows)} constats (CVE × actif)</p>
+<h1>{_e(t(lang, "dash.title", client=run.client.name))}</h1>
+<p class="sub">{_e(sub)}</p>
 <div class="tiles">{tile_html}</div>
-<h2>Constats par actif</h2>
+<h2>{_e(t(lang, "dash.by_asset"))}</h2>
 <div class="card"><div class="legend">{legend}</div>{assets_html}</div>
-<h2>Échéances de remédiation (ACT et ATTEND, référentiel CISA BOD 26-04)</h2>
-<div class="card">{_bars(delay_items) if delay_items else "Aucune échéance."}</div>
-<h2>ACT — CVE à remédier maintenant</h2>
+<h2>{_e(t(lang, "dash.delays"))}</h2>
+<div class="card">{_bars(delay_items, lang) if delay_items else _e(t(lang, "dash.no_delay"))}</div>
+<h2>{_e(t(lang, "dash.act"))}</h2>
 <div class="card">{act_html}</div>
-<footer>Décisions SSVC CISA calculées de façon déterministe. Détail de chaque constat : triage.csv.</footer>
+<footer>{_e(t(lang, "dash.footer"))}</footer>
 </main></body></html>
 """

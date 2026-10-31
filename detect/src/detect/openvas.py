@@ -50,7 +50,7 @@ CVE_RE = re.compile(r"CVE-\d{4}-\d{4,}")
 # "HTTP TRACE enabled" lists the CVEs of every product that ever had that flaw): its CVEs are kept
 # but flagged, the product being unconfirmed.
 GENERIC_NVT_CVES = 5
-GENERIC_REASON = "test OpenVAS générique ({n} CVE, produit non identifié) : CVE à confirmer"
+GENERIC_REASON = "generic OpenVAS test ({n} CVEs, product not identified): CVEs to confirm"
 
 
 @dataclass

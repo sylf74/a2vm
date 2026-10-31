@@ -49,14 +49,14 @@ def test_validate_fails_on_a_ref_mismatch(tmp_path, monkeypatch, capsys):
 
 def test_a_source_is_in_error_only_after_failures_in_a_row(tmp_path):
     state = State.load(tmp_path / "s.json")
-    hard, soft = state.count_failures(["CISA — avis IT: HTTP 503"], 3)
+    hard, soft = state.count_failures(["CISA — IT advisories: HTTP 503"], 3)
     assert not hard and "failure 1/3" in soft[0]
-    state.count_failures(["CISA — avis IT: HTTP 503"], 3)
-    hard, soft = state.count_failures(["CISA — avis IT: HTTP 503"], 3)
-    assert hard == ["CISA — avis IT: HTTP 503 (3 runs in a row)"] and not soft
+    state.count_failures(["CISA — IT advisories: HTTP 503"], 3)
+    hard, soft = state.count_failures(["CISA — IT advisories: HTTP 503"], 3)
+    assert hard == ["CISA — IT advisories: HTTP 503 (3 runs in a row)"] and not soft
     state.save()
     state = State.load(tmp_path / "s.json")  # kept between runs
-    assert state.failures == {"CISA — avis IT": 3}
+    assert state.failures == {"CISA — IT advisories": 3}
     assert state.count_failures([], 3) == ([], []) and state.failures == {}  # one success resets
 
 
