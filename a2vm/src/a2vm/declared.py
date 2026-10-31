@@ -104,20 +104,18 @@ class DeclaredMatcher:
             try:
                 out = adjudicate_match(self.llm, record, am.entries[0], am.asset)
             except LlmError as exc:
-                return am.match, [f"correspondance produit approximative, LLM indisponible : {exc}"]
+                return am.match, [f"approximate product match, LLM unavailable: {exc}"]
             # The LLM proposes, it never decides: the candidate is kept either way and goes to review
             # with the proposal, so that a wrong "no" cannot hide a vulnerability.
             m = am.match
             if not out["same_product"]:
-                return m, [
-                    f"correspondance produit approximative ; proposition du LLM : peu probable — {out['justification']}"
-                ]
+                return m, [f"approximate product match; LLM proposal: unlikely — {out['justification']}"]
             return Match("llm", m.vendor, m.product, m.score, out["justification"]), [
-                "correspondance produit approximative ; proposition du LLM : probable — à confirmer"
+                "approximate product match; LLM proposal: likely — to confirm"
             ]
         if self.fuzzy_without_llm == "drop":
             return None, []
-        return am.match, ["correspondance produit approximative (similarité de noms)"]
+        return am.match, ["approximate product match (name similarity)"]
 
     def scan(self, profile: ClientProfile, records: list[VulnRecord]) -> Detection:
         observed_at = now()
@@ -143,10 +141,10 @@ class DeclaredMatcher:
                         continue
                     status = "affected" if affected else "under_investigation"
                     if not affected:
-                        review.append("statut de la version déployée indéterminé")
+                        review.append("status of the deployed version undetermined")
                 else:
                     affected, status = [], "under_investigation"
-                    review.append("versions déployées non renseignées dans le profil client")
+                    review.append("deployed versions not given in the client profile")
 
                 result.findings.append(
                     Finding(

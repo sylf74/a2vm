@@ -111,12 +111,12 @@ class Triage:
         if candidates:
             exploitation = max(candidates, key=lambda c: RANK[c.value])  # max() keeps the first of equals
             if exploitation.source == "references":
-                review.append("exploitation déduite d'une référence taguée « exploit »")
+                review.append("exploitation inferred from a reference tagged \u201cexploit\u201d")
         else:
             exploitation = Assessed("none", "default")
-            review.append("pas d'évaluation CISA de l'exploitation")
+            review.append("no CISA assessment of the exploitation")
         if gti_unconfirmed(record.gti) and exploitation.value != "active":
-            review.append(f"exploitation signalée ou suspectée par GTI, non confirmée ({gti_note})")
+            review.append(f"exploitation reported or suspected by GTI, not confirmed ({gti_note})")
 
         automatable = technical_impact = None
         if "automatable" in adp and "technical_impact" in adp:
@@ -131,7 +131,7 @@ class Triage:
                     note += f" ({metric.source})"
                 automatable = Assessed(a, "cvss-heuristic", note)
                 technical_impact = Assessed(t, "cvss-heuristic", note)
-                review.append("automatisable / impact technique déduits du vecteur CVSS")
+                review.append("automatable / technical impact derived from the CVSS vector")
             elif self.settings.llm.ssvc_inputs and record.description and self._llm_ready():
                 try:
                     self.llm_calls += 1
@@ -139,10 +139,10 @@ class Triage:
                     self._llm_ok()
                     automatable = Assessed(out["automatable"], "llm", out["justification"])
                     technical_impact = Assessed(out["technical_impact"], "llm", out["justification"])
-                    review.append("automatisable / impact technique estimés par LLM")
+                    review.append("automatable / technical impact estimated by the LLM")
                 except LlmError as exc:
                     self._llm_failed(exc)
-                    review.append(f"LLM indisponible pour l'évaluation SSVC : {exc}")
+                    review.append(f"LLM unavailable for the SSVC assessment: {exc}")
             if automatable is None:
                 worst = self.policy.unknown_inputs == "conservative"
                 automatable = Assessed("yes" if worst else "no", "default")
@@ -210,14 +210,14 @@ class Triage:
         )
         bod = ssvc.bod_timeline(record.in_kev, exposed, inputs.automatable.value, inputs.technical_impact.value)
         delivery, reasons = delivery_decision(decision, bod, record.epss, self.policy)
-        origin = {"worst case": "pire cas", "client default": "hypothèse par défaut du client"}
+        origin = {"worst case": "worst case", "client default": "client's default assumption"}
         assumptions = [
-            f"{label} : {attr.value} ({origin.get(attr.note, attr.note)})"
+            f"{label}: {attr.value} ({origin.get(attr.note, attr.note)})"
             for label, attr in (
-                ("exposition supposée", exposure),
-                ("criticité mission supposée", mission),
-                ("impact bien-être supposé", wellbeing),
-                ("propriétaire supposé", owner),
+                ("assumed exposure", exposure),
+                ("assumed mission criticality", mission),
+                ("assumed well-being impact", wellbeing),
+                ("assumed owner", owner),
             )
             if attr.assumed
         ]
@@ -302,7 +302,7 @@ class Triage:
                     for r in rs:
                         if source.startswith("llm"):
                             r.rationale = text
-                            r.rationale_source = source + (f", {len(rs)} actifs" if len(rs) > 1 else "")
+                            r.rationale_source = source + (f", {len(rs)} assets" if len(rs) > 1 else "")
                         else:
                             r.rationale_source = source
         for _key, rs in pending:  # left over: budget reached or LLM down

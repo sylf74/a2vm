@@ -19,9 +19,9 @@ version: 1
 sources:
   # -- Institutional ------------------------------------------------------------------------------
   - {id: certfr-alerte, category: institutional, kind: certfr, feed: alerte, urgent: true,
-     name: "CERT-FR — alertes"}
+     name: "CERT-FR — alerts"}
   - {id: certfr-avis, category: institutional, kind: certfr, feed: avis,
-     name: "CERT-FR — avis"}
+     name: "CERT-FR — advisories"}
   - {id: cisa-kev, category: institutional, kind: kev, urgent: true,
      name: "CISA — KEV"}
   - {id: cvelist, category: institutional, kind: cvelist,
@@ -30,16 +30,16 @@ sources:
   # cisa.gov answers 403 to the runners, and its provider metadata sits on the same site.
   - {id: cisa-ics, category: institutional, kind: csaf,
      url: "https://raw.githubusercontent.com/cisagov/CSAF/develop/csaf_files/OT/white/changes.csv",
-     name: "CISA — avis ICS"}
+     name: "CISA — ICS advisories"}
   - {id: cisa-it, category: institutional, kind: csaf,
      url: "https://raw.githubusercontent.com/cisagov/CSAF/develop/csaf_files/IT/white/changes.csv",
-     name: "CISA — avis IT"}
+     name: "CISA — IT advisories"}
   - {id: cisa-advisories, category: institutional, kind: rss, enabled: false,
      url: "https://www.cisa.gov/cybersecurity-advisories/all.xml",
-     name: "CISA — avis (RSS, 403 from the runners)"}
+     name: "CISA — advisories (RSS, 403 from the runners)"}
   - {id: cert-eu, category: institutional, kind: rss,
      url: "https://cert.europa.eu/publications/security-advisories-rss",
-     name: "CERT-EU — avis"}
+     name: "CERT-EU — advisories"}
   - {id: jpcert, category: institutional, kind: rss, enabled: false,
      url: "https://www.jpcert.or.jp/english/rss/jpcert-en.rdf",
      name: "JPCERT/CC"}
@@ -68,7 +68,7 @@ sources:
      name: "Palo Alto Networks"}
   - {id: hpe, category: vendor, kind: rss, enabled: false,
      url: "https://support.hpe.com/hpesc/public/api/document/sec_bull_rss_feed",
-     name: "HPE — bulletins de sécurité", notes: "URL to check"}
+     name: "HPE — security bulletins", notes: "URL to check"}
   - {id: siemens, category: vendor, kind: csaf,
      url: "https://cert-portal.siemens.com/productcert/csaf/provider-metadata.json",
      name: "Siemens ProductCERT"}
@@ -101,4 +101,4 @@ sources:
   # -- Research ------------------------------------------------------------------------------------
   - {id: zdi, category: research, kind: rss,
      url: "https://www.zerodayinitiative.com/rss/published/",
-     name: "Zero Day Initiative — avis publiés"}
+     name: "Zero Day Initiative — published advisories"}

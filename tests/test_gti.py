@@ -86,7 +86,7 @@ def test_triage_uses_gti_without_lowering_other_sources(gti_settings, sources):
     suspected = triage.cve_inputs(records["CVE-2099-10004"])
     assert gti_unconfirmed(records["CVE-2099-10004"].gti)
     assert suspected.exploitation.value != "active"
-    assert any("suspectée par GTI" in r for r in suspected.review_reasons)
+    assert any("suspected by GTI" in r for r in suspected.review_reasons)
 
 
 def _network_sources(settings, handler):

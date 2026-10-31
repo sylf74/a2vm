@@ -249,7 +249,7 @@ def test_generic_multi_cve_test_is_flagged_and_v2_vector_kept():
     by_cve = {f.cve_id: f for f in det.findings}
     assert len(by_cve) == 6
     generic = by_cve["CVE-2003-1567"]
-    assert generic.status == "under_investigation" and "générique (6 CVE" in generic.review_reasons[0]
+    assert generic.status == "under_investigation" and "generic OpenVAS test (6 CVEs" in generic.review_reasons[0]
     assert generic.observations[0].cvss_vector == "AV:N/AC:M/Au:N/C:P/I:P/A:N"
     assert generic.observations[0].cvss_source == "openvas (CVSS v2)"
     # also reported by a specific test, with an installed version: not flagged; v2 vector read from the tags

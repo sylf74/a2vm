@@ -13,10 +13,10 @@
 #
 #     include:
 #       - project: vulnops/a2vm
-#         ref: v0.17.2
+#         ref: v0.17.3
 #         file: templates/client-pipeline.yml
 #     variables:
-#       A2VM_REF: v0.17.2        # same version as the include
+#       A2VM_REF: v0.17.3        # same version as the include
 #
 # Jobs:
 #   push to the default branch     validate (profile and targets)

@@ -52,16 +52,16 @@ def _raise(current: str, target: str) -> str:
 
 def delivery_decision(ssvc: str, bod: str, epss: float | None, policy: Policy) -> tuple[str, list[str]]:
     decision = policy.decision_mapping[ssvc]
-    reasons = [f"SSVC CISA Coordinator : {ssvc} -> {decision}"]
+    reasons = [f"SSVC CISA Coordinator: {ssvc} -> {decision}"]
 
     if policy.bod_3_days_to_act and bod.startswith("3 days") and decision != "ACT":
         decision = "ACT"
-        reasons.append(f"relevé à ACT : délai BOD 26-04 « {bod} »")
+        reasons.append(f"raised to ACT: BOD 26-04 delay \u201c{bod}\u201d")
     if policy.bod_14_days_min_attend and bod == "14 days" and decision == "TRACK":
         decision = "ATTEND"
-        reasons.append("relevé à ATTEND : délai BOD 26-04 « 14 days »")
+        reasons.append("raised to ATTEND: BOD 26-04 delay \u201c14 days\u201d")
     threshold = policy.epss_attend_threshold
     if threshold is not None and epss is not None and epss >= threshold and decision == "TRACK":
         decision = _raise(decision, "ATTEND")
-        reasons.append(f"relevé à ATTEND : EPSS {epss:.3f} >= {threshold}")
+        reasons.append(f"raised to ATTEND: EPSS {epss:.3f} >= {threshold}")
     return decision, reasons

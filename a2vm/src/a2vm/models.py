@@ -173,6 +173,7 @@ class ClientProfile:
     warnings: list[str] = field(default_factory=list)  # e.g. deprecated values read in a newer form
     external: ExternalScan | None = None
     published: list[PublishedEndpoint] = field(default_factory=list)
+    language: str = "en"  # language of the client's deliverables (v0.17.3): en, fr
 
     def declared(self, asset_id: str) -> DeclaredAsset:
         for a in self.assets:

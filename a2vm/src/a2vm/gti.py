@@ -20,9 +20,9 @@ def ssvc_exploitation(gti: dict[str, Any] | None) -> tuple[str | None, str]:
     if not gti:
         return None, ""
     state, avail = gti.get("exploitation_state", ""), gti.get("exploit_availability", "")
-    detail = f"GTI : exploitation « {state or 'n/a'} », exploit « {avail or 'n/a'} »"
+    detail = f"GTI: exploitation \u201c{state or 'n/a'}\u201d, exploit \u201c{avail or 'n/a'}\u201d"
     if gti.get("first_exploitation"):
-        detail += f", première exploitation {gti['first_exploitation']}"
+        detail += f", first exploitation {gti['first_exploitation']}"
     if state in ("confirmed", "wide"):
         return "active", detail
     if avail in ("publicly available", "trivial"):

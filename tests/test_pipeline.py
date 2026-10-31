@@ -87,7 +87,7 @@ def test_deterministic_run(settings, sources, profile, tmp_path):
     target = write_all(run, tmp_path)
     data = json.loads((target / "triage.json").read_text())
     assert len(data["rows"]) == len(run.rows)
-    assert "ACT — remédier maintenant" in (target / "report.md").read_text()
+    assert "ACT — remediate now" in (target / "report.md").read_text()
     assert (target / "triage.csv").read_text().splitlines()[0].startswith("decision;cve")
 
 
@@ -103,10 +103,10 @@ def test_llm_run(settings, sources, profile):
             return {"automatable": "no", "technical_impact": "partial", "justification": "Local user required."}
         if name == "product_match":
             return {"same_product": False, "justification": "Mobile client, not the gateway OS."}
-        facts = json.loads(user.split("Faits :\n", 1)[1].split("\n\nDescription", 1)[0])
+        facts = json.loads(user.split("Facts:\n", 1)[1].split("\n\nVendor description", 1)[0])
         if facts["cve"] == "CVE-2099-10002":  # invents a fixed version: must be rejected by the guard
-            return {"summary": f"{facts['decision']} : faille corrigée en 7.2.9.", "action": "Mettre à jour."}
-        return {"summary": f"Décision {facts['decision']} pour {facts['cve']}.", "action": "Planifier."}
+            return {"summary": f"{facts['decision']}: flaw fixed in 7.2.9.", "action": "Update."}
+        return {"summary": f"Decision {facts['decision']} for {facts['cve']}.", "action": "Plan it."}
 
     settings.llm.enabled = True
     transport = fake_llm_transport(answer)
@@ -116,13 +116,13 @@ def test_llm_run(settings, sources, profile):
     # The LLM proposes "unlikely" for the fuzzy match: the candidate stays, flagged with the proposal.
     fuzzy = rows["CVE-2099-10004"]
     assert fuzzy.needs_review
-    assert any("proposition du LLM : peu probable" in r for r in fuzzy.review_reasons)
+    assert any("LLM proposal: unlikely" in r for r in fuzzy.review_reasons)
     build = rows["CVE-2099-10005"]
     assert (build.automatable.value, build.automatable.source) == ("no", "llm")
     assert build.ssvc_decision == "track" and build.needs_review
 
     assert rows["CVE-2024-3400"].rationale_source.startswith("llm")
-    assert rows["CVE-2024-3400"].rationale.startswith("Décision ACT")
+    assert rows["CVE-2024-3400"].rationale.startswith("Decision ACT")
     assert rows["CVE-2099-10002"].rationale_source.startswith("template (LLM output rejected: 7.2.9")
 
     # The decision never depends on the LLM: same decisions as the deterministic run for shared rows.
@@ -215,15 +215,15 @@ def test_one_rationale_per_cve_most_urgent_first(settings, sources, profile):
     def answer(name, body):
         facts = body["messages"][1]["content"]
         assert '"affected_assets_count": 3' in facts and "host1 (rocky 9)" in facts
-        return {"summary": "Décision ACT sur 3 actifs.", "action": "Appliquer le correctif."}
+        return {"summary": "Decision ACT on 3 assets.", "action": "Apply the fix."}
 
     transport = fake_llm_transport(answer)
     settings.llm.enabled = True
     triage = Triage(settings, LlmClient(settings.llm, transport=transport))
     triage._llm_rationales(others)
     assert len(transport.calls) == 1
-    assert all(r.rationale == "Décision ACT sur 3 actifs. Appliquer le correctif." for r in others)
-    assert all(r.rationale_source.endswith("3 actifs") for r in others)
+    assert all(r.rationale == "Decision ACT on 3 assets. Apply the fix." for r in others)
+    assert all(r.rationale_source.endswith("3 assets") for r in others)
 
 
 def test_scanner_cvss_replaces_missing_record_cvss(settings):
@@ -269,7 +269,7 @@ def test_rejected_cves_are_ignored_not_errors(settings, sources, profile):
     assert [e["cve"] for e in run.ignored] == ["CVE-2026-105391"]
     assert [e["cve"] for e in run.errors] == ["CVE-2099-99999"]
     md = render_markdown(run)
-    assert "## Ignorées" in md and "CVE-2026-105391" in md.split("## Ignorées")[1].split("##")[0]
+    assert "## Ignored" in md and "CVE-2026-105391" in md.split("## Ignored")[1].split("##")[0]
 
 
 def test_reporting_dataset_follows_the_decisions(settings, sources, profile, tmp_path):
@@ -309,8 +309,8 @@ def test_exposure_gaps_open_the_report(settings, sources, profile, tmp_path):
     run.exposure_gaps = [{"kind": "unlisted", "asset": "host:203.0.113.9", "name": "203.0.113.9", "detail": detail}]
     target = write_all(run, tmp_path, settings.policy)
     report = (target / "report.md").read_text()
-    assert "## Écarts d'exposition" in report and "hôte public non déclaré" in report
-    assert report.index("## Écarts d'exposition") < report.index("## Par actif")
+    assert "## Exposure gaps" in report and "public host not declared" in report
+    assert report.index("## Exposure gaps") < report.index("## By asset")
     data = read_reporting(tmp_path / profile.id / "reporting.json")
     assert data["exposure_gaps"][0]["kind"] == "unlisted"
     assert json.loads((target / "triage.json").read_text())["exposure_gaps"] == run.exposure_gaps

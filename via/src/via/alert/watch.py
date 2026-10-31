@@ -123,7 +123,7 @@ class Item:
     published: str
     publication: Publication | None = None
     kev: dict[str, Any] | None = None
-    source: str = ""  # source name, e.g. "CERT-FR — alertes"
+    source: str = ""  # source name, e.g. "CERT-FR — alerts"
     category: str = "institutional"  # institutional | vendor | research
     urgent_source: bool = False  # every publication of the source is urgent
 
@@ -149,8 +149,8 @@ class Alert:
 def default_catalogue() -> list[Source]:
     """CERT-FR, KEV and cvelistV5 only: what the watch mode reads without a catalogue file."""
     return [
-        Source("certfr-alerte", "CERT-FR — alertes", "institutional", "certfr", feed="alerte", urgent=True),
-        Source("certfr-avis", "CERT-FR — avis", "institutional", "certfr", feed="avis"),
+        Source("certfr-alerte", "CERT-FR — alerts", "institutional", "certfr", feed="alerte", urgent=True),
+        Source("certfr-avis", "CERT-FR — advisories", "institutional", "certfr", feed="avis"),
         Source("cisa-kev", "CISA — KEV", "institutional", "kev", urgent=True),
         Source("cvelist", "CVE (cvelistV5)", "institutional", "cvelist"),
     ]

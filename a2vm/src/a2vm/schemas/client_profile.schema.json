@@ -40,6 +40,10 @@
         "delivery_file": {
           "type": "string",
           "description": "Optional link to the client's delivery-files sheet."
+        },
+        "language": {
+          "enum": ["en", "fr"],
+          "description": "Language of the labels of the client's deliverables (daily report, dashboard, documents of the chat, Grafana); default en (since v0.17.3). Alerts: the language of each contact (contacts.yaml)."
         }
       }
     },

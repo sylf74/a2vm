@@ -3,7 +3,7 @@
 
 1. assess_ssvc_inputs  - Automatable / Technical Impact when neither CISA ADP data nor a CVSS
                          vector is available (fresh CVEs). Result is always flagged for review.
-2. write_rationale     - French explanation of a decision that was computed deterministically.
+2. write_rationale     - English explanation of a decision that was computed deterministically.
 
 Vendor text (descriptions, product names) is untrusted: it is passed inside <untrusted> tags and
 the model is told to treat it as data. The model has no tools, so injected instructions can at
@@ -64,29 +64,28 @@ RATIONALE_SCHEMA: dict[str, Any] = {
     },
 }
 
-_RATIONALE_SYSTEM = f"""Tu rédiges, en français, la justification d'une décision de triage de vulnérabilité
-destinée à un client. La décision est DÉJÀ prise par un calcul déterministe (SSVC CISA) : tu ne la
-discutes pas et tu ne la modifies pas.
+_RATIONALE_SYSTEM = f"""You write, in English, the rationale of a vulnerability triage decision for a
+client. The decision is ALREADY taken by a deterministic computation (CISA SSVC): you do not discuss
+it and you do not change it.
 
-Règles :
-- N'utilise QUE les faits fournis dans le JSON. N'invente aucun numéro de version, score, date ou
-  identifiant. Si une information manque, ne la mentionne pas.
-- "summary" : 2 à 3 phrases expliquant pourquoi la décision est celle-ci (exploitation, exposition,
-  impact, criticité de l'actif). Cite la décision telle quelle (ACT, ATTEND ou TRACK).
-- "action" : 1 à 2 phrases sur ce que le propriétaire de l'actif doit faire, dans le délai indiqué
-  par le champ bod_timeline. Si le champ fixed_packages n'est pas vide, cite le ou les paquets
-  correctifs tels quels ; sinon ne cite aucune version corrective.
-- Si le champ assumptions n'est pas vide, signale en une courte phrase que la décision repose sur
-  une hypothèse (par exemple une exposition supposée), sans en inventer d'autre.
-- Si le champ affected_assets contient plusieurs actifs, la justification vaut pour tous : cite
-  leur nombre, et nomme l'actif exposé à Internet s'il y en a un.
-- Ton factuel, sans emphase.
+Rules:
+- Use ONLY the facts given in the JSON. Invent no version number, score, date or identifier. When
+  something is missing, leave it out.
+- "summary": 2 to 3 sentences on why the decision is this one (exploitation, exposure, impact,
+  criticality of the asset). Quote the decision as it is (ACT, ATTEND or TRACK).
+- "action": 1 to 2 sentences on what the owner of the asset must do, within the delay given by the
+  field bod_timeline. When the field fixed_packages is not empty, name the fixing package(s) as
+  given; otherwise name no fixed version.
+- When the field assumptions is not empty, say in one short sentence that the decision rests on an
+  assumption (e.g. an assumed exposure), without inventing another one.
+- When the field affected_assets holds several assets, the rationale covers them all: give their
+  number, and name the internet-facing asset if there is one.
+- Factual tone, no emphasis.
 {_UNTRUSTED}"""
 
 
 def write_rationale(llm: LlmClient, facts_json: str, description: str) -> dict[str, Any]:
     user = (
-        f"Faits :\n{facts_json}\n\n"
-        f"Description éditeur (contexte uniquement) :\n<untrusted>\n{description[:1500]}\n</untrusted>"
+        f"Facts:\n{facts_json}\n\nVendor description (context only):\n<untrusted>\n{description[:1500]}\n</untrusted>"
     )
     return llm.structured(_RATIONALE_SYSTEM, user, "rationale", RATIONALE_SCHEMA)

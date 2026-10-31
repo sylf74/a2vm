@@ -94,7 +94,7 @@ def test_word_powerpoint_and_csv_are_built_from_the_data(exporting, caplog):
         if kind == "docx":
             text = "\n".join(p.text for p in Document(io.BytesIO(body)).paragraphs)
             tables = Document(io.BytesIO(body)).tables
-            assert answer["run"]["id"] in text and "Justification" in text
+            assert answer["run"]["id"] in text and "Rationale" in text
             assert any(first_cve in c.text for c in tables[0].columns[1].cells)
         elif kind == "pptx":
             texts = [
@@ -106,7 +106,7 @@ def test_word_powerpoint_and_csv_are_built_from_the_data(exporting, caplog):
             assert any(answer["run"]["id"] in x for x in texts)
         else:
             rows = list(csv.reader(io.StringIO(body.decode("utf-8-sig")), delimiter=";"))
-            assert rows[0][:3] == ["id", "Niveau", "CVE"] and len(rows) == answer["decisions"] + 1
+            assert rows[0][:3] == ["id", "Level", "CVE"] and len(rows) == answer["decisions"] + 1
     token = link.split("/a2vm/exports/", 1)[1].split("/", 1)[0]
     server = [r for r in caplog.records if r.name.startswith(("verdict", "a2vm"))]
     assert server and all(token not in r.getMessage() for r in server)  # the link is a credential
