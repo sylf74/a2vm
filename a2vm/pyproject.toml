@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "a2vm"
-version = "0.17.3"
+version = "0.18.0"
 description = "A2VM common contract: data model, exchange files and their schemas, service contracts, settings, client profiles, LLM client, SSVC tables, declared-asset matching."
 requires-python = ">=3.11"
 license = {text = "LicenseRef-a2vm-proprietary"}
-dependencies = ["httpx>=0.27", "PyYAML>=6.0", "jsonschema>=4.20"]
+dependencies = ["httpx>=0.27", "PyYAML>=6.0", "jsonschema>=4.20", "psycopg[binary]>=3.1"]  # psycopg: a2vm.db (v0.18.0)
 
 [project.scripts]
 a2vm = "a2vm.cli:main"

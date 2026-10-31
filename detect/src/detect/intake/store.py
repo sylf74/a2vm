@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 """Where the detection service keeps what it accepted (LLD detection §8.2).
 
-v0.13.0 keeps the detections on a volume, one folder per tenant and source; PostgreSQL replaces
-it behind the same interface once the shared platform has it (D15 step 3).
+v0.13.0 keeps the detections on a volume, one folder per tenant and source; since v0.18.0 the
+tenant's PostgreSQL replaces it behind the same interface when the tenant has one (`pgstore.PgStore`).
 
   <root>/<tenant>/<source>/<id>.json.gz    the document as received (uncompressed digest in the id)
   <root>/<tenant>/<source>/<id>.meta.json  its receipt
@@ -70,6 +70,9 @@ class FileStore:
         self.root = Path(root)
         self.keep = max(1, keep)
         self._lock = threading.Lock()
+
+    def describe(self) -> str:
+        return f"files {self.root}"
 
     def _key_file(self, tenant: str, collector: str, key: str) -> Path:
         return self.root / tenant / "_keys" / hashlib.sha256(f"{collector}\0{key}".encode()).hexdigest()

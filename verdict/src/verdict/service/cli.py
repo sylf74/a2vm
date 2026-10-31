@@ -27,17 +27,23 @@ def cmd_serve(args: argparse.Namespace) -> int:
     from .store import RunStore
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    from a2vm.db import DatabaseError, open_database
+
+    from .pgstore import MIGRATIONS, PgRunStore
+
     try:
         tokens = TokenSet.load(args.digests, ROLES)
-        Path(args.store).mkdir(parents=True, exist_ok=True)
-    except (ValueError, OSError) as exc:
+        db = open_database("verdict", MIGRATIONS)
+        if db is None:
+            Path(args.store).mkdir(parents=True, exist_ok=True)
+    except (ValueError, OSError, DatabaseError) as exc:
         print(exc, file=sys.stderr)
         return 2
-    store = RunStore(args.store, args.keep)
+    store = PgRunStore(db, args.keep) if db else RunStore(args.store, args.keep)
     latest = store.latest(args.tenant)
     roles = ", ".join(f"{r} {'set' if r in tokens.digests else 'MISSING'}" for r in sorted(ROLES))
     print(
-        f"{args.tenant}: tokens {roles}; store {args.store}; latest run "
+        f"{args.tenant}: tokens {roles}; store {store.describe()}; latest run "
         f"{latest.id + ' of ' + latest.generated_at if latest else 'none yet'}",
         flush=True,
     )

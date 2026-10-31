@@ -63,10 +63,22 @@ def declaration(tmp_path):
     return collectors, digests
 
 
+def _store(tmp_path, dsn, keep):
+    """The detection service's store: files, or the tenant's PostgreSQL (v0.18.0)."""
+    if dsn is None:
+        return FileStore(tmp_path / "store", keep=keep)
+    from a2vm.db import Database
+    from detect.intake.pgstore import MIGRATIONS, PgStore
+
+    db = Database(dsn, "detect", MIGRATIONS)
+    db.init()
+    return PgStore(db, keep=keep)
+
+
 @pytest.fixture
-def service(tmp_path, declaration):
+def service(tmp_path, declaration, backend):
     registry = load_registry("lab", *declaration)
-    return Service(registry, FileStore(tmp_path / "store", keep=3), max_bytes=5 * 1024 * 1024)
+    return Service(registry, _store(tmp_path, backend, 3), max_bytes=5 * 1024 * 1024)
 
 
 # -- registry -------------------------------------------------------------------------------------
@@ -130,18 +142,21 @@ def test_digests_file_errors_and_tenant_id(tmp_path, declaration):
 # -- store ----------------------------------------------------------------------------------------
 
 
-def test_store_is_idempotent_keeps_the_last_n_per_collector_and_drops_their_keys(tmp_path):
-    store = FileStore(tmp_path / "store", keep=2)
+def test_store_is_idempotent_keeps_the_last_n_per_collector_and_drops_their_keys(tmp_path, backend):
+    store = _store(tmp_path, backend, 2)
     receipts = []
     for hour in range(4):
         doc = _document(tmp_path, generated_at=NOW + dt.timedelta(hours=hour))
         receipts.append(store.put("lab", "lab-lan", _body(doc), doc, f"run-{hour}", NOW + dt.timedelta(hours=hour)))
     again = store.put("lab", "lab-lan", b"ignored", _document(tmp_path), "run-3", NOW + dt.timedelta(hours=5))
     assert again.id == receipts[3].id and again.duplicate
-    folder = tmp_path / "store" / "lab" / "trivy"
-    assert len(list(folder.glob("*.meta.json"))) == 2
-    assert store.get("lab", receipts[0].id) is None
-    assert len(list((tmp_path / "store" / "lab" / "_keys").iterdir())) == 2  # keys of the pruned ones gone
+    assert store.get("lab", receipts[0].id) is None and store.get("lab", receipts[2].id) is not None
+    assert store.known("lab", "lab-lan", "run-1") is None  # the keys of the pruned ones are gone
+    assert store.known("lab", "lab-lan", "run-2").id == receipts[2].id
+    if backend is None:
+        folder = tmp_path / "store" / "lab" / "trivy"
+        assert len(list(folder.glob("*.meta.json"))) == 2
+        assert len(list((tmp_path / "store" / "lab" / "_keys").iterdir())) == 2
     # A key whose detection was pruned stores the detection again.
     doc = _document(tmp_path, generated_at=NOW + dt.timedelta(hours=6))
     assert not store.put("lab", "lab-lan", _body(doc), doc, "run-0", NOW + dt.timedelta(hours=6)).duplicate
@@ -149,8 +164,8 @@ def test_store_is_idempotent_keeps_the_last_n_per_collector_and_drops_their_keys
     assert receipt.generated_at == stored["generated_at"] == doc["generated_at"]
 
 
-def test_store_keeps_the_latest_of_each_collector_of_a_source(tmp_path):
-    store = FileStore(tmp_path / "store", keep=1)
+def test_store_keeps_the_latest_of_each_collector_of_a_source(tmp_path, backend):
+    store = _store(tmp_path, backend, 1)
     lan = _document(tmp_path, generated_at=NOW)
     dmz = _document(tmp_path, generated_at=NOW + dt.timedelta(hours=1))
     store.put("lab", "lab-lan", _body(lan), lan, "a", NOW)
@@ -297,12 +312,13 @@ def test_fetch_merges_the_collectors_of_a_source_and_applies_each_max_age(tmp_pa
     assert len(merged.findings) == 2 * len(single.findings)
 
 
-def test_http_routes_health_and_malformed_requests(tmp_path, server, service):
+def test_http_routes_health_and_malformed_requests(tmp_path, server, service, backend):
     url, httpd = server
     with httpx.Client(base_url=url) as c:
         assert c.get("/healthz").status_code == 200
-        assert c.get("/readyz").status_code == 503  # the store volume is not there yet
-        (tmp_path / "store").mkdir()
+        if backend is None:
+            assert c.get("/readyz").status_code == 503  # the store volume is not there yet
+            (tmp_path / "store").mkdir()
         assert c.get("/readyz").status_code == 200
         assert c.get("/v1/tenants/lab/detections/latest").status_code == 401
         r = c.get("/v1/tenants/lab/detections/latest?source=..%2F..", headers={"Authorization": f"Bearer {READER}"})

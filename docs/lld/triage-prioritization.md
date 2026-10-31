@@ -839,10 +839,11 @@ Every read names the run it comes from (`run: {id, generated_at}`); `?run=` take
 | `GET runs` | The runs kept, newest first |
 | `GET summary` | Counts per level, KEV per level, per exposure and level, assets, findings to review, the ten assets and CVEs with most ACT, exposure gaps |
 | `GET decisions` | One page of decisions, a few fields each (id, CVE, asset, level, SSVC, exposure, zone, KEV, EPSS, CVSS, due date, review flag, product, title); filters `level`, `cve`, `asset`, `exposure`, `zone`, `kev`, `needs_review`, `source`, `min_epss`, `min_cvss`, `product`, `q`, `due_before` (a day), `overdue` (v0.15.2); items also carry `first_seen` and `cve_updated`; `sort` by level (default), EPSS, CVSS, due date, CVE, asset |
-| `GET decisions/{id}` | One decision in full: rationale, SSVC inputs and their sources, reasons, fixes, due date |
+| `GET decisions/{id}` | One decision in full: rationale, SSVC inputs and their sources, reasons, fixes, due date; with the tenant's database, its `lifecycle` (§15.8) |
 | `GET cves/{cve}` | The CVE as the run knows it (description, CVSS, CWE, KEV, EPSS, SSVC inputs, fixes, dates) and the decisions on it, paged, `concerned: true`; with `not_affected`, the assets that have the product outside the vulnerable range. Only such assets: `concerned: false`. Neither: 404, "no asset of the tenant is concerned" |
 | `GET assets`, `GET assets/{asset}` | Assets with their counts per level, most ACT first; one asset and its decisions, paged |
 | `GET assets/{asset}/fixes` | The fix plan of an asset (v0.15.2): its decisions grouped by fix (`<package> <fixed version>` reported by the scanners), each group with the decisions it clears per level, its KEV count, its earliest due date and its CVEs; the group that clears most ACT first; then the decisions without a known fix, and among them those whose CVE record names a fix |
+| `GET findings/closed` | Findings closed since a day (v0.18.0, with the tenant's database, §15.8; without it 404): `since` (default 30 days ago), paged, most recent first |
 | `GET changes` | What changed since an earlier run (v0.15.2): `since` = `previous` (the run kept just before, default) or a run id; decisions `new`, `gone` or `changed` (another level), filters `kind`, `level`, `asset`; each with `why`, from the facts of both runs: first detected on a day by a source, CVE published or updated, added to KEV, EPSS, exposure, SSVC inputs and outcome. No earlier run: 404, "nothing to compare with yet" |
 
 An asset is named by its id (`host:web01.example.org`), its id without the kind (`web01.example.org`) or
@@ -860,14 +861,39 @@ in the daily run and the pods labelled `a2vm.io/verdict-reader=true` only, and l
 
 ### 15.6 Limits
 
-Runs as files on one volume, one replica, no history between runs beyond the runs kept: PostgreSQL
-(v0.18.0) brings history and replicas. Bearer tokens until service accounts. Read side only: the
-watch and the alert review do not ask the service for decisions yet (D15 step 3, write side).
+Without the tenant's database: runs as files on one volume, one replica, no history between runs
+beyond the runs kept. With it (v0.18.0, §15.8): history of the findings and several replicas.
+Bearer tokens until service accounts. Read side only: the watch and the alert review do not ask
+the service for decisions yet (D15 step 3, write side).
 
 ### 15.7 Tests
 
-`tests/test_verdict_service.py` (schema, push and its refusals, reads, retention, HTTP and CLI),
-`tests/test_v0140.py` (contract, chart, deploy job, release notes).
+`tests/test_verdict_service.py` (schema, push and its refusals, reads, retention, HTTP and CLI; each
+on the files and, with `A2VM_TEST_DSN`, on PostgreSQL), `tests/test_v0140.py` (contract, chart,
+deploy job, release notes), `tests/test_v0180.py` (database, row-level security, history, chart).
+
+### 15.8 Tenant's database and history of the findings (v0.18.0)
+
+With `database.enabled` (`A2VM_DATABASE=true`, docs/kubernetes.md §5) the service keeps its runs in
+the tenant's PostgreSQL (CloudNativePG cluster in the namespace, `verdict/service/pgstore.py`), schema
+`verdict`, created at start by `a2vm.db` (advisory lock: several replicas start together):
+
+| Table | Content |
+| --- | --- |
+| `verdict.runs` | One row per run: its receipt (JSON) and the triage document (gzip); the last `keep` runs (chart `verdict.keep`) |
+| `verdict.push_keys` | Idempotency: key of the push → run; dropped with its run |
+| `verdict.findings` | One row per finding ever decided: `opened_at`, `last_seen_at`, `last_run`, `closed_at`/`closed_run` (absent from a newer run), `reopened`, `level`, `level_since`, `levels` (the last 50 changes of level) |
+
+Every table has the tenant and row-level security (`FORCE`: the owner too); a transaction sets
+`a2vm.tenant` and sees that tenant's rows only. A push, its key and the findings it moves are one
+transaction, one at a time per tenant (advisory lock). Only the newest run moves the findings: a run
+pushed late (older `generated_at` than the newest) is kept and readable and changes none. The
+findings outlive the runs kept.
+
+The decision (`GET decisions/{id}`) carries `lifecycle` (the finding's row); `GET findings/closed`
+lists the findings closed since a day; the chat's tool `list_closed_findings` asks it. Connection:
+`A2VM_DB_DSN_FILE` (the cluster's secret `<db>-app`, key `uri`) and `A2VM_DB_CA` (its CA, key
+`ca.crt` only): `sslmode=verify-full`; the password is never printed (`describe()`).
 
 ## 16. Tool server of the conversational search (`verdict tools`, v0.15.0)
 

@@ -15,12 +15,11 @@ from pathlib import Path
 import pytest
 import yaml
 
-from via.alert.watch import State
 from via.service.review import Denied, Review, make_handler
 
 from .conftest import ROOT
 from .test_alert import PROFILE
-from .test_v0160 import READ, RUN, TENANT, _service, _watch, service  # noqa: F401 - fixture
+from .test_v0160 import READ, RUN, TENANT, _service, _watch, forget_alert, service  # noqa: F401 - fixture
 
 CHART = ROOT / "deploy" / "charts" / "a2vm-tenant"
 CONTACTS = """schema_version: 1
@@ -44,9 +43,7 @@ OPENER = urllib.request.build_opener(_NoRedirect)
 
 def _alerts(svc, url, token):
     assert _watch(url, token) == 0
-    state = State.load(svc.store.root / TENANT / "state.json")
-    state.certfr.discard("CERTFR-2024-ALE-006")
-    state.save()
+    forget_alert(svc)
     assert _watch(url, token) == 0
     return svc.store.alerts(TENANT)
 

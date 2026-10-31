@@ -136,18 +136,25 @@ def cmd_serve(args: argparse.Namespace) -> int:
     except (RegistryError, OSError) as exc:
         print(exc, file=sys.stderr)
         return 2
+    from a2vm.db import DatabaseError, open_database
+
+    from .intake.pgstore import MIGRATIONS, PgStore
+
+    try:
+        db = open_database("detect", MIGRATIONS)
+        if db is None:
+            Path(args.store).mkdir(parents=True, exist_ok=True)  # a new volume: /readyz waits for it
+    except (OSError, DatabaseError) as exc:
+        print(f"store: {exc}", file=sys.stderr)
+        return 2
+    store = PgStore(db, args.keep) if db else FileStore(args.store, args.keep)
     readers = "set" if "read" in registry.tokens else "MISSING"
     print(
         f"{registry.tenant}: {len(registry.collectors)} collector(s) declared "
-        f"({', '.join(registry.collectors) or 'none'}), read token {readers}, store {args.store}",
+        f"({', '.join(registry.collectors) or 'none'}), read token {readers}, store {store.describe()}",
         flush=True,
     )
-    try:
-        Path(args.store).mkdir(parents=True, exist_ok=True)  # a new volume: /readyz waits for it
-    except OSError as exc:
-        print(f"store {args.store}: {exc}", file=sys.stderr)
-        return 2
-    service = Service(registry, FileStore(args.store, args.keep), args.max_mb * 1024 * 1024)
+    service = Service(registry, store, args.max_mb * 1024 * 1024)
     httpd = serve(service, args.host, args.port)
     try:
         httpd.serve_forever()

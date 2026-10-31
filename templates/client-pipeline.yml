@@ -13,10 +13,10 @@
 #
 #     include:
 #       - project: vulnops/a2vm
-#         ref: v0.17.3
+#         ref: v0.18.0
 #         file: templates/client-pipeline.yml
 #     variables:
-#       A2VM_REF: v0.17.3        # same version as the include
+#       A2VM_REF: v0.18.0        # same version as the include
 #
 # Jobs:
 #   push to the default branch     validate (profile and targets)
@@ -33,6 +33,8 @@
 #                            A2VM_INTAKE_HOST, A2VM_INTAKE_ALLOW, A2VM_INTAKE_INGRESS_CONTROLLER
 #                            (nginx, traefik), A2VM_INTAKE_CLUSTER_ISSUER: its push endpoint (docs/collectors.md)
 #   A2VM_VERDICT_SERVICE  false: no decision service in the cluster (default true; docs/kubernetes.md)
+#   A2VM_DATABASE         true: the tenant's PostgreSQL (CloudNativePG) for the services, instead of
+#                            their volumes; A2VM_DATABASE_SIZE, _STORAGE_CLASS, _INSTANCES (docs/kubernetes.md §5)
 #   A2VM_CHAT_HOST        the analysts' chat on the decision service (Open WebUI); A2VM_CHAT_ALLOW,
 #                            A2VM_CHAT_ADMIN_EMAIL, A2VM_CHAT_RETENTION_DAYS, A2VM_CHAT_LLM_EGRESS... (docs/chat.md)
 #   A2VM_OIDC_ISSUER, A2VM_OIDC_CLIENT_ID, A2VM_OIDC_CLIENT_SECRET (masked), A2VM_OIDC_READERS,
@@ -210,6 +212,22 @@ deploy-k8s:
       else
         echo "A2VM_VERDICT_SERVICE=false: no decision service"
       fi
+    # The tenant's PostgreSQL (v0.18.0), with A2VM_DATABASE=true: a CloudNativePG cluster in the
+    # namespace, where the services keep their data instead of their volumes. The operator is
+    # installed once per Kubernetes cluster (deploy/cnpg/README.md); without it the job stops here.
+    - |
+      DATABASE=""
+      if [ "${A2VM_DATABASE:-false}" = "true" ]; then
+        if ! kubectl api-resources --api-group=postgresql.cnpg.io -o name 2>/dev/null | grep -q '^clusters\.'; then
+          echo "ERROR A2VM_DATABASE=true but the CloudNativePG operator is not installed in the cluster (deploy/cnpg/README.md)"
+          exit 1
+        fi
+        DATABASE="--set database.enabled=true"
+        if [ -n "${A2VM_DATABASE_SIZE:-}" ]; then DATABASE="$DATABASE --set database.storage.size=$A2VM_DATABASE_SIZE"; fi
+        if [ -n "${A2VM_DATABASE_STORAGE_CLASS:-}" ]; then DATABASE="$DATABASE --set database.storage.storageClass=$A2VM_DATABASE_STORAGE_CLASS"; fi
+        if [ -n "${A2VM_DATABASE_INSTANCES:-}" ]; then DATABASE="$DATABASE --set database.instances=$A2VM_DATABASE_INSTANCES"; fi
+        echo "A2VM_DATABASE=true: the services keep their data in the cluster a2vm-$(echo "$CI_PROJECT_NAME" | tr 'A-Z_' 'a-z-')-db"
+      fi
     # Conversational search (HLD §8), when A2VM_CHAT_HOST is set: Open WebUI and its tool server on
     # the decision service. Its session key, its first admin's password and the tools' token are made
     # once and kept in the Secret a2vm-tenant, the token's digest in the Secret a2vm-chat; none printed.
@@ -254,7 +272,7 @@ deploy-k8s:
         if [ -f watch-sources.yaml ]; then WATCH="$WATCH --set-file files.watchSources=watch-sources.yaml"; fi
         echo "A2VM_RUN_MODE=kubernetes: the daily run and the watch run in $NS; the scheduled pipelines do nothing"
       fi
-    # Sign-in of the analysts with the tenant's identity provider (v0.17.2), when A2VM_OIDC_ISSUER is
+    # Sign-in of the analysts with the tenant's identity provider (v0.17.0), when A2VM_OIDC_ISSUER is
     # set: the chat and, with A2VM_ALERTS_HOST, the review page of the alerts behind oauth2-proxy. The
     # proxy's cookie key and the key of the page's forms are made once and kept in the Secret a2vm-tenant.
     - |
@@ -334,7 +352,7 @@ deploy-k8s:
         --set image.tag="$A2VM_REF" \
         --set secret.name=a2vm-tenant \
         --set daily.schedule="${A2VM_K8S_SCHEDULE:-45 5 * * *}" \
-        $PULL $FILES $INTAKE $VERDICT $CHAT $WATCH $SIGNIN -f "$ENVF"
+        $PULL $FILES $INTAKE $VERDICT $DATABASE $CHAT $WATCH $SIGNIN -f "$ENVF"
       rm -rf "$I" "$V" "$C" "$W" "$O"
       kubectl -n "$NS" get cronjob,pvc
       if [ -n "$INTAKE" ]; then kubectl -n "$NS" get deployment,service,ingress -l app.kubernetes.io/component=detect; fi
@@ -342,6 +360,7 @@ deploy-k8s:
       if [ -n "$CHAT" ]; then kubectl -n "$NS" get deployment,ingress -l 'app.kubernetes.io/component in (chat,tools)'; fi
       if [ -n "$WATCH" ]; then kubectl -n "$NS" get deployment,cronjob -l 'app.kubernetes.io/component in (via,watch)'; fi
       if [ -n "$SIGNIN" ] && [ -n "${A2VM_ALERTS_HOST:-}" ]; then kubectl -n "$NS" get deployment,ingress -l 'app.kubernetes.io/component in (review,send)'; fi
+      if [ -n "$DATABASE" ]; then kubectl -n "$NS" get cluster -l app.kubernetes.io/component=database; fi
 
 # Exit code 3 = collection incomplete: the job shows as a warning and the pipeline goes on with
 # what was collected (plus the declared inventory).

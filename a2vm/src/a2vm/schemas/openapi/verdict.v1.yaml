@@ -128,7 +128,7 @@ paths:
         - $ref: "#/components/parameters/run"
         - {name: id, in: path, required: true, schema: {type: string}}
       responses:
-        "200": {description: The decision, content: {application/json: {schema: {type: object}}}}
+        "200": {description: The decision, content: {application/json: {schema: {$ref: "#/components/schemas/Decision"}}}}
         "401": {$ref: "#/components/responses/Problem"}
         "404": {$ref: "#/components/responses/Problem"}
   /v1/tenants/{tenant}/cves/{cve}:
@@ -224,6 +224,36 @@ paths:
         "400": {$ref: "#/components/responses/Problem"}
         "401": {$ref: "#/components/responses/Problem"}
         "404": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/findings/closed:
+    get:
+      tags: [read]
+      operationId: listClosedFindings
+      summary: >-
+        Findings closed since a day: in a run and absent from a newer one (fixed, or no longer
+        detected), most recent first (since v0.18.0, with the tenant's database; 404 without it)
+      security:
+        - readToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+        - {name: since, in: query, schema: {type: string, format: date}, description: "a day (default: 30 days ago)"}
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/offset"
+      responses:
+        "200":
+          description: One page of closed findings
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [since, total, items]
+                properties:
+                  since: {type: string}
+                  total: {type: integer}
+                  next_offset: {type: integer}
+                  items: {type: array, items: {$ref: "#/components/schemas/Lifecycle"}}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
   /healthz:
     get:
       tags: [operations]
@@ -237,7 +267,7 @@ paths:
       operationId: readyz
       security: []
       responses:
-        "200": {description: Ready (store writable)}
+        "200": {description: Ready (store writable, or the database reached)}
         "503": {description: Not ready}
 components:
   securitySchemes:
@@ -320,6 +350,42 @@ components:
               needs_review: {type: boolean}
               product: {type: string}
               title: {type: string}
+    Decision:
+      type: object
+      description: A row of the triage (a2vm.triage/1) with its run, id and due date; its other fields as in the triage.
+      required: [run, id]
+      properties:
+        run: {$ref: "#/components/schemas/RunRef"}
+        id: {type: string}
+        due_date: {type: [string, "null"]}
+        lifecycle: {$ref: "#/components/schemas/Lifecycle"}
+      additionalProperties: true
+    Lifecycle:
+      type: object
+      description: >-
+        The life of a finding across the runs (since v0.18.0, with the tenant's database): when it
+        was first decided, last seen, closed (absent from a newer run), reopened, and its levels.
+      required: [id, cve_id, asset, opened_at, last_seen_at, level, level_since, levels]
+      properties:
+        id: {type: string}
+        cve_id: {type: string}
+        asset: {type: string}
+        opened_at: {type: string}
+        last_seen_at: {type: string}
+        last_run: {type: string}
+        closed_at: {type: string}
+        closed_run: {type: string}
+        reopened: {type: integer}
+        level: {enum: [ACT, ATTEND, TRACK]}
+        level_since: {type: string}
+        levels:
+          type: array
+          items:
+            type: object
+            properties:
+              at: {type: string}
+              level: {type: string}
+              run: {type: string}
     RunRef:
       type: object
       required: [id, generated_at]

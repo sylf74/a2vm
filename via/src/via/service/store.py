@@ -12,7 +12,9 @@
                                              validated, dismissed, sent, send-failed)
 
 One writer (the service), each file written to a temporary name then renamed. Runs older than
-`keep_days` are removed; the journal keeps its last lines (via.alert.journal).
+`keep_days` are removed; the journal keeps its last lines (via.alert.journal). Since v0.18.0 the
+tenant's PostgreSQL replaces these files when the tenant has one (`pgstore.PgWatchStore`, same
+interface: the methods below that read through `file`, `events` and `translation` serve both).
 """
 
 from __future__ import annotations
@@ -64,6 +66,9 @@ class WatchStore:
         self.root = Path(root)
         self.keep_days = keep_days
         self._lock = threading.Lock()
+
+    def describe(self) -> str:
+        return f"files {self.root}"
 
     def ready(self) -> bool:
         try:
@@ -235,10 +240,9 @@ class WatchStore:
             by_alert.setdefault(e.get("alert", ""), []).append(e)
         out, seen = [], set()
         for rid in self.runs(tenant):
-            index_path = self._t(tenant) / "runs" / rid / "index.json"
             try:
-                index = json.loads(index_path.read_text(encoding="utf-8"))
-            except (OSError, ValueError):
+                index = json.loads(self.file(tenant, rid, "index.json") or b"[]")
+            except ValueError:
                 continue
             for entry in index:
                 aid = entry.get("id", "")

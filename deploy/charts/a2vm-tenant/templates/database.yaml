@@ -1,0 +1,78 @@
+{{- /*
+The tenant's PostgreSQL (v0.18.0, HLD D15): a CloudNativePG Cluster in the namespace. The operator
+makes the application role `app`, owner of the database `app`, its password in the Secret
+<db>-app (key uri: the connection string the services read as a file) and the cluster's CA in
+<db>-ca; no superuser access. Each pillar creates its own schema at start (a2vm.db). The cluster
+and its volumes survive an uninstall (resource policy keep): delete it by hand to drop the data.
+*/ -}}
+{{- if .Values.database.enabled }}
+{{- $db := include "a2vm-tenant.dbName" . }}
+{{- $d := .Values.database }}
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ $db }}
+  labels:
+    {{- include "a2vm-tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: database
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  instances: {{ $d.instances }}
+  {{- if $d.imageName }}
+  imageName: {{ $d.imageName | quote }}
+  {{- end }}
+  enableSuperuserAccess: false
+  bootstrap:
+    initdb:
+      database: app
+      owner: app
+  storage:
+    size: {{ $d.storage.size | quote }}
+    {{- if $d.storage.storageClass }}
+    storageClass: {{ $d.storage.storageClass | quote }}
+    {{- end }}
+  {{- with $d.resources }}
+  resources:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.nodeSelector }}
+  affinity:
+    nodeSelector:
+      {{- toYaml . | nindent 6 }}
+  {{- end }}
+---
+# The instances: from the tenant's services (5432), from each other (replication, status) and from
+# the operator (status); egress is left open: the instances talk to the Kubernetes API.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $db }}
+  labels:
+    {{- include "a2vm-tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: database
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/cluster: {{ $db }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        {{- range list "via" "detect" "verdict" }}
+        - podSelector:
+            matchLabels:
+              {{- include "a2vm-tenant.selector" (dict "root" $ "component" .) | nindent 14 }}
+        {{- end }}
+      ports:
+        - {port: 5432, protocol: TCP}
+    - from:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: {{ $db }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $d.operatorNamespace | quote }}
+      ports:
+        - {port: 5432, protocol: TCP}
+        - {port: 8000, protocol: TCP}
+{{- end }}

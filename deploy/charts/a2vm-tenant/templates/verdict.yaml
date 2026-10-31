@@ -1,11 +1,13 @@
 {{- /*
-Decision service of the tenant, read side (LLD triage §15): `verdict serve`, one replica on a
-volume of its own (runs as files until PostgreSQL, D15), the digests of its publish and read tokens
-from a Secret. Fed by the daily run's `publish` step; read inside the cluster, no ingress.
+Decision service of the tenant, read side (LLD triage §15): `verdict serve`, the digests of its
+publish and read tokens from a Secret. Its runs in the tenant's PostgreSQL with database.enabled
+(v0.18.0: database.serviceReplicas replicas), else as files on a volume of its own (one replica). Fed by the daily run's `publish` step; read inside the cluster, no ingress.
 */ -}}
 {{- if .Values.verdict.enabled }}
 {{- include "a2vm-tenant.checks" . }}
 {{- $name := include "a2vm-tenant.name" . }}
+{{- $db := .Values.database.enabled }}
+{{- if not $db }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -24,6 +26,7 @@ spec:
     requests:
       storage: {{ .Values.verdict.storage.size | quote }}
 ---
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -32,9 +35,15 @@ metadata:
     {{- include "a2vm-tenant.labels" . | nindent 4 }}
     app.kubernetes.io/component: verdict
 spec:
+  {{- if $db }}
+  replicas: {{ .Values.database.serviceReplicas }}
+  strategy:
+    type: RollingUpdate
+  {{- else }}
   replicas: 1             # one writer on a ReadWriteOnce volume
   strategy:
     type: Recreate
+  {{- end }}
   selector:
     matchLabels:
       {{- include "a2vm-tenant.selector" (dict "root" . "component" "verdict") | nindent 6 }}
@@ -78,6 +87,10 @@ spec:
             - --keep={{ .Values.verdict.keep }}
             - --max-mb={{ .Values.verdict.maxMb }}
             - --port=8080
+          {{- if $db }}
+          env:
+            {{- include "a2vm-tenant.dbEnv" . | nindent 12 }}
+          {{- end }}
           ports:
             - name: http
               containerPort: 8080
@@ -93,8 +106,12 @@ spec:
             capabilities:
               drop: [ALL]
           volumeMounts:
+            {{- if $db }}
+            {{- include "a2vm-tenant.dbMounts" . | nindent 12 }}
+            {{- else }}
             - name: data
               mountPath: /data
+            {{- end }}
             - name: digests
               mountPath: /verdict-secret
               readOnly: true
@@ -105,9 +122,13 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
       volumes:
+        {{- if $db }}
+        {{- include "a2vm-tenant.dbVolumes" . | nindent 8 }}
+        {{- else }}
         - name: data
           persistentVolumeClaim:
             claimName: {{ $name }}-runs
+        {{- end }}
         - name: digests
           secret:
             secretName: {{ .Values.verdict.digestsSecret }}
@@ -155,6 +176,11 @@ spec:
       ports:
         - port: 8080
           protocol: TCP
+  {{- if $db }}
+  egress:                 # the tenant's database only
+    {{- include "a2vm-tenant.dbEgress" . | nindent 4 }}
+  {{- else }}
   egress: []              # the service opens no connection
+  {{- end }}
 {{- end }}
 {{- end }}

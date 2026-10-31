@@ -280,7 +280,7 @@ def test_deploy_job_makes_the_chat_secrets_once_and_hands_the_values_to_the_char
     for k in ("chat-secret-key", "chat-admin-password", "chat-tools-token"):
         assert f"put {k} " in script
     assert "create secret generic a2vm-chat" in block and "chat_values.py" in block
-    assert "$INTAKE $VERDICT $CHAT" in script
+    assert "$INTAKE $VERDICT $DATABASE $CHAT" in script
     assert script.index('CHAT=""') < script.index("put chat-tools-token")
 
 

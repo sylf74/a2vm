@@ -12,17 +12,18 @@ other files of `docs/`.
 
 | Path | What |
 | --- | --- |
-| `a2vm/` | Common contract: data model, JSON schemas of the exchange files and OpenAPI contracts of the services, settings, profiles, LLM client and guard, CISA SSVC tables, matching of declared assets |
+| `a2vm/` | Common contract: data model, JSON schemas of the exchange files and OpenAPI contracts of the services, settings, profiles, LLM client and guard, CISA SSVC tables, matching of declared assets, connection to the tenant's database (`a2vm.db`) |
 | `via/` | Pillar 1, intelligence (records) and watch (alerts); watch service, review page and sender on Kubernetes (`via serve`, `via service`) |
 | `detect/` | Pillar 2, detection: SSH collection, OpenVAS, declared inventory, external scan; collector agent and detection service (`detect agent`, `detect serve`, `detect fetch`) |
 | `verdict/` | Pillar 3, asset context, SSVC decision, restitution (reporting database, Grafana); decision service and tool server of the analysts' chat (`verdict serve`, `verdict push`, `verdict tools`) |
 | `templates/client-pipeline.yml` | The pipeline every tenant project includes at a version tag |
 | `examples/` | Fictitious tenants (`lab`, `demo-industrie`) |
 | `deploy/portal/` | Terraform and cloud-init of the reporting database and Grafana |
-| `deploy/charts/a2vm-tenant/` | Helm chart: a tenant's daily run as a Kubernetes CronJob (D15 step 1, `docs/kubernetes.md`), its detection service (D15 step 2, `docs/collectors.md`), its decision service (D15 step 3), the analysts' chat (`docs/chat.md`), the watch on Kubernetes (`A2VM_RUN_MODE`) and the review page of the alerts with the analysts' sign-in (`docs/sign-in.md`) |
+| `deploy/charts/a2vm-tenant/` | Helm chart: a tenant's daily run as a Kubernetes CronJob (D15 step 1, `docs/kubernetes.md`), its detection service (D15 step 2, `docs/collectors.md`), its decision service (D15 step 3), the analysts' chat (`docs/chat.md`), the watch on Kubernetes (`A2VM_RUN_MODE`) and the review page of the alerts with the analysts' sign-in (`docs/sign-in.md`), the tenant's PostgreSQL (CloudNativePG `Cluster`) |
 | `deploy/intake/` | Script of the job `deploy-k8s` that turns the collectors' tokens into digests (stdlib and PyYAML only) |
 | `deploy/chat/` | Scripts of the job `deploy-k8s` that write the values of the chat and of the analysts' sign-in and review page (stdlib only) |
 | `deploy/collector/` | Install script of a collector on its VM (`docs/collectors.md` §2) |
+| `deploy/cnpg/` | Installation of the CloudNativePG operator, once per Kubernetes cluster (the tenants' PostgreSQL, `docs/kubernetes.md` §5) |
 | `images/` | Dockerfile of the pillar images (one per pillar, built by the `images` job on tags) |
 | `scripts/` | Generators of committed files: dashboards, decision diagrams, neutral Word template |
 
@@ -68,7 +69,9 @@ python scripts/make_decision_diagrams.py --check
 ```
 
 Without `A2VM_TEST_DSN` (a disposable PostgreSQL 16+), the database tests are skipped; the CI test
-job always runs them.
+job always runs them. With it, the tests of the three services run on their files and on
+PostgreSQL (a new database and role per test; the administrator connection needs CREATEDB and
+CREATEROLE).
 
 ## Releasing
 

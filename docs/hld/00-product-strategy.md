@@ -295,9 +295,10 @@ Migration, each step usable on its own:
 2. **Collectors and detection intake** (v0.13.0): collectors near the networks push their
    detections to the detection service; the daily run reads them instead of collecting; the
    tenant project declares its collectors (LLD detection §8).
-3. **Shared platform.** PostgreSQL in the cluster (reporting database and the future history
-   database), the event bus, the observability stack; the reporting database may move from its
-   VM into the cluster.
+3. **Shared platform.** PostgreSQL in the cluster: since v0.18.0 each tenant has its own cluster
+   (CloudNativePG, in its namespace) behind its services, a schema per pillar, row-level security
+   per tenant; the reporting database may move from its VM into the cluster. Then the event bus
+   and the observability stack.
 4. **The two APIs that unblock the most**: decisions (pillar 3, `a2vm.decision_request/1` →
    `a2vm.decision/1`) and records (pillar 1, VIA team); the watch asks verdict for the decision of
    each asset concerned instead of applying its own urgency rules; the daily run and the watch
@@ -370,7 +371,7 @@ its LLDs. The Python entry points between pillars (`a2vm.extensions`, until v0.1
 | Portal deployment | Infrastructure as code: Terraform creates the portal instance and its security group (Scaleway first, a module per cloud provider); cloud-init installs PostgreSQL, Grafana and the HTTPS proxy in containers; secrets generated on the instance (`deploy/portal/`) | In place (v0.11.5) |
 | Restitution | Grafana dashboards shipped with A2VM, reading the reporting database: overview of a client, which assets to fix first, which CVEs to fix first (snapshots compared, filters); Qlik Sense through its PostgreSQL connection or a file connector, once specified | Overview (v0.11.5), per asset and per CVE (v0.11.6); Qlik Sense waiting for its interface specifications |
 | Client portal | Grafana, one organisation per tenant, reading the reporting database | Demo in place (v0.11.5) |
-| Decision service | `verdict serve` in each tenant's namespace: the last runs of the tenant (`a2vm.triage/1`) behind the read API `verdict.v1` (`a2vm/src/a2vm/schemas/openapi/verdict.v1.yaml`), for analysts and their tools | Read side in place (v0.14.0); write side and PostgreSQL planned |
+| Decision service | `verdict serve` in each tenant's namespace: the last runs of the tenant (`a2vm.triage/1`) behind the read API `verdict.v1` (`a2vm/src/a2vm/schemas/openapi/verdict.v1.yaml`), for analysts and their tools | Read side in place (v0.14.0); the tenant's PostgreSQL and the history of the findings (v0.18.0); write side planned |
 
 ## 7. Tenant and client context
 
@@ -522,8 +523,8 @@ release.
 | v0.17.0 | Sign-in of the analysts with the tenant's identity provider (OIDC, Keycloak first; the directory's groups give the rights: readers, validators, admins) in the chat, and the review page of the alerts on `via serve` behind oauth2-proxy: a validator corrects a sheet, validates it or dismisses it, journaled with who; a sender mails the validated alerts; GitLab only deploys | 1, 3 |
 | v0.17.1 | English reference and translations (D16): the watch writes the alert sheet in English; each contact has a language; on the review page a validator enriches the reference, chooses the recipients, checks and corrects the translation the tenant's LLM made for each of their languages (facts and structure checked by code), then validates; the sender mails each language its version and its Word file | 1 |
 | v0.17.2 | Fix: every analyst signed in through the provider sees the tenant's model in the chat (`BYPASS_MODEL_ACCESS_CONTROL`) | 3 |
-| v0.17.3 (current) | The rest of A2VM in English (D16): rationales (template and LLM), reasons and assumptions of the decisions, watch sources; the client's deliverables (daily report, HTML dashboard, chat documents) labelled in the tenant's language (`client.language`, catalogue `verdict.i18n`), the texts of the decisions kept in English; a French version of each Grafana dashboard | 1, 2, 3 |
-| v0.18.0 (to confirm) | PostgreSQL (CloudNativePG) behind `detect serve`, `verdict serve` and `via serve`: history between runs, finding lifecycle, several replicas, row-level security per tenant | 2, 3 |
+| v0.17.3 | The rest of A2VM in English (D16): rationales (template and LLM), reasons and assumptions of the decisions, watch sources; the client's deliverables (daily report, HTML dashboard, chat documents) labelled in the tenant's language (`client.language`, catalogue `verdict.i18n`), the texts of the decisions kept in English; a French version of each Grafana dashboard | 1, 2, 3 |
+| v0.18.0 (current) | The tenant's PostgreSQL (CloudNativePG cluster in its namespace, `A2VM_DATABASE=true`; the operator once per Kubernetes cluster) behind `via serve`, `detect serve` and `verdict serve`, same interfaces as their files: a schema per pillar created at start, row-level security per tenant, no volume and several replicas per service; life of each finding across runs (opened, closed, reopened, levels) in the decision service and the chat | 1, 2, 3 |
 | v0.19.0 (to confirm) | Dispatch channels, set per tenant and per contact: mail (as today), and ITSM connectors that open a ticket or a case from a validated alert and, later, from an ACT decision: TheHive first (case or alert through its API), ServiceNow (incident or security incident through its REST API), others behind the same connector interface; the ticket's reference and state kept with the alert, credentials in the tenant's secrets (pillar 4, chapter 40) | 1, 4 |
 | Next (to confirm) | Client portal VM (Grafana) in service; decisions asked by the watch (D15 step 3, write side); asset graph (Apache AGE in PostgreSQL or Neo4j, to settle) | 1, 3, 4 |
 | Then (to confirm) | Dispatch & Capitalization; Emergency Actions | 4, 5 |

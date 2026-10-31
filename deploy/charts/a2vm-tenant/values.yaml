@@ -31,6 +31,26 @@ files:
 collect:
   mode: local
 
+# The tenant's PostgreSQL (v0.18.0, HLD D15): a CloudNativePG cluster in the namespace, where the
+# watch service, the detection service and the decision service keep their data instead of their
+# volumes (one schema per pillar, row-level security per tenant). Needs the CloudNativePG operator,
+# installed once per Kubernetes cluster (docs/kubernetes.md §9). deploy-k8s enables it with
+# A2VM_DATABASE=true.
+database:
+  enabled: false
+  instances: 1          # PostgreSQL instances: 1, or 3 for a standby that takes over
+  imageName: ""         # empty: the operator's default PostgreSQL image
+  storage:
+    size: 5Gi
+    storageClass: ""
+  resources:
+    requests: {cpu: 50m, memory: 256Mi}
+    limits: {memory: 1Gi}
+  # Replicas of each service once its data is in the database (no volume to share any more).
+  serviceReplicas: 1
+  operatorNamespace: cnpg-system   # where the operator runs: it reaches the instances
+  dnsNamespace: kube-system        # namespace of the cluster DNS (the services resolve <db>-rw)
+
 # Detection service of the tenant (`detect serve`, LLD detection §8.2): receives the pushes of the
 # collectors declared in the tenant's collectors.yaml. deploy-k8s fills this section when the
 # tenant project has a collectors.yaml (docs/collectors.md).

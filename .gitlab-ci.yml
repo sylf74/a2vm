@@ -40,6 +40,7 @@ chart:
     - apk add --no-cache -q helm
     - helm lint deploy/charts/a2vm-tenant --strict --set tenant=lab --set image.registry=registry.example.org/vulnops/a2vm --set-file files.profile=examples/lab/client.yaml --set-file files.targets=examples/lab/targets.yaml --set secret.name=a2vm-tenant
     - helm template a2vm deploy/charts/a2vm-tenant --set tenant=lab --set image.registry=registry.example.org/vulnops/a2vm --set-file files.profile=examples/lab/client.yaml --set secret.name=a2vm-tenant > /dev/null
+    - helm template a2vm deploy/charts/a2vm-tenant --set tenant=lab --set image.registry=registry.example.org/vulnops/a2vm --set-file files.profile=examples/lab/client.yaml --set secret.name=a2vm-tenant --set database.enabled=true --set verdict.enabled=true --set verdict.digestsSecret=a2vm-verdict --set watch.enabled=true --set watch.digestsSecret=a2vm-via > /dev/null
 
 test:
   stage: test
