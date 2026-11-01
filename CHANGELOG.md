@@ -31,8 +31,11 @@ An asset patched clean stays known; a fix is told from a scan that did not run; 
   answer in the language of the question (a model mixed in another script).
 - `docs/operations.md`: operator's manual (where each part runs, usual actions, checks, known
   failures and remedies, upgrades, stopping the cluster).
-- LLD triage §12, §13, §14.4, §15; HLD roadmap (iTop connector planned in v0.20.0);
-  `docs/reporting.md`.
+- HLD roadmap: v0.18.2 (automated cloud scanner, to confirm); v0.19.0 renamed "dispatch channels:
+  mail, ITSM, SIRP": remediation tickets in the ITSM (iTop first, then ServiceNow) and, on a
+  suspected compromise only, alerts in TheHive (a SIRP, not an ITSM), two flows side by side;
+  v0.20.0 the iTop CMDB connector. HLD chapter 40.
+- LLD triage §12, §13, §14.4, §15; `docs/reporting.md`.
 
 **Upgrade**: run `verdict db init` once on the reporting database (schema version 3,
 `docs/reporting.md`), then move `ref` and `A2VM_REF` to `v0.18.1` and push. Import the dashboard
