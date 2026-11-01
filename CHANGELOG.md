@@ -29,6 +29,8 @@ An asset patched clean stays known; a fix is told from a scan that did not run; 
   their bar chart (`xField`): the chart showed no bar.
 - Chat: the instructions tell an asset scanned clean from one not scanned, and keep the whole
   answer in the language of the question (a model mixed in another script).
+- `docs/operations.md`: operator's manual (where each part runs, usual actions, checks, known
+  failures and remedies, upgrades, stopping the cluster).
 - LLD triage §12, §13, §14.4, §15; HLD roadmap (iTop connector planned in v0.20.0);
   `docs/reporting.md`.
 

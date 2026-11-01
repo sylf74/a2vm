@@ -6,7 +6,7 @@ explained, reviewed by an analyst, and restituted in reports and dashboards.
 
 Read first: `docs/hld/00-product-strategy.md` (goals, decisions D1–D15, contracts), then the
 chapter and the LLD of the pillar you touch (`docs/hld/`, `docs/lld/`). Operating guides are the
-other files of `docs/`.
+other files of `docs/`; day-to-day operation: `docs/operations.md`.
 
 ## Layout
 
