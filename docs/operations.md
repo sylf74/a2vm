@@ -122,7 +122,7 @@ shows an asset, with its scans since v0.18.1, even when it has no finding.
 | Daily run `Init:Error`, step `collect`: "no detection received from the collectors", each source "nothing received yet" | The detection service has nothing yet: a new database, collectors not run since, or their pushes refused | Run the connectors on the collector (§2), check the pushes in the detection service's log, then the daily run again |
 | Step `collect`: "Another run holds the working volume" | A daily run is still running, or one was killed holding the lock | Wait for it; a lock older than the run's deadline (`daily.activeDeadlineSeconds`) is taken over by the next run |
 | Step `collect`: a source "older than max_age_hours" | The collector did not push today (timer, scan failed) | Its journal on the collector; the run goes on with the other sources |
-| Collector: `docker pull` or `podman pull` "HTTP Basic: Access denied" | The registry login of the VM has expired | A deploy token with `read_registry`, then `docker login <registry> -u <token user> --password-stdin`, the password read from the terminal, never typed on the command line |
+| Collector: `docker pull` or `podman pull` "HTTP Basic: Access denied" | The registry login of the VM has expired or its deploy token was revoked; or `docker login` used another user name than the token's | A new deploy token and a new login (§5, "Registry login of a collector") |
 | Collector journal: push refused `401` or `403` | Token of the collector changed or not declared in `collectors.yaml` | `docs/collectors.md` (declaration and tokens) |
 | Watch: `inventory none yet` | The daily run has not pushed its inventory to the watch service (step `inventory`; needs `A2VM_RUN_MODE: kubernetes`) | The log of the step `inventory` of the last daily run; it warns and keeps the previous inventory when the service cannot be reached |
 | Services restart two or three times after `A2VM_DATABASE=true` | They wait for the database's secret while the cluster initialises | None: they settle within two minutes |
@@ -161,6 +161,27 @@ When the tag's `images` job is green: in the tenant project, change `ref` and `A
 `.gitlab-ci.yml` and push; `deploy-k8s` redeploys. Read the release's **Upgrade** paragraph in
 `CHANGELOG.md` first: some releases need `verdict db init` on the reporting database, or a
 dashboard imported again.
+
+### Registry login of a collector
+
+A collector pulls its image from the registry of the code project with a deploy token of its own,
+read-only, that can be revoked without touching the cluster:
+
+1. In GitLab, project `vulnops/a2vm` > Settings > Repository > Deploy tokens > Add token:
+   name and **Username** `collector-<host>` (left empty, GitLab makes `gitlab+deploy-token-<n>`,
+   shown in the list of tokens), an expiry date, scope **`read_registry` only** (no
+   `read_repository`, no `write_registry`). GitLab shows the password once.
+2. On the collector, log in with the token's **user name**, the password pasted at the prompt
+   (not echoed, not kept in the shell history):
+
+   ```bash
+   read -rsp 'Deploy token password: ' T && echo && printf '%s' "$T" | sudo docker login registry.example.org:5050 -u collector-scan01 --password-stdin; unset T
+   ```
+
+   `Login Succeeded` is expected; Podman: `sudo podman login` with the same options. Still
+   "Access denied": the user name is not the token's, the scope is not `read_registry`, or the
+   token has expired (the list of deploy tokens shows all three).
+3. Note the expiry date: the next pull after it fails the same way.
 
 ### A collector
 
