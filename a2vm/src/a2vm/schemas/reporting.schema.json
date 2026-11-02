@@ -132,9 +132,17 @@
           "counts": {"$ref": "#/$defs/counts"},
           "kind": {"type": "string"},
           "scans": {"type": "object", "additionalProperties": {"type": "string"}, "description": "Last scan of the asset per source, a scan without finding included (since v0.18.1)"},
-          "last_seen": {"type": "string"}
+          "last_seen": {"type": "string"},
+          "cmdb_class": {"type": "string", "description": "Class of its configuration item in the CMDB (since v0.19.0)"},
+          "cmdb_status": {"type": "string", "description": "Status of its configuration item (since v0.19.0)"},
+          "criticality": {"type": "string", "description": "Business criticality of its configuration item (since v0.19.0)"},
+          "coverage": {"type": "string", "description": "Its scan coverage state (since v0.19.0)"}
         }
       }
+    },
+    "coverage": {
+      "type": "object",
+      "description": "Scan coverage of the run, as in triage.json (since v0.19.0); empty when the assets were built before"
     }
   },
   "$defs": {

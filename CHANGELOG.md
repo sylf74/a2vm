@@ -5,6 +5,46 @@ analyst and, under **Upgrade**, what a tenant must do when it moves to that tag 
 `A2VM_REF` in its `.gitlab-ci.yml`). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
 §11) and the LLDs. A release adds its entry here in the same merge request (CLAUDE.md, Releasing).
 
+## v0.19.0 — 2026-11-02
+
+The tenant's CMDB (iTop) read by A2VM, and the scan coverage of every host against it.
+
+- CMDB as a detection source (`cmdb`, pillar 2): a connector `type: itop` of the collector reads
+  every physical and virtual device of iTop (`PhysicalDevice`, `VirtualDevice` and their
+  subclasses) over the REST API, `core/get` only: A2VM never writes to the CMDB. Each item with a
+  name becomes a host observation with its addresses (management IP, interfaces) and its item
+  (class, key, status, criticality, organisation, type). `detect cmdb fetch` for a test.
+- Asset context (pillar 3): the CMDB comes after a declaration of the profile and before its
+  rules. Business criticality high, medium, low → Mission Prevalence essential, support, minimal;
+  owner from the item's first contact, else its organisation. The CMDB is not a scan: it is never
+  one of an asset's `scans`.
+- Scan coverage of each host (`coverage.json`, `triage.json` `coverage`): `not-in-cmdb`,
+  `retired-but-alive`, `not-expected`, `not-scannable`, `never-scanned`, `stale`, `partial`,
+  `covered`, against the means of detection its CMDB class expects (profile `coverage:`; defaults:
+  servers, virtual machines, hypervisors `openvas` and `trivy|dnf-updateinfo`, PCs `edr`, every
+  other class `openvas`; `stale_days` 7). Without a CMDB, every host is judged as in production.
+- Decision service: `GET …/coverage` (filters `state`, `gaps`, `class`, `q`), the coverage in the
+  summary, the item and coverage state on each asset (`verdict.v1`, added only). Chat tool
+  `list_coverage`.
+- Reporting database, schema version 4: table `coverage`, views `coverage_facts` and
+  `latest_coverage`, coverage totals per run, the item of each asset. Grafana dashboard `coverage`
+  (and its French version): one row per host with its class, status, criticality, coverage, the
+  means missing and the last date each means saw it.
+- `detect cmdb export triage.json --organization <org>`: the hosts scanned but not in the CMDB as
+  a CSV for the CSV import of iTop, checked and imported by a person.
+- iTop extension `deploy/itop/a2vm-iot-device` (1.0.1): class `IoTDevice` for the connected
+  objects with an address (cameras, TVs, media players, energy meters, sensors).
+- `docs/cmdb.md` (new), `docs/collectors.md`, `docs/reporting.md`, `docs/operations.md`; LLD
+  detection §3.5, triage §5.2, §13, §14.3, §14.6, §15.4, §16.1; HLD chapters 20, 30, roadmap
+  (v0.20.0: the dispatch channels, after the CMDB).
+
+**Upgrade**: run `verdict db init` once on the reporting database (schema version 4,
+`docs/reporting.md`), then move `ref` and `A2VM_REF` to `v0.19.0` and push; pull the new `detect`
+image on the collectors. For the CMDB (`docs/cmdb.md`): a read-only account in iTop, a connector
+`itop` on the collector and its timer, the source `cmdb` in `collectors.yaml`. Import the
+dashboard `verdict grafana dashboard coverage` (and `--language fr`). Without a CMDB nothing else
+changes: the coverage judges every host as in production.
+
 ## v0.18.3 — 2026-11-02
 
 Fixes of the cloud scanner found at its first deployment.

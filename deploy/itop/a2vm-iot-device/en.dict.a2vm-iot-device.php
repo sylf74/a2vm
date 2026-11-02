@@ -1,0 +1,32 @@
+<?php
+// SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+
+Dict::Add('EN US', 'English', 'English', [
+	'Class:IoTDevice' => 'Connected object',
+	'Class:IoTDevice+' => 'Connected objects (IoT): cameras, TVs, media players, energy meters, sensors',
+	'Class:IoTDevice/ComplementaryName' => '%1$s - %2$s',
+	'Class:IoTDevice/Attribute:device_type' => 'Device type',
+	'Class:IoTDevice/Attribute:device_type+' => '',
+	'Class:IoTDevice/Attribute:device_type/Value:camera' => 'Camera',
+	'Class:IoTDevice/Attribute:device_type/Value:camera+' => '',
+	'Class:IoTDevice/Attribute:device_type/Value:tv' => 'TV',
+	'Class:IoTDevice/Attribute:device_type/Value:tv+' => '',
+	'Class:IoTDevice/Attribute:device_type/Value:media_player' => 'Media player',
+	'Class:IoTDevice/Attribute:device_type/Value:media_player+' => '',
+	'Class:IoTDevice/Attribute:device_type/Value:energy' => 'Energy (meter, inverter gateway)',
+	'Class:IoTDevice/Attribute:device_type/Value:energy+' => '',
+	'Class:IoTDevice/Attribute:device_type/Value:sensor' => 'Sensor',
+	'Class:IoTDevice/Attribute:device_type/Value:sensor+' => '',
+	'Class:IoTDevice/Attribute:device_type/Value:smart_home' => 'Smart home hub',
+	'Class:IoTDevice/Attribute:device_type/Value:smart_home+' => '',
+	'Class:IoTDevice/Attribute:device_type/Value:appliance' => 'Appliance',
+	'Class:IoTDevice/Attribute:device_type/Value:appliance+' => '',
+	'Class:IoTDevice/Attribute:device_type/Value:other' => 'Other',
+	'Class:IoTDevice/Attribute:device_type/Value:other+' => '',
+	'Class:IoTDevice/Attribute:managementip' => 'Management IP',
+	'Class:IoTDevice/Attribute:managementip+' => '',
+	'Class:Model/Attribute:type/Value:IoTDevice' => 'Connected object',
+	'Class:Model/Attribute:type/Value:IoTDevice+' => '',
+	'Menu:IoTDevice' => 'Connected objects',
+	'Menu:IoTDevice+' => '',
+]);

@@ -5,7 +5,7 @@
   verdict db init --dsn …                   create or update the schema (administrator, once per version)
   verdict db grant ROLE TENANT… --dsn …     reading role for a tool (Grafana, Qlik Sense), limited to tenants
   verdict grafana dashboard NAME            print a Grafana dashboard (JSON, to import): overview, assets, cves,
-                                            remediation;
+                                            remediation, coverage;
                                             --language fr for its French version
 
 The jobs read the connection from A2VM_REPORTING_DSN and the server's certificate from
@@ -70,7 +70,7 @@ def cmd_db_grant(args: argparse.Namespace) -> int:
     return 0
 
 
-DASHBOARDS = ("overview", "assets", "cves", "remediation")
+DASHBOARDS = ("overview", "assets", "cves", "remediation", "coverage")
 
 
 LANGUAGES = ("en", "fr")

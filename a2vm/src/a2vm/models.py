@@ -133,6 +133,28 @@ class ExternalScan:
     max_age_days: int = 8
 
 
+# Means of detection expected per CMDB class (v0.19.0), each entry "a|b": one of these sources.
+DEFAULT_EXPECTED: dict[str, list[str]] = {
+    "Server": ["openvas", "trivy|dnf-updateinfo"],
+    "VirtualMachine": ["openvas", "trivy|dnf-updateinfo"],
+    "Hypervisor": ["openvas", "trivy|dnf-updateinfo"],
+    "PC": ["edr"],
+    "default": ["openvas"],
+}
+
+
+@dataclass
+class CoveragePolicy:
+    """`coverage:` of the client profile: when a scan is stale, which means each class expects."""
+
+    stale_days: int = 7
+    expected: dict[str, list[str]] = field(default_factory=lambda: dict(DEFAULT_EXPECTED))
+
+    def expected_for(self, cmdb_class: str | None) -> list[list[str]]:
+        entries = self.expected.get(cmdb_class or "", self.expected.get("default", DEFAULT_EXPECTED["default"]))
+        return [[s.strip() for s in entry.split("|") if s.strip()] for entry in entries]
+
+
 @dataclass
 class PublishedEndpoint:
     """A public endpoint and the internal assets that answer behind it (profile section `published`)."""
@@ -174,6 +196,7 @@ class ClientProfile:
     external: ExternalScan | None = None
     published: list[PublishedEndpoint] = field(default_factory=list)
     language: str = "en"  # language of the client's deliverables (v0.17.3): en, fr
+    coverage: CoveragePolicy = field(default_factory=CoveragePolicy)  # scan coverage (v0.19.0)
 
     def declared(self, asset_id: str) -> DeclaredAsset:
         for a in self.assets:
@@ -404,5 +427,6 @@ class TriageRun:
     llm_model: str | None = None
     ignored: list[dict[str, str]] = field(default_factory=list)  # rejected CVE ids cited by a source
     exposure_gaps: list[dict[str, str]] = field(default_factory=list)  # from the assets stage (v0.11.4)
+    coverage: dict[str, Any] = field(default_factory=dict)  # scan coverage, from the assets stage (v0.19.0)
     # Every asset of the run, with or without a finding (v0.18.1): who scanned it and when.
     assets: list[dict[str, Any]] = field(default_factory=list)

@@ -12,9 +12,11 @@ import yaml
 
 from .io import load_schema
 from .models import (
+    DEFAULT_EXPECTED,
     LEGACY_EXPOSURE,
     AttributeRule,
     ClientProfile,
+    CoveragePolicy,
     DeclaredAsset,
     ExternalScan,
     PublishedEndpoint,
@@ -82,7 +84,15 @@ def load_profile(path: str | Path) -> ClientProfile:
         external=ExternalScan(**data["external"]) if data.get("external") else None,
         published=[PublishedEndpoint(**p) for p in data.get("published", [])],
         language=client.get("language", "en"),
+        coverage=_coverage(data.get("coverage") or {}),
     )
+
+
+def _coverage(data: dict[str, Any]) -> CoveragePolicy:
+    """`coverage:` merged over the defaults: a class given replaces that class only."""
+    expected = dict(DEFAULT_EXPECTED)
+    expected.update({str(k): [str(v) for v in vals] for k, vals in (data.get("expected") or {}).items()})
+    return CoveragePolicy(stale_days=int(data.get("stale_days", 7)), expected=expected)
 
 
 def _normalise_exposures(data: dict[str, Any]) -> list[str]:

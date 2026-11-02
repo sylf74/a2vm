@@ -96,6 +96,9 @@ Written to `<out>/<client id>/<YYYY-MM-DD>/`:
 | `dashboard.html` | Self-contained dashboard, labelled in the client's language | Analysts, client after review |
 | `reporting.json` (v0.11.3) | Reporting dataset of the run, the only file the client portal reads (section 12); also copied to `<out>/<client id>/reporting.json` so that its path never changes | Client portal (Grafana) |
 
+`triage.json` carries, since v0.19.0, the scan coverage of the run (`coverage`, §14.6) and, for
+each asset, its addresses (`ips`) and configuration items (`cmdb`).
+
 Rows are sorted ACT, ATTEND, TRACK, then by decreasing EPSS, CVE id and asset.
 
 ### 2.4 Main fields of a decision (`TriageRow`)
@@ -411,7 +414,10 @@ added later without changing the data.
 
 ### 5.2 Precedence
 
-`external-scan` (v0.11.2) > `declared` > `rule` > `<scanner>` > `assumed`.
+`external-scan` (v0.11.2) > `declared` > `cmdb` (v0.19.0) > `rule` > `<scanner>` > `assumed`.
+
+The CMDB gives `mission_prevalence` and `owner`, never the exposure (iTop has no such field); the
+rules of the profile still set what the CMDB does not say.
 
 An external scan only proves reachability: it can set `open`, never lower a value. An asset the
 external scan does not reach keeps its declared value; absence from a scan is not evidence (source
@@ -655,7 +661,7 @@ it never reads `triage.json`, the records or the assets, and computes no rule.
 verdict publish <reporting.json>... [--dsn …]       (job publish; writer role)
 verdict db init [--dsn …] [--writer a2vm_writer]   (administrator, once per schema version)
 verdict db grant ROLE TENANT... [--dsn …] [--rotate]  (administrator; TENANT * = all)
-verdict grafana dashboard [overview|assets|cves] [--language en|fr]
+verdict grafana dashboard [overview|assets|cves|remediation|coverage] [--language en|fr]
 ```
 
 | Exit code | Meaning |
@@ -670,11 +676,11 @@ Connection: `--dsn`, else `A2VM_REPORTING_DSN`, a libpq string (`host=… user=�
 a private temporary file) the server is verified (`sslmode=verify-full`); without, `require`.
 An invalid string is reported without quoting it.
 
-### 13.2 Schema `a2vm` (version 3)
+### 13.2 Schema `a2vm` (version 4)
 
 | Object | Content |
 | --- | --- |
-| `schema_version` | Versions applied (1, 2, 3) |
+| `schema_version` | Versions applied (1, 2, 3, 4) |
 | `runs` | One row per tenant and run (unique on tenant and generation time): totals of section 12 |
 | `decisions`, `assets`, `exposure_gaps`, `sources` | Rows of a run (`run_id`, deleted with it) |
 | `latest_runs`, `latest_decisions`, `latest_assets`, `latest_exposure_gaps` | Views: latest run of each tenant |
@@ -683,6 +689,8 @@ An invalid string is reported without quoting it.
 | `run_pairs` (version 3) | View: each run with the run of its tenant just before |
 | `finding_closures` (version 3) | View: each finding of a run absent from the next run of its tenant, with the day, days open (from its first observation), on time against its due date, and `outcome`: `fixed` when its asset was scanned again in that run, after the finding's last observation, by a source that had seen it (`assets.scans` against `decisions.seen_by`), else `unverified`; runs published before version 3 have no scans: their findings come out `unverified` |
 | `latest_asset_scans` (version 3) | View: the assets of each tenant's latest run, with their scans and the date of their last scan |
+| `coverage` (version 4) | The scan coverage of each host asset of a run (§14.6): state, CMDB class, key, status, criticality, type, owner, means expected and missing, scans, last scan; `runs` gains `cmdb`, `expected_assets`, `covered_assets`, `coverage_gaps`, and `assets` the class, status, criticality and coverage state of its item |
+| `coverage_facts`, `latest_coverage` (version 4) | Views: the coverage with its run's day, `state_rank`, `in_production`, `gap`, `days_since_scan`, the class `not in the CMDB` and the criticality `unknown` when empty |
 | `tenant_roles` | Reading role → tenants (`*` = all) |
 
 Rules:
@@ -706,6 +714,7 @@ Rules:
 | Overview of a client (`a2vm-decisions`) | Findings of the latest run of one tenant | Totals per level, overdue, due within 7 days, to review, exposure gaps, last run; trend run after run; findings per exposure; exposure gaps; decisions to act on; assets; detection sources |
 | Which assets to fix first (`a2vm-assets`) | Exposure = finding (asset × CVE) | Counters (exposures, assets concerned, KEV exposures, ACT exposures, assets with ACT, overdue on the snapshot day, share with a fix, EPSS ≥ 10 %); decision × severity matrix and its KEV part; assets ranked by ACT, KEV, overdue, critical, ATTEND, with the change of ACT; exposures per decision per day; exposures per zone and exposure |
 | Remediation (`a2vm-remediation`, v0.18.1) | Finding fixed (`finding_closures`), in the dashboard's time range | Counters (fixed findings, mean days to fix an ACT, share of ACT and ATTEND fixed on time, gone without a new scan, assets not scanned for 7 days, reopened); fixed per day per level; time to fix per level (fixed, mean, median, on time); recently fixed; assets by last scan; findings gone without a new scan. Variable `tenant` |
+| Assets and scan coverage (`a2vm-coverage`, v0.19.0) | Host of the latest run (`latest_coverage`) | Counters (covered share, in production, never scanned, stale, partial, not in the CMDB, retired but alive, not scannable); one row per host: class, CMDB status, criticality, coverage, means missing, the last date each means saw it (OpenVAS, Trivy, dnf, external scan, other means such as an EDR), days since the last scan, owner; coverage per class; covered share run after run. Variables `tenant`, `state` |
 | Which CVEs to fix first (`a2vm-cves`) | Distinct CVE; its decision is the most urgent of its findings, its KEV, EPSS, CVSS, fix the strongest among them | Counters (distinct CVEs, KEV CVEs, KEV exposures, CVEs decided ACT, share with a fix, EPSS ≥ 10 %); matrix and its KEV part; CVEs ranked by decision, KEV, EPSS, CVSS, assets, with "new" or the decision at the compared snapshot; distinct CVEs per decision per day; products with the most CVEs |
 
 Variables of the per-asset and per-CVE dashboards: `tenant` (multi), `snapshot` (days that have a
@@ -766,12 +775,19 @@ gives one.
 ### 14.3 Attributes
 
 For `exposure`, `mission_prevalence`, `public_wellbeing_impact` and `owner`, the first source wins:
-declared on the asset, then a profile rule matching a host name, an FQDN (globs) and an address
+declared on the asset, then the tenant's CMDB (v0.19.0: `mission_prevalence` from the business
+criticality of the configuration item, `owner` from its first contact or its organisation, source
+`cmdb`, note the item `<class>::<key>`), then a profile rule matching a host name, an FQDN (globs) and an address
 range (all the conditions it sets), then a source that reported it, then the client's default
 assumption, else the built-in worst case (`open`, `essential`, `minimal`, `inconnu`), flagged as
 assumed in every report. The external scan then sets `open` (source `external-scan`) on an asset
 it reached, directly or `behind` a published endpoint; it only ever raises the exposure. `zone` is
 set by a declaration, a rule, or the zone of the published entry, never by default.
+
+The CMDB (source `cmdb`) joins assets like any host observation (host name, FQDN, address) and
+adds its configuration items to `identifiers.cmdb` (class, key, status, criticality, organisation,
+type). It is an inventory, not a scan: never one of the asset's `scans`. A host known only to the
+CMDB is named by its item when it has no host name.
 
 ### 14.4 Findings
 
@@ -788,7 +804,37 @@ their versions for the report.
 ### 14.5 Tests
 
 `tests/test_detection_assets.py` (reconciliation, attribute precedence, former exposure values,
-zone and exposure source), `tests/test_external.py` (external scan, `published`, `behind`, gaps).
+zone and exposure source), `tests/test_external.py` (external scan, `published`, `behind`, gaps),
+`tests/test_v0190.py` (CMDB precedence, coverage states, service, reporting, dashboard).
+
+### 14.6 Scan coverage (v0.19.0)
+
+Code: `verdict/src/verdict/assets/coverage.py`. Computed by `verdict assets build` for every host
+asset (declared product families and images are left out), written to `coverage.json` next to
+assets.json, carried by the run into `triage.json` (`coverage`), `reporting.json`, the decision
+service (§15.4) and the reporting database (§13.2).
+
+| State | When (the first that applies) | Counted in production |
+| --- | --- | --- |
+| `not-in-cmdb` | Scanned, and no configuration item is this asset, in a run that has a CMDB | No |
+| `retired-but-alive` | Its item is `obsolete` or `stock`, and a scan saw it within `stale_days` | No |
+| `not-expected` | Its item is `obsolete`, `stock` or `implementation` | No |
+| `not-scannable` | In production, no address nor host name, never scanned | Yes |
+| `never-scanned` | In production, no scan | Yes |
+| `stale` | In production, last scan older than `stale_days` | Yes |
+| `partial` | In production, scanned within `stale_days`, but an expected means is missing | Yes |
+| `covered` | In production, every expected means saw it within `stale_days` | Yes |
+
+Means expected per CMDB class (profile `coverage.expected`, a class given replaces that class
+only; each entry one source or several separated by `|`, one of them enough): `Server`,
+`VirtualMachine`, `Hypervisor`: `openvas` and `trivy|dnf-updateinfo`; `PC`: `edr` (no EDR
+connector yet: a PC is partial); `default` (every other class, and every host without a CMDB):
+`openvas`. `stale_days`: 7. The share covered is `covered` over the assets in production. Without
+a CMDB in the run, every host is judged as an item in production of class `default`.
+
+Each entry: asset, name, state, CMDB class, key, status, criticality, type, number of items, means
+expected and missing, scans, last scan, owner. The assets stage prints one line per client:
+`coverage with CMDB, <covered>/<in production> covered (<share>), gaps: …`.
 
 ## 15. Decision service (`verdict serve`, v0.14.0)
 
@@ -855,6 +901,7 @@ Every read names the run it comes from (`run: {id, generated_at}`); `?run=` take
 | `GET assets/{asset}/fixes` | The fix plan of an asset (v0.15.2): its decisions grouped by fix (`<package> <fixed version>` reported by the scanners), each group with the decisions it clears per level, its KEV count, its earliest due date and its CVEs; the group that clears most ACT first; then the decisions without a known fix, and among them those whose CVE record names a fix |
 | `GET findings/closed` | Findings closed (fixed) since a day (v0.18.0, with the tenant's database, §15.8; without it 404): `since` (default 30 days ago), paged, most recent first |
 | `GET findings/unverified` | Findings gone while their asset was not scanned again (v0.18.1, §15.8): same parameters |
+| `GET coverage` | The scan coverage of the run (v0.19.0, §14.6): whether a CMDB took part, `stale_days`, counts per state, assets in production, share covered, means seen, and one page of assets, gaps first; filters `state` (comma-separated, or `gaps`: every state that calls for an action), `class` (CMDB class), `q`; an unknown state is refused (400). A run built before has an empty coverage. The `summary` carries its counts and share; an asset card its configuration items (`cmdb`) and coverage state |
 | `GET changes` | What changed since an earlier run (v0.15.2): `since` = `previous` (the run kept just before, default) or a run id; decisions `new`, `gone` or `changed` (another level), filters `kind`, `level`, `asset`; each with `why`, from the facts of both runs: first detected on a day by a source, CVE published or updated, added to KEV, EPSS, exposure, SSVC inputs and outcome. No earlier run: 404, "nothing to compare with yet" |
 
 An asset is named by its id (`host:web01.example.org`), its id without the kind (`web01.example.org`) or
@@ -932,6 +979,7 @@ server: an OpenAPI server whose operations a model calls. Code:
 | `list_runs` | `runs` | The runs kept, to compare with an earlier one |
 | `what_changed` | `changes` | "What is new since yesterday", "why do I see this only today" (v0.15.2) |
 | `get_fix_plan` | `assets/{asset}/fixes` | "What do I apply on web01, in which order" (v0.15.2) |
+| `list_coverage` | `coverage` | "Which servers were never scanned", "what is not in the CMDB", "how well are we covered" (v0.19.0) |
 | `list_alerts`, `get_alert` | the watch service `via serve`: `alerts`, `alerts/{id}` | The watch's alerts and whether they were sent (v0.16.0, watch on Kubernetes; otherwise 503) |
 | `export_decisions` | `decisions` (pages), `decisions/{id}` | A Word, PowerPoint or CSV document of the decisions chosen by the filters of `search_decisions` (16.6) |
 

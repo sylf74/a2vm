@@ -14,7 +14,7 @@ Restitution is part of pillar 3 (`verdict.restitution`): it publishes the decisi
 reads nothing but the reporting dataset, and computes no rule of its own. Design: LLD
 triage-prioritization §13.
 
-## Tables (schema `a2vm`, version 2)
+## Tables (schema `a2vm`, version 4)
 
 | Table / view | Content |
 | --- | --- |
@@ -24,6 +24,8 @@ triage-prioritization §13.
 | `latest_runs`, `latest_decisions`, `latest_assets`, `latest_exposure_gaps` | The latest run of each tenant and its rows |
 | `decision_facts` (view, version 2) | Every decision with its run's day and the labels the dashboards filter on: severity, KEV yes/no, EPSS band, product type, sources |
 | `snapshot_runs(tenants, day)` (function, version 2) | A snapshot: for each tenant, its latest run on or before the day |
+| `run_pairs`, `finding_closures`, `latest_asset_scans` (views, version 3) | Each run with the one before; each finding gone, fixed or unverified; the assets of the latest run with their last scan |
+| `coverage`, `coverage_facts`, `latest_coverage` (version 4) | The scan coverage of each host asset of a run against the CMDB: state, class, CMDB status, criticality, means expected and missing, scans, last scan (`docs/cmdb.md`) |
 | `tenant_roles` | Which tenants a reading role sees (`*` = all) |
 
 The writer role owns the tables. Reading roles get `SELECT` and see only their tenants (row-level
@@ -67,6 +69,14 @@ init`" (exit code 3, a warning). The first run published after the upgrade has n
 its scans with: the findings gone between the last run before and the first run after come out
 "gone without a new scan"; the next days count fixes.
 
+### Upgrading to schema version 4 (v0.19.0)
+
+Run `verdict db init` once, as above, before the first daily run of v0.19.0: it adds the table
+`coverage`, the views `coverage_facts` and `latest_coverage`, the coverage totals of each run and
+the configuration item of each asset, keeps every run and re-grants the reading roles. Until then
+`publish` stops with "schema version 3 … run `verdict db init`" (exit code 3, a warning). Then
+import the dashboard `coverage` (and its French version).
+
 ## Client projects
 
 CI/CD variables of the client project (Settings > CI/CD > Variables):
@@ -105,6 +115,7 @@ string is reported without quoting it, since it holds a password.
 | --- | --- | --- | --- |
 | `assets` | A2VM — which assets to fix first | Exposures: one CVE on one asset | Counters: exposures, assets concerned, KEV exposures, ACT exposures, assets with ACT, overdue, share with a fix, EPSS ≥ 10 %; decision × severity matrix and its KEV part; assets ranked (ACT, KEV, overdue, critical) with the change of ACT; trend per day; exposures per zone and exposure |
 | `cves` | A2VM — which CVEs to fix first | Distinct CVEs; a CVE takes the most urgent decision among its findings | Counters: distinct CVEs, KEV CVEs, KEV exposures, CVEs decided ACT, share with a fix, EPSS ≥ 10 %; decision × severity matrix and its KEV part; CVEs ranked (decision, KEV, EPSS, CVSS) with "new" or the earlier decision; trend per day; products with the most CVEs |
+| `coverage` | A2VM — assets and scan coverage (v0.19.0) | Host of the latest run, against the CMDB and the means of detection its class expects | Covered share, in production, never scanned, stale, partial, not in the CMDB, retired but alive, not scannable; one row per host with its class, CMDB status, criticality, coverage, means missing and the last date each means (OpenVAS, Trivy, dnf, external scan, other) saw it; coverage per class; covered share run after run |
 | `remediation` | A2VM — remediation (v0.18.1) | Findings fixed: gone from a run while their asset was scanned again by the source that had seen them | Fixed findings, mean days to fix an ACT, share of ACT and ATTEND fixed on time (BOD 26-04), gone without a new scan, assets not scanned for 7 days, reopened; fixed per day; time to fix per level; recently fixed; assets by last scan |
 | `overview` | A2VM — overview of a client | Findings of the latest run | One client: totals per level, overdue, due within 7 days, to review, exposure gaps, trend run after run, decisions to act on, assets, detection sources |
 

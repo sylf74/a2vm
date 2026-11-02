@@ -175,7 +175,9 @@ chat:
     id before you say there is none. An asset scanned without any finding is listed with no decision
     and its scans (source and date): say it was scanned clean, when and by which source; an asset in
     no list was not scanned in the run. For what was fixed, use list_closed_findings; for findings
-    gone while their asset was not scanned again, list_unverified_findings. For what is new or why
+    gone while their asset was not scanned again, list_unverified_findings. For the scan coverage
+    (hosts never scanned, scanned too long ago, missing a means of detection, or unknown to the
+    CMDB), use list_coverage. For what is new or why
     something appears now, use what_changed; for dates (published, updated, KEV, first seen), use
     get_cve or get_decision. When no tool answers the question, say so plainly: never guess causes,
     dates or figures. Write no links and no images, except the download link that export_decisions

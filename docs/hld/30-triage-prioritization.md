@@ -57,14 +57,19 @@ reporting database and the dashboards that read it show its decisions and nothin
 
 Every asset attribute carries where it comes from, in this order of precedence:
 
-1. **Declared** by the client: profile, asset declarations, a CMDB export when available.
-2. **Rule** set in the tenant project, e.g. an address range giving a zone and an exposure.
-3. **Observed** by a scanner; the external scan can only raise an asset's exposure, never lower it.
-4. **Assumed** when nothing else is known: a cautious default, shown as such in every report.
+1. **Declared** by the client: profile, asset declarations.
+2. **CMDB** of the client (v0.19.0, iTop first): business criticality (mission prevalence) and owner
+   of each configuration item.
+3. **Rule** set in the tenant project, e.g. an address range giving a zone and an exposure.
+4. **Observed** by a scanner; the external scan can only raise an asset's exposure, never lower it.
+5. **Assumed** when nothing else is known: a cautious default, shown as such in every report.
 
 Assets are new, active or removed; an asset unknown to the client's inventory is created with
-default context and reported; one absent from every source for a set number of days is removed. A
-client CMDB, when available, is the reference for context.
+default context and reported; one absent from every source for a set number of days is removed.
+The client's CMDB, read by a connector of pillar 2, is the reference of what exists: since v0.19.0
+each host asset has a **scan coverage** state (not in the CMDB, retired but alive, never scanned,
+stale, partial, covered...) against the means of detection its class expects (LLD §14.6), restituted
+by the decision service, the chat and a Grafana dashboard.
 
 ## 5. Flows
 

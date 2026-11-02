@@ -24,6 +24,20 @@ class QueryError(ValueError):
     """A filter, a sort or a page the read model does not understand."""
 
 
+# States of the scan coverage (verdict.assets.coverage, v0.19.0), and those that call for an action.
+COVERAGE_STATES = (
+    "not-in-cmdb",
+    "retired-but-alive",
+    "not-expected",
+    "not-scannable",
+    "never-scanned",
+    "stale",
+    "partial",
+    "covered",
+)
+COVERAGE_GAPS = ("not-in-cmdb", "retired-but-alive", "not-scannable", "never-scanned", "stale", "partial")
+
+
 def _short(text: str, limit: int = TITLE_MAX) -> str:
     text = " ".join((text or "").split())
     return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
@@ -165,6 +179,9 @@ class RunIndex:
         # Every asset of the run, a finding or not (v0.18.1; a triage of an earlier version lists
         # the assets of its findings only).
         self.inventory: dict[str, dict[str, Any]] = {a["id"]: a for a in document.get("assets") or []}
+        # Scan coverage of each host asset (v0.19.0; empty for a triage of an earlier version).
+        self.coverage_doc: dict[str, Any] = document.get("coverage") or {}
+        self.coverage_by_asset = {c["asset"]: c for c in self.coverage_doc.get("assets") or []}
 
     def _card(self, asset: str) -> dict[str, Any]:
         """What the run knows of an asset: from its inventory entry, else from its first decision."""
@@ -183,6 +200,11 @@ class RunIndex:
         if known:
             card["scans"] = known.get("scans") or {}
             card["last_seen"] = known.get("last_seen", "")
+            if known.get("cmdb"):
+                card["cmdb"] = known["cmdb"]  # its configuration items (v0.19.0)
+        covered = self.coverage_by_asset.get(asset)
+        if covered:
+            card["coverage"] = covered["state"]
         return card
 
     def _find_asset(self, asset: str) -> str | None:
@@ -231,6 +253,11 @@ class RunIndex:
             "not_affected": len(self.document.get("not_affected") or []),
             "errors": len(self.document.get("errors") or []),
             "exposure_gaps": self.document.get("exposure_gaps") or [],
+            "coverage": {
+                k: self.coverage_doc[k]
+                for k in ("cmdb", "counts", "expected_assets", "covered_share", "stale_days")
+                if k in self.coverage_doc
+            },
         }
 
     def decisions(self, query: dict[str, str]) -> dict[str, Any]:
@@ -369,6 +396,29 @@ class RunIndex:
         items.sort(key=lambda a: (-a["counts"]["ACT"], -a["counts"]["ATTEND"], a["asset"]))
         limit, offset = page(query)
         return {"run": self.run, **_paged(items, limit, offset)}
+
+    def coverage(self, query: dict[str, str]) -> dict[str, Any]:
+        """Scan coverage of the run (v0.19.0): the state of each host asset, gaps first.
+
+        Filters: `state` (comma-separated, or `gaps` for every state that needs an action), `class`
+        (CMDB class), `q` (part of the asset or its name)."""
+        items = list(self.coverage_doc.get("assets") or [])
+        if "state" in query:
+            wanted = {s.strip() for s in query["state"].split(",") if s.strip()}
+            if "gaps" in wanted:
+                wanted = (wanted - {"gaps"}) | set(COVERAGE_GAPS)
+            unknown = wanted - set(COVERAGE_STATES)
+            if unknown:
+                raise ValueError(f"state: unknown {sorted(unknown)}; one of {', '.join(COVERAGE_STATES)} or gaps")
+            items = [c for c in items if c["state"] in wanted]
+        if "class" in query:
+            items = [c for c in items if c.get("cmdb_class", "").lower() == query["class"].lower()]
+        if "q" in query:
+            q = query["q"].lower()
+            items = [c for c in items if q in c["asset"].lower() or q in c["name"].lower()]
+        limit, offset = page(query)
+        head = {k: v for k, v in self.coverage_doc.items() if k != "assets"}
+        return {"run": self.run, **head, **_paged(items, limit, offset)}
 
     def asset(self, asset: str, query: dict[str, str]) -> dict[str, Any] | None:
         """One asset and its decisions; an asset scanned without a finding has none (v0.18.1)."""

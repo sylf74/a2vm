@@ -23,6 +23,7 @@ from a2vm.io import ExchangeError, read_assets, read_findings, read_records
 from a2vm.llm import LlmClient
 from a2vm.profile import ProfileError, load_profile
 
+from .assets.coverage import read_coverage
 from .assets.gaps import read_gaps
 from .report import write_all
 from .triage import Triage
@@ -101,6 +102,7 @@ def main(argv: list[str] | None = None) -> int:
             run = triage.run(profile, records, assets, findings, not_affected, len(requested), errors)
             try:
                 run.exposure_gaps = read_gaps(base / "exposure_gaps.json", profile.id)
+                run.coverage = read_coverage(base / "coverage.json", profile.id)
             except (ValueError, OSError) as exc:
                 print(f"{profile.id}: {exc}", file=sys.stderr)
                 return 2

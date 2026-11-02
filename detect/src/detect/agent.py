@@ -22,6 +22,13 @@ collector.yaml, on the collector's machine (secrets in files readable by the age
       type: file-import                    # scanner exports dropped in a folder
       source: trivy                        # trivy, dnf-updateinfo or openvas
       folder: /var/lib/a2vm/import/trivy
+    - name: cmdb
+      type: itop                           # the tenant's CMDB, read only (source cmdb, v0.19.0)
+      url: https://itop.example.org
+      user: a2vm-cmdb
+      password_file: /etc/a2vm/collector/itop-password
+      ca_file: /etc/a2vm/collector/ca.pem
+      organization: Lab                    # optional: the CIs of this organisation only
 
 `detect agent run` runs the connectors (or one, `--connector`) and pushes each detection; a
 system timer gives each connector its schedule (docs/collectors.md). A push that fails for a reason
@@ -45,6 +52,8 @@ import yaml
 
 from a2vm.io import Detection, write_detection
 
+from .cmdb import CmdbError, ItopConfig
+from .cmdb import fetch as fetch_cmdb
 from .collect import collect, load_targets
 from .intake.client import IntakeError, push
 from .intake.registry import ID
@@ -115,6 +124,24 @@ class FileImportConnector:
 
 
 @dataclass
+class CmdbConnector:
+    """The tenant's CMDB (iTop REST API, `core/get` only): one detection of source `cmdb`."""
+
+    name: str
+    config: ItopConfig
+
+    def run(self, tenant: str, work: Path, log: Callable[[str], None] = print) -> tuple[list[Detection], list[str]]:
+        started = time.monotonic()
+        try:
+            detection = fetch_cmdb(self.config, tenant, log=log)
+        except CmdbError as exc:
+            log(f"FAIL cmdb [{self.config.url}]: {exc} ({time.monotonic() - started:.0f} s)")
+            return [], [f"{self.name}: {exc}"]
+        log(f"ok   cmdb [{self.config.url}]: {len(detection.observations)} items ({time.monotonic() - started:.0f} s)")
+        return [detection], []
+
+
+@dataclass
 class AgentConfig:
     collector: str
     tenant: str
@@ -160,12 +187,17 @@ def load_config(path: str | Path) -> AgentConfig:
             connectors.append(
                 TargetsConnector(name, Path(c["targets"]), bool(c.get("ssh", True)), bool(c.get("openvas", True)))
             )
+        elif kind == "itop":
+            try:
+                connectors.append(CmdbConnector(name, ItopConfig.from_dict(c, where)))
+            except ValueError as exc:
+                raise AgentError(str(exc)) from exc
         elif kind == "file-import":
             if c.get("source") not in SOURCES_BY_SUFFIX or not c.get("folder"):
                 raise AgentError(f"{where}: `source` ({', '.join(SOURCES_BY_SUFFIX)}) and `folder` are required")
             connectors.append(FileImportConnector(name, c["source"], Path(c["folder"]), int(c.get("min_qod", 70))))
         else:
-            raise AgentError(f"{where}: unknown type {kind!r} (targets, file-import)")
+            raise AgentError(f"{where}: unknown type {kind!r} (targets, file-import, itop)")
     if not connectors:
         raise AgentError(f"{path}: at least one connector is required")
     try:

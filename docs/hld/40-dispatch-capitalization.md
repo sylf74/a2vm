@@ -30,10 +30,10 @@ pillar 4.
 
 | Block | Responsibility | Status |
 | --- | --- | --- |
-| Dispatch channels | Where a validated alert or a decision goes for a tenant and for each of its contacts: mail (the sender of the review page today), the ITSM of the teams that patch, the SOC's incident response platform (SIRP); rules per tenant of what goes where | Planned v0.19.0 |
-| ITSM connectors | Remediation: one ticket per asset and fix (iTop first: UserRequest or Change through its REST API, linked to the CMDB item when known; ServiceNow next: REST Table API), with its CVEs, levels and BOD 26-04 due date. The ticket follows the finding: closing it does not close the finding, only a new scan of the asset does (LLD triage §15.8) | Planned v0.19.0 |
-| SIRP connectors | Suspected compromise only (BOD 26-04 delay "3 days & forensic investigation", or a watch alert on an exploitation in the wild of an exposed asset): an alert in TheHive (API v1) with its observables (CVE, host names, addresses), which the SOC promotes to a case. Never a channel for remediation, never a step towards the ITSM: the two flows leave A2VM side by side | Planned v0.19.0 |
-| Connector interface | Create, update, read the state; the external reference and state kept with the finding or the alert; credentials in the tenant's secrets, never in its project files; each tool reached only from the tenant's namespace, by its NetworkPolicy | Planned v0.19.0 |
+| Dispatch channels | Where a validated alert or a decision goes for a tenant and for each of its contacts: mail (the sender of the review page today), the ITSM of the teams that patch, the SOC's incident response platform (SIRP); rules per tenant of what goes where | Planned v0.20.0 |
+| ITSM connectors | Remediation: one ticket per asset and fix (iTop first: UserRequest or Change through its REST API, linked to the CMDB item when known; ServiceNow next: REST Table API), with its CVEs, levels and BOD 26-04 due date. The ticket follows the finding: closing it does not close the finding, only a new scan of the asset does (LLD triage §15.8) | Planned v0.20.0 |
+| SIRP connectors | Suspected compromise only (BOD 26-04 delay "3 days & forensic investigation", or a watch alert on an exploitation in the wild of an exposed asset): an alert in TheHive (API v1) with its observables (CVE, host names, addresses), which the SOC promotes to a case. Never a channel for remediation, never a step towards the ITSM: the two flows leave A2VM side by side | Planned v0.20.0 |
+| Connector interface | Create, update, read the state; the external reference and state kept with the finding or the alert; credentials in the tenant's secrets, never in its project files; each tool reached only from the tenant's namespace, by its NetworkPolicy | Planned v0.20.0 |
 
 The channels are configured with the contacts (`contacts.yaml`: a contact is a mailbox, a
 queue of an ITSM tool or of the SIRP) so that the analyst still chooses the recipients on the review page, and
@@ -62,4 +62,4 @@ verified closure.
 | Item | Content |
 | --- | --- |
 | Status | Not started. v0.11.5 had put the reporting database in a package named `dispatch`; v0.11.6 moved it to pillar 3, which restitutes its own decisions, and removed the package: the name stays for this pillar |
-| Open points | Dispatch channels per client planned in v0.19.0 (§3): ITSM (iTop, ServiceNow) for remediation and SIRP (TheHive) for suspected compromise, their mapping of fields and severities to settle with each tool; finding lifecycle (v0.18.0, v0.18.1) and indicators of remediation (dashboard `remediation`, v0.18.1) in place, to connect to the tickets |
+| Open points | Dispatch channels per client planned in v0.20.0, after the CMDB connector of v0.19.0 (§3): ITSM (iTop, ServiceNow) for remediation and SIRP (TheHive) for suspected compromise, their mapping of fields and severities to settle with each tool; finding lifecycle (v0.18.0, v0.18.1) and indicators of remediation (dashboard `remediation`, v0.18.1) in place, to connect to the tickets |
