@@ -20,6 +20,7 @@ disrupt services; it is still traffic the client must expect and agree to.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import re
 import time
@@ -66,6 +67,8 @@ class OpenvasConfig:
     min_qod: int = 70
     timeout_minutes: int = 240
     reuse_hours: float = 6  # a finished scan younger than this is collected instead of a new scan (0: never)
+    gmp_timeout_seconds: float = 300  # wait for one answer of gvmd
+    gmp_reconnects: int = 3  # new connections when gvmd does not answer in time, for the whole scan
 
     @classmethod
     def from_dict(cls, data: dict[str, Any], where: str = "openvas") -> OpenvasConfig:
@@ -76,9 +79,17 @@ class OpenvasConfig:
             raise ValueError(f"{where}: 'gmp' and 'hosts' are required")
         if not str(data["gmp"]).startswith(("tls://", "unix://")):
             raise ValueError(f"{where}: gmp must be tls://host:port or unix:///path/to/gvmd.sock")
-        return cls(
+        cfg = cls(
             **{**data, "hosts": [str(h) for h in data["hosts"]], "exclude": [str(h) for h in data.get("exclude", [])]}
         )
+        try:
+            cfg.gmp_timeout_seconds = float(cfg.gmp_timeout_seconds)
+            cfg.gmp_reconnects = int(cfg.gmp_reconnects)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{where}: gmp_timeout_seconds and gmp_reconnects must be numbers") from exc
+        if cfg.gmp_timeout_seconds <= 0 or cfg.gmp_reconnects < 0:
+            raise ValueError(f"{where}: gmp_timeout_seconds must be positive and gmp_reconnects 0 or more")
+        return cfg
 
     def key(self, client: str) -> str:
         """Name of the target and task in gvmd: one per client and scan definition."""
@@ -211,6 +222,15 @@ class GmpError(RuntimeError):
     pass
 
 
+def _transient(exc: BaseException) -> bool:
+    """gvmd did not answer in time or closed the connection (worth a new connection).
+
+    A timeout or a broken socket is an OSError; python-gvm raises its base GvmError when the remote
+    closes the connection, and a subclass (GvmResponseError...) when gvmd refused the command: that
+    one is not retried."""
+    return isinstance(exc, OSError) or type(exc).__name__ == "GvmError"
+
+
 def _first_id(response: Any, tag: str, name: str) -> str | None:
     for el in response.findall(tag):
         if (el.findtext("name") or "") == name:
@@ -242,6 +262,7 @@ def run_scan(
     sleep: Callable[[float], None] = time.sleep,
     poll_seconds: float = 30,
     clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+    reopen: Callable[[], Any] | None = None,
 ) -> bytes:
     """Scan with an authenticated python-gvm Gmp object; returns the report XML.
 
@@ -249,24 +270,56 @@ def run_scan(
     history of the scans; a scan already running for this client is waited for, not doubled; a scan
     that finished less than `reuse_hours` ago is collected as is (e.g. after a job killed by its
     timeout while gvmd went on scanning).
+
+    `reopen` gives a new authenticated Gmp object: when gvmd does not answer within
+    `gmp_timeout_seconds` (busy loading its feed or writing a large report), the call is made again
+    on a new connection, `gmp_reconnects` times at most for the whole scan. The scan itself goes on
+    in gvmd meanwhile; `timeout_minutes` stays the limit of the wait.
     """
+    session = {"gmp": gmp, "reconnects": 0}
+
+    def renew(command: str, exc: BaseException) -> None:
+        if reopen is None or not _transient(exc):
+            raise exc
+        if session["reconnects"] >= cfg.gmp_reconnects:
+            raise GmpError(
+                f"gvmd did not answer {command} ({type(exc).__name__}: {exc}) "
+                f"after {session['reconnects']} reconnections"
+            ) from exc
+        session["reconnects"] += 1
+        log(
+            f"openvas: gvmd did not answer {command} ({type(exc).__name__}: {exc}): "
+            f"new connection {session['reconnects']}/{cfg.gmp_reconnects}"
+        )
+        session["gmp"] = reopen()
+
+    def call(command: str, *args: Any, **kwargs: Any) -> Any:
+        """A read or an idempotent command, made again on a new connection when gvmd is silent."""
+        while True:
+            try:
+                return getattr(session["gmp"], command)(*args, **kwargs)
+            except Exception as exc:  # noqa: BLE001 - python-gvm raises its own error classes
+                renew(command, exc)
+
     name = cfg.key(client)
-    target_id = _first_id(gmp.get_targets(filter_string=f'name="{name}"'), "target", name)
+    target_id = _first_id(call("get_targets", filter_string=f'name="{name}"'), "target", name)
     if not target_id:
-        resp = gmp.create_target(
+        resp = session["gmp"].create_target(
             name, hosts=cfg.hosts, exclude_hosts=cfg.exclude or None, port_list_id=cfg.port_list,
             comment=f"vulnops, client {client}",
         )  # fmt: skip
         target_id = resp.get("id")
         log(f"openvas: target {name} created ({', '.join(cfg.hosts)})")
-    task_id = _first_id(gmp.get_tasks(filter_string=f'name="{name}"'), "task", name)
+    task_id = _first_id(call("get_tasks", filter_string=f'name="{name}"'), "task", name)
     if not task_id:
-        task_id = gmp.create_task(
-            name, cfg.scan_config, target_id, cfg.scanner, comment=f"vulnops, client {client}"
-        ).get("id")
+        task_id = (
+            session["gmp"]
+            .create_task(name, cfg.scan_config, target_id, cfg.scanner, comment=f"vulnops, client {client}")
+            .get("id")
+        )
         log(f"openvas: task {name} created")
 
-    task = gmp.get_task(task_id).find("task")
+    task = call("get_task", task_id).find("task")
     status = task.findtext("status") if task is not None else ""
     recent = _recent_report(task, cfg.reuse_hours, clock()) if status == "Done" else None
     if status in ACTIVE:
@@ -277,17 +330,26 @@ def run_scan(
         report_id, ended = recent
         log(f"openvas: last scan finished at {ended}, less than {cfg.reuse_hours:g} h ago: collecting it")
     else:
-        report_id = gmp.start_task(task_id).findtext("report_id")
-        log(f"openvas: scan started, report {report_id}")
+        try:
+            report_id = session["gmp"].start_task(task_id).findtext("report_id")
+            log(f"openvas: scan started, report {report_id}")
+        except Exception as exc:  # noqa: BLE001 - not made twice: the task may have started
+            renew("start_task", exc)
+            task = call("get_task", task_id).find("task")
+            current = task.find("current_report/report") if task is not None else None
+            if (task is None or task.findtext("status") not in ACTIVE) or current is None:
+                raise GmpError("gvmd did not answer start_task and the scan is not running") from exc
+            report_id = current.get("id")
+            log(f"openvas: scan started, report {report_id}")
 
     deadline = time.monotonic() + cfg.timeout_minutes * 60
     while True:
-        task = gmp.get_task(task_id).find("task")
+        task = call("get_task", task_id).find("task")
         status = task.findtext("status") if task is not None else "?"
         if status in FINISHED:
             break
         if time.monotonic() > deadline:
-            gmp.stop_task(task_id)
+            call("stop_task", task_id)
             raise GmpError(f"scan still {status} after {cfg.timeout_minutes} min: stopped")
         log(f"openvas: {status} {task.findtext('progress') or ''}%")
         sleep(poll_seconds)
@@ -298,10 +360,13 @@ def run_scan(
         if last is None:
             raise GmpError("the scan ended without a report")
         report_id = last.get("id")
-    report = gmp.get_report(
+    report = call(
+        "get_report",
         report_id, report_format_id=XML_REPORT_FORMAT, ignore_pagination=True, details=True,
         filter_string=f"apply_overrides=1 min_qod={cfg.min_qod} levels=hml rows=-1",
     )  # fmt: skip
+    if session["reconnects"]:
+        log(f"openvas: report collected after {session['reconnects']} new connection(s) to gvmd")
     from lxml import etree  # python-gvm's dependency
 
     return etree.tostring(report)
@@ -318,24 +383,42 @@ def connect(cfg: OpenvasConfig, env: dict[str, str]):
     user, password = cfg_env("GVM_USER", environ=env) or None, cfg_env("GVM_PASSWORD", environ=env) or None
     if not user or not password:
         raise GmpError("A2VM_GVM_USER and A2VM_GVM_PASSWORD must be set")
-    if cfg.gmp.startswith("unix://"):
-        connection = UnixSocketConnection(path=cfg.gmp[len("unix://") :], timeout=300)
-    else:
+    timeout = cfg.gmp_timeout_seconds
+
+    def connection():
+        if cfg.gmp.startswith("unix://"):
+            return UnixSocketConnection(path=cfg.gmp[len("unix://") :], timeout=timeout)
         host, _, port = cfg.gmp[len("tls://") :].rpartition(":")
-        connection = TLSConnection(
-            hostname=host or cfg.gmp[len("tls://") :], port=int(port or 9390), timeout=300,
+        return TLSConnection(
+            hostname=host or cfg.gmp[len("tls://") :], port=int(port or 9390), timeout=timeout,
             cafile=cfg_env("GVM_CA", environ=env) or None,
             certfile=cfg_env("GVM_CERT", environ=env) or None, keyfile=cfg_env("GVM_KEY", environ=env) or None,
         )  # fmt: skip
 
     class _Session:
-        def __enter__(self):
-            self.gmp = Gmp(connection, transform=EtreeCheckCommandTransform())
-            gmp = self.gmp.__enter__()
+        """`with session as gmp`; `session.reopen()` closes the connection and opens a new one."""
+
+        current = None
+
+        def _open(self):
+            self.current = Gmp(connection(), transform=EtreeCheckCommandTransform())
+            gmp = self.current.__enter__()
             gmp.authenticate(user, password)
             return gmp
 
+        def _close(self, *exc):
+            current, self.current = self.current, None
+            return current.__exit__(*exc) if current is not None else None
+
+        def __enter__(self):
+            return self._open()
+
+        def reopen(self):
+            with contextlib.suppress(Exception):  # the old connection is dead anyway
+                self._close(None, None, None)
+            return self._open()
+
         def __exit__(self, *exc):
-            return self.gmp.__exit__(*exc)
+            return self._close(*exc)
 
     return _Session()

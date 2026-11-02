@@ -19,6 +19,7 @@ other files of `docs/`; day-to-day operation: `docs/operations.md`.
 | `templates/client-pipeline.yml` | The pipeline every tenant project includes at a version tag |
 | `examples/` | Fictitious tenants (`lab`, `demo-industrie`) |
 | `deploy/portal/` | Terraform and cloud-init of the reporting database and Grafana |
+| `deploy/scanner/` | Terraform and cloud-init of the cloud scanner: Greenbone and the runner of the external projects (`docs/openvas.md` §5) |
 | `deploy/charts/a2vm-tenant/` | Helm chart: a tenant's daily run as a Kubernetes CronJob (D15 step 1, `docs/kubernetes.md`), its detection service (D15 step 2, `docs/collectors.md`), its decision service (D15 step 3), the analysts' chat (`docs/chat.md`), the watch on Kubernetes (`A2VM_RUN_MODE`) and the review page of the alerts with the analysts' sign-in (`docs/sign-in.md`), the tenant's PostgreSQL (CloudNativePG `Cluster`) |
 | `deploy/intake/` | Script of the job `deploy-k8s` that turns the collectors' tokens into digests (stdlib and PyYAML only) |
 | `deploy/chat/` | Scripts of the job `deploy-k8s` that write the values of the chat and of the analysts' sign-in and review page (stdlib only) |

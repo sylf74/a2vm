@@ -19,7 +19,7 @@ repeat it. The examples use the tenant `lab` (namespace `a2vm-lab`); replace it 
 | Part | Where | When | Started by |
 | --- | --- | --- | --- |
 | Internal scans: SSH (Trivy, dnf) and OpenVAS | Collector VM near the network (`a2vm-collector@<connector>`, Docker or Podman) | Its systemd timer (`install-collector.sh --schedule`, default 07:30) | systemd |
-| External scan (OpenVAS from the internet) | Pipeline of the project `<tenant>-external`, on the runner of the cloud scanner (tag `scan-cloud`) | Its pipeline schedule | GitLab |
+| External scan (OpenVAS from the internet) | Pipeline of the project `<tenant>-external`, on the runner of the cloud scanner (tag `scan-cloud`; deployed by `deploy/scanner` since v0.18.2) | Its pipeline schedule | GitLab |
 | Daily run: collect → via → detect → assets → triage → publish, inventory | CronJob `a2vm-<tenant>-daily` | `daily.schedule` (default 05:45, Europe/Paris) | Kubernetes |
 | Watch | CronJob `a2vm-<tenant>-watch` | Every 10 minutes | Kubernetes |
 | Detection, watch and decision services | Deployments `a2vm-<tenant>-detect`, `-via`, `-verdict` | Always | Kubernetes |
@@ -123,6 +123,8 @@ shows an asset, with its scans since v0.18.1, even when it has no finding.
 | Step `collect`: "Another run holds the working volume" | A daily run is still running, or one was killed holding the lock | Wait for it; a lock older than the run's deadline (`daily.activeDeadlineSeconds`) is taken over by the next run |
 | Step `collect`: a source "older than max_age_hours" | The collector did not push today (timer, scan failed) | Its journal on the collector; the run goes on with the other sources |
 | Collector: `docker pull` or `podman pull` "HTTP Basic: Access denied" | The registry login of the VM has expired or its deploy token was revoked; or `docker login` used another user name than the token's | A new deploy token and a new login (§5, "Registry login of a collector") |
+| Collector journal: `FAIL <host> [trivy]` or `[dnf-updateinfo]` (v0.18.2) | That host could not be scanned over SSH: off, key refused, scanner missing; the reason follows | `docs/scanning.md` §3 (test by hand from the collector); the other targets are pushed |
+| Collector journal or job log: OpenVAS "timed out" | gvmd did not answer one command within `gmp_timeout_seconds` (300 s): feed loading, large report. Since v0.18.2 a new connection is made (`new connection 1/3`); "after 3 reconnections" means gvmd stayed silent | Raise `gmp_timeout_seconds` in the `openvas` section of `targets.yaml` (`docs/openvas.md` §4); the scan goes on in gvmd and the next run waits for it or collects it |
 | Collector journal: push refused `401` or `403` | Token of the collector changed or not declared in `collectors.yaml` | `docs/collectors.md` (declaration and tokens) |
 | Watch: `inventory none yet` | The daily run has not pushed its inventory to the watch service (step `inventory`; needs `A2VM_RUN_MODE: kubernetes`) | The log of the step `inventory` of the last daily run; it warns and keeps the previous inventory when the service cannot be reached |
 | Services restart two or three times after `A2VM_DATABASE=true` | They wait for the database's secret while the cluster initialises | None: they settle within two minutes |

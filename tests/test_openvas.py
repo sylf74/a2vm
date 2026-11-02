@@ -9,7 +9,7 @@ from a2vm.io import read_detection
 from a2vm.profile import load_profile
 from detect.cli import main
 from detect.collect import collect, load_targets
-from detect.openvas import FULL_AND_FAST, OpenvasConfig, parse_gmp_report, run_scan
+from detect.openvas import FULL_AND_FAST, GmpError, OpenvasConfig, parse_gmp_report, run_scan
 from verdict.assets.build import build_inventory
 
 from .conftest import FIXTURES, ROOT
@@ -199,13 +199,15 @@ def test_targets_file_with_openvas_only(tmp_path):
 
     from unittest.mock import patch
 
-    def quick(gmp, cfg, client):
-        return run_scan(gmp, cfg, client, sleep=lambda s: None)
+    def quick(gmp, cfg, client, log=print, reopen=None):
+        return run_scan(gmp, cfg, client, log=log, sleep=lambda s: None, reopen=reopen)
 
+    lines = []
     with patch("detect.collect.run_scan", quick):
-        detections, errors = collect(tf, tmp_path / "raw", gmp_session=Session())
+        detections, errors = collect(tf, tmp_path / "raw", gmp_session=Session(), log=lines.append)
     assert errors == [] and detections[0].source == "openvas"
     assert (tmp_path / "raw" / "lab" / "openvas" / "report.xml").exists()
+    assert lines[-1].startswith("ok   openvas [192.0.2.10]: ") and " findings" in lines[-1]
 
 
 def test_bad_openvas_section(tmp_path):
@@ -262,3 +264,103 @@ def test_few_cves_is_not_generic():
     refs = '<ref type="cve" id="CVE-2003-1567"/><ref type="cve" id="CVE-2004-2763"/>'
     det = parse_gmp_report(GENERIC_REPORT.format(refs=refs), "lab")
     assert all(f.status == "affected" and not f.review_reasons for f in det.findings)
+
+
+# -- gvmd that does not answer in time (v0.18.2) ---------------------------------------------------
+class SilentGmp(FakeGmp):
+    """gvmd that times out on some calls; `shared` keeps the scan state across connections."""
+
+    def __init__(self, shared, silent_on, times=1, error=None):
+        super().__init__()
+        self.shared, self.silent_on, self.times = shared, set(silent_on), times
+        self.error = error or TimeoutError("timed out")
+        self.calls = shared["calls"]
+
+    def _maybe_silent(self, command):
+        if command in self.silent_on and self.shared["silences"].get(command, 0) < self.times:
+            self.shared["silences"][command] = self.shared["silences"].get(command, 0) + 1
+            raise self.error
+
+    def get_task(self, task_id):
+        self._maybe_silent("get_task")
+        self.polls = self.shared["polls"]
+        out = super().get_task(task_id)
+        self.shared["polls"] = self.polls
+        return out
+
+    def start_task(self, task_id):
+        out = super().start_task(task_id)
+        self._maybe_silent("start_task")
+        return out
+
+    def get_report(self, report_id, **kw):
+        self._maybe_silent("get_report")
+        return super().get_report(report_id, **kw)
+
+
+def _shared():
+    return {"calls": [], "silences": {}, "polls": 0}
+
+
+def test_timeout_and_reconnections_are_read_from_the_openvas_section():
+    cfg = _cfg(gmp_timeout_seconds=900, gmp_reconnects=5)
+    assert (cfg.gmp_timeout_seconds, cfg.gmp_reconnects) == (900.0, 5)
+    assert (_cfg().gmp_timeout_seconds, _cfg().gmp_reconnects) == (300.0, 3)
+    with pytest.raises(ValueError, match="gmp_timeout_seconds must be positive"):
+        _cfg(gmp_timeout_seconds=0)
+    with pytest.raises(ValueError, match="must be numbers"):
+        _cfg(gmp_reconnects="many")
+
+
+def test_a_silent_gvmd_is_reached_again_on_a_new_connection():
+    shared, opened, lines = _shared(), [], []
+
+    def reopen():
+        opened.append(1)
+        return SilentGmp(shared, silent_on={"get_task", "get_report"})
+
+    gmp = SilentGmp(shared, silent_on={"get_task", "get_report"})  # once each, whatever the connection
+    xml = run_scan(gmp, _cfg(), "lab", log=lines.append, sleep=lambda s: None, reopen=reopen)
+    assert b"<report" in xml and len(opened) == 2
+    assert [c[0] for c in shared["calls"]].count("start_task") == 1
+    assert any("did not answer get_task (TimeoutError: timed out): new connection 1/3" in x for x in lines)
+    assert any("did not answer get_report" in x and "2/3" in x for x in lines)
+    assert lines[-1] == "openvas: report collected after 2 new connection(s) to gvmd"
+
+
+def test_start_task_without_answer_is_not_made_twice():
+    shared = _shared()
+
+    class Started(SilentGmp):
+        def get_task(self, task_id):
+            if any(c[0] == "start_task" for c in self.calls) and self.shared["polls"] == 0:
+                self.shared["polls"] = 1
+                return self._el('<r><task id="k1"><status>Running</status><progress>1</progress>'
+                                '<current_report><report id="rep-new"/></current_report></task></r>')  # fmt: skip
+            return super().get_task(task_id)
+
+    gmp = Started(shared, silent_on={"start_task"})
+    run_scan(gmp, _cfg(), "lab", log=lambda x: None, sleep=lambda s: None, reopen=lambda: Started(shared, ()))
+    assert [c[0] for c in shared["calls"]].count("start_task") == 1
+    assert shared["calls"][-1][:2] == ("get_report", "rep-new")
+
+
+def test_reconnections_are_bounded_and_refusals_are_not_retried():
+    shared = _shared()
+    always = SilentGmp(shared, silent_on={"get_task"}, times=99)
+    with pytest.raises(GmpError, match="did not answer get_task .* after 2 reconnections"):
+        run_scan(always, _cfg(gmp_reconnects=2), "lab", log=lambda x: None, sleep=lambda s: None,
+                 reopen=lambda: SilentGmp(shared, {"get_task"}, times=99))  # fmt: skip
+
+    class GvmResponseError(Exception):  # python-gvm: gvmd refused the command
+        pass
+
+    refused = SilentGmp(_shared(), silent_on={"get_task"}, error=GvmResponseError("400 bad"))
+    with pytest.raises(GvmResponseError):
+        run_scan(refused, _cfg(), "lab", log=lambda x: None, sleep=lambda s: None, reopen=lambda: 1 / 0)
+
+
+def test_without_reopen_a_timeout_fails_as_before():
+    gmp = SilentGmp(_shared(), silent_on={"get_task"})
+    with pytest.raises(TimeoutError):
+        run_scan(gmp, _cfg(), "lab", log=lambda x: None, sleep=lambda s: None)

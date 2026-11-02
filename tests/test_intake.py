@@ -497,8 +497,12 @@ def test_agent_imports_dropped_exports_once_and_pushes_them(tmp_path):
     cfg = load_config(_config(tmp_path))
     dropped = _drop(tmp_path)
     fake = FakeService(tmp_path)
-    report = run(cfg, transport=httpx.MockTransport(fake))
+    lines = []
+    report = run(cfg, transport=httpx.MockTransport(fake), log=lines.append, clock=lambda: 0.0)
     assert report.status == 0 and report.pushed[0].startswith("trivy -> ")
+    assert lines[0] == "connector drop: started"
+    assert lines[1].startswith("drop: ok   node00.json: ") and lines[1].endswith(" findings")
+    assert lines[2] == "connector drop: ended in 0 s, 1 detections, 0 errors"
     assert not dropped.exists() and dropped.with_name("node00.json.imported").exists()
     assert fake.pushed[0]["client_id"] == "lab" and fake.pushed[0]["findings"]
     assert (cfg.work / "detect" / "lab" / "trivy.json").exists()
@@ -533,7 +537,7 @@ def test_agent_never_pushes_another_client_and_reports_a_bad_export(tmp_path):
     class Other:
         name = "other"
 
-        def run(self, tenant, work):
+        def run(self, tenant, work, log=print):
             return [load_trivy_file(TRIVY / "node00.lab.example.json", "someone-else")], []
 
     cfg.connectors = [Other(), FileImportConnector("drop", "trivy", tmp_path / "drop")]

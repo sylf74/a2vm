@@ -1,0 +1,173 @@
+#cloud-config
+# A2VM cloud scanner, first boot (Ubuntu 24.04): Docker, Greenbone Community Edition in containers,
+# GitLab Runner (Docker executor) for the client's external project. Rendered by Terraform
+# templatefile(): a doubled dollar sign is a shell variable, a single one a Terraform value.
+package_update: true
+package_upgrade: true
+packages:
+  - docker.io
+  - docker-compose-v2
+  - curl
+  - openssl
+  - ca-certificates
+
+write_files:
+  - path: /opt/a2vm-scanner/scanner.env
+    permissions: "0644"
+    content: |
+      GITLAB_URL=${gitlab_url}
+      RUNNER_TAG=${runner_tag}
+      COMPOSE_URL=${greenbone_compose_url}
+      COMPOSE_PROJECT=greenbone-community-edition
+      SOCKET_VOLUME=greenbone-community-edition_gvmd_socket_vol
+      GVM_USER=vulnops
+
+  - path: /opt/a2vm-scanner/lib.sh
+    permissions: "0644"
+    content: |
+      # Shared by the scripts of /opt/a2vm-scanner.
+      set -euo pipefail
+      . /opt/a2vm-scanner/scanner.env
+      D=/opt/a2vm-scanner
+      gb() { docker compose -p "$COMPOSE_PROJECT" -f "$D/greenbone/compose.yaml" "$@"; }
+      gvmd_cmd() { gb exec -T -u gvmd gvmd gvmd "$@"; }
+
+  - path: /opt/a2vm-scanner/gvm-users.sh
+    permissions: "0700"
+    content: |
+      #!/bin/bash
+      # The GMP account of A2VM (role User) and the password of the web interface's admin, from
+      # the secrets generated at first boot. Waits for gvmd (up to 30 minutes at first start).
+      . /opt/a2vm-scanner/lib.sh
+      for i in $(seq 1 180); do
+        if users=$(gvmd_cmd --get-users 2>/dev/null); then break; fi
+        [ "$i" -lt 180 ] || { echo "gvmd does not answer after 30 minutes: $D/status.sh" >&2; exit 1; }
+        sleep 10
+      done
+      pw=$(cat "$D/secrets/gvm-password.txt")
+      if printf '%s\n' "$users" | grep -qx "$GVM_USER"; then
+        gvmd_cmd --user="$GVM_USER" --new-password="$pw" > /dev/null
+      else
+        gvmd_cmd --create-user="$GVM_USER" --role=User --password="$pw" > /dev/null
+      fi
+      if printf '%s\n' "$users" | grep -qx admin; then
+        gvmd_cmd --user=admin --new-password="$(cat "$D/secrets/gvm-admin.txt")" > /dev/null
+      fi
+      echo "gvmd: account $GVM_USER ready"
+
+  - path: /opt/a2vm-scanner/register-runner.sh
+    permissions: "0700"
+    content: |
+      #!/bin/bash
+      # Registers the runner of the external project. The runner authentication token (glrt-...)
+      # is read on stdin, never on the command line:
+      #   ... | ssh root@<scanner> /opt/a2vm-scanner/register-runner.sh
+      # A client certificate for the GitLab reverse proxy, when it asks for one, is copied first to
+      # /opt/a2vm-scanner/certs/client.crt and client.key (ca.pem: a private CA of GitLab).
+      . /opt/a2vm-scanner/lib.sh
+      IFS= read -r token || true
+      token=$(printf '%s' "$token" | tr -d '[:space:]')
+      case "$token" in
+        glrt-*) ;;
+        *) echo "expected a runner authentication token (glrt-...) on stdin" >&2; exit 2 ;;
+      esac
+      "$D/gvm-users.sh"
+      umask 077
+      tpl="$D/secrets/runner-template.toml"
+      trap 'rm -f "$tpl"' EXIT
+      {
+        echo '[[runners]]'
+        printf '  environment = ["A2VM_SERVER_URL=%s", "A2VM_GVM_USER=%s", "A2VM_GVM_PASSWORD=%s"]\n' \
+          "$GITLAB_URL" "$GVM_USER" "$(cat "$D/secrets/gvm-password.txt")"
+        if [ -s "$D/certs/client.crt" ] && [ -s "$D/certs/client.key" ]; then
+          printf '  tls-cert-file = "%s"\n  tls-key-file = "%s"\n' "$D/certs/client.crt" "$D/certs/client.key"
+        fi
+        if [ -s "$D/certs/ca.pem" ]; then printf '  tls-ca-file = "%s"\n' "$D/certs/ca.pem"; fi
+        echo '  [runners.docker]'
+        printf '    volumes = ["/cache", "%s:/run/gvmd"]\n' "$SOCKET_VOLUME"
+      } > "$tpl"
+      if gitlab-runner list 2>&1 | grep -q 'Token='; then
+        gitlab-runner unregister --all-runners
+      fi
+      CI_SERVER_TOKEN="$token" gitlab-runner register --non-interactive \
+        --url "$GITLAB_URL" --clone-url "$GITLAB_URL" --name "$(hostname)" \
+        --executor docker --docker-image alpine:3 --template-config "$tpl"
+      sed -i 's/^concurrent = .*/concurrent = 1/' /etc/gitlab-runner/config.toml
+      systemctl restart gitlab-runner
+      gitlab-runner verify
+      echo "runner registered: jobs tagged $RUNNER_TAG in the project of this token run here"
+
+  - path: /opt/a2vm-scanner/status.sh
+    permissions: "0700"
+    content: |
+      #!/bin/bash
+      # State of the scanner: containers, feeds, GMP account, runner.
+      . /opt/a2vm-scanner/lib.sh
+      set +e
+      echo "== first boot"; cloud-init status
+      echo "== containers"; gb ps --format 'table {{.Service}}\t{{.State}}\t{{.Status}}'
+      echo "== feeds (NVTs loaded; a scan before the first synchronisation finds little)"
+      gb exec -T -u postgres pg-gvm psql -d gvmd -tAc 'SELECT count(*) FROM nvts;' 2>/dev/null || echo "not yet"
+      echo "== GMP accounts"; gvmd_cmd --get-users 2>/dev/null || echo "gvmd not ready"
+      echo "== runner"; gitlab-runner list 2>&1 | grep -v '^Runtime platform' | sed -E 's/Token=[^ ]+/Token=(hidden)/'
+      echo "== feed update"; systemctl list-timers a2vm-greenbone-feed.timer --no-pager | head -2
+
+  - path: /opt/a2vm-scanner/feed-update.sh
+    permissions: "0700"
+    content: |
+      #!/bin/bash
+      # Newer feed images (and Greenbone components), then the containers that changed restart.
+      . /opt/a2vm-scanner/lib.sh
+      gb pull --quiet
+      gb up -d --remove-orphans
+      docker image prune -f > /dev/null
+
+  - path: /etc/systemd/system/a2vm-greenbone-feed.service
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=Greenbone feed update (A2VM scanner)
+      After=docker.service
+      Requires=docker.service
+
+      [Service]
+      Type=oneshot
+      ExecStart=/opt/a2vm-scanner/feed-update.sh
+
+  - path: /etc/systemd/system/a2vm-greenbone-feed.timer
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=Daily Greenbone feed update (A2VM scanner)
+
+      [Timer]
+      OnCalendar=${feed_update_time}
+      Persistent=true
+
+      [Install]
+      WantedBy=timers.target
+
+  - path: /opt/a2vm-scanner/bootstrap.sh
+    permissions: "0700"
+    content: |
+      #!/bin/bash
+      # Secrets generated here, once: they never leave the instance.
+      . /opt/a2vm-scanner/lib.sh
+      umask 077
+      mkdir -p "$D/secrets" "$D/certs" "$D/greenbone"
+      for s in gvm-password gvm-admin; do
+        [ -s "$D/secrets/$s.txt" ] || openssl rand -base64 24 | tr -d '/+=' > "$D/secrets/$s.txt"
+      done
+      umask 022
+      systemctl enable --now docker
+      curl -fsSL "$COMPOSE_URL" -o "$D/greenbone/compose.yaml"
+      gb pull --quiet
+      gb up -d
+      curl -fsSL https://packages.gitlab.com/install/repositories/runner/gitlab-runner/script.deb.sh | bash
+      apt-get install -y gitlab-runner
+      systemctl daemon-reload
+      systemctl enable --now gitlab-runner a2vm-greenbone-feed.timer
+      "$D/gvm-users.sh"
+
+runcmd:
+  - [/opt/a2vm-scanner/bootstrap.sh]
