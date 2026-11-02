@@ -296,6 +296,30 @@
           }
         }
       }
+    },
+    "coverage": {
+      "description": "Scan coverage (v0.19.0): when the last scan of an asset is stale, and which means of detection each CMDB class expects.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "stale_days": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 7,
+          "description": "An asset not scanned for this many days is stale."
+        },
+        "expected": {
+          "type": "object",
+          "description": "CMDB class (Server, VirtualMachine, PC, IoTDevice... or default) -> means expected, each entry one source or several separated by | (one of them is enough). A class given replaces the default of that class only.",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9-]+(\\|[a-z0-9-]+)*$"
+            }
+          }
+        }
+      }
     }
   },
   "allOf": [

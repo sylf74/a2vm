@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 """`verdict assets build`: consolidate the detection files of each client into its asset inventory.
 
-Reads <detect>/<client>/*.json, writes <out>/<client>/assets.json and <out>/<client>/findings.json.
+Reads <detect>/<client>/*.json, writes <out>/<client>/assets.json, findings.json, exposure_gaps.json
+and coverage.json (scan coverage, v0.19.0).
 The inventory is rebuilt at each run from the observations of that run; history (first seen across
 runs, attribute changes) comes with the PostgreSQL storage.
 """
@@ -17,6 +18,7 @@ from a2vm.io import ExchangeError, detection_files, read_detection, write_assets
 from a2vm.profile import ProfileError, load_profile
 
 from .build import build_inventory
+from .coverage import GAPS, build_coverage, write_coverage
 from .gaps import write_gaps
 
 
@@ -44,6 +46,8 @@ def main(argv: list[str] | None = None) -> int:
         write_assets(target / "assets.json", profile.id, inv.assets)
         write_findings(target / "findings.json", profile.id, inv.findings, inv.not_affected)
         write_gaps(target / "exposure_gaps.json", profile.id, inv.exposure_gaps)
+        coverage = build_coverage(profile.id, inv.assets, profile.coverage)
+        write_coverage(target / "coverage.json", profile.id, coverage)
         for g in inv.exposure_gaps:
             print(f"  WARN  exposure gap ({g['kind']}): {g['name']}: {g['detail']}")
         assumed = Counter(n for a in inv.assets for n, attr in a.attributes.items() if attr.assumed)
@@ -51,6 +55,14 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"{profile.id}: {len(inv.assets)} assets from {len(detections)} sources, {len(inv.findings)} findings, "
             f"assumed attributes: {assumed_txt} -> {target}"
+        )
+        gaps = {s: n for s, n in coverage["counts"].items() if n and s in GAPS}
+        share = coverage["covered_share"]
+        print(
+            f"{profile.id}: coverage {'with' if coverage['cmdb'] else 'without'} CMDB, "
+            f"{coverage['counts']['covered']}/{coverage['expected_assets']} covered"
+            f"{f' ({share:.0%})' if share is not None else ''}, "
+            f"gaps: {', '.join(f'{s}: {n}' for s, n in gaps.items()) or 'none'}"
         )
     return 0
 

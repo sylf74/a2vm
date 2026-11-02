@@ -13,9 +13,13 @@ only ever raises the exposure. An external host that no entry names stays an ass
 Attributes (exposure, mission_prevalence, public_wellbeing_impact, owner), first source wins:
   0. external-scan  exposure only: the external scan reached the asset (or an endpoint in front of it)
   1. declared   the client profile declares it for this asset
-  2. rule       a profile rule matches the host name, FQDN or address
-  3. <scanner>  a source reported it (e.g. a scanner tag)
-  4. default    the client's default assumption, or the built-in worst case — flagged in reports
+  2. cmdb       the tenant's CMDB (v0.19.0): mission prevalence from the business criticality, owner
+  3. rule       a profile rule matches the host name, FQDN or address
+  4. <scanner>  a source reported it (e.g. a scanner tag)
+  5. default    the client's default assumption, or the built-in worst case — flagged in reports
+
+The CMDB (source cmdb) is an inventory, not a scan: it joins assets like any host observation and
+gives them their configuration item (`identifiers.cmdb`), but it is not one of their `scans`.
 
 Exposure uses the SSVC values (open, controlled, small); a former value from a source is read in the
 new form. The optional zone label comes from a declaration or a rule only, and never defaults.
@@ -42,6 +46,8 @@ from a2vm.models import (
 )
 
 EXTERNAL = "external-scan"
+CMDB = "cmdb"
+NOT_SCANS = {CMDB}  # sources that list assets without scanning them
 
 WORST_CASE = {
     "exposure": "open",
@@ -137,6 +143,10 @@ def _merge_identifiers(group: list[AssetObservation]) -> dict:
     hostnames = sorted({str(o.identifiers["hostname"]).lower() for o in group if o.identifiers.get("hostname")})
     ips = sorted({ip for o in group for ip in o.identifiers.get("ips", [])})
     images = sorted({str(o.identifiers["image"]) for o in group if o.identifiers.get("image")})
+    items = sorted(
+        (dict(o.identifiers["cmdb"]) for o in group if isinstance(o.identifiers.get("cmdb"), dict)),
+        key=lambda c: (c.get("class", ""), c.get("key", "")),
+    )
     out: dict = {}
     if fqdns:
         out["fqdns"] = fqdns
@@ -146,6 +156,8 @@ def _merge_identifiers(group: list[AssetObservation]) -> dict:
         out["ips"] = ips
     if images:
         out["images"] = images
+    if items:
+        out["cmdb"] = items  # the configuration items of this asset (usually one)
     return out
 
 
@@ -176,6 +188,10 @@ def _attributes(
         rule = None
         if kind != "declared":
             rule = next((r for r in profile.rules if name in r.set and _rule_matches(r, ids)), None)
+        cmdb = next((o for o in group if o.source == CMDB and name in o.attributes), None)
+        if cmdb:
+            out[name] = Attribute(cmdb.attributes[name], CMDB, cmdb.ref)
+            continue
         if rule:
             where = rule.hostname or rule.fqdn or rule.ip or ""
             out[name] = Attribute(rule.set[name], "rule", rule.description or where)
@@ -300,7 +316,9 @@ def build_inventory(profile: ClientProfile, detections: list[Detection]) -> Inve
             public = _merge_identifiers(external)
             ids["public"] = sorted({*public.get("fqdns", []), *public.get("hostnames", []), *public.get("ips", [])})
         seen = sorted(o.observed_at for o in group)
-        name = group[0].name if kind == "declared" else (ids.get("hostnames") or [group[0].name])[0]
+        # A host is named by its host name; without one, by its configuration item, else by its first sighting.
+        item = next((o.name for o in group if o.source == CMDB), None)
+        name = group[0].name if kind == "declared" else (ids.get("hostnames") or [item or group[0].name])[0]
         if not internal:
             entry = next((e for e in (_endpoint_of(o, profile.published) for o in external) if e), None)
             if entry is not None:
@@ -321,7 +339,10 @@ def build_inventory(profile: ClientProfile, detections: list[Detection]) -> Inve
             first_seen=seen[0],
             last_seen=seen[-1],
             os=os_name,
-            scans={src: max(o.observed_at for o in group if o.source == src) for src in {o.source for o in group}},
+            scans={
+                src: max(o.observed_at for o in group if o.source == src)
+                for src in {o.source for o in group} - NOT_SCANS
+            },
         )
         before = asset.attributes.pop("_before", None)
         gap = exposure_gap(asset, before, internal, external, profile)

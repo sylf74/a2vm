@@ -91,6 +91,8 @@ def run_asset(asset: Asset) -> dict[str, Any]:
         "exposure_source": exposure_source(exposure),
         "zone": zone.value if zone else "",
         "os": asset.os,
+        "ips": list(asset.identifiers.get("ips") or []),
+        "cmdb": [dict(item) for item in asset.identifiers.get("cmdb") or []],
         "scans": dict(sorted((asset.scans or {s: asset.last_seen for s in asset.sources}).items())),
         "last_seen": asset.last_seen,
     }

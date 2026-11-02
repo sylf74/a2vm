@@ -13,6 +13,8 @@
   agent      the collector: runs its connectors near a network and pushes to the detection service
   fetch      the daily run's first step in the cluster: the latest detections from the service
   collectors check the tenant's declaration of its collectors (collectors.yaml)
+  cmdb       the tenant's CMDB: read it as a detection (fetch), or list the hosts scanned but not
+             in it, as a CSV a person imports into the CMDB (export); A2VM never writes to it
 
 Output: <out>/<client>/<source>.json (default work/detect).
 """
@@ -280,6 +282,42 @@ def cmd_import(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_cmdb(args: argparse.Namespace) -> int:
+    import csv
+    import json
+
+    import yaml
+
+    from .cmdb import EXPORT_COLUMNS, CmdbError, ItopConfig, export_candidates, fetch
+
+    if args.cmdb_command == "fetch":
+        try:
+            data = yaml.safe_load(Path(args.config).read_text(encoding="utf-8")) or {}
+            cfg = ItopConfig.from_dict(data, args.config)
+            _write(args.out, fetch(cfg, args.tenant))
+        except (OSError, ValueError, yaml.YAMLError, CmdbError) as exc:
+            print(exc, file=sys.stderr)
+            return 2
+        return 0
+    try:
+        triage = json.loads(Path(args.triage).read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        print(f"{args.triage}: {exc}", file=sys.stderr)
+        return 2
+    if triage.get("schema") != "a2vm.triage/1":
+        print(f"{args.triage}: not a triage document (a2vm.triage/1)", file=sys.stderr)
+        return 2
+    rows = export_candidates(triage, args.organization)
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with out.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=EXPORT_COLUMNS, delimiter=";")
+        writer.writeheader()
+        writer.writerows(rows)
+    print(f"{len(rows)} hosts not in the CMDB -> {out} (iTop: Data administration > CSV import, separator ;)")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="detect", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -360,6 +398,19 @@ def main(argv: list[str] | None = None) -> int:
     cl.add_argument("--tenant", required=True, help="tenant id (the deploy job uses the project name)")
     cl.add_argument("--profile", help="client.yaml: its client id must be the tenant id")
     cl.set_defaults(func=cmd_collectors)
+
+    cm = sub.add_parser("cmdb", help="the tenant's CMDB: read it (fetch), seed it (export)")
+    cm_sub = cm.add_subparsers(dest="cmdb_command", required=True)
+    cf = cm_sub.add_parser("fetch", help="read the CMDB into a detection of source cmdb")
+    cf.add_argument("--config", required=True, help="YAML with the settings of an itop connector")
+    cf.add_argument("--tenant", required=True)
+    cf.add_argument("--out", default="work/detect")
+    cf.set_defaults(func=cmd_cmdb)
+    ce = cm_sub.add_parser("export", help="hosts scanned but not in the CMDB, as a CSV to import")
+    ce.add_argument("triage", help="triage.json of a run (v0.19.0: its coverage section)")
+    ce.add_argument("--organization", required=True, help="organisation of the CIs to create")
+    ce.add_argument("--out", default="cmdb-candidates.csv")
+    ce.set_defaults(func=cmd_cmdb)
 
     args = parser.parse_args(argv)
     return args.func(args)

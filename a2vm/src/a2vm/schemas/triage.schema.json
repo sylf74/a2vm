@@ -179,6 +179,133 @@
           },
           "last_seen": {
             "type": "string"
+          },
+          "ips": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Internal addresses of the asset (since v0.19.0)"
+          },
+          "cmdb": {
+            "type": "array",
+            "description": "Configuration items of the CMDB that are this asset: class, key, status, criticality, organization, type (since v0.19.0)",
+            "items": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "description": "Scan coverage of the client (since v0.19.0, LLD triage §14.6): state of each host asset against the CMDB and the means of detection its class expects; empty for runs whose assets were built before.",
+      "properties": {
+        "generated_at": {
+          "type": "string"
+        },
+        "cmdb": {
+          "type": "boolean",
+          "description": "a CMDB took part in the run"
+        },
+        "stale_days": {
+          "type": "integer"
+        },
+        "counts": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        },
+        "expected_assets": {
+          "type": "integer"
+        },
+        "covered_share": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "means": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "assets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "asset",
+              "name",
+              "state"
+            ],
+            "properties": {
+              "asset": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "state": {
+                "enum": [
+                  "not-in-cmdb",
+                  "retired-but-alive",
+                  "not-expected",
+                  "not-scannable",
+                  "never-scanned",
+                  "stale",
+                  "partial",
+                  "covered"
+                ]
+              },
+              "cmdb_class": {
+                "type": "string"
+              },
+              "cmdb_key": {
+                "type": "string"
+              },
+              "cmdb_status": {
+                "type": "string"
+              },
+              "criticality": {
+                "type": "string"
+              },
+              "cmdb_type": {
+                "type": "string"
+              },
+              "cmdb_items": {
+                "type": "integer"
+              },
+              "expected": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "missing": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "scans": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "last_scan": {
+                "type": "string"
+              },
+              "owner": {
+                "type": "string"
+              }
+            }
           }
         }
       }
