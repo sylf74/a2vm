@@ -90,6 +90,8 @@ openvas:
   # min_qod: 70                         quality of detection threshold (Greenbone's default view)
   # timeout_minutes: 240                how long the collect job waits for the scan
   # reuse_hours: 6                      a scan finished less than this ago is collected, not redone
+  # gmp_timeout_seconds: 300            wait for one answer of gvmd (v0.18.2)
+  # gmp_reconnects: 3                   new connections when gvmd does not answer in time (v0.18.2)
 ```
 
 A full scan of a few hosts on every TCP port takes hours. The GitLab job timeout (1 h by default)
@@ -97,6 +99,16 @@ must be longer than `timeout_minutes`: set it in the client project, **Settings 
 pipelines > Timeout** (e.g. `5h`), and check the runner's own maximum job timeout. If the job is
 killed anyway, gvmd goes on scanning: a later run waits for the running scan, or collects the
 finished one when it is younger than `reuse_hours`.
+
+gvmd sometimes takes minutes to answer one command: while it loads a feed update, or writes a
+large report. When it does not answer within `gmp_timeout_seconds`, the collection opens a new
+connection, signs in again and makes the same call (reading the task, downloading the report),
+`gmp_reconnects` times at most for the whole scan; the scan goes on in gvmd meanwhile. A start of
+the scan that got no answer is never sent twice: the task is read again, and a running scan is
+followed. A command gvmd refused (wrong id, permissions) is not retried. Each new connection is a
+line of the job log or of the collector's journal: `openvas: gvmd did not answer get_task
+(TimeoutError: timed out): new connection 1/3`. Raise `gmp_timeout_seconds` (e.g. `900`) on a slow
+scanner host rather than `gmp_reconnects`.
 
 List each address once: a host name and the address it resolves to are two targets for the
 scanner, and the same machine is then scanned twice.

@@ -24,6 +24,8 @@ import os
 import re
 import shlex
 import subprocess
+import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -142,37 +144,57 @@ def collect(
     ssh: bool = True,
     gmp_session=None,
     env: dict[str, str] | None = None,
+    log: Callable[[str], None] = print,
+    clock: Callable[[], float] = time.monotonic,
 ) -> tuple[list[Detection], list[str]]:
     """Run every scan; return the detections (one per source) and the per-target errors.
 
     `ssh=False` skips the SSH targets (no key available); `gmp_session` replaces the GMP connection
-    (tests)."""
+    (tests). `log` gets one line per target as it ends (found, or why it failed, and how long it
+    took): the journal of a collector shows where a long run is and which target failed."""
     raw_dir = Path(raw_dir)
     by_source: dict[str, list[Detection]] = {}
     errors: list[str] = []
+
+    def failed(where: str, message: str, started: float, label: str = "") -> None:
+        errors.append(f"{where}: {message}")
+        log(f"FAIL {label or where}: {message} ({clock() - started:.0f} s)")
+
+    def done(where: str, d: Detection, started: float) -> None:
+        hosts = len({o.ref for o in d.observations})
+        on = f" on {hosts} assets" if hosts > 1 else ""
+        log(f"ok   {where}: {len(d.findings)} findings{on} ({clock() - started:.0f} s)")
+
     if tf.openvas:
+        where = f"openvas [{', '.join(tf.openvas.hosts)}]"
+        started = clock()
         try:
             session = gmp_session or gmp_connect(tf.openvas, env if env is not None else dict(os.environ))
             with session as gmp:
-                xml = run_scan(gmp, tf.openvas, tf.client)
+                xml = run_scan(gmp, tf.openvas, tf.client, log=log, reopen=getattr(session, "reopen", None))
             path = raw_dir / tf.client / "openvas" / "report.xml"
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(xml)
-            by_source["openvas"] = [parse_gmp_report(xml, tf.client, tf.openvas.min_qod)]
+            detection = parse_gmp_report(xml, tf.client, tf.openvas.min_qod)
+            by_source["openvas"] = [detection]
+            done(where, detection, started)
         except (GmpError, OSError, ValueError) as exc:
-            errors.append(f"openvas [{tf.openvas.gmp}]: {exc}")
+            failed(f"openvas [{tf.openvas.gmp}]", str(exc), started, where)
         except Exception as exc:  # noqa: BLE001 - python-gvm raises its own error classes
-            errors.append(f"openvas [{tf.openvas.gmp}]: {type(exc).__name__}: {exc}")
+            failed(f"openvas [{tf.openvas.gmp}]", f"{type(exc).__name__}: {exc}", started, where)
     for t, method, remote, target in plan(tf) if ssh else []:
+        where = f"{t.host} [{method} {target.ref}]"  # the error, as before
+        label = f"{t.host} [{method}]" if target.kind == "host" else f"{t.host} [{method} {target.ref}]"
+        started = clock()
         cmd = ssh_command(tf, t, remote)
         try:
             proc = runner(cmd, capture_output=True, text=True, timeout=tf.timeout_seconds)
         except (OSError, subprocess.TimeoutExpired) as exc:
-            errors.append(f"{t.host} [{method} {target.ref}]: {exc}")
+            failed(where, str(exc), started, label)
             continue
         # dnf exits 100 when updates are available; anything else non-zero is a failure.
         if proc.returncode not in (0, 100) or (method == "trivy" and not proc.stdout.strip()):
-            errors.append(f"{t.host} [{method} {target.ref}]: exit {proc.returncode}: {_tail(proc.stderr)}")
+            failed(where, f"exit {proc.returncode}: {_tail(proc.stderr)}", started, label)
             continue
         ext = "json" if method == "trivy" else "txt"
         path = raw_dir / tf.client / method / f"{raw_name(target)}.{ext}"
@@ -180,7 +202,10 @@ def collect(
         path.write_text(proc.stdout, encoding="utf-8")
         try:
             loader = load_trivy_file if method == "trivy" else load_dnf_file
-            by_source.setdefault(method, []).append(loader(path, tf.client, target))
+            detection = loader(path, tf.client, target)
         except (ValueError, KeyError) as exc:
-            errors.append(f"{t.host} [{method} {target.ref}]: unreadable output: {exc}")
+            failed(where, f"unreadable output: {exc}", started, label)
+            continue
+        by_source.setdefault(method, []).append(detection)
+        done(label, detection, started)
     return [merge(ds) for ds in by_source.values()], errors
