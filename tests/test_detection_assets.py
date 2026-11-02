@@ -126,8 +126,16 @@ def test_collect_with_fake_ssh(tmp_path):
         assert cmd[-1] in (TRIVY_HOST, DNF)
         return subprocess.CompletedProcess(cmd, code, out, "ssh: connect to host down: refused" if code else "")
 
-    detections, errors = collect(load_targets(targets), tmp_path / "raw", runner=fake_run)
+    lines = []
+    ticks = iter(range(0, 100, 2))
+    detections, errors = collect(
+        load_targets(targets), tmp_path / "raw", runner=fake_run, log=lines.append, clock=lambda: next(ticks)
+    )
     assert {d.source for d in detections} == {"trivy", "dnf-updateinfo"}
+    assert len(lines) == 3  # one line per target, as it ends
+    assert lines[0].startswith("ok   node00.lab.example [trivy]: ") and lines[0].endswith(" findings (2 s)")
+    assert lines[1].startswith("ok   edge01.lab.example [dnf-updateinfo]: ")
+    assert lines[2].startswith("FAIL down.lab.example [trivy]: exit 255: ssh: connect to host down: refused")
     assert len(errors) == 1 and "down.lab.example" in errors[0] and "255" in errors[0]
     dnf = next(d for d in detections if d.source == "dnf-updateinfo")
     assert dnf.observations[0].identifiers["ips"] == ["198.51.100.4"]

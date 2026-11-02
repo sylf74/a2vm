@@ -170,7 +170,8 @@ def cmd_agent(args: argparse.Namespace) -> int:
 
     try:
         cfg = load_config(args.config)
-        report = run(cfg, args.connector)
+        prefix = f"{cfg.tenant} [{cfg.collector}]"
+        report = run(cfg, args.connector, log=lambda line: print(f"{prefix} {line}", flush=True))
     except AgentError as exc:
         print(exc, file=sys.stderr)
         return 2

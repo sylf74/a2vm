@@ -279,7 +279,21 @@ sudo systemctl enable --now a2vm-collector@lan-ssh.timer a2vm-collector@lan-open
 
 ## 3. Check
 
-The journal shows one line per push: `lab [lab-lan]: pushed trivy -> <id>`. On the cluster side,
+The journal shows, for each connector, a line when it starts, one line per target as it ends
+(since v0.18.2: what was found, or why it failed, and how long it took), a line when it ends, then
+one line per push:
+
+```text
+lab [lab-lan] connector lan-ssh: started
+lab [lab-lan] lan-ssh: ok   web01.lab.example [trivy]: 42 findings (18 s)
+lab [lab-lan] lan-ssh: FAIL db01.lab.example [dnf-updateinfo]: exit 255: ssh: connect to host db01.lab.example port 22: No route to host (3 s)
+lab [lab-lan] connector lan-ssh: ended in 21 s, 1 detections, 1 errors
+lab [lab-lan]: pushed trivy -> <id>
+```
+
+An OpenVAS connector shows its progress (`openvas: Running 40%`), the new connections to gvmd
+when it did not answer in time (`docs/openvas.md` §4), then `ok   openvas [<hosts>]: <n> findings
+on <m> assets`. On the cluster side,
 the service's log has one line per push accepted or refused, with the reason. The state of each
 collector (last push per source, age, staleness, last refusal) is read inside the cluster with
 the read token, from a workstation with access to the namespace:

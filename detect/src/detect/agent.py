@@ -35,6 +35,8 @@ from __future__ import annotations
 
 import json
 import os
+import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
@@ -59,7 +61,7 @@ class AgentError(ValueError):
 class Connector(Protocol):
     name: str
 
-    def run(self, tenant: str, work: Path) -> tuple[list[Detection], list[str]]: ...
+    def run(self, tenant: str, work: Path, log: Callable[[str], None] = ...) -> tuple[list[Detection], list[str]]: ...
 
 
 @dataclass
@@ -71,13 +73,13 @@ class TargetsConnector:
     ssh: bool = True
     openvas: bool = True
 
-    def run(self, tenant: str, work: Path) -> tuple[list[Detection], list[str]]:
+    def run(self, tenant: str, work: Path, log: Callable[[str], None] = print) -> tuple[list[Detection], list[str]]:
         tf = load_targets(self.targets)
         if tf.client != tenant:
             return [], [f"{self.name}: targets file of client {tf.client!r}, not {tenant!r}"]
         if not self.openvas:
             tf.openvas = None
-        detections, errors = collect(tf, work / "raw" / self.name, ssh=self.ssh)
+        detections, errors = collect(tf, work / "raw" / self.name, ssh=self.ssh, log=log)
         return detections, [f"{self.name}: {e}" for e in errors]
 
 
@@ -90,7 +92,7 @@ class FileImportConnector:
     folder: Path
     min_qod: int = 70
 
-    def run(self, tenant: str, work: Path) -> tuple[list[Detection], list[str]]:
+    def run(self, tenant: str, work: Path, log: Callable[[str], None] = print) -> tuple[list[Detection], list[str]]:
         suffix = SOURCES_BY_SUFFIX[self.source]
         files = sorted(p for p in self.folder.glob(f"*{suffix}") if p.is_file())
         if not files:
@@ -105,8 +107,10 @@ class FileImportConnector:
                 else:
                     detections.append(load_dnf_file(f, tenant))
                 f.rename(f.with_name(f.name + ".imported"))
+                log(f"ok   {f.name}: {len(detections[-1].findings)} findings")
             except (OSError, ValueError, KeyError) as exc:
                 errors.append(f"{self.name}: {f.name}: {exc}")
+                log(f"FAIL {f.name}: {exc}")
         return ([merge(detections)] if detections else []), errors
 
 
@@ -228,7 +232,15 @@ def _push_or_spool(
                 os.replace(spool_file, spool_file.with_name(spool_file.name + ".rejected"))
 
 
-def run(cfg: AgentConfig, only: str | None = None, transport=None) -> RunReport:
+def run(
+    cfg: AgentConfig,
+    only: str | None = None,
+    transport=None,
+    log: Callable[[str], None] = print,
+    clock: Callable[[], float] = time.monotonic,
+) -> RunReport:
+    """Run the connectors and push. `log` gets a line when a connector starts, one per target as it
+    ends (collect.py) and one when the connector ends; the pushes are in the report."""
     report = RunReport()
     token = cfg.token()
     # What earlier runs could not push first; a fresher detection of the same source replaces it below.
@@ -247,7 +259,17 @@ def run(cfg: AgentConfig, only: str | None = None, transport=None) -> RunReport:
     if only and not selected:
         raise AgentError(f"no connector named {only!r}")
     for connector in selected:
-        detections, errors = connector.run(cfg.tenant, cfg.work)
+        started = clock()
+        log(f"connector {connector.name}: started")
+
+        def target_log(line: str, name: str = connector.name) -> None:
+            log(f"{name}: {line}")
+
+        detections, errors = connector.run(cfg.tenant, cfg.work, log=target_log)
+        log(
+            f"connector {connector.name}: ended in {clock() - started:.0f} s, "
+            f"{len(detections)} detections, {len(errors)} errors"
+        )
         report.errors.extend(errors)
         for d in detections:
             if d.client_id != cfg.tenant:
