@@ -60,8 +60,16 @@ Then, as `terraform output next_steps` says:
      | ssh root@<public_ip> /opt/a2vm-scanner/register-runner.sh
    ```
 
-   From the web interface, copy the token shown once and paste it on the standard input:
-   `ssh root@<public_ip> /opt/a2vm-scanner/register-runner.sh`, paste, Enter.
+   From the web interface, copy the token shown once; read it without echo on the workstation
+   (zsh; in bash, `read -rsp 'Runner token: ' T`), run this line on its own, then paste at the
+   prompt and press Enter:
+
+   ```bash
+   read -rs 'T?Runner token: ' && echo && printf '%s\n' "$T" | ssh root@<public_ip> /opt/a2vm-scanner/register-runner.sh; unset T
+   ```
+
+   Pasted together with the lines that follow it, the prompt reads one of them instead of the
+   token, and the script refuses it (`expected a runner authentication token`).
 
    If GitLab is reached through a reverse proxy that asks for a client certificate, copy it
    before registering (registering again later is fine: the previous registration is removed):
@@ -71,7 +79,8 @@ Then, as `terraform output next_steps` says:
    scp scanner.key root@<public_ip>:/opt/a2vm-scanner/certs/client.key
    ```
 
-   `certs/ca.pem` is read too, when GitLab's certificate comes from a private CA.
+   `certs/ca.pem` is read too, when GitLab's certificate comes from a private CA (not needed
+   with a public certificate, e.g. Let's Encrypt, on the reverse proxy).
 4. **External project**: delete its CI/CD variables `A2VM_GVM_USER` and `A2VM_GVM_PASSWORD`, so
    that the runner's own apply; keep `A2VM_COLLECT_TAG` and `A2VM_RUNNER_TAG` equal to the tag.
    Its `targets.yaml` reads gvmd over the socket: `gmp: unix:///run/gvmd/gvmd.sock`.
@@ -83,6 +92,13 @@ of Greenbone listens on the instance only: `ssh -L 9392:127.0.0.1:9392 root@<pub
 `http://127.0.0.1:9392`, user `admin`.
 
 ## Operate
+
+- **A token shown by mistake** (a terminal, a ticket): delete the runner in the external project
+  (Settings > CI/CD > Runners), which revokes its token, create a new one and register again
+  (step 3); the registration left on the instance is removed. The scripts never print the token:
+  `status.sh` reads only the name and URL of the registration in `config.toml`.
+- **While the feeds load**, gvmd holds its lock: `status.sh` gives each gvmd query 20 s and
+  says "gvmd busy" rather than waiting.
 
 - **Feeds**: a systemd timer (`a2vm-greenbone-feed.timer`, `feed_update_time`, 03:30 UTC by
   default) pulls the newer feed and component images and restarts what changed. Keep it before the

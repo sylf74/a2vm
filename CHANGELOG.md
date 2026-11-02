@@ -5,6 +5,25 @@ analyst and, under **Upgrade**, what a tenant must do when it moves to that tag 
 `A2VM_REF` in its `.gitlab-ci.yml`). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
 §11) and the LLDs. A release adds its entry here in the same merge request (CLAUDE.md, Releasing).
 
+## v0.18.3 — 2026-11-02
+
+Fixes of the cloud scanner found at its first deployment.
+
+- `deploy/scanner`: `status.sh` showed the runner's authentication token. It filtered the token out
+  of the runner's own listing, but colour codes around `Token=` defeated the filter. The scripts no
+  longer call that listing: they read the registration in `config.toml` and show only its name and
+  URL.
+- `status.sh` waits 20 s at most for each gvmd query (gvmd holds its lock while it loads the feeds,
+  and the script seemed stuck); `gvm-users.sh` prints gvmd's messages only when it fails;
+  `register-runner.sh` removes locally a registration already deleted in GitLab (a revoked token).
+- `deploy/scanner/README.md`: reading the token without echo (zsh and bash), what to do when a
+  token was shown, `ca.pem` not needed with a public certificate on the reverse proxy.
+
+**Upgrade**: move `ref` and `A2VM_REF` to `v0.18.3` and push (nothing changes in the pipelines).
+On a scanner built with v0.18.2, rebuild it, or copy the four scripts of `cloud-init.yaml.tftpl`
+(`lib.sh`, `gvm-users.sh`, `register-runner.sh`, `status.sh`) to `/opt/a2vm-scanner`. If its
+token was shown, delete the runner in GitLab and register a new one (README, "Operate").
+
 ## v0.18.2 — 2026-11-02
 
 The cloud scanner deployed by Terraform; OpenVAS collections that survive a silent gvmd; a journal
