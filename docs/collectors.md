@@ -157,7 +157,17 @@ connectors:
   #   type: file-import
   #   source: trivy                        # trivy (.json), dnf-updateinfo (.txt), openvas (.xml)
   #   folder: /var/lib/a2vm/import/trivy
+  # - name: lan-cmdb                       # the tenant's CMDB, read only (v0.19.0, docs/cmdb.md)
+  #   type: itop
+  #   url: https://itop.lab.example
+  #   user: a2vm-cmdb
+  #   password_file: /etc/a2vm/collector/itop-password
+  #   ca_file: /etc/a2vm/collector/ca.pem
+  #   organization: Lab
 ```
+
+A connector `itop` pushes the source `cmdb`: declare it in `collectors.yaml` with the collector's
+other sources (`sources: [trivy, dnf-updateinfo, openvas, cmdb]`).
 
 The image, with the group deploy token of the cluster (`docs/kubernetes.md` §1), the password read
 from a file:
