@@ -63,8 +63,11 @@ def test_no_secret_goes_through_terraform():
     register = files["/opt/a2vm-scanner/register-runner.sh"]
     assert "read -r token" in register and "CI_SERVER_TOKEN=" in register  # stdin, not argv
     assert "--token" not in register
-    assert "gitlab-runner list" in files["/opt/a2vm-scanner/status.sh"]
-    assert "Token=(hidden)" in files["/opt/a2vm-scanner/status.sh"]
+    # `gitlab-runner list` prints the tokens (with colour codes around "Token="): never called.
+    for path, content in files.items():
+        assert "gitlab-runner list" not in content, path
+    status = files["/opt/a2vm-scanner/status.sh"]
+    assert "(name|url)" in status and status.count("timeout 20") == 2
     assert "openssl rand" in files["/opt/a2vm-scanner/bootstrap.sh"]
     variables = (SCANNER / "variables.tf").read_text()
     assert not re.search(r'variable "\w*(token|password|secret)\w*"', variables)
@@ -87,3 +90,17 @@ def test_documented():
     assert "register-runner.sh" in readme and "A2VM_GVM_PASSWORD" in readme
     assert "deploy/scanner" in (ROOT / "docs" / "openvas.md").read_text()
     assert "`deploy/scanner/`" in (ROOT / "CLAUDE.md").read_text()
+
+
+@pytest.mark.skipif(shutil.which("bash") is None, reason="bash not installed")
+def test_a_registration_deleted_in_gitlab_is_removed_locally(tmp_path):
+    lib = _files()["/opt/a2vm-scanner/lib.sh"]
+    helper = lib[lib.index("RUNNER_CONFIG=") :]
+    config = tmp_path / "config.toml"
+    config.write_text('concurrent = 1\n\n[[runners]]\n  name = "s"\n  token = "glrt-x"\n')
+    script = (
+        helper.replace("/etc/gitlab-runner/config.toml", str(config))
+        + "runner_registered && sed -i '/^\\[\\[runners\\]\\]/,$d' \"$RUNNER_CONFIG\"; runner_registered || echo gone"
+    )
+    out = subprocess.run(["bash", "-c", script], capture_output=True, text=True).stdout
+    assert out.strip() == "gone" and config.read_text() == "concurrent = 1\n\n"
