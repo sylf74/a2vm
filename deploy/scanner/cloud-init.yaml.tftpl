@@ -31,6 +31,11 @@ write_files:
       D=/opt/a2vm-scanner
       gb() { docker compose -p "$COMPOSE_PROJECT" -f "$D/greenbone/compose.yaml" "$@"; }
       gvmd_cmd() { gb exec -T -u gvmd gvmd gvmd "$@"; }
+      # Quiet gvmd command: its messages only when it fails.
+      gvmd_quiet() { local out; out=$(gvmd_cmd "$@" 2>&1) || { printf '%s\n' "$out" >&2; return 1; }; }
+      # Read from the configuration: the runner's own listing prints the tokens.
+      RUNNER_CONFIG=/etc/gitlab-runner/config.toml
+      runner_registered() { grep -q '^\[\[runners\]\]' "$RUNNER_CONFIG" 2>/dev/null; }
 
   - path: /opt/a2vm-scanner/gvm-users.sh
     permissions: "0700"
@@ -46,12 +51,12 @@ write_files:
       done
       pw=$(cat "$D/secrets/gvm-password.txt")
       if printf '%s\n' "$users" | grep -qx "$GVM_USER"; then
-        gvmd_cmd --user="$GVM_USER" --new-password="$pw" > /dev/null
+        gvmd_quiet --user="$GVM_USER" --new-password="$pw"
       else
-        gvmd_cmd --create-user="$GVM_USER" --role=User --password="$pw" > /dev/null
+        gvmd_quiet --create-user="$GVM_USER" --role=User --password="$pw"
       fi
       if printf '%s\n' "$users" | grep -qx admin; then
-        gvmd_cmd --user=admin --new-password="$(cat "$D/secrets/gvm-admin.txt")" > /dev/null
+        gvmd_quiet --user=admin --new-password="$(cat "$D/secrets/gvm-admin.txt")"
       fi
       echo "gvmd: account $GVM_USER ready"
 
@@ -86,30 +91,41 @@ write_files:
         echo '  [runners.docker]'
         printf '    volumes = ["/cache", "%s:/run/gvmd"]\n' "$SOCKET_VOLUME"
       } > "$tpl"
-      if gitlab-runner list 2>&1 | grep -q 'Token='; then
-        gitlab-runner unregister --all-runners
+      # A registration made before is removed: in GitLab when it still exists there, else locally.
+      if runner_registered; then
+        gitlab-runner unregister --all-runners || true
+        if runner_registered; then sed -i '/^\[\[runners\]\]/,$d' "$RUNNER_CONFIG"; fi
       fi
       CI_SERVER_TOKEN="$token" gitlab-runner register --non-interactive \
         --url "$GITLAB_URL" --clone-url "$GITLAB_URL" --name "$(hostname)" \
         --executor docker --docker-image alpine:3 --template-config "$tpl"
       sed -i 's/^concurrent = .*/concurrent = 1/' /etc/gitlab-runner/config.toml
       systemctl restart gitlab-runner
-      gitlab-runner verify
+      gitlab-runner verify 2>&1 | grep -v '^Runtime platform' | sed -E 's/\x1b\[[0-9;]*m//g'
       echo "runner registered: jobs tagged $RUNNER_TAG in the project of this token run here"
 
   - path: /opt/a2vm-scanner/status.sh
     permissions: "0700"
     content: |
       #!/bin/bash
-      # State of the scanner: containers, feeds, GMP account, runner.
+      # State of the scanner: containers, feeds, GMP account, runner. Never prints a secret; a part
+      # that does not answer within 20 s is skipped (gvmd waits on its lock while it loads the feeds).
       . /opt/a2vm-scanner/lib.sh
       set +e
       echo "== first boot"; cloud-init status
       echo "== containers"; gb ps --format 'table {{.Service}}\t{{.State}}\t{{.Status}}'
       echo "== feeds (NVTs loaded; a scan before the first synchronisation finds little)"
-      gb exec -T -u postgres pg-gvm psql -d gvmd -tAc 'SELECT count(*) FROM nvts;' 2>/dev/null || echo "not yet"
-      echo "== GMP accounts"; gvmd_cmd --get-users 2>/dev/null || echo "gvmd not ready"
-      echo "== runner"; gitlab-runner list 2>&1 | grep -v '^Runtime platform' | sed -E 's/Token=[^ ]+/Token=(hidden)/'
+      timeout 20 docker compose -p "$COMPOSE_PROJECT" -f "$D/greenbone/compose.yaml" exec -T -u postgres pg-gvm \
+        psql -d gvmd -tAc 'SELECT count(*) FROM nvts;' 2>/dev/null || echo "not yet"
+      echo "== GMP accounts"
+      timeout 20 docker compose -p "$COMPOSE_PROJECT" -f "$D/greenbone/compose.yaml" exec -T -u gvmd gvmd \
+        gvmd --get-users 2>/dev/null || echo "gvmd busy (loading the feeds) or not ready"
+      echo "== runner"
+      if runner_registered; then
+        grep -E '^ *(name|url) = ' "$RUNNER_CONFIG" | sed 's/^ *//'
+      else
+        echo "not registered (register-runner.sh)"
+      fi
       echo "== feed update"; systemctl list-timers a2vm-greenbone-feed.timer --no-pager | head -2
 
   - path: /opt/a2vm-scanner/feed-update.sh
