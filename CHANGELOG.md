@@ -5,6 +5,35 @@ analyst and, under **Upgrade**, what a tenant must do when it moves to that tag 
 `A2VM_REF` in its `.gitlab-ci.yml`). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
 §11) and the LLDs. A release adds its entry here in the same merge request (CLAUDE.md, Releasing).
 
+## v0.18.2 — 2026-11-02
+
+The cloud scanner deployed by Terraform; OpenVAS collections that survive a silent gvmd; a journal
+line per target.
+
+- `deploy/scanner`: Terraform (Scaleway) and cloud-init of the cloud scanner of the external
+  projects: Ubuntu 24.04, Greenbone Community Edition in containers with a daily feed update
+  (systemd timer), GitLab Runner with the Docker executor and the gvmd socket mounted in its jobs.
+  SSH is the only port open inbound. The GMP account `vulnops` (role User) and the web admin's
+  password are generated on the instance; the runner gives the GMP account to the jobs, so the
+  external project needs no `A2VM_GVM_*` variable. The runner's token is sent over SSH to
+  `register-runner.sh` on its standard input, never through Terraform or its state.
+  `status.sh` shows the containers, the feeds, the accounts and the runner.
+- OpenVAS: `gmp_timeout_seconds` (300) and `gmp_reconnects` (3) in the `openvas` section of
+  `targets.yaml`. When gvmd does not answer a read or an idempotent command in time (feed loading,
+  large report), the collection opens a new, signed-in connection and makes the same call, up to
+  `gmp_reconnects` times for the whole scan. A scan start without an answer is never sent twice,
+  and a refusal of gvmd is not retried. Before, one silent answer of 300 s failed the collection
+  ("timed out") while gvmd went on scanning.
+- Collector agent and `collect` job: one line per target as it ends (`ok` with its findings, or
+  `FAIL` with the reason, and the time taken), and a line when each connector starts and ends.
+- `docs/openvas.md` §4 and §5, `docs/collectors.md` §3, `docs/operations.md` (known failures),
+  LLD detection §3.2, §6, §8.1; HLD roadmap and building blocks.
+
+**Upgrade**: move `ref` and `A2VM_REF` to `v0.18.2` and push; on a collector, pull the new `detect`
+image (`docs/operations.md` §5). Nothing else is needed: the new keys of `openvas` have defaults.
+For a cloud scanner installed by hand, `deploy/scanner/README.md` ("Moving from a scanner
+installed by hand").
+
 ## v0.18.1 — 2026-10-31
 
 An asset patched clean stays known; a fix is told from a scan that did not run; remediation KPIs.
