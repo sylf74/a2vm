@@ -169,6 +169,49 @@ paths:
       responses:
         "200": {description: One page, content: {application/json: {schema: {type: object}}}}
         "401": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/coverage:
+    get:
+      tags: [read]
+      operationId: getCoverage
+      summary: >-
+        Scan coverage of the run (since v0.19.0): the state of each host asset against the CMDB and
+        the means of detection its class expects, gaps first; empty for a run built before
+      security:
+        - readToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+        - $ref: "#/components/parameters/run"
+        - name: state
+          in: query
+          schema: {type: string}
+          description: >-
+            comma-separated states (not-in-cmdb, retired-but-alive, not-expected, not-scannable,
+            never-scanned, stale, partial, covered), or gaps for every state that calls for an action
+        - {name: class, in: query, schema: {type: string}, description: "CMDB class (Server, VirtualMachine...)"}
+        - {name: q, in: query, schema: {type: string}}
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/offset"
+      responses:
+        "200":
+          description: Counts per state, the share covered, and one page of assets
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [run, total, items]
+                properties:
+                  run: {type: object}
+                  cmdb: {type: boolean, description: a CMDB took part in the run}
+                  stale_days: {type: integer}
+                  counts: {type: object, additionalProperties: {type: integer}}
+                  expected_assets: {type: integer}
+                  covered_share: {type: [number, "null"]}
+                  means: {type: array, items: {type: string}}
+                  total: {type: integer}
+                  next_offset: {type: integer}
+                  items: {type: array, items: {type: object}}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
   /v1/tenants/{tenant}/assets/{asset}:
     get:
       tags: [read]

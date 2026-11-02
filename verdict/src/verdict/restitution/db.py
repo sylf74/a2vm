@@ -20,7 +20,7 @@ from typing import Any
 
 from a2vm.config import env
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 PEM = "-----BEGIN CERTIFICATE-----"
 
 
@@ -132,6 +132,11 @@ RUN_COLUMNS = (
     "tenant", "tenant_name", "generated_at", "a2vm_version", "policy_hash", "pipeline_id", "pipeline_url",
     "cve_count", "act", "attend", "track", "assets_act", "assets_attend", "assets_track", "needs_review",
     "assumed_inputs", "not_affected", "errors", "overdue", "due_soon", "exposure_gaps",
+    "cmdb", "expected_assets", "covered_assets", "coverage_gaps",
+)  # fmt: skip
+COVERAGE_COLUMNS = (
+    "asset", "name", "state", "cmdb_class", "cmdb_key", "cmdb_status", "criticality", "cmdb_type", "owner",
+    "expected", "missing", "scans", "last_scan",
 )  # fmt: skip
 DECISION_COLUMNS = (
     "finding_id", "asset", "asset_name", "zone", "exposure", "exposure_source", "cve", "title", "level", "ssvc",
@@ -166,6 +171,21 @@ def run_row(data: dict[str, Any]) -> dict[str, Any]:
         "overdue": data["deadlines"]["overdue"],
         "due_soon": data["deadlines"]["due_soon"],
         "exposure_gaps": len(data.get("exposure_gaps", [])),
+        **_coverage_totals(data.get("coverage") or {}),
+    }
+
+
+def _coverage_totals(coverage: dict[str, Any]) -> dict[str, Any]:
+    """Totals of the scan coverage on the run's row (v0.19.0); NULL for a dataset without it."""
+    if not coverage:
+        return dict.fromkeys(("cmdb", "expected_assets", "covered_assets", "coverage_gaps"))
+    counts = coverage.get("counts") or {}
+    gaps = ("not-in-cmdb", "retired-but-alive", "not-scannable", "never-scanned", "stale", "partial")
+    return {
+        "cmdb": bool(coverage.get("cmdb")),
+        "expected_assets": coverage.get("expected_assets", 0),
+        "covered_assets": counts.get("covered", 0),
+        "coverage_gaps": sum(counts.get(s, 0) for s in gaps),
     }
 
 
@@ -214,12 +234,15 @@ def publish(conninfo: str, data: dict[str, Any]) -> tuple[int, dict[str, int]]:
                     assets = [
                         (run_id, tenant, a["id"], a.get("name"), a.get("zone"), a.get("exposure"), a.get("owner"),
                          a["counts"]["ACT"], a["counts"]["ATTEND"], a["counts"]["TRACK"], a.get("kind") or None,
-                         Jsonb(a["scans"]) if "scans" in a else None, a.get("last_seen") or None)
+                         Jsonb(a["scans"]) if "scans" in a else None, a.get("last_seen") or None,
+                         a.get("cmdb_class") or None, a.get("cmdb_status") or None, a.get("criticality") or None,
+                         a.get("coverage") or None)
                         for a in data.get("assets", [])
                     ]  # fmt: skip
                     cur.executemany(
                         "INSERT INTO a2vm.assets (run_id, tenant, asset, name, zone, exposure, owner, act, attend,"
-                        " track, kind, scans, last_seen) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                        " track, kind, scans, last_seen, cmdb_class, cmdb_status, criticality, coverage)"
+                        f" VALUES ({', '.join(['%s'] * 17)})",
                         assets,
                     )
                     counts["assets"] = len(assets)
@@ -241,6 +264,17 @@ def publish(conninfo: str, data: dict[str, Any]) -> tuple[int, dict[str, int]]:
                         gaps,
                     )
                     counts["exposure_gaps"] = len(gaps)
+                    coverage = [
+                        (run_id, tenant, *[Jsonb(c.get(k) or {}) if k == "scans" else (c.get(k) or None)
+                                           for k in COVERAGE_COLUMNS])
+                        for c in (data.get("coverage") or {}).get("assets", [])
+                    ]  # fmt: skip
+                    cur.executemany(
+                        f"INSERT INTO a2vm.coverage (run_id, tenant, {', '.join(COVERAGE_COLUMNS)})"
+                        f" VALUES ({', '.join(['%s'] * (len(COVERAGE_COLUMNS) + 2))})",
+                        coverage,
+                    )
+                    counts["coverage"] = len(coverage)
                     sources = [
                         (run_id, tenant, s["name"], s["findings"], s.get("last_observation") or None)
                         for s in data["run"].get("sources", [])

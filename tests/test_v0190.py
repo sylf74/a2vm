@@ -371,3 +371,116 @@ def test_export_lists_the_hosts_not_in_the_cmdb(tmp_path):
 def test_examples_and_schemas_stay_valid():
     for client in ("lab", "demo-industrie"):
         load_profile(ROOT / "examples" / client / "client.yaml")
+
+
+# -- decision service and chat ----------------------------------------------------------------------
+def _index():
+    from verdict.service.index import RunIndex
+
+    coverage = {
+        "cmdb": True,
+        "stale_days": 7,
+        "counts": {"covered": 1, "never-scanned": 1, "not-in-cmdb": 1},
+        "expected_assets": 2,
+        "covered_share": 0.5,
+        "means": ["openvas"],
+        "assets": [
+            {"asset": "host:printer", "name": "printer", "state": "not-in-cmdb", "cmdb_class": ""},
+            {"asset": "host:db01", "name": "db01", "state": "never-scanned", "cmdb_class": "VirtualMachine"},
+            {"asset": "host:web01", "name": "web01", "state": "covered", "cmdb_class": "Server"},
+        ],
+    }
+    document = {
+        "client": {"id": "lab", "name": "Lab"},
+        "cve_count": 0,
+        "rows": [],
+        "assets": [{"id": "host:web01", "name": "web01", "cmdb": [{"class": "Server", "key": "1"}], "scans": {}}],
+        "coverage": coverage,
+    }
+    return RunIndex({"id": "r1", "generated_at": "2026-11-02T06:00:00+00:00"}, document)
+
+
+def test_service_reads_the_coverage():
+    idx = _index()
+    assert idx.summary()["coverage"]["covered_share"] == 0.5
+    gaps = idx.coverage({"state": "gaps"})
+    assert [c["name"] for c in gaps["items"]] == ["printer", "db01"] and gaps["cmdb"] is True
+    assert [c["name"] for c in idx.coverage({"class": "server"})["items"]] == ["web01"]
+    with pytest.raises(ValueError, match="unknown"):
+        idx.coverage({"state": "lost"})
+    card = idx.assets({})["items"][0]
+    assert card["coverage"] == "covered" and card["cmdb"][0]["class"] == "Server"
+
+
+def test_chat_has_the_coverage_tool():
+    from verdict.service.tools import OPERATIONS
+
+    assert any(op[1] == "list_coverage" and op[-1] == "coverage" for op in OPERATIONS)
+    values = yaml.safe_load((ROOT / "deploy/charts/a2vm-tenant/values.yaml").read_text())
+    assert "list_coverage" in values["chat"]["systemPrompt"]
+
+
+# -- reporting database and dashboard ---------------------------------------------------------------
+from .test_pipeline import _run  # noqa: E402
+from .test_restitution import ADMIN, _grafana, needs_db, reporting_db  # noqa: E402, F401
+
+
+@needs_db
+def test_coverage_is_published_and_the_dashboard_counts_it(settings, sources, profile, tmp_path, reporting_db):  # noqa: F811
+    import psycopg
+
+    from verdict.reporting import build
+    from verdict.restitution import db
+    from verdict.restitution.cli import dashboard, main
+
+    run = _run(settings, sources, profile)
+    hosts = run.assets  # the assets of the fixture run are declared ones: enough to load rows
+    assert len(hosts) >= 2
+    states = ["covered", "never-scanned", "not-in-cmdb", "partial"]
+    run.coverage = {
+        "cmdb": True,
+        "stale_days": 7,
+        "counts": {},
+        "expected_assets": 0,
+        "covered_share": None,
+        "means": ["openvas"],
+        "assets": [
+            {"asset": a["id"], "name": a["name"], "state": states[i % 4], "cmdb_class": "Server" if i % 4 != 2 else "",
+             "missing": ["trivy|dnf-updateinfo"] if i % 4 == 3 else [], "expected": ["openvas"],
+             "scans": a.get("scans") or {}, "last_scan": "2026-11-01T06:00:00+00:00"}
+            for i, a in enumerate(hosts)
+        ],
+    }  # fmt: skip
+    for state in states:
+        run.coverage["counts"][state] = sum(1 for c in run.coverage["assets"] if c["state"] == state)
+    run.coverage["expected_assets"] = sum(run.coverage["counts"][s] for s in ("covered", "never-scanned", "partial"))
+    data = {"schema": "a2vm.reporting/1", **build(run, settings.policy)}
+    assert data["coverage"]["cmdb"] is True and any(a.get("coverage") for a in data["assets"])
+    rdb = reporting_db
+    assert db.init(ADMIN, rdb["writer"]).startswith("schema a2vm version 4")
+    path = tmp_path / "r.json"
+    path.write_text(json.dumps(data))
+    assert main(["publish", str(path), "--dsn", rdb["as_writer"]]) == 0
+    password = db.grant(ADMIN, rdb["reader"], ["*"])
+    as_reader = psycopg.conninfo.make_conninfo(ADMIN, user=rdb["reader"], password=password)
+    board = json.loads(dashboard("coverage"))
+    values = {"tenant": [profile.id], "state": states + ["retired-but-alive", "not-scannable", "not-expected"]}
+    results = {}
+    with psycopg.connect(as_reader) as conn:
+        row = conn.execute(
+            "SELECT cmdb, expected_assets, covered_assets, coverage_gaps FROM a2vm.latest_runs"
+        ).fetchone()
+        assert row == (True, run.coverage["expected_assets"], run.coverage["counts"]["covered"],
+                       len(hosts) - run.coverage["counts"]["covered"])  # fmt: skip
+        for panel in board["panels"]:
+            for t in panel.get("targets", []):
+                cur = conn.execute(_grafana(t["rawSql"], values))
+                results[panel["title"]] = ([c.name for c in cur.description], cur.fetchall())
+    assert results["Never scanned"][1] == [(run.coverage["counts"]["never-scanned"],)]
+    assert results["Not in the CMDB"][1] == [(run.coverage["counts"]["not-in-cmdb"],)]
+    cols, rows = results["Assets and their means of detection"]
+    assert len(rows) == len(hosts) and "OpenVAS" in cols and "Other means" in cols
+    cols, rows = results["Coverage per class"]
+    assert sum(r[cols.index("Assets")] for r in rows) == len(hosts)
+    fr = json.loads(dashboard("coverage", "fr"))
+    assert fr["uid"] == "a2vm-coverage-fr" and fr["title"] == "A2VM — actifs et couverture des scans"

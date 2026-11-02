@@ -5,7 +5,8 @@
 - assets.json: "which assets to fix first?" - findings (asset x CVE) of a snapshot;
 - cves.json: "which CVEs to fix first?" - distinct CVEs of a snapshot, each decided by its most
   urgent finding;
-- remediation.json: what was fixed and how fast, and the assets whose scans are missing (v0.18.1).
+- remediation.json: what was fixed and how fast, and the assets whose scans are missing (v0.18.1);
+- coverage.json: the assets against the CMDB and their means of detection, the scan coverage (v0.19.0).
 
 Each has a French version (`<name>.fr.json`, own uid `<uid>-fr`), translated by code below (v0.17.3).
 They read the reporting database only (PostgreSQL data source, chosen at import). A snapshot is,
@@ -930,6 +931,154 @@ def remediation_dashboard() -> dict:
     return board
 
 
+# -- assets and scan coverage (v0.19.0) -----------------------------------------------------------
+COVERAGE = "a2vm.latest_coverage"
+IN_TENANT = f"tenant = ANY ({TENANTS})"
+# Means of detection shown as columns, with the last date each saw the asset; any other source is
+# listed in "Other means" (an EDR, a new scanner) until it gets its own column.
+MEANS = (("openvas", "OpenVAS"), ("trivy", "Trivy"), ("dnf-updateinfo", "dnf"), ("external-scan", "External scan"))
+STATE_COLORS = (
+    ("not-in-cmdb", "purple"),
+    ("retired-but-alive", "dark-red"),
+    ("never-scanned", "red"),
+    ("stale", "orange"),
+    ("partial", "yellow"),
+    ("not-scannable", "blue"),
+    ("not-expected", "text"),
+    ("covered", "green"),
+)
+
+
+def state_text(name: str) -> dict:
+    """Colour the text of a coverage state column."""
+    return {
+        "matcher": {"id": "byName", "options": name},
+        "properties": [
+            {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+            {
+                "id": "mappings",
+                "value": [
+                    {"type": "value", "options": {state: {"color": color, "index": i}}}
+                    for i, (state, color) in enumerate(STATE_COLORS)
+                ],
+            },
+        ],
+    }
+
+
+def coverage_dashboard() -> dict:
+    """What exists (the CMDB), what was scanned, by which means and when (a2vm.latest_coverage)."""
+    b = Board()
+
+    def stat(title: str, sql: str, x: int, color: str, desc: str, unit: str = "none") -> None:
+        b.add(
+            {
+                "type": "stat",
+                "title": title,
+                "description": desc,
+                "targets": [target(sql)],
+                "options": {
+                    "colorMode": "background",
+                    "graphMode": "none",
+                    "reduceOptions": {"calcs": ["lastNotNull"]},
+                },
+                "fieldConfig": {
+                    "defaults": {"unit": unit, "decimals": 0, "color": {"mode": "fixed", "fixedColor": color}},
+                    "overrides": [],
+                },
+            },
+            x, 0, 3, 4,
+        )  # fmt: skip
+
+    def count(state: str) -> str:
+        return f"SELECT count(*) AS value FROM {COVERAGE} WHERE {IN_TENANT} AND state = '{state}'"
+
+    stat(
+        "Covered",
+        f"SELECT 100.0 * count(*) FILTER (WHERE state = 'covered') / nullif(count(*) FILTER (WHERE in_production), 0)"
+        f" AS value FROM {COVERAGE} WHERE {IN_TENANT}",
+        0, "green",
+        "Share of the assets in production in the CMDB that every expected means of detection saw within the "
+        "tenant's stale_days (latest run).",
+        unit="percent",
+    )  # fmt: skip
+    stat(
+        "In production",
+        f"SELECT count(*) AS value FROM {COVERAGE} WHERE {IN_TENANT} AND in_production",
+        3, "blue",
+        "Assets the CMDB expects to be scanned (in production), or every host when the run has no CMDB.",
+    )  # fmt: skip
+    stat("Never scanned", count("never-scanned"), 6, "red", "In production, never seen by a scan.")
+    stat("Stale", count("stale"), 9, "orange", "In production, last scan older than the tenant's stale_days.")
+    stat(
+        "Partial", count("partial"), 12, "yellow",
+        "In production, scanned lately, but a means of detection its class expects is missing.",
+    )  # fmt: skip
+    stat("Not in the CMDB", count("not-in-cmdb"), 15, "purple", "Scanned, but no configuration item of the CMDB.")
+    stat(
+        "Retired but alive", count("retired-but-alive"), 18, "dark-red",
+        "Obsolete or in stock in the CMDB, but still seen by a scan.",
+    )  # fmt: skip
+    stat("Not scannable", count("not-scannable"), 21, "text", "In production, with no address nor host name.")
+    means = ", ".join(f"(scans ->> '{code}')::timestamptz AS \"{label}\"" for code, label in MEANS)
+    known = ", ".join(f"'{code}'" for code, _ in MEANS)
+    b.add(
+        table(
+            "Assets and their means of detection",
+            f"SELECT asset_name AS \"Asset\", cmdb_class AS \"Class\", cmdb_status AS \"CMDB status\", "
+            f"criticality AS \"Criticality\", state AS \"Coverage\", "
+            "array_to_string(missing, ', ') AS \"Missing\", "
+            f"{means}, "
+            "(SELECT string_agg(k, ', ' ORDER BY k) FROM jsonb_object_keys(coalesce(scans, '{}'::jsonb)) k "
+            f"WHERE k NOT IN ({known})) AS \"Other means\", "
+            "days_since_scan AS \"Days since scan\", owner AS \"Owner\" "
+            f"FROM {COVERAGE} WHERE {IN_TENANT} AND state IN (${{state:sqlstring}}) "
+            "ORDER BY state_rank, criticality, asset_name",
+            "Every host of the latest run: its configuration item, its coverage, the means missing, and for "
+            "each means of detection the date it last saw the asset.",
+            [state_text("Coverage")],
+        ),
+        0, 4, 24, 12,
+    )  # fmt: skip
+    b.add(
+        table(
+            "Coverage per class",
+            "SELECT cmdb_class AS \"Class\", count(*) AS \"Assets\", "
+            + ", ".join(f"count(*) FILTER (WHERE state = '{st}') AS \"{st}\"" for st, _ in STATE_COLORS)
+            + f" FROM {COVERAGE} WHERE {IN_TENANT} GROUP BY cmdb_class ORDER BY count(*) DESC, cmdb_class",
+            "Per CMDB class, the assets in each coverage state.",
+        ),
+        0, 16, 14, 8,
+    )  # fmt: skip
+    b.add(
+        trend(
+            "Covered share, run after run",
+            "SELECT generated_at AS time, 100.0 * covered_assets / nullif(expected_assets, 0) AS \"Covered\" "
+            f"FROM a2vm.runs WHERE {IN_TENANT} AND expected_assets IS NOT NULL AND $__timeFilter(generated_at) "
+            "ORDER BY generated_at",
+            "Share of the assets in production that are covered, at each run (dashboard time range).",
+        ),
+        14, 16, 10, 8,
+    )  # fmt: skip
+    board = dashboard(
+        "A2VM — assets and scan coverage",
+        "a2vm-coverage",
+        b.panels,
+        [
+            SNAPSHOT_VARS[0],
+            custom_var(
+                "state",
+                "Coverage",
+                tuple(st for st, _ in STATE_COLORS),
+                desc="States of the coverage shown in the table",
+            ),
+        ],
+        ["stat", "table", "timeseries"],
+    )
+    board["time"] = {"from": "now-30d", "to": "now"}
+    return board
+
+
 # -- French version (v0.17.3, HLD D16) ------------------------------------------------------------
 # The dashboards are built in English, then translated here by code: titles, descriptions, labels,
 # column names (SQL aliases) and the overrides that match them. Codes (ACT, CVE, EPSS, KEV…) and the
@@ -1089,6 +1238,42 @@ FR_TEXT = {
     "Findings gone while their asset was not scanned again: check the scans of these assets.": "Constats "
     "disparus sans nouveau scan de leur actif : vérifier les scans de ces actifs.",
     "… of which known exploited (KEV)": "… dont exploitées (KEV)",
+    "A2VM — assets and scan coverage": "A2VM — actifs et couverture des scans",
+    "Covered": "Couverts",
+    "Share of the assets in production in the CMDB that every expected means of detection saw within the "
+    "tenant's stale_days (latest run).": "Part des actifs en production dans la CMDB que chaque moyen de "
+    "détection attendu a vus dans le délai stale_days du client (dernier run).",
+    "In production": "En production",
+    "Assets the CMDB expects to be scanned (in production), or every host when the run has no CMDB.": "Actifs "
+    "que la CMDB attend au scan (en production), ou tous les hôtes quand le run n'a pas de CMDB.",
+    "Never scanned": "Jamais scannés",
+    "In production, never seen by a scan.": "En production, jamais vus par un scan.",
+    "Stale": "Scan trop ancien",
+    "In production, last scan older than the tenant's stale_days.": "En production, dernier scan plus ancien que "
+    "le délai stale_days du client.",
+    "Partial": "Partiels",
+    "In production, scanned lately, but a means of detection its class expects is missing.": "En production, "
+    "scannés récemment, mais un moyen de détection attendu pour leur classe manque.",
+    "Not in the CMDB": "Hors CMDB",
+    "Scanned, but no configuration item of the CMDB.": "Scannés, mais sans élément de configuration dans la CMDB.",
+    "Retired but alive": "Retirés mais vivants",
+    "Obsolete or in stock in the CMDB, but still seen by a scan.": "Obsolètes ou en stock dans la CMDB, mais "
+    "encore vus par un scan.",
+    "Not scannable": "Non scannables",
+    "In production, with no address nor host name.": "En production, sans adresse ni nom d'hôte.",
+    "Assets and their means of detection": "Actifs et moyens de détection",
+    "Every host of the latest run: its configuration item, its coverage, the means missing, and for each means "
+    "of detection the date it last saw the asset.": "Chaque hôte du dernier run : son élément de configuration, "
+    "sa couverture, les moyens manquants, et pour chaque moyen de détection la date à laquelle il a vu l'actif "
+    "pour la dernière fois.",
+    "Coverage per class": "Couverture par classe",
+    "Per CMDB class, the assets in each coverage state.": "Par classe de la CMDB, les actifs dans chaque état de "
+    "couverture.",
+    "Covered share, run after run": "Part couverte, run après run",
+    "Share of the assets in production that are covered, at each run (dashboard time range).": "Part des actifs "
+    "en production couverts, à chaque run (période du tableau de bord).",
+    "Coverage": "Couverture",
+    "States of the coverage shown in the table": "États de couverture affichés dans le tableau",
 }
 FR_COLUMN = {
     "ACT": "ACT",
@@ -1143,6 +1328,26 @@ FR_COLUMN = {
     "Last scan": "Dernier scan",
     "Sources": "Sources",
     "Gone on": "Disparu le",
+    "Class": "Classe",
+    "CMDB status": "Statut CMDB",
+    "Criticality": "Criticité",
+    "Coverage": "Couverture",
+    "Missing": "Manquants",
+    "OpenVAS": "OpenVAS",
+    "Trivy": "Trivy",
+    "dnf": "dnf",
+    "External scan": "Scan externe",
+    "Other means": "Autres moyens",
+    "Days since scan": "Jours depuis le scan",
+    "Covered": "Couverts",
+    "not-in-cmdb": "not-in-cmdb",
+    "retired-but-alive": "retired-but-alive",
+    "never-scanned": "never-scanned",
+    "stale": "stale",
+    "partial": "partial",
+    "not-scannable": "not-scannable",
+    "not-expected": "not-expected",
+    "covered": "covered",
 }
 FR_CONTENT = (
     ("## Threats: which assets to fix first?", "## Menaces : quels actifs corriger d'abord ?"),
@@ -1199,6 +1404,7 @@ BUILDERS = {
     "assets": assets_dashboard,
     "cves": cves_dashboard,
     "remediation": remediation_dashboard,
+    "coverage": coverage_dashboard,
 }
 
 

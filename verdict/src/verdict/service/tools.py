@@ -249,6 +249,23 @@ OPERATIONS: list[tuple[str, str, str, list[dict[str, Any]], str]] = [
         "findings/unverified",
     ),
     (
+        "/coverage",
+        "list_coverage",
+        "Scan coverage of the run, against the CMDB: for each host, its state (not-in-cmdb: scanned but unknown "
+        "to the CMDB; retired-but-alive: retired in the CMDB but still seen; not-expected; not-scannable: no "
+        "address; never-scanned; stale: last scan too old; partial: a means of detection its class expects is "
+        "missing; covered), its CMDB class and status, the means that saw it and when, and the means missing. "
+        "Use it for 'which servers were never scanned', 'what is not in the CMDB', 'how well are we covered'.",
+        [
+            _q("state", "string", "Comma-separated states, or gaps (every state that needs an action)"),
+            _q("class", "string", "CMDB class: Server, VirtualMachine, NetworkDevice, PC, IoTDevice..."),
+            _q("q", "string", "Part of the asset id or name"),
+            *_PAGE,
+            _RUN,
+        ],
+        "coverage",
+    ),
+    (
         "/runs",
         "list_runs",
         "The runs kept by the service, newest first, with their date and counts: to compare with an earlier run.",
@@ -429,6 +446,7 @@ class Tools:
                 "assets/{asset}/fixes",
                 "findings/closed",
                 "findings/unverified",
+                "coverage",
             ):
                 query["limit"] = "10"
             if upstream == "exports":

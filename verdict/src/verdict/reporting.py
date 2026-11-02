@@ -156,6 +156,13 @@ def build(run: TriageRun, policy: dict[str, Any] | None = None, today: dt.date |
                 "counts": dict.fromkeys(LEVELS, 0),
             }
         a.update(kind=entry.get("kind", ""), scans=entry.get("scans") or {}, last_seen=entry.get("last_seen", ""))
+        item = (entry.get("cmdb") or [{}])[0]  # its configuration item (v0.19.0)
+        if item:
+            a.update(cmdb_class=item.get("class", ""), cmdb_status=item.get("status", ""))
+            a.update(criticality=item.get("criticality", ""))
+    for entry in (run.coverage or {}).get("assets", []):
+        if entry["asset"] in listed:
+            listed[entry["asset"]]["coverage"] = entry["state"]
     assets = [listed[k] for k in sorted(listed)]
 
     zones = sorted({r.zone for r in rows if r.zone})
@@ -188,4 +195,5 @@ def build(run: TriageRun, policy: dict[str, Any] | None = None, today: dt.date |
         "exposure_gaps": [
             {k: g.get(k, "") for k in ("kind", "asset", "name", "declared", "detail")} for g in run.exposure_gaps
         ],
+        "coverage": run.coverage or {},
     }

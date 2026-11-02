@@ -1,5 +1,5 @@
 -- SPDX-License-Identifier: LicenseRef-a2vm-proprietary
--- Reporting database of A2VM (schema a2vm, version 3): the reporting datasets of every run and
+-- Reporting database of A2VM (schema a2vm, version 4): the reporting datasets of every run and
 -- tenant, read by dashboarding and reporting tools. Idempotent: run again on every init; an
 -- upgrade only adds (columns, views, functions), so a database of an earlier version is kept.
 -- Objects are owned by the writer role (the A2VM jobs); readers get SELECT, limited to their
@@ -8,7 +8,7 @@
 CREATE SCHEMA IF NOT EXISTS a2vm;
 
 CREATE TABLE IF NOT EXISTS a2vm.schema_version (version integer PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now());
-INSERT INTO a2vm.schema_version (version) VALUES (1), (2), (3) ON CONFLICT DO NOTHING;
+INSERT INTO a2vm.schema_version (version) VALUES (1), (2), (3), (4) ON CONFLICT DO NOTHING;
 
 -- Which tenants a reading role may see; tenant '*' = all of them (the Grafana of the MSSP).
 CREATE TABLE IF NOT EXISTS a2vm.tenant_roles (
@@ -110,6 +110,36 @@ CREATE TABLE IF NOT EXISTS a2vm.exposure_gaps (
     detail   text
 );
 
+-- Version 4 (v0.19.0): the scan coverage of each host asset against the tenant's CMDB, and the
+-- configuration item of each asset. Empty for runs published before.
+ALTER TABLE a2vm.runs
+    ADD COLUMN IF NOT EXISTS cmdb            boolean,
+    ADD COLUMN IF NOT EXISTS expected_assets integer,
+    ADD COLUMN IF NOT EXISTS covered_assets  integer,
+    ADD COLUMN IF NOT EXISTS coverage_gaps   integer;
+ALTER TABLE a2vm.assets
+    ADD COLUMN IF NOT EXISTS cmdb_class  text,
+    ADD COLUMN IF NOT EXISTS cmdb_status text,
+    ADD COLUMN IF NOT EXISTS criticality text,
+    ADD COLUMN IF NOT EXISTS coverage    text;
+CREATE TABLE IF NOT EXISTS a2vm.coverage (
+    run_id      bigint NOT NULL REFERENCES a2vm.runs ON DELETE CASCADE,
+    tenant      text NOT NULL,
+    asset       text NOT NULL,
+    name        text,
+    state       text NOT NULL,
+    cmdb_class  text,
+    cmdb_key    text,
+    cmdb_status text,
+    criticality text,
+    cmdb_type   text,
+    owner       text,
+    expected    text[],
+    missing     text[],
+    scans       jsonb,
+    last_scan   timestamptz
+);
+CREATE INDEX IF NOT EXISTS coverage_run ON a2vm.coverage (run_id);
 CREATE TABLE IF NOT EXISTS a2vm.sources (
     run_id           bigint NOT NULL REFERENCES a2vm.runs ON DELETE CASCADE,
     tenant           text NOT NULL,
@@ -206,10 +236,29 @@ CREATE OR REPLACE VIEW a2vm.latest_asset_scans AS
     FROM a2vm.assets a JOIN a2vm.latest_runs r USING (run_id);
 ALTER VIEW a2vm.latest_asset_scans SET (security_invoker = true);
 
+-- The scan coverage with its run's date and the labels the dashboard groups on (version 4).
+CREATE OR REPLACE VIEW a2vm.coverage_facts AS
+    SELECT c.run_id, c.tenant, r.tenant_name, r.generated_at, r.generated_at::date AS day,
+           c.asset, coalesce(c.name, c.asset) AS asset_name, c.state,
+           CASE c.state WHEN 'not-in-cmdb' THEN 1 WHEN 'retired-but-alive' THEN 2 WHEN 'never-scanned' THEN 3
+                WHEN 'stale' THEN 4 WHEN 'partial' THEN 5 WHEN 'not-scannable' THEN 6 WHEN 'not-expected' THEN 7
+                ELSE 8 END AS state_rank,
+           c.state IN ('not-scannable', 'never-scanned', 'stale', 'partial', 'covered') AS in_production,
+           c.state IN ('not-in-cmdb', 'retired-but-alive', 'not-scannable', 'never-scanned', 'stale', 'partial')
+               AS gap,
+           coalesce(nullif(c.cmdb_class, ''), 'not in the CMDB') AS cmdb_class, c.cmdb_key, c.cmdb_status,
+           coalesce(nullif(c.criticality, ''), 'unknown') AS criticality, c.cmdb_type, c.owner,
+           c.expected, c.missing, c.scans, c.last_scan,
+           (r.generated_at::date - c.last_scan::date) AS days_since_scan
+    FROM a2vm.coverage c JOIN a2vm.runs r USING (run_id);
+ALTER VIEW a2vm.coverage_facts SET (security_invoker = true);
+CREATE OR REPLACE VIEW a2vm.latest_coverage AS
+    SELECT f.* FROM a2vm.coverage_facts f JOIN a2vm.latest_runs r USING (run_id);
+ALTER VIEW a2vm.latest_coverage SET (security_invoker = true);
 DO $$
 DECLARE t text;
 BEGIN
-    FOREACH t IN ARRAY ARRAY['runs', 'decisions', 'assets', 'exposure_gaps', 'sources'] LOOP
+    FOREACH t IN ARRAY ARRAY['runs', 'decisions', 'assets', 'exposure_gaps', 'sources', 'coverage'] LOOP
         EXECUTE format('ALTER TABLE a2vm.%I ENABLE ROW LEVEL SECURITY', t);
         EXECUTE format('DROP POLICY IF EXISTS tenant_read ON a2vm.%I', t);
         EXECUTE format(

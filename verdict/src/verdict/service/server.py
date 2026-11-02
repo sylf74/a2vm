@@ -182,6 +182,11 @@ class Service:
                 return idx.decisions(query)
             if rest == "assets":
                 return idx.assets(query)
+            if rest == "coverage":
+                try:
+                    return idx.coverage(query)
+                except ValueError as exc:
+                    raise Problem(HTTPStatus.BAD_REQUEST, str(exc)) from exc
             parts = rest.split("/", 1)
             if len(parts) == 2 and parts[1]:
                 kind, ident = parts[0], unquote(parts[1])

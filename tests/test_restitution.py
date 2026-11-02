@@ -116,7 +116,7 @@ def test_publish_twice_keeps_one_run_and_readers_see_their_tenants_only(
 
     run, data, path = _dataset(settings, sources, profile, tmp_path)
     as_writer, reader = reporting_db["as_writer"], reporting_db["reader"]
-    assert db.init(ADMIN, reporting_db["writer"]).startswith("schema a2vm version 3")
+    assert db.init(ADMIN, reporting_db["writer"]).startswith("schema a2vm version 4")
     assert main(["publish", str(path), "--dsn", as_writer]) == 0
     assert main(["publish", str(path), "--dsn", as_writer]) == 0  # replaced, not doubled
     password = db.grant(ADMIN, reader, ["another-tenant"])
@@ -170,7 +170,7 @@ def test_a_version_1_database_is_upgraded_in_place(settings, sources, profile, t
         )
     password = db.grant(ADMIN, reader, ["*"])
     assert main(["publish", str(path), "--dsn", as_writer]) == 3  # refused: schema version 1
-    assert db.init(ADMIN, reporting_db["writer"]).startswith("schema a2vm version 3")
+    assert db.init(ADMIN, reporting_db["writer"]).startswith("schema a2vm version 4")
     assert main(["publish", str(path), "--dsn", as_writer]) == 0
     as_reader = psycopg.conninfo.make_conninfo(ADMIN, user=reader, password=password)
     with psycopg.connect(as_reader) as conn:  # granted before the upgrade, reads the new view
