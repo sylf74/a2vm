@@ -1,0 +1,32 @@
+<?php
+// SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+
+Dict::Add('FR FR', 'French', 'Français', [
+	'Class:IoTDevice' => 'Objet connecté',
+	'Class:IoTDevice+' => 'Objets connectés (IoT) : caméras, téléviseurs, lecteurs multimédia, compteurs d\'énergie, capteurs',
+	'Class:IoTDevice/ComplementaryName' => '%1$s - %2$s',
+	'Class:IoTDevice/Attribute:device_type' => 'Type d\'objet',
+	'Class:IoTDevice/Attribute:device_type+' => '',
+	'Class:IoTDevice/Attribute:device_type/Value:camera' => 'Caméra',
+	'Class:IoTDevice/Attribute:device_type/Value:camera+' => '',
+	'Class:IoTDevice/Attribute:device_type/Value:tv' => 'Téléviseur',
+	'Class:IoTDevice/Attribute:device_type/Value:tv+' => '',
+	'Class:IoTDevice/Attribute:device_type/Value:media_player' => 'Lecteur multimédia',
+	'Class:IoTDevice/Attribute:device_type/Value:media_player+' => '',
+	'Class:IoTDevice/Attribute:device_type/Value:energy' => 'Énergie (compteur, passerelle d\'onduleurs)',
+	'Class:IoTDevice/Attribute:device_type/Value:energy+' => '',
+	'Class:IoTDevice/Attribute:device_type/Value:sensor' => 'Capteur',
+	'Class:IoTDevice/Attribute:device_type/Value:sensor+' => '',
+	'Class:IoTDevice/Attribute:device_type/Value:smart_home' => 'Box domotique',
+	'Class:IoTDevice/Attribute:device_type/Value:smart_home+' => '',
+	'Class:IoTDevice/Attribute:device_type/Value:appliance' => 'Électroménager',
+	'Class:IoTDevice/Attribute:device_type/Value:appliance+' => '',
+	'Class:IoTDevice/Attribute:device_type/Value:other' => 'Autre',
+	'Class:IoTDevice/Attribute:device_type/Value:other+' => '',
+	'Class:IoTDevice/Attribute:managementip' => 'IP de management',
+	'Class:IoTDevice/Attribute:managementip+' => '',
+	'Class:Model/Attribute:type/Value:IoTDevice' => 'Objet connecté',
+	'Class:Model/Attribute:type/Value:IoTDevice+' => '',
+	'Menu:IoTDevice' => 'Objets connectés',
+	'Menu:IoTDevice+' => '',
+]);

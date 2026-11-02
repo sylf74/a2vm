@@ -1,0 +1,256 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: LicenseRef-a2vm-proprietary -->
+<itop_design xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="3.2">
+  <classes>
+    <class id="IoTDevice" _delta="define">
+      <parent>ConnectableCI</parent>
+      <properties>
+        <category>bizmodel,searchable</category>
+        <abstract>false</abstract>
+        <key_type>autoincrement</key_type>
+        <db_table>a2vm_iotdevice</db_table>
+        <db_key_field>id</db_key_field>
+        <db_final_class_field/>
+        <naming>
+          <attributes>
+            <attribute id="name"/>
+          </attributes>
+          <complementary_attributes>
+            <attribute id="organization_name"/>
+            <attribute id="location_name"/>
+          </complementary_attributes>
+        </naming>
+        <style>
+          <icon>../../images/icons/icons8-electronics.svg</icon>
+        </style>
+        <reconciliation>
+          <attributes>
+            <attribute id="name"/>
+            <attribute id="org_id"/>
+            <attribute id="organization_name"/>
+          </attributes>
+        </reconciliation>
+      </properties>
+      <fields>
+        <field id="device_type" xsi:type="AttributeEnum">
+          <sort_type>label</sort_type>
+          <values>
+            <value id="camera">
+              <code>camera</code>
+            </value>
+            <value id="tv">
+              <code>tv</code>
+            </value>
+            <value id="media_player">
+              <code>media_player</code>
+            </value>
+            <value id="energy">
+              <code>energy</code>
+            </value>
+            <value id="sensor">
+              <code>sensor</code>
+            </value>
+            <value id="smart_home">
+              <code>smart_home</code>
+            </value>
+            <value id="appliance">
+              <code>appliance</code>
+            </value>
+            <value id="other">
+              <code>other</code>
+            </value>
+          </values>
+          <sql>device_type</sql>
+          <default_value>other</default_value>
+          <is_null_allowed>false</is_null_allowed>
+          <display_style>list</display_style>
+        </field>
+        <field id="managementip" xsi:type="AttributeIPAddress">
+          <sql>managementip</sql>
+          <default_value/>
+          <is_null_allowed>true</is_null_allowed>
+        </field>
+      </fields>
+      <methods/>
+      <presentation>
+        <details>
+          <items>
+            <item id="contacts_list">
+              <rank>10</rank>
+            </item>
+            <item id="documents_list">
+              <rank>20</rank>
+            </item>
+            <item id="physicalinterface_list">
+              <rank>40</rank>
+            </item>
+            <item id="networkdevice_list">
+              <rank>50</rank>
+            </item>
+            <item id="col:col1">
+              <rank>80</rank>
+              <items>
+                <item id="fieldset:Server:baseinfo">
+                  <rank>10</rank>
+                  <items>
+                    <item id="name">
+                      <rank>10</rank>
+                    </item>
+                    <item id="org_id">
+                      <rank>20</rank>
+                    </item>
+                    <item id="status">
+                      <rank>30</rank>
+                    </item>
+                    <item id="business_criticity">
+                      <rank>40</rank>
+                    </item>
+                    <item id="location_id">
+                      <rank>50</rank>
+                    </item>
+                    <item id="device_type">
+                      <rank>60</rank>
+                    </item>
+                    <item id="managementip">
+                      <rank>70</rank>
+                    </item>
+                  </items>
+                </item>
+                <item id="fieldset:Server:moreinfo">
+                  <rank>20</rank>
+                  <items>
+                    <item id="brand_id">
+                      <rank>10</rank>
+                    </item>
+                    <item id="model_id">
+                      <rank>20</rank>
+                    </item>
+                    <item id="serialnumber">
+                      <rank>30</rank>
+                    </item>
+                    <item id="asset_number">
+                      <rank>40</rank>
+                    </item>
+                  </items>
+                </item>
+              </items>
+            </item>
+            <item id="col:col2">
+              <rank>90</rank>
+              <items>
+                <item id="fieldset:Server:Date">
+                  <rank>10</rank>
+                  <items>
+                    <item id="move2production">
+                      <rank>10</rank>
+                    </item>
+                    <item id="purchase_date">
+                      <rank>20</rank>
+                    </item>
+                    <item id="end_of_warranty">
+                      <rank>30</rank>
+                    </item>
+                  </items>
+                </item>
+                <item id="fieldset:Server:otherinfo">
+                  <rank>20</rank>
+                  <items>
+                    <item id="description">
+                      <rank>10</rank>
+                    </item>
+                  </items>
+                </item>
+              </items>
+            </item>
+          </items>
+        </details>
+        <search>
+          <items>
+            <item id="name">
+              <rank>10</rank>
+            </item>
+            <item id="org_id">
+              <rank>20</rank>
+            </item>
+            <item id="status">
+              <rank>30</rank>
+            </item>
+            <item id="business_criticity">
+              <rank>40</rank>
+            </item>
+            <item id="device_type">
+              <rank>50</rank>
+            </item>
+            <item id="managementip">
+              <rank>60</rank>
+            </item>
+            <item id="location_id">
+              <rank>70</rank>
+            </item>
+            <item id="brand_id">
+              <rank>80</rank>
+            </item>
+            <item id="model_id">
+              <rank>90</rank>
+            </item>
+          </items>
+        </search>
+        <list>
+          <items>
+            <item id="org_id">
+              <rank>10</rank>
+            </item>
+            <item id="status">
+              <rank>20</rank>
+            </item>
+            <item id="business_criticity">
+              <rank>30</rank>
+            </item>
+            <item id="device_type">
+              <rank>40</rank>
+            </item>
+            <item id="managementip">
+              <rank>50</rank>
+            </item>
+            <item id="location_id">
+              <rank>60</rank>
+            </item>
+            <item id="brand_id">
+              <rank>70</rank>
+            </item>
+            <item id="model_id">
+              <rank>80</rank>
+            </item>
+          </items>
+        </list>
+        <summary>
+          <items>
+            <item id="org_id">
+              <rank>10</rank>
+            </item>
+            <item id="business_criticity">
+              <rank>20</rank>
+            </item>
+            <item id="device_type">
+              <rank>30</rank>
+            </item>
+            <item id="managementip">
+              <rank>40</rank>
+            </item>
+          </items>
+        </summary>
+      </presentation>
+    </class>
+    <class id="Model" _delta="must_exist">
+      <fields>
+        <field id="type" _delta="must_exist">
+          <values>
+            <value id="IoTDevice" _delta="define">
+              <code>IoTDevice</code>
+            </value>
+          </values>
+        </field>
+      </fields>
+    </class>
+  </classes>
+</itop_design>
