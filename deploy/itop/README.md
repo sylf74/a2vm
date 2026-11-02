@@ -5,7 +5,7 @@ Extensions to install in the tenant's iTop (the CMDB that the `itop` connector r
 
 | Extension | What |
 | --- | --- |
-| `a2vm-iot-device` | Class `IoTDevice` (under `ConnectableCI`): connected objects with an address — cameras, TVs, media players, energy meters and gateways, sensors, smart home hubs. A device type, a management IP and network interfaces, like a printer. Rights follow those of the other CIs (group `Configuration`). |
+| `a2vm-iot-device` (1.0.1) | Class `IoTDevice` (under `ConnectableCI`): connected objects with an address — cameras, TVs, media players, energy meters and gateways, sensors, smart home hubs. A device type, a management IP and network interfaces, like a printer. Rights follow those of the other CIs (group `Configuration`). |
 
 ## Install (iTop 3.2, in containers)
 
