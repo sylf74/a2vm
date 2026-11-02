@@ -19,7 +19,7 @@ repeat it. The examples use the tenant `lab` (namespace `a2vm-lab`); replace it 
 | Part | Where | When | Started by |
 | --- | --- | --- | --- |
 | Internal scans: SSH (Trivy, dnf) and OpenVAS | Collector VM near the network (`a2vm-collector@<connector>`, Docker or Podman) | Its systemd timer (`install-collector.sh --schedule`, default 07:30) | systemd |
-| External scan (OpenVAS from the internet) | Pipeline of the project `<tenant>-external`, on the runner of the cloud scanner (tag `scan-cloud`) | Its pipeline schedule | GitLab |
+| External scan (OpenVAS from the internet) | Pipeline of the project `<tenant>-external`, on the runner of the cloud scanner (tag `scan-cloud`; deployed by `deploy/scanner` since v0.18.2) | Its pipeline schedule | GitLab |
 | Daily run: collect → via → detect → assets → triage → publish, inventory | CronJob `a2vm-<tenant>-daily` | `daily.schedule` (default 05:45, Europe/Paris) | Kubernetes |
 | Watch | CronJob `a2vm-<tenant>-watch` | Every 10 minutes | Kubernetes |
 | Detection, watch and decision services | Deployments `a2vm-<tenant>-detect`, `-via`, `-verdict` | Always | Kubernetes |

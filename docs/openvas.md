@@ -128,6 +128,10 @@ Check the file with `detect plan targets.yaml` (the validate job does it). The d
 
 ## 5. Scanner host as runner (external scans)
 
+Since v0.18.2, `deploy/scanner` builds such a host on Scaleway with Terraform and cloud-init
+(Greenbone, the runner, the GMP account, a daily feed update): its README replaces steps 1 and
+2 below. The steps say what it does, for a host installed by hand.
+
 For a scanner outside the network that holds the client data (a cloud instance scanning the
 public exposure), the scanner host can run the `collect` job itself: GMP then goes through the
 local socket, port 9390 stays closed, and only the collection runs there; the other jobs (intel,
