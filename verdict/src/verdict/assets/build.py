@@ -321,6 +321,7 @@ def build_inventory(profile: ClientProfile, detections: list[Detection]) -> Inve
             first_seen=seen[0],
             last_seen=seen[-1],
             os=os_name,
+            scans={src: max(o.observed_at for o in group if o.source == src) for src in {o.source for o in group}},
         )
         before = asset.attributes.pop("_before", None)
         gap = exposure_gap(asset, before, internal, external, profile)

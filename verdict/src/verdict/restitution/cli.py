@@ -4,7 +4,8 @@
   verdict publish reporting.json …          load a run's reporting dataset into the reporting database (jobs)
   verdict db init --dsn …                   create or update the schema (administrator, once per version)
   verdict db grant ROLE TENANT… --dsn …     reading role for a tool (Grafana, Qlik Sense), limited to tenants
-  verdict grafana dashboard NAME            print a Grafana dashboard (JSON, to import): overview, assets, cves;
+  verdict grafana dashboard NAME            print a Grafana dashboard (JSON, to import): overview, assets, cves,
+                                            remediation;
                                             --language fr for its French version
 
 The jobs read the connection from A2VM_REPORTING_DSN and the server's certificate from
@@ -69,7 +70,7 @@ def cmd_db_grant(args: argparse.Namespace) -> int:
     return 0
 
 
-DASHBOARDS = ("overview", "assets", "cves")
+DASHBOARDS = ("overview", "assets", "cves", "remediation")
 
 
 LANGUAGES = ("en", "fr")
@@ -114,7 +115,7 @@ def main(argv: list[str] | None = None) -> int:
     gr = sub.add_parser("grafana", help="Grafana resources")
     gr.add_argument("what", choices=["dashboard"])
     gr.add_argument("name", nargs="?", default="overview", choices=DASHBOARDS,
-                    help="overview (default), assets (per asset), cves (per CVE)")  # fmt: skip
+                    help="overview (default), assets, cves, remediation (what was fixed)")  # fmt: skip
     gr.add_argument("--language", default="en", choices=LANGUAGES,
                     help="language of the titles, descriptions and columns (default en)")  # fmt: skip
     gr.set_defaults(func=cmd_grafana)

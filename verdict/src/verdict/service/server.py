@@ -141,8 +141,9 @@ class Service:
             raise Problem(HTTPStatus.NOT_FOUND, "no earlier run kept: nothing to compare with yet")
         return earlier[-1].id  # receipts are oldest first
 
-    def closed(self, query: dict[str, str]) -> dict[str, Any]:
-        """Findings closed since a day (absent from the newer runs: fixed or no longer detected)."""
+    def closed(self, query: dict[str, str], state: str = "closed") -> dict[str, Any]:
+        """Findings closed since a day (fixed: absent once their asset was scanned again), or
+        unverified (absent, their asset not scanned again, v0.18.1)."""
         if not self.store.history:
             raise Problem(HTTPStatus.NOT_FOUND, "the history of the findings needs the tenant's database (v0.18.0)")
         since = query.get("since") or (dt.datetime.now(dt.UTC) - dt.timedelta(days=30)).date().isoformat()
@@ -154,7 +155,7 @@ class Service:
             limit, offset = page(query)
         except QueryError as exc:
             raise Problem(HTTPStatus.BAD_REQUEST, str(exc)) from exc
-        total, items = self.store.closed(self.tenant, start, limit, offset)
+        total, items = self.store.findings(self.tenant, state, start, limit, offset)
         out: dict[str, Any] = {"since": start.date().isoformat(), "total": total, "items": items}
         if offset + limit < total:
             out["next_offset"] = offset + limit
@@ -164,8 +165,8 @@ class Service:
         self._reader(tenant, token)
         if rest == "runs":
             return {"items": [r.to_dict() for r in reversed(self.store.receipts(tenant))]}
-        if rest == "findings/closed":
-            return self.closed(query)
+        if rest in ("findings/closed", "findings/unverified"):
+            return self.closed(query, rest.split("/")[1])
         idx = self.index(query.pop("run", "latest"))
         try:
             if rest == "changes":

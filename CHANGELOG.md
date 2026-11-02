@@ -5,6 +5,43 @@ analyst and, under **Upgrade**, what a tenant must do when it moves to that tag 
 `A2VM_REF` in its `.gitlab-ci.yml`). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
 §11) and the LLDs. A release adds its entry here in the same merge request (CLAUDE.md, Releasing).
 
+## v0.18.1 — 2026-10-31
+
+An asset patched clean stays known; a fix is told from a scan that did not run; remediation KPIs.
+
+- Assets stage: each asset carries `scans`, the latest observation of each source, a scan with no
+  finding included (`vulnops.assets/1`, added). `triage.json` lists every asset of the run, a finding
+  or not (`a2vm.triage/1`, `assets`, added).
+- Decision service and chat: `GET …/assets` and `GET …/assets/{asset}` show every asset of the run;
+  an asset with no finding has zero counts and its scans (an asset patched clean was "not in the
+  perimeter" before). The summary counts all assets and `assets_with_findings`.
+- With the tenant's database: a finding absent from the newest run is closed (fixed) only when its
+  asset was scanned again by a source that had seen it, after the finding's last observation;
+  otherwise it is `unverified` (scan failed, host off) and opens again with the next run that sees
+  it. `GET …/findings/unverified`, `state` and `unverified_since` in `lifecycle` (`verdict.v1`,
+  added); chat tool `list_unverified_findings`.
+- Reporting database, schema version 3: every asset of a run with its scans, the last observation
+  of each finding per source, views `run_pairs`, `finding_closures` (fixed or unverified, days open,
+  on time) and `latest_asset_scans`. Grafana dashboard `remediation` (and its French version): fixed
+  findings, mean days to fix an ACT, share fixed within the BOD 26-04 due date, gone without a new
+  scan, assets not scanned for 7 days, reopened, per day and per level.
+- Fix: the French versions of the per-asset and per-CVE dashboards named the English column of
+  their bar chart (`xField`): the chart showed no bar.
+- Chat: the instructions tell an asset scanned clean from one not scanned, and keep the whole
+  answer in the language of the question (a model mixed in another script).
+- `docs/operations.md`: operator's manual (where each part runs, usual actions, checks, known
+  failures and remedies, upgrades, stopping the cluster).
+- HLD roadmap: v0.18.2 (automated cloud scanner, to confirm); v0.19.0 renamed "dispatch channels:
+  mail, ITSM, SIRP": remediation tickets in the ITSM (iTop first, then ServiceNow) and, on a
+  suspected compromise only, alerts in TheHive (a SIRP, not an ITSM), two flows side by side;
+  v0.20.0 the iTop CMDB connector. HLD chapter 40.
+- LLD triage §12, §13, §14.4, §15; `docs/reporting.md`.
+
+**Upgrade**: run `verdict db init` once on the reporting database (schema version 3,
+`docs/reporting.md`), then move `ref` and `A2VM_REF` to `v0.18.1` and push. Import the dashboard
+`verdict grafana dashboard remediation` (and `--language fr`), and import again the French
+`assets` and `cves` dashboards.
+
 ## v0.18.0 — 2026-10-31
 
 The tenant's PostgreSQL behind the watch, detection and decision services (HLD D15).

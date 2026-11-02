@@ -1045,7 +1045,7 @@
       "options": {
         "stacking": "normal",
         "orientation": "horizontal",
-        "xField": "Product",
+        "xField": "Produit",
         "legend": {
           "displayMode": "list",
           "placement": "bottom",

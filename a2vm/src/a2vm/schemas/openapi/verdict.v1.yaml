@@ -229,8 +229,9 @@ paths:
       tags: [read]
       operationId: listClosedFindings
       summary: >-
-        Findings closed since a day: in a run and absent from a newer one (fixed, or no longer
-        detected), most recent first (since v0.18.0, with the tenant's database; 404 without it)
+        Findings closed since a day: in a run and absent from a newer one (since v0.18.1, only when
+        their asset was scanned again by a source that had seen them: fixed), most recent first (since
+        v0.18.0, with the tenant's database; 404 without it)
       security:
         - readToken: []
       parameters:
@@ -241,6 +242,37 @@ paths:
       responses:
         "200":
           description: One page of closed findings
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [since, total, items]
+                properties:
+                  since: {type: string}
+                  total: {type: integer}
+                  next_offset: {type: integer}
+                  items: {type: array, items: {$ref: "#/components/schemas/Lifecycle"}}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/findings/unverified:
+    get:
+      tags: [read]
+      operationId: listUnverifiedFindings
+      summary: >-
+        Findings gone from a run while their asset was not scanned again by the source that had seen
+        them (scan failed, host off): not known to be fixed, most recent first (since v0.18.1, with the
+        tenant's database; 404 without it)
+      security:
+        - readToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+        - {name: since, in: query, schema: {type: string, format: date}, description: "a day (default: 30 days ago)"}
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/offset"
+      responses:
+        "200":
+          description: One page of unverified findings
           content:
             application/json:
               schema:
@@ -370,11 +402,13 @@ components:
         id: {type: string}
         cve_id: {type: string}
         asset: {type: string}
+        state: {enum: [open, closed, unverified], description: "since v0.18.1"}
         opened_at: {type: string}
         last_seen_at: {type: string}
         last_run: {type: string}
         closed_at: {type: string}
         closed_run: {type: string}
+        unverified_since: {type: string, description: "gone from a run, its asset not scanned again (since v0.18.1)"}
         reopened: {type: integer}
         level: {enum: [ACT, ATTEND, TRACK]}
         level_since: {type: string}

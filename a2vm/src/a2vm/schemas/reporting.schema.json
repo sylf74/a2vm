@@ -97,7 +97,8 @@
           "vendor": {"type": "string"},
           "product": {"type": "string"},
           "product_type": {"enum": ["application", "os", "hardware", "unknown"], "description": "CPE part of the vulnerable product"},
-          "sources": {"type": "array", "items": {"type": "string"}, "description": "Detection sources that observed the finding"}
+          "sources": {"type": "array", "items": {"type": "string"}, "description": "Detection sources that observed the finding"},
+          "seen_by": {"type": "object", "additionalProperties": {"type": "string"}, "description": "Last observation of the finding per source (since v0.18.1)"}
         }
       }
     },
@@ -118,6 +119,7 @@
     },
     "assets": {
       "type": "array",
+      "description": "Every asset of the run, with or without a finding (since v0.18.1; before, the assets of the findings)",
       "items": {
         "type": "object",
         "required": ["id", "name", "counts"],
@@ -127,7 +129,10 @@
           "zone": {"type": "string"},
           "exposure": {"type": "string"},
           "owner": {"type": "string"},
-          "counts": {"$ref": "#/$defs/counts"}
+          "counts": {"$ref": "#/$defs/counts"},
+          "kind": {"type": "string"},
+          "scans": {"type": "object", "additionalProperties": {"type": "string"}, "description": "Last scan of the asset per source, a scan without finding included (since v0.18.1)"},
+          "last_seen": {"type": "string"}
         }
       }
     }

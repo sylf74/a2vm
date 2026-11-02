@@ -4,7 +4,8 @@
 - overview.json: one client, its latest run and the trend (v0.11.5);
 - assets.json: "which assets to fix first?" - findings (asset x CVE) of a snapshot;
 - cves.json: "which CVEs to fix first?" - distinct CVEs of a snapshot, each decided by its most
-  urgent finding.
+  urgent finding;
+- remediation.json: what was fixed and how fast, and the assets whose scans are missing (v0.18.1).
 
 Each has a French version (`<name>.fr.json`, own uid `<uid>-fr`), translated by code below (v0.17.3).
 They read the reporting database only (PostgreSQL data source, chosen at import). A snapshot is,
@@ -778,6 +779,157 @@ def overview_dashboard() -> dict:
     return board
 
 
+# -- remediation (v0.18.1) ------------------------------------------------------------------------
+CLOSURES = "a2vm.finding_closures"
+IN_RANGE = f"tenant = ANY ({TENANTS}) AND $__timeFilter(closed_at)"
+
+
+def in_range(alias: str) -> str:
+    """IN_RANGE on the columns of `alias`."""
+    return f"{alias}.tenant = ANY ({TENANTS}) AND $__timeFilter({alias}.closed_at)"
+
+
+def remediation_dashboard() -> dict:
+    """What was fixed and how fast: findings gone from a run while their asset was scanned again by
+    the source that had seen them (a2vm.finding_closures), and the assets whose scans are missing."""
+    b = Board()
+
+    def stat(title: str, sql: str, x: int, color: str, unit: str = "none", desc: str = "") -> None:
+        b.add(
+            {
+                "type": "stat",
+                "title": title,
+                "description": desc,
+                "targets": [target(sql)],
+                "options": {
+                    "colorMode": "background",
+                    "graphMode": "none",
+                    "reduceOptions": {"calcs": ["lastNotNull"]},
+                },
+                "fieldConfig": {
+                    "defaults": {"unit": unit, "decimals": 0 if unit == "none" else 1,
+                                 "color": {"mode": "fixed", "fixedColor": color}},
+                    "overrides": [],
+                },
+            },
+            x, 0, 4, 4,
+        )  # fmt: skip
+
+    stat(
+        "Fixed findings",
+        f"SELECT count(*) AS value FROM {CLOSURES} WHERE {IN_RANGE} AND outcome = 'fixed'",
+        0, "green",
+        desc="Findings gone from a run while their asset was scanned again by the source that had seen them "
+        "(dashboard time range).",
+    )  # fmt: skip
+    stat(
+        "Mean days to fix an ACT",
+        f"SELECT avg(days_open) AS value FROM {CLOSURES} WHERE {IN_RANGE} AND outcome = 'fixed' AND level = 'ACT'",
+        4, "blue", unit="d",
+        desc="From the first observation of the finding to the run that saw it fixed.",
+    )  # fmt: skip
+    stat(
+        "Fixed within the BOD 26-04 due date",
+        f"SELECT 100.0 * avg(CASE WHEN within_due THEN 1 ELSE 0 END) AS value FROM {CLOSURES} "
+        f"WHERE {IN_RANGE} AND outcome = 'fixed' AND level IN ('ACT', 'ATTEND') AND within_due IS NOT NULL",
+        8, "purple", unit="percent",
+        desc="Share of the ACT and ATTEND findings fixed on or before their due date.",
+    )  # fmt: skip
+    stat(
+        "Gone without a new scan",
+        f"SELECT count(*) AS value FROM {CLOSURES} WHERE {IN_RANGE} AND outcome = 'unverified'",
+        12, "orange",
+        desc="Findings gone from a run while their asset was not scanned again by the source that had seen "
+        "them: not known to be fixed.",
+    )  # fmt: skip
+    stat(
+        "Assets not scanned for 7 days",
+        f"SELECT count(*) AS value FROM a2vm.latest_asset_scans WHERE tenant = ANY ({TENANTS}) "
+        "AND (last_scan IS NULL OR last_scan < generated_at - interval '7 days')",
+        16, "dark-orange",
+        desc="Assets of the latest run whose last scan is older than 7 days, or unknown.",
+    )  # fmt: skip
+    stat(
+        "Reopened findings",
+        f"SELECT count(*) AS value FROM {CLOSURES} c WHERE {in_range('c')} "
+        "AND c.outcome = 'fixed' AND EXISTS (SELECT 1 FROM a2vm.decisions d JOIN a2vm.runs r USING (run_id) "
+        "WHERE d.tenant = c.tenant AND d.finding_id = c.finding_id AND r.generated_at > c.closed_at)",
+        20, "red",
+        desc="Findings fixed in the time range and seen again in a later run.",
+    )  # fmt: skip
+    b.add(
+        trend(
+            "Fixed findings per day",
+            "SELECT day::timestamptz AS time, "
+            + ", ".join(f"count(*) FILTER (WHERE level = '{lv}') AS \"{lv}\"" for lv in LEVELS)
+            + f" FROM {CLOSURES} WHERE {IN_RANGE} AND outcome = 'fixed' GROUP BY day ORDER BY day",
+            "Findings fixed each day, per level.",
+        ),
+        0, 4, 14, 8,
+    )  # fmt: skip
+    b.add(
+        table(
+            "Time to fix per level",
+            "SELECT l.level AS \"Level\", count(c.finding_id) AS \"Fixed\", "
+            "round(avg(c.days_open), 1) AS \"Mean days\", "
+            "percentile_cont(0.5) WITHIN GROUP (ORDER BY c.days_open) AS \"Median days\", "
+            "round(100.0 * avg(CASE WHEN c.within_due THEN 1 WHEN c.within_due IS NOT NULL THEN 0 END), 1) "
+            "AS \"Within due date (%)\"\n"
+            "FROM (VALUES ('ACT', 1), ('ATTEND', 2), ('TRACK', 3)) l (level, o)\n"
+            f"LEFT JOIN {CLOSURES} c ON c.level = l.level AND c.outcome = 'fixed' "
+            f"AND {in_range('c')}\n"
+            "GROUP BY l.level, l.o ORDER BY l.o",
+            "Per level: findings fixed, mean and median days from first observation to fix, share fixed on "
+            "time (no due date for TRACK).",
+            [level_text("Level")],
+        ),
+        14, 4, 10, 8,
+    )  # fmt: skip
+    b.add(
+        table(
+            "Recently fixed",
+            f"SELECT asset_name AS \"Asset\", cve AS \"CVE\", level AS \"Level\", first_seen AS \"First seen\", "
+            f"day AS \"Fixed on\", days_open AS \"Days open\", within_due AS \"On time\" FROM {CLOSURES} "
+            f"WHERE {IN_RANGE} AND outcome = 'fixed' ORDER BY closed_at DESC, level_rank, cve LIMIT 500",
+            "The findings fixed in the time range, most recent first.",
+            [level_text("Level")],
+        ),
+        0, 12, 12, 10,
+    )  # fmt: skip
+    b.add(
+        table(
+            "Assets by last scan",
+            "SELECT asset_name AS \"Asset\", last_scan AS \"Last scan\", "
+            "(SELECT string_agg(k, ', ' ORDER BY k) FROM jsonb_object_keys(coalesce(scans, '{}'::jsonb)) k) "
+            "AS \"Sources\", act AS \"ACT\", attend AS \"ATTEND\", track AS \"TRACK\" "
+            f"FROM a2vm.latest_asset_scans WHERE tenant = ANY ({TENANTS}) ORDER BY last_scan NULLS FIRST, asset_name",
+            "Every asset of the latest run, the least recently scanned first; an asset scanned clean shows "
+            "no finding.",
+        ),
+        12, 12, 12, 10,
+    )  # fmt: skip
+    b.add(
+        table(
+            "Findings gone without a new scan",
+            f"SELECT asset_name AS \"Asset\", cve AS \"CVE\", level AS \"Level\", day AS \"Gone on\" "
+            f"FROM {CLOSURES} WHERE {IN_RANGE} AND outcome = 'unverified' "
+            "ORDER BY closed_at DESC, level_rank LIMIT 500",
+            "Findings gone while their asset was not scanned again: check the scans of these assets.",
+            [level_text("Level")],
+        ),
+        0, 22, 24, 8,
+    )  # fmt: skip
+    board = dashboard(
+        "A2VM — remediation",
+        "a2vm-remediation",
+        b.panels,
+        [SNAPSHOT_VARS[0]],
+        ["stat", "table", "timeseries"],
+    )
+    board["time"] = {"from": "now-30d", "to": "now"}
+    return board
+
+
 # -- French version (v0.17.3, HLD D16) ------------------------------------------------------------
 # The dashboards are built in English, then translated here by code: titles, descriptions, labels,
 # column names (SQL aliases) and the overrides that match them. Codes (ACT, CVE, EPSS, KEV…) and the
@@ -899,6 +1051,43 @@ FR_TEXT = {
     "The same findings, limited to CVEs listed in CISA KEV.": "Les mêmes constats, limités aux CVE du catalogue "
     "CISA KEV.",
     "To review": "À revoir",
+    "A2VM — remediation": "A2VM — remédiation",
+    "Fixed findings": "Constats corrigés",
+    "Findings gone from a run while their asset was scanned again by the source that had seen them "
+    "(dashboard time range).": "Constats disparus d'un run alors que leur actif a été scanné à nouveau par la "
+    "source qui les avait vus (période du tableau de bord).",
+    "Mean days to fix an ACT": "Délai moyen de correction d'un ACT",
+    "From the first observation of the finding to the run that saw it fixed.": "De la première observation du "
+    "constat au run qui l'a vu corrigé.",
+    "Fixed within the BOD 26-04 due date": "Corrigés dans l'échéance BOD 26-04",
+    "Share of the ACT and ATTEND findings fixed on or before their due date.": "Part des constats ACT et ATTEND "
+    "corrigés au plus tard à leur échéance.",
+    "Gone without a new scan": "Disparus sans nouveau scan",
+    "Findings gone without a new scan": "Constats disparus sans nouveau scan",
+    "Findings gone from a run while their asset was not scanned again by the source that had seen them: not "
+    "known to be fixed.": "Constats disparus d'un run alors que leur actif n'a pas été scanné à nouveau par la "
+    "source qui les avait vus : correction non établie.",
+    "Assets not scanned for 7 days": "Actifs non scannés depuis 7 jours",
+    "Assets of the latest run whose last scan is older than 7 days, or unknown.": "Actifs du dernier run dont le "
+    "dernier scan date de plus de 7 jours, ou est inconnu.",
+    "Reopened findings": "Constats réouverts",
+    "Findings fixed in the time range and seen again in a later run.": "Constats corrigés sur la période et revus "
+    "dans un run ultérieur.",
+    "Fixed findings per day": "Constats corrigés par jour",
+    "Findings fixed each day, per level.": "Constats corrigés chaque jour, par niveau.",
+    "Time to fix per level": "Délai de correction par niveau",
+    "Per level: findings fixed, mean and median days from first observation to fix, share fixed on time (no due "
+    "date for TRACK).": "Par niveau : constats corrigés, délais moyen et médian de la première observation à la "
+    "correction, part corrigée dans l'échéance (pas d'échéance pour TRACK).",
+    "Recently fixed": "Corrigés récemment",
+    "The findings fixed in the time range, most recent first.": "Les constats corrigés sur la période, les plus "
+    "récents d'abord.",
+    "Assets by last scan": "Actifs par dernier scan",
+    "Every asset of the latest run, the least recently scanned first; an asset scanned clean shows no "
+    "finding.": "Tous les actifs du dernier run, les moins récemment scannés d'abord ; un actif scanné sans "
+    "constat n'en montre aucun.",
+    "Findings gone while their asset was not scanned again: check the scans of these assets.": "Constats "
+    "disparus sans nouveau scan de leur actif : vérifier les scans de ces actifs.",
     "… of which known exploited (KEV)": "… dont exploitées (KEV)",
 }
 FR_COLUMN = {
@@ -943,6 +1132,17 @@ FR_COLUMN = {
     "With a fix": "Avec correctif",
     "Zone": "Zone",
     "Zone · exposure": "Zone · exposition",
+    "Fixed": "Corrigés",
+    "Mean days": "Jours (moyenne)",
+    "Median days": "Jours (médiane)",
+    "Within due date (%)": "Dans l'échéance (%)",
+    "First seen": "Première observation",
+    "Fixed on": "Corrigé le",
+    "Days open": "Jours ouvert",
+    "On time": "Dans l'échéance",
+    "Last scan": "Dernier scan",
+    "Sources": "Sources",
+    "Gone on": "Disparu le",
 }
 FR_CONTENT = (
     ("## Threats: which assets to fix first?", "## Menaces : quels actifs corriger d'abord ?"),
@@ -978,6 +1178,8 @@ def french(board: dict) -> dict:
         if isinstance(o, str):
             if key == "rawSql":
                 return _fr_sql(o)
+            if key == "xField":
+                return FR_COLUMN.get(o, o)  # a quoted alias is translated, a plain column is not
             if key == "content":
                 for en, fr in FR_CONTENT:
                     o = o.replace(en, fr)
@@ -992,9 +1194,17 @@ def french(board: dict) -> dict:
     return out
 
 
+BUILDERS = {
+    "overview": overview_dashboard,
+    "assets": assets_dashboard,
+    "cves": cves_dashboard,
+    "remediation": remediation_dashboard,
+}
+
+
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
-    for name, build in (("overview", overview_dashboard), ("assets", assets_dashboard), ("cves", cves_dashboard)):
+    for name, build in BUILDERS.items():
         board = build()
         for suffix, data in (("", board), (".fr", french(board))):
             path = OUT / f"{name}{suffix}.json"

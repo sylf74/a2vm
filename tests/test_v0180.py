@@ -96,7 +96,9 @@ def test_the_findings_live_across_runs(tenant_db, settings, sources, profile, tm
     rows = [r for r in doc["rows"] if row_id(r) != first]
     moved = next(r for r in rows if r["delivery_decision"] != "ACT")
     rows = [{**r, "delivery_decision": "ACT"} if r is moved else r for r in rows]
-    _push(service, {**doc, "generated_at": "2026-10-02T06:00:00+00:00", "rows": rows}, "d2")
+    # (v0.18.1: its asset scanned again by the source that had seen it, so it is fixed)
+    rescanned = [{**x, "scans": {k: "2100-01-01T00:00:00+00:00" for k in x["scans"]}} for x in doc["assets"]]
+    _push(service, {**doc, "generated_at": "2026-10-02T06:00:00+00:00", "rows": rows, "assets": rescanned}, "d2")
     closed = service.read(tenant, READ, "findings/closed", {"since": "2026-09-01"})
     assert closed["total"] == 1 and closed["items"][0]["id"] == first
     assert closed["items"][0]["closed_at"].startswith("2026-10-02")

@@ -366,6 +366,13 @@
             "string",
             "null"
           ]
+        },
+        "scans": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "When each source last observed the asset, a scan with no finding included (v0.18.1)."
         }
       }
     }

@@ -70,7 +70,26 @@ CREATE INDEX findings_closed ON verdict.findings (tenant, closed_at);
         + rls("verdict.push_keys")
         + rls("verdict.findings"),
     ),
+    Migration(
+        2,
+        """
+ALTER TABLE verdict.findings ADD COLUMN seen_by jsonb NOT NULL DEFAULT '{}';
+ALTER TABLE verdict.findings ADD COLUMN unverified_since timestamptz;
+""",
+    ),
 ]
+
+
+def rescanned(seen_by: dict[str, str], scans: dict[str, str]) -> bool:
+    """A source that had seen the finding scanned its asset again after its last observation."""
+    for source, seen in seen_by.items():
+        again = scans.get(source)
+        try:
+            if again and seen and parse_time(again) > parse_time(seen):
+                return True
+        except ValueError:
+            continue
+    return False
 
 
 def _iso(value: Any) -> str | None:
@@ -162,19 +181,22 @@ class PgRunStore:
             )
             at = parse_time(receipt.generated_at)
             if newest is None or at > newest:
-                self._findings(conn, tenant, rid, at, document["rows"])
+                self._findings(conn, tenant, rid, at, document)
             self._prune(conn, tenant)
         return receipt
 
-    def _findings(self, conn, tenant: str, rid: str, at: dt.datetime, rows: list[dict[str, Any]]) -> None:
-        """Open, keep or close each finding from the newest run."""
-        current: dict[str, dict[str, Any]] = {}
-        for r in rows:
-            current[row_id(r)] = r
+    def _findings(self, conn, tenant: str, rid: str, at: dt.datetime, document: dict[str, Any]) -> None:
+        """Open, keep or close each finding from the newest run. A finding absent from it is closed
+        (fixed) only when its asset was scanned again, after the finding's last observation, by a
+        source that had seen it (v0.18.1); otherwise it is unverified: absent, not checked."""
+        current: dict[str, dict[str, Any]] = {row_id(r): r for r in document["rows"]}
+        scans = {a["id"]: a.get("scans") or {} for a in document.get("assets") or []}
         known = {
-            f: (level, closed, levels)
-            for f, level, closed, levels in conn.execute(
-                "SELECT finding, level, closed_at, levels FROM verdict.findings WHERE tenant = %s", (tenant,)
+            f: (level, closed, unverified, levels, seen_by, asset)
+            for f, level, closed, unverified, levels, seen_by, asset in conn.execute(
+                "SELECT finding, level, closed_at, unverified_since, levels, seen_by, asset FROM verdict.findings "
+                "WHERE tenant = %s",
+                (tenant,),
             ).fetchall()
         }
         stamp = at.isoformat()
@@ -182,31 +204,42 @@ class PgRunStore:
             for fid, r in current.items():
                 level = r["delivery_decision"]
                 asset = r.get("asset_id_full") or r["asset_id"]
+                seen = json.dumps(r.get("seen_by") or {})
                 if fid not in known:
                     cur.execute(
                         "INSERT INTO verdict.findings (tenant, finding, cve, asset, opened_at, last_seen_at, "
-                        "last_run, level, level_since, levels) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                        "last_run, level, level_since, levels, seen_by) "
+                        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
                         (tenant, fid, r["cve_id"], asset, at, at, rid, level, at,
-                         json.dumps([{"at": stamp, "level": level, "run": rid}])),
+                         json.dumps([{"at": stamp, "level": level, "run": rid}]), seen),
                     )  # fmt: skip
                     continue
-                old_level, closed, levels = known[fid]
+                old_level, closed, _, levels, _, _ = known[fid]
                 changed = old_level != level or closed is not None
                 if changed:
                     levels = (levels + [{"at": stamp, "level": level, "run": rid}])[-LEVELS_KEPT:]
                 cur.execute(
                     "UPDATE verdict.findings SET last_seen_at = %s, last_run = %s, closed_at = NULL, "
-                    "closed_run = NULL, reopened = reopened + %s, level = %s, "
-                    "level_since = CASE WHEN %s THEN %s ELSE level_since END, levels = %s "
+                    "closed_run = NULL, unverified_since = NULL, reopened = reopened + %s, level = %s, "
+                    "level_since = CASE WHEN %s THEN %s ELSE level_since END, levels = %s, seen_by = %s "
                     "WHERE tenant = %s AND finding = %s",
-                    (at, rid, 1 if closed is not None else 0, level, changed, at, json.dumps(levels), tenant, fid),
-                )
-            gone = [f for f, (_, closed, _) in known.items() if closed is None and f not in current]
-            for fid in gone:
-                cur.execute(
-                    "UPDATE verdict.findings SET closed_at = %s, closed_run = %s WHERE tenant = %s AND finding = %s",
-                    (at, rid, tenant, fid),
-                )
+                    (at, rid, 1 if closed is not None else 0, level, changed, at, json.dumps(levels), seen,
+                     tenant, fid),
+                )  # fmt: skip
+            for fid, (_, closed, unverified, _, seen_by, asset) in known.items():
+                if closed is not None or fid in current:
+                    continue
+                if rescanned(seen_by or {}, scans.get(asset) or {}):
+                    cur.execute(
+                        "UPDATE verdict.findings SET closed_at = %s, closed_run = %s, unverified_since = NULL "
+                        "WHERE tenant = %s AND finding = %s",
+                        (at, rid, tenant, fid),
+                    )
+                elif unverified is None:
+                    cur.execute(
+                        "UPDATE verdict.findings SET unverified_since = %s WHERE tenant = %s AND finding = %s",
+                        (at, tenant, fid),
+                    )
 
     def _prune(self, conn, tenant: str) -> None:
         ids = [
@@ -257,29 +290,32 @@ class PgRunStore:
     # -- life of the findings ----------------------------------------------------------------------
     @staticmethod
     def _finding(row: tuple) -> dict[str, Any]:
-        fid, cve, asset, opened, last, last_run, closed, closed_run, reopened, level, since, levels = row
+        fid, cve, asset, opened, last, last_run, closed, closed_run, reopened, level, since, levels, unverified = row
+        state = "closed" if closed is not None else "unverified" if unverified is not None else "open"
         out = {
             "id": fid,
             "cve_id": cve,
             "asset": asset,
+            "state": state,
             "opened_at": _iso(opened),
             "last_seen_at": _iso(last),
             "last_run": last_run,
             "closed_at": _iso(closed),
             "closed_run": closed_run,
+            "unverified_since": _iso(unverified),
             "reopened": reopened,
             "level": level,
             "level_since": _iso(since),
             "levels": levels,
         }
-        if closed is None:
-            out.pop("closed_at")
-            out.pop("closed_run")
+        for key in ("closed_at", "closed_run", "unverified_since"):
+            if out[key] is None:
+                out.pop(key)
         return out
 
     _COLUMNS = (
         "finding, cve, asset, opened_at, last_seen_at, last_run, closed_at, closed_run, reopened, level, "
-        "level_since, levels"
+        "level_since, levels, unverified_since"
     )
 
     def lifecycle(self, tenant: str, finding: str) -> dict[str, Any] | None:
@@ -290,15 +326,24 @@ class PgRunStore:
             ).fetchone()
         return self._finding(row) if row else None
 
-    def closed(self, tenant: str, since: dt.datetime, limit: int, offset: int) -> tuple[int, list[dict[str, Any]]]:
-        """Findings closed since `since` (absent from the newest runs), most recent first."""
+    def findings(
+        self, tenant: str, state: str, since: dt.datetime, limit: int, offset: int
+    ) -> tuple[int, list[dict[str, Any]]]:
+        """Findings `closed` (fixed: absent once their asset was scanned again) or `unverified`
+        (absent, their asset not scanned again) since `since`, most recent first."""
+        column = {"closed": "closed_at", "unverified": "unverified_since"}[state]
+        where = f"tenant = %s AND {column} >= %s" + (" AND closed_at IS NULL" if state == "unverified" else "")
         with self.db.tx(tenant) as conn:
             total = conn.execute(
-                "SELECT count(*) FROM verdict.findings WHERE tenant = %s AND closed_at >= %s", (tenant, since)
+                f"SELECT count(*) FROM verdict.findings WHERE {where}",  # noqa: S608 - fixed names
+                (tenant, since),
             ).fetchone()[0]
             rows = conn.execute(
-                f"SELECT {self._COLUMNS} FROM verdict.findings WHERE tenant = %s AND closed_at >= %s "  # noqa: S608
-                "ORDER BY closed_at DESC, finding LIMIT %s OFFSET %s",
+                f"SELECT {self._COLUMNS} FROM verdict.findings WHERE {where} "  # noqa: S608
+                f"ORDER BY {column} DESC, finding LIMIT %s OFFSET %s",
                 (tenant, since, limit, offset),
             ).fetchall()
         return total, [self._finding(r) for r in rows]
+
+    def closed(self, tenant: str, since: dt.datetime, limit: int, offset: int) -> tuple[int, list[dict[str, Any]]]:
+        return self.findings(tenant, "closed", since, limit, offset)

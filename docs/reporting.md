@@ -57,6 +57,16 @@ version 1 … run `verdict db init`" (exit code 3, a warning) and publishes noth
 before the upgrade have no severity, product or source: the new dashboards count them as
 `Unknown` / `unknown`.
 
+### Upgrading to schema version 3 (v0.18.1)
+
+Run `verdict db init` once, as above, before the first daily run of v0.18.1: it adds the scans of
+the assets, the last observation of each finding per source, the views `run_pairs`,
+`finding_closures` and `latest_asset_scans` (the remediation dashboard), keeps every run and
+re-grants the reading roles. Until then `publish` stops with "schema version 2 … run `verdict db
+init`" (exit code 3, a warning). The first run published after the upgrade has nothing to compare
+its scans with: the findings gone between the last run before and the first run after come out
+"gone without a new scan"; the next days count fixes.
+
 ## Client projects
 
 CI/CD variables of the client project (Settings > CI/CD > Variables):
@@ -95,6 +105,7 @@ string is reported without quoting it, since it holds a password.
 | --- | --- | --- | --- |
 | `assets` | A2VM — which assets to fix first | Exposures: one CVE on one asset | Counters: exposures, assets concerned, KEV exposures, ACT exposures, assets with ACT, overdue, share with a fix, EPSS ≥ 10 %; decision × severity matrix and its KEV part; assets ranked (ACT, KEV, overdue, critical) with the change of ACT; trend per day; exposures per zone and exposure |
 | `cves` | A2VM — which CVEs to fix first | Distinct CVEs; a CVE takes the most urgent decision among its findings | Counters: distinct CVEs, KEV CVEs, KEV exposures, CVEs decided ACT, share with a fix, EPSS ≥ 10 %; decision × severity matrix and its KEV part; CVEs ranked (decision, KEV, EPSS, CVSS) with "new" or the earlier decision; trend per day; products with the most CVEs |
+| `remediation` | A2VM — remediation (v0.18.1) | Findings fixed: gone from a run while their asset was scanned again by the source that had seen them | Fixed findings, mean days to fix an ACT, share of ACT and ATTEND fixed on time (BOD 26-04), gone without a new scan, assets not scanned for 7 days, reopened; fixed per day; time to fix per level; recently fixed; assets by last scan |
 | `overview` | A2VM — overview of a client | Findings of the latest run | One client: totals per level, overdue, due within 7 days, to review, exposure gaps, trend run after run, decisions to act on, assets, detection sources |
 
 The `assets` and `cves` dashboards share their variables, kept when moving from one to the other

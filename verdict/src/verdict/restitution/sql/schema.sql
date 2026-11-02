@@ -1,5 +1,5 @@
 -- SPDX-License-Identifier: LicenseRef-a2vm-proprietary
--- Reporting database of A2VM (schema a2vm, version 2): the reporting datasets of every run and
+-- Reporting database of A2VM (schema a2vm, version 3): the reporting datasets of every run and
 -- tenant, read by dashboarding and reporting tools. Idempotent: run again on every init; an
 -- upgrade only adds (columns, views, functions), so a database of an earlier version is kept.
 -- Objects are owned by the writer role (the A2VM jobs); readers get SELECT, limited to their
@@ -8,7 +8,7 @@
 CREATE SCHEMA IF NOT EXISTS a2vm;
 
 CREATE TABLE IF NOT EXISTS a2vm.schema_version (version integer PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now());
-INSERT INTO a2vm.schema_version (version) VALUES (1), (2) ON CONFLICT DO NOTHING;
+INSERT INTO a2vm.schema_version (version) VALUES (1), (2), (3) ON CONFLICT DO NOTHING;
 
 -- Which tenants a reading role may see; tenant '*' = all of them (the Grafana of the MSSP).
 CREATE TABLE IF NOT EXISTS a2vm.tenant_roles (
@@ -91,6 +91,14 @@ CREATE TABLE IF NOT EXISTS a2vm.assets (
     track    integer NOT NULL
 );
 CREATE INDEX IF NOT EXISTS assets_run ON a2vm.assets (run_id);
+-- Version 3 (v0.18.1): every asset of a run, a finding or not, with its scans; the last observation
+-- of each finding per source. A finding gone from a run is told fixed from unchecked with them.
+ALTER TABLE a2vm.assets
+    ADD COLUMN IF NOT EXISTS kind      text,
+    ADD COLUMN IF NOT EXISTS scans     jsonb,
+    ADD COLUMN IF NOT EXISTS last_seen timestamptz;
+ALTER TABLE a2vm.decisions ADD COLUMN IF NOT EXISTS seen_by jsonb;
+CREATE INDEX IF NOT EXISTS decisions_run_finding ON a2vm.decisions (run_id, finding_id);
 
 CREATE TABLE IF NOT EXISTS a2vm.exposure_gaps (
     run_id   bigint NOT NULL REFERENCES a2vm.runs ON DELETE CASCADE,
@@ -160,6 +168,43 @@ RETURNS TABLE (run_id bigint) LANGUAGE sql STABLE AS $$
     WHERE r.tenant = ANY (tenants) AND r.generated_at::date <= snapshot_day
     ORDER BY r.tenant, r.generated_at DESC
 $$;
+
+-- Each run with the run of its tenant just before (version 3).
+CREATE OR REPLACE VIEW a2vm.run_pairs AS
+    SELECT r.run_id, r.tenant, r.generated_at,
+           lag(r.run_id) OVER (PARTITION BY r.tenant ORDER BY r.generated_at) AS previous_run_id
+    FROM a2vm.runs r;
+ALTER VIEW a2vm.run_pairs SET (security_invoker = true);
+
+-- Each finding of a run absent from the next run of its tenant (version 3). Outcome `fixed`: its
+-- asset was scanned again in that run, after the finding's last observation, by a source that had
+-- seen it; else `unverified`: gone, not checked (scan failed, host off, asset no longer listed).
+-- Runs published before version 3 carry no scans: their findings come out unverified.
+CREATE OR REPLACE VIEW a2vm.finding_closures AS
+    SELECT p.tenant, p.run_id, p.generated_at AS closed_at, p.generated_at::date AS day,
+           d.finding_id, d.asset, coalesce(d.asset_name, d.asset) AS asset_name, d.cve, d.level,
+           CASE d.level WHEN 'ACT' THEN 1 WHEN 'ATTEND' THEN 2 ELSE 3 END AS level_rank,
+           d.kev, d.bod_timeline, d.first_seen, d.due_date,
+           (p.generated_at::date - d.first_seen) AS days_open,
+           CASE WHEN d.due_date IS NULL THEN NULL ELSE p.generated_at::date <= d.due_date END AS within_due,
+           CASE WHEN EXISTS (
+               SELECT 1 FROM a2vm.assets a
+               CROSS JOIN LATERAL jsonb_each_text(coalesce(d.seen_by, '{}'::jsonb)) s (source, seen)
+               WHERE a.run_id = p.run_id AND a.asset = d.asset AND a.scans ? s.source
+                 AND (a.scans ->> s.source)::timestamptz > s.seen::timestamptz
+           ) THEN 'fixed' ELSE 'unverified' END AS outcome
+    FROM a2vm.run_pairs p
+    JOIN a2vm.decisions d ON d.run_id = p.previous_run_id
+    WHERE NOT EXISTS (SELECT 1 FROM a2vm.decisions c WHERE c.run_id = p.run_id AND c.finding_id = d.finding_id);
+ALTER VIEW a2vm.finding_closures SET (security_invoker = true);
+
+-- The assets of each tenant's latest run with the date of their last scan (version 3).
+CREATE OR REPLACE VIEW a2vm.latest_asset_scans AS
+    SELECT a.tenant, r.tenant_name, r.generated_at, a.asset, coalesce(a.name, a.asset) AS asset_name, a.kind,
+           a.act, a.attend, a.track, a.scans,
+           (SELECT max(v::timestamptz) FROM jsonb_each_text(coalesce(a.scans, '{}'::jsonb)) s (k, v)) AS last_scan
+    FROM a2vm.assets a JOIN a2vm.latest_runs r USING (run_id);
+ALTER VIEW a2vm.latest_asset_scans SET (security_invoker = true);
 
 DO $$
 DECLARE t text;
