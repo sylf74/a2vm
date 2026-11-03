@@ -77,7 +77,9 @@ verdict grafana dashboard remediation --rssi --language fr > remediation.rssi.fr
 
 (or the files `verdict/src/verdict/restitution/grafana/*.rssi*.json`). Import them in a folder whose
 permissions give them to the persons who may ask for remediation; at import, Grafana asks the
-address of the page: `https://<A2VM_DISPATCH_HOST>`. The reading versions stay where they are: a
+address of the page: `https://<A2VM_DISPATCH_HOST>`. It is kept in the hidden constant `dispatch_url` of each
+dashboard: when a link "Remediate" leads nowhere, set it in Edit > Settings > Variables >
+`dispatch_url` > Value, then save the dashboard. The reading versions stay where they are: a
 link gives no right, the page refuses anyone outside `A2VM_OIDC_REMEDIATORS`, but a reader has no
 use for it.
 

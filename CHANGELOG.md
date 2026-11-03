@@ -5,6 +5,21 @@ analyst and, under **Upgrade**, what a tenant must do when it moves to that tag 
 `A2VM_REF` in its `.gitlab-ci.yml`). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
 §11) and the LLDs. A release adds its entry here in the same merge request (CLAUDE.md, Releasing).
 
+## v0.20.1 — 2026-11-03
+
+Fixes of v0.20.0.
+
+- The dispatch service reaches the tenant's database: its pods were missing from the
+  NetworkPolicy of the CloudNativePG cluster, so the service stopped at start (connection timeout)
+  and the page of the requests answered 502.
+- `A2VM_CHAT_MAX_CHARS`: the longest answer of a tool of the chat, per tenant (default 8000
+  characters, about 2,000 tokens; 4000 for a model with a 16k context, which a long conversation
+  fills with the tools' answers).
+- `docs/dispatch.md`: the address of the page asked at the import of the RSSI dashboards, and how to
+  change it afterwards (the constant `dispatch_url`).
+
+**Upgrade**: move `ref` and `A2VM_REF` to `v0.20.1` and push; no database change.
+
 ## v0.20.0 — 2026-11-03
 
 Pillar 4 starts: remediation tickets in the ITSM, sent by the tenant's rules or asked for from a

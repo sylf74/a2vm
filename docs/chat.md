@@ -40,6 +40,7 @@ pages (about 2,000 tokens at most) for the model's context.
 | `A2VM_CHAT_ALLOW` | Optional: the analysts' networks, CIDR, comma-separated; empty: every source | Visible |
 | `A2VM_CHAT_ADMIN_EMAIL` | Optional: login of the first admin (default `admin@example.org`) | Visible |
 | `A2VM_CHAT_RETENTION_DAYS` | Optional: chats unchanged for longer are deleted (default 30; 0 keeps them) | Visible |
+| `A2VM_CHAT_MAX_CHARS` | Optional: longest answer of a tool, in characters of JSON (default 8000, about 2,000 tokens). With a model of a 16k context, 4000: a long conversation fills the context with the tools' answers (v0.20.1) | Visible |
 | `A2VM_CHAT_LLM_EGRESS` | Optional: `cidr:port,...` of the LLM endpoints, when the job cannot resolve their names | Visible |
 | `A2VM_CHAT_INGRESS_CONTROLLER`, `A2VM_CHAT_INGRESS_CLASS`, `A2VM_CHAT_TLS_SECRET`, `A2VM_CHAT_CLUSTER_ISSUER` | Optional; default to the `A2VM_INTAKE_*` ones | Visible |
 

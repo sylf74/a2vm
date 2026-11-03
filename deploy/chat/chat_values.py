@@ -12,6 +12,8 @@ NetworkPolicy. Endpoints given by name are resolved here, in the job, to their a
     A2VM_CHAT_ALLOW                 optional: the analysts' networks (CIDR, comma-separated)
     A2VM_CHAT_ADMIN_EMAIL           optional: login of the first admin
     A2VM_CHAT_RETENTION_DAYS        optional: chats unchanged for longer are deleted (default 30, 0: kept)
+    A2VM_CHAT_MAX_CHARS             optional: longest tool answer, characters of JSON (default 8000, about
+                                    2,000 tokens; 4000 for a model with a 16k context)
     A2VM_CHAT_INGRESS_CONTROLLER, A2VM_CHAT_INGRESS_CLASS, A2VM_CHAT_TLS_SECRET,
     A2VM_CHAT_CLUSTER_ISSUER        optional; default to the A2VM_INTAKE_* ones
 """
@@ -88,6 +90,11 @@ def values(env: dict[str, str]) -> dict:
         if days < 0:
             raise ValueError("A2VM_CHAT_RETENTION_DAYS: 0 (keep) or a number of days")
         chat["retentionDays"] = days
+    if env.get("A2VM_CHAT_MAX_CHARS", "").strip():
+        chars = int(env["A2VM_CHAT_MAX_CHARS"])
+        if not 1000 <= chars <= 100000:
+            raise ValueError("A2VM_CHAT_MAX_CHARS: 1000 to 100000 characters")
+        chat["maxChars"] = chars
     return {"chat": chat}
 
 
