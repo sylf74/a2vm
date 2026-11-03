@@ -13,7 +13,7 @@ import a2vm
 
 ROOT = Path(__file__).resolve().parents[1]
 CHART = ROOT / "deploy" / "charts" / "a2vm-tenant"
-PILLARS = ("via", "detect", "verdict")
+PILLARS = ("via", "detect", "verdict", "dispatch")
 
 
 def _deploy_job() -> dict:
@@ -31,7 +31,7 @@ def test_chart_carries_the_package_version():
 
 def test_one_image_per_pillar_from_the_same_dockerfile():
     dockerfile = (ROOT / "images" / "Dockerfile").read_text()
-    assert 'case "$PILLAR" in via|detect|verdict)' in dockerfile
+    assert 'case "$PILLAR" in via|detect|verdict|dispatch)' in dockerfile
     assert "USER 10001" in dockerfile  # the chart runs as this user
     job = yaml.safe_load((ROOT / ".gitlab-ci.yml").read_text())["images"]
     assert "for p in " + " ".join(PILLARS) + "; do" in "\n".join(job["script"])
@@ -65,7 +65,7 @@ def test_every_secret_the_job_writes_is_read_by_the_chart_and_documented():
     read = set(re.findall(r"/secrets/([a-z-]+)", chart)) | set(re.findall(r'"([a-z]+(?:-[a-z]+)+)" ?}}?', chart))
     read |= set(re.findall(r'"[A-Z0-9_]+" "([a-z-]+)"', chart))
     read |= set(re.findall(r"key: ([a-z]+(?:-[a-z]+)+)", chart))  # items of a Secret volume (v0.15.0)
-    tools: set[str] = set()
+    tools = {"dispatch-read-token"}  # kept for the tools that read the dispatch service (docs/dispatch.md)
     assert written and written - tools <= read, written - tools - read
     values = (CHART / "values.yaml").read_text()
     documented = set(re.findall(r"^#   ([a-z][a-z-]+)(?:, ([a-z][a-z-]+))?\s", values, re.MULTILINE))

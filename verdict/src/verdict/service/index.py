@@ -98,6 +98,7 @@ def compact(row: dict[str, Any]) -> dict[str, Any]:
         "title": _short(row.get("description", "")),
         "first_seen": (row.get("first_seen") or "")[:10] or None,
         "cve_updated": (row.get("cve_updated") or "")[:10] or None,
+        "fixes": list(row.get("fixes") or []),  # the fixes the scanners reported (v0.20.0, pillar 4)
     }
 
 

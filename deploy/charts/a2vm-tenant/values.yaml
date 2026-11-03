@@ -23,6 +23,7 @@ files:
   settings: ""    # settings.yaml: without it, the defaults of the version
   contacts: ""    # contacts.yaml: who receives the alerts, by level (watch.enabled)
   watchSources: ""  # watch-sources.yaml: without it, the catalogue of the version (watch.enabled)
+  dispatch: ""    # dispatch.yaml: where the decisions go (dispatch.enabled)
 
 # First step of the daily run (LLD detection §8.4):
 # - local: the run collects itself from the cluster (targets.yaml: SSH, OpenVAS), as in v0.12;
@@ -116,6 +117,50 @@ verdict:
   # a2vm.io/verdict-reader=true in the namespace (the analysts' tools), and opens none.
   networkPolicy:
     enabled: true
+
+# Dispatch service of the tenant (pillar 4, v0.20.0, LLD dispatch §6): `dispatch serve`. After each
+# run (step `dispatch` of the daily run) it groups the decisions into remediation tickets and sends
+# them to the ITSM of dispatch.yaml (files.dispatch), then follows them until a scan confirms the
+# fix. Needs verdict.enabled (it reads the decision service with verdict-read-token). The
+# credential of each target of dispatch.yaml is the key dispatch-<target> of secret.name (and
+# dispatch-<target>-ca for a private CA). deploy-k8s enables it when the project has dispatch.yaml.
+dispatch:
+  enabled: false
+  # Secret with the key `digests`: `run <sha256>` (the daily run) and `read <sha256>` (tools).
+  digestsSecret: ""
+  digestsChecksum: ""
+  # Where the targets of dispatch.yaml are, for the NetworkPolicy: one {cidr, port} per address
+  # (deploy-k8s resolves their hosts). inCluster: reached through the cluster's ingress controller.
+  egress: []
+  inCluster: false
+  storage:              # without the tenant's database
+    size: 1Gi
+    storageClass: ""
+  resources:
+    requests: {cpu: 20m, memory: 96Mi}
+    limits: {memory: 512Mi}
+  networkPolicy:
+    enabled: true
+  # The page of the requests for remediation (D18): served by dispatch serve on port 8081, behind
+  # oauth2-proxy, which signs the persons in with the tenant's identity provider (oidc.*) and lets
+  # in the members of `remediators` only. The dashboards' links "Remediate" open it.
+  page:
+    enabled: false
+    host: ""            # e.g. dispatch-lab.apps.example.org
+    remediators: []     # groups that may ask for remediation
+    proxy:
+      image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.5
+      cookieHours: 8
+      resources:
+        requests: {cpu: 10m, memory: 32Mi}
+        limits: {memory: 128Mi}
+    ingress:
+      className: ""
+      tlsSecret: ""     # empty: the controller's default, or with clusterIssuer <release>-<tenant>-dispatch-tls
+      clusterIssuer: ""
+      controller: nginx # nginx, traefik or other, as chat.ingress.controller
+      allowFrom: []     # optional: the networks of the persons (CIDR)
+      annotations: {}
 
 # Conversational search of the tenant's analysts (HLD §8, LLD triage §16): Open WebUI in the
 # namespace, on the tenant's approved LLM endpoints, with a read-only tool server (`verdict tools`)
@@ -303,7 +348,11 @@ daily:
 #   gitlab-ca       CA of GitLab, for the GitLab API (external detection)
 #   detect-read-token   token of the daily run on the detection service (collect.mode intake)
 #   verdict-publish-token   token of the daily run on the decision service (verdict.enabled)
-#   verdict-read-token   token of the tool server on the decision service (chat.enabled)
+#   verdict-read-token   token of the tool server and of the dispatch service on the decision service
+#   dispatch-run-token   token of the daily run on the dispatch service (dispatch.enabled)
+#   dispatch-read-token   token of the tools on the dispatch service (dispatch.enabled)
+#   dispatch-page-key    key that signs the forms of the page of the requests (dispatch.page.enabled)
+#   dispatch-<target>, dispatch-<target>-ca   credential and private CA of a target of dispatch.yaml
 #   chat-secret-key   session key of Open WebUI (chat.enabled)
 #   chat-admin-password   password of its first admin (chat.enabled)
 #   chat-tools-token   token Open WebUI gives the tool server (chat.enabled)

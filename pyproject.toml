@@ -9,7 +9,7 @@ target-version = "py311"
 select = ["E", "F", "I", "B", "UP", "SIM"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["a2vm", "via", "detect", "verdict"]
+known-first-party = ["a2vm", "via", "detect", "verdict", "dispatch"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

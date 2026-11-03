@@ -5,6 +5,42 @@ analyst and, under **Upgrade**, what a tenant must do when it moves to that tag 
 `A2VM_REF` in its `.gitlab-ci.yml`). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
 §11) and the LLDs. A release adds its entry here in the same merge request (CLAUDE.md, Releasing).
 
+## v0.20.0 — 2026-11-03
+
+Pillar 4 starts: remediation tickets in the ITSM, sent by the tenant's rules or asked for from a
+dashboard, and followed until a scan confirms the fix.
+
+- New package and command `dispatch` (pillar 4), image `dispatch`, LLD dispatch-capitalization,
+  operating guide `docs/dispatch.md`. The placeholder `remediate/` is removed.
+- Tickets: one per asset and fix (`<package> <fixed version>` reported by the scanners), each
+  decision in one ticket; the decisions without a known fix of an asset make one ticket. Text from
+  templates (no LLM): asset, fix, level, BOD 26-04 due date, the CVEs; linked to the CMDB item of the
+  asset (v0.19.0).
+- The tenant's rules in `dispatch.yaml` (`dispatch.schema.json`, checked by `validate`): the
+  targets (iTop first), what leaves by itself after each run (`automatic`: none, act, act-attend),
+  zones left out, what a person may ask; `mode: dry-run` (default) proposes and records, `live`
+  sends. No credential in it: `A2VM_DISPATCH_<TARGET>_PASSWORD` (and `_CA`).
+- Dispatch service `dispatch serve` (API `dispatch.v1`: process a run, tickets, requests), the
+  tickets in the tenant's PostgreSQL (schema `dispatch`) or on its volume; the daily run ends with a
+  step `dispatch`. Follow-up: the fixes a scan confirmed are written into the ticket, a ticket with
+  none left is resolved, a ticket closed while a scan still sees a vulnerability is reopened; A2VM
+  never takes the tool's word for a fix.
+- iTop connector: `UserRequest` from a Person (`caller`), optionally to a Team, impact and urgency
+  from the level, linked to the CMDB item; comments in the public log; resolve and reopen.
+- Requests for remediation (D18): the RSSI versions of the dashboards `remediation` and
+  `coverage` (`verdict grafana dashboard NAME --rssi`) link each asset, and every ACT, to a page of
+  the dispatch service behind oauth2-proxy, for the groups `A2VM_OIDC_REMEDIATORS`: it shows the
+  tickets of the selection, sends them on confirmation (anti-forgery token, same origin), never a
+  duplicate, and records who asked.
+- Decision service: the decision items carry their `fixes` (`verdict.v1`, added only).
+- HLD: D12 names pillar 4; chapter 40 and §6 (contracts `dispatch.v1.yaml`, `dispatch.schema.json`).
+
+**Upgrade**: nothing changes for a tenant without `dispatch.yaml`; move `ref` and `A2VM_REF` to
+`v0.20.0`. To use it (`docs/dispatch.md`): in iTop a Person `A2VM` and an account for A2VM; in the
+tenant project `dispatch.yaml` in `mode: dry-run`, `A2VM_DISPATCH_<TARGET>_PASSWORD`, and for the
+page `A2VM_DISPATCH_HOST`, `A2VM_OIDC_REMEDIATORS` and its redirect URI in Keycloak; import the RSSI
+dashboards. No change of the reporting database.
+
 ## v0.19.1 — 2026-11-03
 
 The cloud scanner keeps its disk free; two decisions recorded.

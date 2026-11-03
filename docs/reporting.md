@@ -110,6 +110,12 @@ string is reported without quoting it, since it holds a password.
    choose the data source of step 1. Importing again replaces the dashboard of the same uid.
    For French readers: `verdict grafana dashboard NAME --language fr` (or `NAME.fr.json`), a
    dashboard of its own (uid `<uid>-fr`) with the same queries and French titles and columns.
+3. RSSI versions (v0.20.0, D18): `verdict grafana dashboard remediation --rssi` and `coverage --rssi`
+   (with `--language fr` too; files `*.rssi.json`, `*.rssi.fr.json`, uid `<uid>-rssi`): the same
+   dashboards with a link "Remediate" on each asset and in their header, to the page of the requests
+   for remediation of pillar 4. Grafana asks the page's address at import (`https://<A2VM_DISPATCH_HOST>`).
+   Import them in a folder of their own, open to the persons who may ask for remediation
+   (`docs/dispatch.md` §3); the reading versions stay as they are.
 
 | `NAME` | Dashboard | Counts | Content |
 | --- | --- | --- | --- |

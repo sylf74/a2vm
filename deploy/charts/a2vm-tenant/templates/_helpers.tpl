@@ -59,6 +59,11 @@ app.kubernetes.io/component: {{ .component }}
 {{- end -}}
 {{- end -}}
 
+{{/* Dispatch service of the tenant, inside the cluster. */}}
+{{- define "a2vm-tenant.dispatchUrl" -}}
+{{- printf "http://%s-dispatch:8080" (include "a2vm-tenant.name" .) -}}
+{{- end -}}
+
 {{/* Watch service of the tenant, inside the cluster. */}}
 {{- define "a2vm-tenant.viaUrl" -}}
 {{- printf "http://%s-via:8080" (include "a2vm-tenant.name" .) -}}
@@ -119,6 +124,23 @@ if [ ! -s /secrets/via-run-token ]; then echo "No via-run-token: the watch servi
 {{- end -}}
 {{- if and .Values.oidc.issuerUrl (not .Values.oidc.inCluster) (not .Values.oidc.egress) -}}
 {{- fail "oidc.issuerUrl needs oidc.egress (or oidc.inCluster) for the NetworkPolicies" -}}
+{{- end -}}
+{{- if .Values.dispatch.enabled -}}
+{{- if not .Values.verdict.enabled -}}
+{{- fail "dispatch.enabled needs verdict.enabled (the dispatch service reads the decision service)" -}}
+{{- end -}}
+{{- $_ := required "dispatch.digestsSecret is required (Secret with the key digests)" .Values.dispatch.digestsSecret -}}
+{{- $_ := required "dispatch.enabled needs files.dispatch (--set-file files.dispatch=dispatch.yaml)" .Values.files.dispatch -}}
+{{- if not .Values.secret.name -}}
+{{- fail "dispatch.enabled needs secret.name (keys verdict-read-token, dispatch-run-token, dispatch-<target>)" -}}
+{{- end -}}
+{{- if .Values.dispatch.page.enabled -}}
+{{- $_ := required "dispatch.page.host is required" .Values.dispatch.page.host -}}
+{{- $_ := required "dispatch.page.enabled needs oidc.issuerUrl (the identity provider)" .Values.oidc.issuerUrl -}}
+{{- if not .Values.dispatch.page.remediators -}}
+{{- fail "dispatch.page.enabled needs dispatch.page.remediators (the groups that may ask for remediation)" -}}
+{{- end -}}
+{{- end -}}
 {{- end -}}
 {{- if .Values.chat.enabled -}}
 {{- if not .Values.verdict.enabled -}}

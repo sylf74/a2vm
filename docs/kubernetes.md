@@ -105,6 +105,7 @@ CI/CD variables of the tenant project (or of a subgroup):
 | `A2VM_RUN_MODE` | In the tenant's `.gitlab-ci.yml`: `gitlab` (default) or `kubernetes`, the daily run and the watch in the namespace only (§4) | — |
 | `A2VM_CHAT_HOST` | Optional: the analysts' chat on the decision service, at this host (v0.15.0, `chat.md`) | Visible |
 | `A2VM_DATABASE` | Optional, `true`: the tenant's PostgreSQL (CloudNativePG) for the watch, detection and decision services instead of their volumes (v0.18.0, §5) | Visible |
+| `A2VM_DISPATCH_HOST`, `A2VM_DISPATCH_<TARGET>_PASSWORD`, … | Optional: with `dispatch.yaml` in the project, the dispatch service of pillar 4, remediation tickets in the ITSM, and its page of the requests for remediation at this host (v0.20.0, `dispatch.md`) | — |
 | `A2VM_DATABASE_SIZE`, `A2VM_DATABASE_STORAGE_CLASS`, `A2VM_DATABASE_INSTANCES` | Optional: the database's volume (default `5Gi`, the cluster's default class) and its instances (default `1`, `3` for a standby) | Visible |
 
 The other variables are the pipeline's (`docs/deployment.md`): the job copies the secret ones

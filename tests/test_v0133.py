@@ -115,6 +115,10 @@ def test_one_daily_run_at_a_time_on_the_volume():
     assert "{{ .Values.daily.activeDeadlineSeconds }}" in collect  # an older lock is a killed run's
     assert 'echo "$HOSTNAME" > /data/.a2vm-run/pod' in collect
     owner = '"$(cat /data/.a2vm-run/pod 2>/dev/null)" = "$HOSTNAME"'
-    publish = chart.split('{{- define "a2vm-tenant.step.publish" -}}', 1)[1].split("{{- end -}}", 1)[0]
-    assert f"trap 'if [ {owner} ]; then rm -rf /data/.a2vm-run; fi' EXIT" in publish
+    release = chart.split('{{- define "a2vm-tenant.release" -}}', 1)[1].split("{{- end -}}", 1)[0]
+    assert f"trap 'if [ {owner} ]; then rm -rf /data/.a2vm-run; fi' EXIT" in release
+    # The last step releases the lock: publish, or dispatch after it (v0.20.0).
+    for step in ("publish", "dispatch"):
+        body = chart.split(f'{{{{- define "a2vm-tenant.step.{step}" -}}}}', 1)[1]
+        assert '{{ include "a2vm-tenant.release" . }}' in body.split("{{- define", 1)[0]
     assert f'[ "$rc" -ne 0 ] && [ {owner} ]' in chart  # a failed step releases its own run's lock only

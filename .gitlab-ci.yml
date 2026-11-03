@@ -41,6 +41,8 @@ chart:
     - helm lint deploy/charts/a2vm-tenant --strict --set tenant=lab --set image.registry=registry.example.org/vulnops/a2vm --set-file files.profile=examples/lab/client.yaml --set-file files.targets=examples/lab/targets.yaml --set secret.name=a2vm-tenant
     - helm template a2vm deploy/charts/a2vm-tenant --set tenant=lab --set image.registry=registry.example.org/vulnops/a2vm --set-file files.profile=examples/lab/client.yaml --set secret.name=a2vm-tenant > /dev/null
     - helm template a2vm deploy/charts/a2vm-tenant --set tenant=lab --set image.registry=registry.example.org/vulnops/a2vm --set-file files.profile=examples/lab/client.yaml --set secret.name=a2vm-tenant --set database.enabled=true --set verdict.enabled=true --set verdict.digestsSecret=a2vm-verdict --set watch.enabled=true --set watch.digestsSecret=a2vm-via > /dev/null
+    - helm template a2vm deploy/charts/a2vm-tenant --set tenant=lab --set image.registry=registry.example.org/vulnops/a2vm --set-file files.profile=examples/lab/client.yaml --set secret.name=a2vm-tenant --set verdict.enabled=true --set verdict.digestsSecret=a2vm-verdict --set dispatch.enabled=true --set dispatch.digestsSecret=a2vm-dispatch --set-file files.dispatch=examples/lab/dispatch.yaml > /dev/null
+    - helm template a2vm deploy/charts/a2vm-tenant --set tenant=lab --set image.registry=registry.example.org/vulnops/a2vm --set-file files.profile=examples/lab/client.yaml --set secret.name=a2vm-tenant --set database.enabled=true --set verdict.enabled=true --set verdict.digestsSecret=a2vm-verdict --set dispatch.enabled=true --set dispatch.digestsSecret=a2vm-dispatch --set-file files.dispatch=examples/lab/dispatch.yaml --set oidc.issuerUrl=https://auth.example.org/realms/lab --set oidc.clientId=a2vm-lab --set oidc.inCluster=true --set dispatch.page.enabled=true --set dispatch.page.host=dispatch-lab.apps.example.org --set 'dispatch.page.remediators={A2VM-Remediation}' > /dev/null
 
 test:
   stage: test
@@ -79,7 +81,7 @@ release:
   script:
     - |
       want="${CI_COMMIT_TAG#v}"
-      for p in a2vm via detect verdict; do
+      for p in a2vm via detect verdict dispatch; do
         got=$(sed -n 's/^version = "\(.*\)"/\1/p' $p/pyproject.toml)
         [ "$got" = "$want" ] || { echo "$p/pyproject.toml has version $got, tag says $want"; exit 1; }
       done
@@ -110,7 +112,7 @@ images:
     - echo "$CI_REGISTRY_PASSWORD" | buildah login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
     - TAG="${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}"
     - |
-      for p in via detect verdict; do
+      for p in via detect verdict dispatch; do
         buildah build --quiet --pull -f images/Dockerfile --build-arg PILLAR=$p -t "$CI_REGISTRY_IMAGE/$p:$TAG" .
         buildah push "$CI_REGISTRY_IMAGE/$p:$TAG"
         echo "image $CI_REGISTRY_IMAGE/$p:$TAG"

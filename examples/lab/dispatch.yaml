@@ -1,0 +1,23 @@
+# Where this client's decisions go (fictitious example, docs/dispatch.md). The credentials are CI/CD
+# variables of the project, never here: A2VM_DISPATCH_ITSM_PASSWORD (and A2VM_DISPATCH_ITSM_CA when
+# the certificate of iTop comes from a private CA).
+schema_version: 1
+mode: dry-run                 # dry-run: proposed and logged, nothing sent; live: sent
+targets:
+  itsm:
+    type: itop
+    url: https://itop.lab.example
+    user: a2vm-itsm
+    organization: Lab
+    caller: A2VM              # the iTop Person the tickets come from
+    team: Linux               # optional: the iTop Team they are given to
+tickets:
+  target: itsm
+  automatic: act              # none | act | act-attend: what leaves by itself after each run
+  exclude_zones: [lab]
+  resolve_when_fixed: true
+  reopen_when_still_seen: true
+requests:                     # what a person may send from a dashboard
+  targets: [itsm]
+  levels: [ACT, ATTEND, TRACK]
+  max_tickets: 50

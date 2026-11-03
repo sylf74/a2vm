@@ -19,6 +19,10 @@ data:
   contacts.yaml: |
     {{- .Values.files.contacts | nindent 4 }}
   {{- end }}
+  {{- if .Values.files.dispatch }}
+  dispatch.yaml: |
+    {{- .Values.files.dispatch | nindent 4 }}
+  {{- end }}
   {{- if .Values.files.watchSources }}
   watch-sources.yaml: |
     {{- .Values.files.watchSources | nindent 4 }}
