@@ -41,3 +41,16 @@ def test_the_tools_answer_size_is_set_per_tenant():
     assert cv.values({**env, "A2VM_CHAT_MAX_CHARS": "4000"})["chat"]["maxChars"] == 4000
     with pytest.raises(ValueError, match="A2VM_CHAT_MAX_CHARS"):
         cv.values({**env, "A2VM_CHAT_MAX_CHARS": "50"})
+
+
+def test_the_page_has_time_and_reads_large_pages():
+    from dispatch import decisions
+    from verdict.service.index import DECISIONS_MAX, QueryError, page
+
+    assert decisions.PAGE <= DECISIONS_MAX == 2000
+    assert page({"limit": "2000"}, DECISIONS_MAX) == (2000, 0)
+    with pytest.raises(QueryError):
+        page({"limit": "2000"})  # 200 elsewhere
+    tpl = (CHART / "templates" / "dispatch.yaml").read_text()
+    assert "--upstream-timeout={{ $p.proxy.timeoutSeconds }}s" in tpl
+    assert "timeoutSeconds: 120" in (CHART / "values.yaml").read_text()

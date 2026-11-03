@@ -906,7 +906,7 @@ Every read names the run it comes from (`run: {id, generated_at}`); `?run=` take
 
 An asset is named by its id (`host:web01.example.org`), its id without the kind (`web01.example.org`) or
 its short name (`web01`), in any case, in the filter `asset` and in `assets/{asset}` (v0.15.1).
-Pages: `limit` 1 to 200 (default 25), `offset`, `next_offset` while more remain. A decision id is
+Pages: `limit` 1 to 200 (default 25; `GET decisions` up to 2000 since v0.20.2, for pillar 4), `offset`, `next_offset` while more remain. A decision id is
 the finding id, else `<CVE>@<asset>`. The due date is the first observation plus the BOD 26-04
 delay, as in the reporting dataset. Two runs are kept in memory, the others read on demand.
 

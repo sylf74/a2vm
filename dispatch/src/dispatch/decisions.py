@@ -9,8 +9,8 @@ from urllib.parse import quote
 
 import httpx
 
-PAGE = 200
-MAX_PAGES = 500  # 100,000 decisions
+PAGE = 2000  # GET decisions accepts 2000 since v0.20.2
+MAX_PAGES = 100  # 200,000 decisions
 
 
 class DecisionsError(RuntimeError):
@@ -85,7 +85,7 @@ class Decisions:
         out: list[dict[str, Any]] = []
         offset = 0
         for _ in range(MAX_PAGES):
-            page = self._get("findings/closed", {"since": since, "limit": PAGE, "offset": offset}, missing_ok=True)
+            page = self._get("findings/closed", {"since": since, "limit": 200, "offset": offset}, missing_ok=True)
             if not page:
                 break
             out.extend(page.get("items") or [])

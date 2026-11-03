@@ -151,6 +151,7 @@ dispatch:
     proxy:
       image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.5
       cookieHours: 8
+      timeoutSeconds: 120  # a large selection reads thousands of decisions
       resources:
         requests: {cpu: 10m, memory: 32Mi}
         limits: {memory: 128Mi}
