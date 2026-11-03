@@ -59,4 +59,10 @@ resource "scaleway_instance_server" "scanner" {
       feed_update_time      = var.feed_update_time
     })
   }
+
+  # cloud-init runs at the first boot only: a changed template must not touch a running scanner.
+  # Its scripts are updated with update-scripts.py; `terraform apply -replace` rebuilds it.
+  lifecycle {
+    ignore_changes = [user_data]
+  }
 }

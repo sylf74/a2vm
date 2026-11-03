@@ -5,6 +5,25 @@ analyst and, under **Upgrade**, what a tenant must do when it moves to that tag 
 `A2VM_REF` in its `.gitlab-ci.yml`). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
 §11) and the LLDs. A release adds its entry here in the same merge request (CLAUDE.md, Releasing).
 
+## v0.19.1 — 2026-11-03
+
+The cloud scanner keeps its disk free; two decisions recorded.
+
+- Cloud scanner (`deploy/scanner`): the volume is 90 GB by default (60 GB filled up with the CI
+  jobs' images). Each night after the feed update, `cleanup.sh` removes the jobs' stopped
+  containers, the images no container has used for 3 days, the runner's cache volumes no container
+  uses, the system journal above 200 MB and the package cache; Greenbone's containers, images and
+  volumes are never touched. `status.sh` shows the free space and warns under 15 %.
+- A changed cloud-init template no longer touches a running scanner (`ignore_changes` on its user
+  data): `update-scripts.py` writes the new scripts on it, its secrets and `scanner.env` kept.
+- HLD: D17, the vulnerability knowledge shared by every tenant and the watch kept per tenant
+  (v0.21.0); D18, the dashboards link to the platform, which acts (requests for remediation in
+  v0.20.0). Roadmap updated.
+
+**Upgrade**: nothing for the tenants (they may move `ref` and `A2VM_REF` to `v0.19.1`; no
+database change). On a running cloud scanner: `python3 deploy/scanner/update-scripts.py | ssh
+root@<scanner> bash`; `terraform plan` then shows no replacement.
+
 ## v0.19.0 — 2026-11-02
 
 The tenant's CMDB (iTop) read by A2VM, and the scan coverage of every host against it.
