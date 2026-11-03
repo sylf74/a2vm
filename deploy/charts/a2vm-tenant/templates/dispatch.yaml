@@ -321,6 +321,7 @@ spec:
             - --cookie-expire={{ $p.proxy.cookieHours }}h
             - --redirect-url={{ printf "https://%s/oauth2/callback" $p.host }}
             - --upstream={{ printf "http://%s-dispatch:8081/" $name }}
+            - --upstream-timeout={{ $p.proxy.timeoutSeconds }}s
             - --scope=openid email profile
             - --code-challenge-method=S256
             - --oidc-groups-claim={{ $o.groupsClaim }}

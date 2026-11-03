@@ -154,7 +154,7 @@ def test_reads_are_short_paged_and_cite_their_run(triage, tmp_path):
     ("rest", "query", "status"),
     [
         ("decisions", {"level": "URGENT"}, 400),
-        ("decisions", {"limit": "500"}, 400),
+        ("decisions", {"limit": "5000"}, 400),  # 2000 at most since v0.20.2
         ("decisions", {"sort": "random"}, 400),
         ("decisions", {"kev": "maybe"}, 400),
         ("decisions", {"run": "../../etc"}, 400),

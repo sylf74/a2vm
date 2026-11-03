@@ -5,6 +5,19 @@ analyst and, under **Upgrade**, what a tenant must do when it moves to that tag 
 `A2VM_REF` in its `.gitlab-ci.yml`). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
 §11) and the LLDs. A release adds its entry here in the same merge request (CLAUDE.md, Releasing).
 
+## v0.20.2 — 2026-11-03
+
+The page of the requests for remediation answers on large selections.
+
+- A selection of thousands of decisions (an asset with many findings, every ACT) was read 200 at a
+  time from the decision service and outlasted oauth2-proxy's 30 seconds: the page answered 502.
+  `GET decisions` accepts pages of up to 2000 (`verdict.v1`, added only; 200 elsewhere), which the
+  dispatch service reads, and the proxy of the page waits up to 120 seconds
+  (`dispatch.page.proxy.timeoutSeconds`). A client gone before the answer is one line in the log.
+
+**Upgrade**: move `ref` and `A2VM_REF` to `v0.20.2` and push; no database change, no dashboard to
+import again.
+
 ## v0.20.1 — 2026-11-03
 
 Fixes of v0.20.0.

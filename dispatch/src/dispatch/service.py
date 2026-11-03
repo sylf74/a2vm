@@ -167,7 +167,10 @@ def page_handler(service: Service, page: RequestPage) -> type[BaseHTTPRequestHan
             self.send_header("Content-Security-Policy", csp)
             self.send_header("Referrer-Policy", "same-origin")
             self.end_headers()
-            self.wfile.write(data)
+            try:
+                self.wfile.write(data)
+            except (BrokenPipeError, ConnectionResetError):
+                log.warning("page: the client left before the answer (proxy timeout?)")
 
         def do_GET(self) -> None:  # noqa: N802
             u = urlsplit(self.path)

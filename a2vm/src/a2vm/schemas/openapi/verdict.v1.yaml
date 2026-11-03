@@ -105,7 +105,7 @@ paths:
         - {name: due_before, in: query, schema: {type: string, format: date}, description: Due on or before this day (since v0.15.2)}
         - {name: overdue, in: query, schema: {type: boolean}, description: Past their due date (since v0.15.2)}
         - {name: sort, in: query, schema: {type: string, enum: [level, epss, cvss, due_date, cve, asset]}}
-        - $ref: "#/components/parameters/limit"
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 2000, default: 25}, description: "Up to 2000 here (since v0.20.2: the services that read every decision), 200 elsewhere"}
         - $ref: "#/components/parameters/offset"
       responses:
         "200":

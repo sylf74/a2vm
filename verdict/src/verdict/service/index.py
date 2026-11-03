@@ -17,6 +17,7 @@ EXPOSURES = ("open", "controlled", "small")
 TITLE_MAX = 140
 LIMIT_DEFAULT = 25
 LIMIT_MAX = 200
+DECISIONS_MAX = 2000  # pages of GET decisions, for the services that read them all (v0.20.2, pillar 4)
 SORTS = ("level", "epss", "cvss", "due_date", "cve", "asset")
 
 
@@ -128,14 +129,14 @@ def _level_rank(level: str) -> int:
     return LEVELS.index(level) if level in LEVELS else len(LEVELS)
 
 
-def page(query: dict[str, str]) -> tuple[int, int]:
+def page(query: dict[str, str], most: int = LIMIT_MAX) -> tuple[int, int]:
     try:
         limit = int(query.get("limit", LIMIT_DEFAULT))
         offset = int(query.get("offset", 0))
     except ValueError as exc:
         raise QueryError("limit and offset: integers") from exc
-    if not 1 <= limit <= LIMIT_MAX or offset < 0:
-        raise QueryError(f"limit: 1 to {LIMIT_MAX}; offset: 0 or more")
+    if not 1 <= limit <= most or offset < 0:
+        raise QueryError(f"limit: 1 to {most}; offset: 0 or more")
     return limit, offset
 
 
@@ -314,7 +315,7 @@ class RunIndex:
         sort = query.get("sort", "level")
         if sort not in SORTS:
             raise QueryError(f"sort: one of {', '.join(SORTS)}")
-        limit, offset = page(query)
+        limit, offset = page(query, DECISIONS_MAX)
         ordered = sorted(rows, key=_sort_key(sort))
         out: dict[str, Any] = {
             "run": self.run,
