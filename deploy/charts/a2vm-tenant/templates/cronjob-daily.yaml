@@ -81,8 +81,14 @@ rm -rf /data/output
 verdict run /config/client.yaml --settings "$SETTINGS" --records /data/work/records.json --assets /data/work/assets --out /data/output
 {{- end -}}
 
-{{- define "a2vm-tenant.step.publish" -}}
+{{- define "a2vm-tenant.release" -}}
 trap 'if [ "$(cat /data/.a2vm-run/pod 2>/dev/null)" = "$HOSTNAME" ]; then rm -rf /data/.a2vm-run; fi' EXIT
+{{- end -}}
+
+{{- define "a2vm-tenant.step.publish" -}}
+{{- if not .Values.dispatch.enabled }}
+{{ include "a2vm-tenant.release" . }}
+{{- end }}
 {{- if .Values.verdict.enabled }}
 # The decision service first: the analysts read the run there, the reporting database may be down.
 TRIAGE=$(ls /data/output/*/*/triage.json 2>/dev/null | sort | tail -1)
@@ -103,6 +109,17 @@ rc=0
 verdict publish /data/output/*/reporting.json || rc=$?
 if [ "$rc" -eq 3 ]; then echo "WARN reporting database unreachable or refused: the next run publishes again"; exit 0; fi
 exit "$rc"
+{{- end -}}
+
+{{- define "a2vm-tenant.step.dispatch" -}}
+# The last step (pillar 4): the dispatch service turns the run's decisions into tickets and follows
+# them. A failure is a warning: the next run dispatches again.
+{{ include "a2vm-tenant.release" . }}
+if [ ! -s /secrets/dispatch-run-token ]; then echo "WARN no dispatch-run-token: nothing dispatched"; exit 0; fi
+rc=0
+dispatch run --url {{ include "a2vm-tenant.dispatchUrl" . | quote }} --tenant {{ .Values.tenant | quote }} \
+  --token-file /secrets/dispatch-run-token || rc=$?
+if [ "$rc" -ne 0 ]; then echo "WARN dispatch incomplete (exit $rc): the next run dispatches again"; fi
 {{- end -}}
 
 {{- define "a2vm-tenant.step.inventory" -}}
@@ -198,8 +215,15 @@ spec:
             {{- if .Values.watch.enabled }}
             {{- include "a2vm-tenant.container" (dict "root" . "name" "inventory" "pillar" "via") | nindent 12 }}
             {{- end }}
-          containers:
+            {{- if .Values.dispatch.enabled }}
             {{- include "a2vm-tenant.container" (dict "root" . "name" "publish" "pillar" "verdict") | nindent 12 }}
+            {{- end }}
+          containers:
+            {{- if .Values.dispatch.enabled }}
+            {{- include "a2vm-tenant.container" (dict "root" . "name" "dispatch" "pillar" "dispatch") | nindent 12 }}
+            {{- else }}
+            {{- include "a2vm-tenant.container" (dict "root" . "name" "publish" "pillar" "verdict") | nindent 12 }}
+            {{- end }}
           volumes:
             - name: data
               persistentVolumeClaim:

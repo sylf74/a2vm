@@ -111,7 +111,8 @@ them within a minute.
 | `kubectl -n a2vm-lab logs deploy/a2vm-lab-via \| grep store` | The same for the watch service, with the number of alerts kept |
 | `kubectl -n a2vm-lab get pods -l cnpg.io/cluster=a2vm-lab-db` | The database instance(s) `Running` |
 | `kubectl -n a2vm-lab logs deploy/a2vm-lab-verdict --tail=5` | A `push tenant=lab run=… rows=…` line after each daily run |
-| `helm -n a2vm-lab get values a2vm -o yaml` | What `deploy-k8s` set (database, chat, watch, sign-in) |
+| `kubectl -n a2vm-lab logs deploy/a2vm-lab-dispatch \| head -1` | With `dispatch.yaml` (v0.20.0): its store, mode (dry-run or live), targets, automatic levels and targets of the requests; each daily run's container `dispatch` ends with `dispatch of run … : proposed n, sent n, …` (`docs/dispatch.md`) |
+| `helm -n a2vm-lab get values a2vm -o yaml` | What `deploy-k8s` set (database, chat, watch, sign-in, dispatch) |
 
 In the chat: "summary of the latest run" names the run and its date; "details of asset web01"
 shows an asset, with its scans since v0.18.1, even when it has no finding.

@@ -9,6 +9,7 @@ validates it for sending or dismisses it. Their rights come from the directory's
 | Readers (`A2VM_OIDC_READERS`) | Yes | Read the alerts and their sheets |
 | Validators (`A2VM_OIDC_VALIDATORS`) | Yes | Also enrich the English reference, choose the recipients, check and correct the translations, validate (the sender mails each language its version within a minute) and dismiss |
 | Admins (`A2VM_OIDC_ADMINS`, optional) | Admin of Open WebUI | — |
+| Remediators (`A2VM_OIDC_REMEDIATORS`, v0.20.0) | — | — ; the page of the requests for remediation of pillar 4 (`docs/dispatch.md`), from the links of the RSSI dashboards |
 | Anyone else | Refused | Refused |
 
 ```mermaid
@@ -60,6 +61,7 @@ Check with a member of each group: *Clients* > the client > *Client scopes* > *E
 | `A2VM_OIDC_EGRESS` | Optional: `cidr:port,...` of the provider, when the job cannot resolve its host | Visible |
 | `A2VM_OIDC_IN_CLUSTER` | Optional: `true` when the provider runs in the cluster behind its ingress controller | Visible |
 | `A2VM_ALERTS_HOST` | Host of the review page (with `A2VM_RUN_MODE: kubernetes`) | Visible |
+| `A2VM_OIDC_REMEDIATORS` | Groups that may ask for remediation from a dashboard (v0.20.0, with `A2VM_DISPATCH_HOST`, `docs/dispatch.md`); their redirect URI `https://<dispatch host>/oauth2/callback` goes with the others of step 3 | Visible |
 | `A2VM_ALERTS_ALLOW` | Optional: the analysts' networks (CIDR) | Visible |
 
 The ingress controller, class and certificate issuer are the chat's (`A2VM_CHAT_*`, else

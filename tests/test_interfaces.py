@@ -15,6 +15,7 @@ LLD = {
     "via": ROOT / "docs" / "lld" / "vulnerability-intelligence.md",
     "detect": ROOT / "docs" / "lld" / "vulnerability-detection.md",
     "verdict": ROOT / "docs" / "lld" / "triage-prioritization.md",
+    "dispatch": ROOT / "docs" / "lld" / "dispatch-capitalization.md",
 }
 LIBRARIES = {"a2vm.declared": ("detect", "via"), "a2vm.ssvc": ("verdict", "via")}
 

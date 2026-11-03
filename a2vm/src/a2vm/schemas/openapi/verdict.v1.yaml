@@ -425,6 +425,9 @@ components:
               needs_review: {type: boolean}
               product: {type: string}
               title: {type: string}
+              first_seen: {type: [string, "null"]}
+              cve_updated: {type: [string, "null"]}
+              fixes: {type: array, items: {type: string}, description: "the fixes the scanners reported, `<package> <fixed version>` (since v0.20.0)"}
     Decision:
       type: object
       description: A row of the triage (a2vm.triage/1) with its run, id and due date; its other fields as in the triage.

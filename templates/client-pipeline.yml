@@ -13,7 +13,7 @@
 #
 #     include:
 #       - project: vulnops/a2vm
-#         ref: v0.19.1
+#         ref: v0.20.0
 #         file: templates/client-pipeline.yml
 #     variables:
 #       A2VM_REF: v0.19.0        # same version as the include
@@ -136,6 +136,7 @@ validate:
     - if [ -f "$A2VM_COLLECTORS" ]; then detect collectors "$A2VM_COLLECTORS" --tenant "$(echo "$CI_PROJECT_NAME" | tr 'A-Z_' 'a-z-')" --profile "$A2VM_PROFILE"; fi
     - if [ -f contacts.yaml ]; then via contacts "$A2VM_PROFILE" --contacts contacts.yaml; fi
     - for t in templates/alert*.docx; do if [ -f "$t" ]; then via check-template "$t" || exit 1; fi; done
+    - if [ -f dispatch.yaml ]; then pip install --quiet .a2vm/dispatch && dispatch check dispatch.yaml; fi
 
 # -- Kubernetes (HLD D15, step 1): the daily run as a CronJob in the cluster -----------------------
 # When A2VM_K8S_CONTEXT names a GitLab agent context allowed for this project (e.g.
@@ -272,6 +273,28 @@ deploy-k8s:
         if [ -f watch-sources.yaml ]; then WATCH="$WATCH --set-file files.watchSources=watch-sources.yaml"; fi
         echo "A2VM_RUN_MODE=kubernetes: the daily run and the watch run in $NS; the scheduled pipelines do nothing"
       fi
+    # Dispatch service (pillar 4, v0.20.0), when the project has dispatch.yaml and the decision service
+    # runs: its run and read tokens and the key of its page made once and kept in the Secret
+    # a2vm-tenant, their digests in the Secret a2vm-dispatch; the targets' credentials from
+    # A2VM_DISPATCH_<TARGET>_PASSWORD (and _CA); none printed (docs/dispatch.md).
+    - |
+      DISPATCH=""; DT=""; D="$(mktemp -d)"; chmod 700 "$D"
+      if [ -f dispatch.yaml ] && [ -n "$VERDICT" ]; then
+        apk add --no-cache -q python3 py3-yaml
+        python3 .a2vm/deploy/dispatch/dispatch_values.py dispatch.yaml "$D/values.json" "$D/targets.txt"
+        DT="$(cat "$D/targets.txt")"
+        for k in dispatch-run-token dispatch-read-token dispatch-page-key; do
+          kubectl -n "$NS" get secret a2vm-tenant -o jsonpath="{.data.$k}" 2>/dev/null | base64 -d > "$D/$k" 2>/dev/null || true
+          if [ "$(wc -c < "$D/$k")" -lt 32 ]; then od -An -tx1 -N32 /dev/urandom | tr -d ' \n' > "$D/$k"; fi
+        done
+        printf 'run %s\nread %s\n' "$(sha256sum < "$D/dispatch-run-token" | cut -d' ' -f1)" \
+          "$(sha256sum < "$D/dispatch-read-token" | cut -d' ' -f1)" > "$D/digests"
+        kubectl -n "$NS" create secret generic a2vm-dispatch --from-file=digests="$D/digests" --dry-run=client -o yaml | kubectl apply -f -
+        DISPATCH="--set-file files.dispatch=dispatch.yaml --set dispatch.digestsSecret=a2vm-dispatch"
+        DISPATCH="$DISPATCH --set dispatch.digestsChecksum=$(sha256sum "$D/digests" | cut -d' ' -f1) -f $D/values.json"
+      elif [ -f dispatch.yaml ]; then
+        echo "WARN dispatch.yaml but no decision service (A2VM_VERDICT_SERVICE=false): nothing dispatched"
+      fi
     # Sign-in of the analysts with the tenant's identity provider (v0.17.0), when A2VM_OIDC_ISSUER is
     # set: the chat and, with A2VM_ALERTS_HOST, the review page of the alerts behind oauth2-proxy. The
     # proxy's cookie key and the key of the page's forms are made once and kept in the Secret a2vm-tenant.
@@ -315,6 +338,16 @@ deploy-k8s:
       put via-read-token "$(cat "$W/via-read-token" 2>/dev/null)"
       put smtp-password "${A2VM_SMTP_PASSWORD:-}"
       put graph-client-secret "${A2VM_GRAPH_CLIENT_SECRET:-}"
+      if [ -n "$DISPATCH" ]; then
+        put dispatch-run-token "$(cat "$D/dispatch-run-token")"
+        put dispatch-read-token "$(cat "$D/dispatch-read-token")"
+        put dispatch-page-key "$(cat "$D/dispatch-page-key")"
+        for t in $DT; do
+          V="A2VM_DISPATCH_$(echo "$t" | tr 'a-z-' 'A-Z_')"
+          eval "put dispatch-$t \"\${${V}_PASSWORD:-}\""
+          eval "put dispatch-$t-ca \"\${${V}_CA:-}\""
+        done
+      fi
       if [ -n "$SIGNIN" ]; then
         put oidc-client-secret "${A2VM_OIDC_CLIENT_SECRET:-}"
         put oidc-ca "${A2VM_OIDC_CA:-}"
@@ -352,8 +385,8 @@ deploy-k8s:
         --set image.tag="$A2VM_REF" \
         --set secret.name=a2vm-tenant \
         --set daily.schedule="${A2VM_K8S_SCHEDULE:-45 5 * * *}" \
-        $PULL $FILES $INTAKE $VERDICT $DATABASE $CHAT $WATCH $SIGNIN -f "$ENVF"
-      rm -rf "$I" "$V" "$C" "$W" "$O"
+        $PULL $FILES $INTAKE $VERDICT $DATABASE $CHAT $WATCH $SIGNIN $DISPATCH -f "$ENVF"
+      rm -rf "$I" "$V" "$C" "$W" "$O" "$D"
       kubectl -n "$NS" get cronjob,pvc
       if [ -n "$INTAKE" ]; then kubectl -n "$NS" get deployment,service,ingress -l app.kubernetes.io/component=detect; fi
       if [ -n "$VERDICT" ]; then kubectl -n "$NS" get deployment,service -l app.kubernetes.io/component=verdict; fi
@@ -361,6 +394,7 @@ deploy-k8s:
       if [ -n "$WATCH" ]; then kubectl -n "$NS" get deployment,cronjob -l 'app.kubernetes.io/component in (via,watch)'; fi
       if [ -n "$SIGNIN" ] && [ -n "${A2VM_ALERTS_HOST:-}" ]; then kubectl -n "$NS" get deployment,ingress -l 'app.kubernetes.io/component in (review,send)'; fi
       if [ -n "$DATABASE" ]; then kubectl -n "$NS" get cluster -l app.kubernetes.io/component=database; fi
+      if [ -n "$DISPATCH" ]; then kubectl -n "$NS" get deployment,ingress -l 'app.kubernetes.io/component in (dispatch,dispatch-page)'; fi
 
 # Exit code 3 = collection incomplete: the job shows as a warning and the pipeline goes on with
 # what was collected (plus the declared inventory).

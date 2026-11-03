@@ -6,7 +6,8 @@
   verdict db grant ROLE TENANT… --dsn …     reading role for a tool (Grafana, Qlik Sense), limited to tenants
   verdict grafana dashboard NAME            print a Grafana dashboard (JSON, to import): overview, assets, cves,
                                             remediation, coverage;
-                                            --language fr for its French version
+                                            --language fr for its French version; --rssi (remediation,
+                                            coverage) for the version with the links "Remediate" (D18)
 
 The jobs read the connection from A2VM_REPORTING_DSN and the server's certificate from
 A2VM_REPORTING_CA. Exit codes: 0 done, 2 bad input, 3 database unreachable or refused (warning).
@@ -76,15 +77,25 @@ DASHBOARDS = ("overview", "assets", "cves", "remediation", "coverage")
 LANGUAGES = ("en", "fr")
 
 
-def dashboard(name: str, language: str = "en") -> str:
-    """A dashboard in English, or its French version (v0.17.3: its own uid, `<uid>-fr`)."""
-    suffix = "" if language == "en" else f".{language}"
+RSSI_DASHBOARDS = ("remediation", "coverage")
+
+
+def dashboard(name: str, language: str = "en", rssi: bool = False) -> str:
+    """A dashboard in English, or its French version (v0.17.3: its own uid, `<uid>-fr`); `rssi`: the
+    version with the links "Remediate" to the page of the requests of pillar 4 (v0.20.0, D18)."""
+    if rssi and name not in RSSI_DASHBOARDS:
+        raise ValueError(f"no RSSI version of {name}: {', '.join(RSSI_DASHBOARDS)} only")
+    suffix = (".rssi" if rssi else "") + ("" if language == "en" else f".{language}")
     path = resources.files("verdict.restitution").joinpath("grafana", f"{name}{suffix}.json")
     return path.read_text(encoding="utf-8")
 
 
 def cmd_grafana(args: argparse.Namespace) -> int:
-    sys.stdout.write(dashboard(args.name, args.language))
+    try:
+        sys.stdout.write(dashboard(args.name, args.language, args.rssi))
+    except ValueError as exc:
+        print(exc, file=sys.stderr)
+        return 2
     return 0
 
 
@@ -118,6 +129,8 @@ def main(argv: list[str] | None = None) -> int:
                     help="overview (default), assets, cves, remediation (what was fixed)")  # fmt: skip
     gr.add_argument("--language", default="en", choices=LANGUAGES,
                     help="language of the titles, descriptions and columns (default en)")  # fmt: skip
+    gr.add_argument("--rssi", action="store_true",
+                    help="remediation, coverage: the version with the links to the remediation page")  # fmt: skip
     gr.set_defaults(func=cmd_grafana)
 
     args = parser.parse_args(argv)

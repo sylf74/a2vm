@@ -16,12 +16,14 @@ other files of `docs/`; day-to-day operation: `docs/operations.md`.
 | `via/` | Pillar 1, intelligence (records) and watch (alerts); watch service, review page and sender on Kubernetes (`via serve`, `via service`) |
 | `detect/` | Pillar 2, detection: SSH collection, OpenVAS, declared inventory, external scan; collector agent and detection service (`detect agent`, `detect serve`, `detect fetch`) |
 | `verdict/` | Pillar 3, asset context, SSVC decision, restitution (reporting database, Grafana); decision service and tool server of the analysts' chat (`verdict serve`, `verdict push`, `verdict tools`) |
+| `dispatch/` | Pillar 4, dispatch: remediation tickets in the ITSM (iTop), followed until a scan confirms the fix; page of the requests for remediation (`dispatch serve`, `dispatch run`) |
 | `templates/client-pipeline.yml` | The pipeline every tenant project includes at a version tag |
 | `examples/` | Fictitious tenants (`lab`, `demo-industrie`) |
 | `deploy/portal/` | Terraform and cloud-init of the reporting database and Grafana |
 | `deploy/scanner/` | Terraform and cloud-init of the cloud scanner: Greenbone and the runner of the external projects (`docs/openvas.md` §5) |
 | `deploy/charts/a2vm-tenant/` | Helm chart: a tenant's daily run as a Kubernetes CronJob (D15 step 1, `docs/kubernetes.md`), its detection service (D15 step 2, `docs/collectors.md`), its decision service (D15 step 3), the analysts' chat (`docs/chat.md`), the watch on Kubernetes (`A2VM_RUN_MODE`) and the review page of the alerts with the analysts' sign-in (`docs/sign-in.md`), the tenant's PostgreSQL (CloudNativePG `Cluster`) |
 | `deploy/intake/` | Script of the job `deploy-k8s` that turns the collectors' tokens into digests (stdlib and PyYAML only) |
+| `deploy/dispatch/` | Script of the job `deploy-k8s` that writes the values of the dispatch service (stdlib and PyYAML only) |
 | `deploy/chat/` | Scripts of the job `deploy-k8s` that write the values of the chat and of the analysts' sign-in and review page (stdlib only) |
 | `deploy/collector/` | Install script of a collector on its VM (`docs/collectors.md` §2) |
 | `deploy/cnpg/` | Installation of the CloudNativePG operator, once per Kubernetes cluster (the tenants' PostgreSQL, `docs/kubernetes.md` §5) |
@@ -76,7 +78,7 @@ CREATEROLE).
 
 ## Releasing
 
-1. Bump `version` in `a2vm/`, `via/`, `detect/`, `verdict/` `pyproject.toml`, `__version__` in
+1. Bump `version` in `a2vm/`, `via/`, `detect/`, `verdict/`, `dispatch/` `pyproject.toml`, `__version__` in
    `a2vm` and `via`, and `version`/`appVersion` of `deploy/charts/a2vm-tenant/Chart.yaml`; set the
    new tag in `examples/*/.gitlab-ci.yml` and `docs/deployment.md`; add the version to the roadmap
    table of the HLD (§11) and its release notes at the top of `CHANGELOG.md` (what changed, then

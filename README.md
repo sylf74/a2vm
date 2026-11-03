@@ -16,7 +16,8 @@ detect/     2. Vulnerability Detection   scanners + declared inventory          
 verdict/    3. Triage & Prioritization
               verdict assets build       asset context consolidated per client             -> work/assets/<client>/
               verdict run                CISA SSVC + policy, French rationale              -> output/<client>/<date>/
-remediate/  4. Dispatch & Capitalization (not started)
+dispatch/   4. Dispatch & Capitalization
+              dispatch serve             remediation tickets in the ITSM, requests from dashboards
 ```
 
 The pillars never import one another (a test checks it): each reads and writes only the common
@@ -177,8 +178,7 @@ by changing the tag in its `.gitlab-ci.yml`. Set-up: `docs/deployment.md`.
 
 ```
 a2vm/                                       common contract (package and command `a2vm`)
-via/ detect/ verdict/                      one package and one command per pillar
-remediate/                                 not started
+via/ detect/ verdict/ dispatch/             one package and one command per pillar
 config/settings.yaml                       default settings (a client project may override them)
 templates/client-pipeline.yml              pipeline included by every client project
 examples/                                  fictitious client projects (profile, targets, CI)

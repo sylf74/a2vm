@@ -1399,6 +1399,77 @@ def french(board: dict) -> dict:
     return out
 
 
+# -- RSSI versions (D18, v0.20.0) -----------------------------------------------------------------
+# The same dashboard with links "Remediate" to the page of the requests of pillar 4: a dashboard
+# shows, A2VM acts. The address of the page is a constant asked at import (dispatch_url). Imported in
+# a folder for the persons who may ask for remediation; the reading version stays as it is.
+RSSI = {"remediation": ("Assets by last scan",), "coverage": ("Assets and their means of detection",)}
+RSSI_TEXT = {
+    "en": {
+        "suffix": " (requests for remediation)",
+        "label": "Address of the page of the requests for remediation",
+        "asset": "Ask for the remediation of this asset",
+        "act": "Ask for the remediation of every ACT",
+        "column": "Asset",
+    },
+    "fr": {
+        "suffix": " (demandes de remédiation)",
+        "label": "Adresse de la page des demandes de remédiation",
+        "asset": "Demander la remédiation de cet actif",
+        "act": "Demander la remédiation de tous les ACT",
+        "column": "Actif",
+    },
+}
+
+
+def rssi(board: dict, name: str, language: str) -> dict:
+    """The RSSI version of a dashboard: links to the page of the requests, its own uid."""
+    t = RSSI_TEXT[language]
+    out = json.loads(json.dumps(board))
+    out["uid"] = board["uid"] + "-rssi"
+    out["title"] = board["title"] + t["suffix"]
+    out["tags"] = [*board.get("tags", []), "rssi"]
+    out["__inputs"].append(
+        {
+            "name": "VAR_DISPATCH_URL",
+            "type": "constant",
+            "label": t["label"],
+            "value": "https://dispatch.example.org",
+            "description": "https://<host of A2VM_DISPATCH_HOST>",
+        }  # fmt: skip
+    )
+    out["templating"]["list"].append(
+        {
+            "name": "dispatch_url",
+            "type": "constant",
+            "hide": 2,
+            "query": "${VAR_DISPATCH_URL}",
+            "current": {"text": "${VAR_DISPATCH_URL}", "value": "${VAR_DISPATCH_URL}"},
+            "options": [],
+        }  # fmt: skip
+    )
+    out["links"].append(
+        {
+            "type": "link",
+            "title": t["act"],
+            "url": "${dispatch_url}/remediate?level=ACT",
+            "targetBlank": True,
+            "icon": "external link",
+            "tooltip": t["act"],
+            "asDropdown": False,
+            "includeVars": False,
+            "keepTime": False,
+        }  # fmt: skip
+    )
+    titles = {FR_TEXT.get(x, x) if language == "fr" else x for x in RSSI[name]}
+    for panel in out["panels"]:
+        if panel.get("type") == "table" and panel.get("title") in titles:
+            panel["fieldConfig"]["overrides"].append(
+                link(t["column"], "${dispatch_url}/remediate?asset=${__value.raw:percentencode}", t["asset"])
+            )
+    return out
+
+
 BUILDERS = {
     "overview": overview_dashboard,
     "assets": assets_dashboard,
@@ -1412,7 +1483,10 @@ def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     for name, build in BUILDERS.items():
         board = build()
-        for suffix, data in (("", board), (".fr", french(board))):
+        versions = [("", board), (".fr", french(board))]
+        if name in RSSI:
+            versions += [(".rssi", rssi(board, name, "en")), (".rssi.fr", rssi(french(board), name, "fr"))]
+        for suffix, data in versions:
             path = OUT / f"{name}{suffix}.json"
             path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
             print(path)
