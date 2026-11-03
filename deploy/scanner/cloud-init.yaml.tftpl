@@ -126,23 +126,49 @@ write_files:
       else
         echo "not registered (register-runner.sh)"
       fi
-      echo "== feed update"; systemctl list-timers a2vm-greenbone-feed.timer --no-pager | head -2
+      echo "== disk"
+      df -h --output=size,used,avail,pcent /
+      used=$(df --output=pcent / | tail -1 | tr -dc 0-9)
+      if [ "$used" -ge 85 ]; then
+        echo "WARNING: less than 15 % free: $D/cleanup.sh, then docker system df"
+      fi
+      echo "== feed update and cleanup"; systemctl list-timers a2vm-greenbone-feed.timer --no-pager | head -2
 
   - path: /opt/a2vm-scanner/feed-update.sh
     permissions: "0700"
     content: |
       #!/bin/bash
-      # Newer feed images (and Greenbone components), then the containers that changed restart.
+      # Newer feed images (and Greenbone components), then the containers that changed restart,
+      # then the disk is cleaned up.
       . /opt/a2vm-scanner/lib.sh
       gb pull --quiet
       gb up -d --remove-orphans
-      docker image prune -f > /dev/null
+      "$D/cleanup.sh"
+
+  - path: /opt/a2vm-scanner/cleanup.sh
+    permissions: "0700"
+    content: |
+      #!/bin/bash
+      # Disk housekeeping, every night after the feed update: the stopped containers of the CI jobs,
+      # the images no container uses for 3 days, the runner's cache volumes no container uses, the
+      # system journal above 200 MB and the package cache. Greenbone is never touched: its
+      # containers (running, or stopped once their feed data is copied) keep their images, and its
+      # volumes are not the runner's.
+      . /opt/a2vm-scanner/lib.sh
+      free() { df --output=avail -BG / | tail -1 | tr -dc 0-9; }
+      before=$(free)
+      docker container prune -f --filter "label!=com.docker.compose.project=$COMPOSE_PROJECT" > /dev/null
+      docker image prune -af --filter "until=72h" > /dev/null
+      docker volume ls -q --filter dangling=true | grep '^runner-' | xargs -r docker volume rm > /dev/null
+      journalctl --vacuum-size=200M > /dev/null 2>&1 || true
+      apt-get clean
+      echo "cleanup: $before GB free before, $(free) GB after"
 
   - path: /etc/systemd/system/a2vm-greenbone-feed.service
     permissions: "0644"
     content: |
       [Unit]
-      Description=Greenbone feed update (A2VM scanner)
+      Description=Greenbone feed update and disk cleanup (A2VM scanner)
       After=docker.service
       Requires=docker.service
 
@@ -154,7 +180,7 @@ write_files:
     permissions: "0644"
     content: |
       [Unit]
-      Description=Daily Greenbone feed update (A2VM scanner)
+      Description=Daily Greenbone feed update and disk cleanup (A2VM scanner)
 
       [Timer]
       OnCalendar=${feed_update_time}

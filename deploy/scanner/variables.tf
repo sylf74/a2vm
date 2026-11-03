@@ -60,9 +60,9 @@ variable "image" {
 }
 
 variable "root_volume_gb" {
-  description = "System and data volume, GB: the Greenbone feeds and database take 20 GB and more."
+  description = "System and data volume, GB: the Greenbone feeds and database take 20 GB and more, the CI jobs' images and caches the rest."
   type        = number
-  default     = 60
+  default     = 90
 }
 
 variable "greenbone_compose_url" {

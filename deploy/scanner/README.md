@@ -104,6 +104,14 @@ of Greenbone listens on the instance only: `ssh -L 9392:127.0.0.1:9392 root@<pub
   default) pulls the newer feed and component images and restarts what changed. Keep it before the
   external project's schedule: a container restarted during a scan stops the scan. By hand:
   `ssh root@<public_ip> /opt/a2vm-scanner/feed-update.sh`.
+- **Disk**: after the feeds, the same timer runs `cleanup.sh`: the stopped containers of the CI
+  jobs, the images no container has used for 3 days, the runner's cache volumes no container uses,
+  the system journal above 200 MB and the package cache. Greenbone's containers, images and volumes
+  are never touched. `status.sh` shows the free space and warns under 15 %; by hand:
+  `ssh root@<public_ip> /opt/a2vm-scanner/cleanup.sh`, then `docker system df` for what remains.
+  The volume is 90 GB by default (`root_volume_gb`; 60 GB filled up with the jobs' images): raise
+  it with `terraform apply` (in place), then on the instance `growpart` and `resize2fs` if the
+  file system did not grow.
 - **Logs**: `ssh root@<public_ip> 'cd /opt/a2vm-scanner/greenbone && docker compose -p greenbone-community-edition logs --tail 50 gvmd'`; the runner:
   `journalctl -u gitlab-runner`.
 - **gvmd slow to answer**: raise `gmp_timeout_seconds` in the external project's `targets.yaml`
@@ -113,7 +121,12 @@ of Greenbone listens on the instance only: `ssh -L 9392:127.0.0.1:9392 root@<pub
 
 ## Change, rebuild, remove
 
-- `admin_ips`: `terraform apply` updates the security group in place.
+- `admin_ips`, `root_volume_gb`: `terraform apply` updates the security group or the volume in
+  place.
+- **Scripts of a new release**: cloud-init runs at the first boot only, and `main.tf` ignores a
+  changed template on a running instance (no replacement by mistake). Write the new scripts of
+  `/opt/a2vm-scanner` and the feed service from the template, secrets and `scanner.env` kept:
+  `python3 deploy/scanner/update-scripts.py | ssh root@<public_ip> bash`.
 - `gitlab_url`, `feed_update_time`: written at first boot; edit `/opt/a2vm-scanner/scanner.env` or
   the timer there, or rebuild.
 - **Rebuild** (`terraform apply -replace=scaleway_instance_server.scanner`): a new instance with new
@@ -133,5 +146,5 @@ of Greenbone listens on the instance only: `ssh -L 9392:127.0.0.1:9392 root@<pub
 
 ## Files in git, files out of git
 
-In git: `*.tf`, `cloud-init.yaml.tftpl`, `terraform.tfvars.example`. Out of git (see
+In git: `*.tf`, `cloud-init.yaml.tftpl`, `update-scripts.py`, `terraform.tfvars.example`. Out of git (see
 `.gitignore`): `terraform.tfvars`, `*.tfstate*`, `.terraform/`.
