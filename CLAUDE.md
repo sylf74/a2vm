@@ -19,7 +19,8 @@ other files of `docs/`; day-to-day operation: `docs/operations.md`.
 | `dispatch/` | Pillar 4, dispatch: remediation tickets in the ITSM (iTop), followed until a scan confirms the fix; page of the requests for remediation (`dispatch serve`, `dispatch run`) |
 | `templates/client-pipeline.yml` | The pipeline every tenant project includes at a version tag |
 | `examples/` | Fictitious tenants (`lab`, `demo-industrie`) |
-| `deploy/portal/` | Terraform and cloud-init of the reporting database and Grafana |
+| `deploy/portal/` | Terraform and cloud-init of the reporting database and Grafana on a VM |
+| `deploy/charts/a2vm-portal/` | Helm chart of a portal on Kubernetes: the reporting database (CloudNativePG) and Grafana with the dashboards provisioned (`docs/reporting.md`); its `dashboards/` are copies made by `scripts/make_grafana_dashboards.py` |
 | `deploy/scanner/` | Terraform and cloud-init of the cloud scanner: Greenbone and the runner of the external projects (`docs/openvas.md` §5) |
 | `deploy/charts/a2vm-tenant/` | Helm chart: a tenant's daily run as a Kubernetes CronJob (D15 step 1, `docs/kubernetes.md`), its detection service (D15 step 2, `docs/collectors.md`), its decision service (D15 step 3), the analysts' chat (`docs/chat.md`), the watch on Kubernetes (`A2VM_RUN_MODE`) and the review page of the alerts with the analysts' sign-in (`docs/sign-in.md`), the tenant's PostgreSQL (CloudNativePG `Cluster`) |
 | `deploy/intake/` | Script of the job `deploy-k8s` that turns the collectors' tokens into digests (stdlib and PyYAML only) |
@@ -79,7 +80,8 @@ CREATEROLE).
 ## Releasing
 
 1. Bump `version` in `a2vm/`, `via/`, `detect/`, `verdict/`, `dispatch/` `pyproject.toml`, `__version__` in
-   `a2vm` and `via`, and `version`/`appVersion` of `deploy/charts/a2vm-tenant/Chart.yaml`; set the
+   `a2vm` and `via`, and `version`/`appVersion` of `deploy/charts/a2vm-tenant/Chart.yaml` and
+   `deploy/charts/a2vm-portal/Chart.yaml`; set the
    new tag in `examples/*/.gitlab-ci.yml` and `docs/deployment.md`; add the version to the roadmap
    table of the HLD (§11) and its release notes at the top of `CHANGELOG.md` (what changed, then
    what a tenant does to upgrade; `tests/test_v0140.py` checks the current version is there).

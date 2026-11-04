@@ -24,11 +24,16 @@ from . import db
 
 
 def cmd_publish(args: argparse.Namespace) -> int:
+    """Each dataset into each reporting database (v0.20.3: several portals); one that fails does not
+    stop the others. 0 done, 2 bad input, 3 a database unreachable or refused (warning)."""
     paths = [Path(p) for p in args.datasets]
     try:
-        conninfo = db.dsn(args.dsn)
+        where = [("given", db.dsn(args.dsn))] if args.dsn else db.targets()
     except db.DatabaseError as exc:
         print(exc, file=sys.stderr)
+        return 2
+    if not where:
+        print("no reporting database: --dsn or the CI/CD variable A2VM_REPORTING_DSN", file=sys.stderr)
         return 2
     rc = 0
     for path in paths:
@@ -38,14 +43,18 @@ def cmd_publish(args: argparse.Namespace) -> int:
             print(f"{path}: {exc}", file=sys.stderr)
             rc = max(rc, 2)
             continue
-        try:
-            run_id, counts = db.publish(conninfo, data)
-        except db.DatabaseError as exc:
-            print(f"ERROR {exc}", file=sys.stderr)
-            rc = max(rc, 3)
-            continue
-        written = ", ".join(f"{v} {k}" for k, v in counts.items())
-        print(f"{data['run']['tenant']['id']}: run {data['generated_at']} published as #{run_id} ({written})")
+        for name, conninfo in where:
+            label = "" if len(where) == 1 else f" [{name}]"
+            try:
+                run_id, counts = db.publish(conninfo, data)
+            except db.DatabaseError as exc:
+                print(f"ERROR{label} {exc}", file=sys.stderr)
+                rc = max(rc, 3)
+                continue
+            written = ", ".join(f"{v} {k}" for k, v in counts.items())
+            print(
+                f"{data['run']['tenant']['id']}{label}: run {data['generated_at']} published as #{run_id} ({written})"
+            )
     return rc
 
 
@@ -60,8 +69,11 @@ def cmd_db_init(args: argparse.Namespace) -> int:
 
 def cmd_db_grant(args: argparse.Namespace) -> int:
     try:
-        password = db.grant(db.dsn(args.dsn), args.role, args.tenants, rotate=args.rotate)
-    except db.DatabaseError as exc:
+        given = Path(args.password_file).read_text(encoding="utf-8").strip() if args.password_file else None
+        if args.password_file and not given:
+            raise db.DatabaseError(f"{args.password_file} is empty")
+        password = db.grant(db.dsn(args.dsn), args.role, args.tenants, password=given, rotate=args.rotate)
+    except (db.DatabaseError, OSError) as exc:
         print(exc, file=sys.stderr)
         return 3
     scope = "all tenants" if "*" in args.tenants else ", ".join(args.tenants)
@@ -121,6 +133,7 @@ def main(argv: list[str] | None = None) -> int:
     g.add_argument("tenants", nargs="+", help="tenant ids, or * for all")
     g.add_argument("--dsn", help="administrator connection string")
     g.add_argument("--rotate", action="store_true", help="give an existing role a new password (printed once)")
+    g.add_argument("--password-file", help="set this password (kept elsewhere, e.g. a Secret) instead of making one")
     g.set_defaults(func=cmd_db_grant)
 
     gr = sub.add_parser("grafana", help="Grafana resources")

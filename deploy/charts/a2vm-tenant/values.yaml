@@ -345,6 +345,7 @@ daily:
 #   gvm-user, gvm-password   OpenVAS (GMP) account
 #   reporting-dsn   writer connection to the reporting database
 #   reporting-ca    certificate of the reporting database
+#   reporting-dsn-<name>, reporting-ca-<name>   another reporting database, of another portal (v0.20.3)
 #   gitlab-token    A2VM_GITLAB_TOKEN (external detection)
 #   gitlab-ca       CA of GitLab, for the GitLab API (external detection)
 #   detect-read-token   token of the daily run on the detection service (collect.mode intake)

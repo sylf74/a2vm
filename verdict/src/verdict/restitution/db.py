@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import secrets
 import tempfile
 from importlib import resources
@@ -41,20 +42,55 @@ def _ca_file(ca: str) -> str:
     return ca
 
 
-def dsn(given: str | None = None, environ=None) -> str:
-    """Connection string: `given`, else A2VM_REPORTING_DSN, a libpq string (`host=… user=…`) or a
-    URI (`postgresql://user:password@host/a2vm`, which GitLab can mask), or a file holding one.
-    With A2VM_REPORTING_CA (the server's certificate, file or text), the server is verified
-    (verify-full); without, the connection is encrypted (require). Never in clear text. Errors
-    never quote the string: it holds a password."""
+TARGET_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,30}$")
+
+
+def targets(environ=None, directory: str | None = None) -> list[tuple[str, str]]:
+    """Every reporting database a run publishes to (v0.20.3): several portals, e.g. the operator's
+    and one at the client, each with its own database. (name, connection string), the default first:
+
+      default   A2VM_REPORTING_DSN, A2VM_REPORTING_CA
+      <name>    A2VM_REPORTING_DSN_<NAME>, A2VM_REPORTING_CA_<NAME> (variables), or the files
+                reporting-dsn-<name>, reporting-ca-<name> of A2VM_REPORTING_TARGETS_DIR (the
+                tenant's Secret on Kubernetes)
+
+    A target whose connection string is not valid raises DatabaseError (its name only)."""
+    environ = os.environ if environ is None else environ
+    found: dict[str, tuple[str, str]] = {}
+    if env("REPORTING_DSN", "", environ=environ).strip():
+        found["default"] = (env("REPORTING_DSN", "", environ=environ), env("REPORTING_CA", "", environ=environ))
+    for key, value in environ.items():
+        if key.startswith("A2VM_REPORTING_DSN_") and value.strip():
+            name = key[len("A2VM_REPORTING_DSN_") :].lower()
+            found[name] = (value, environ.get(f"A2VM_REPORTING_CA_{name.upper()}", ""))
+    directory = directory or environ.get("A2VM_REPORTING_TARGETS_DIR", "")
+    if directory and Path(directory).is_dir():
+        for f in sorted(Path(directory).glob("reporting-dsn-*")):
+            name = f.name[len("reporting-dsn-") :].lower()
+            ca = Path(directory) / f"reporting-ca-{name}"
+            if f.is_file() and f.stat().st_size and name not in found:
+                found[name] = (str(f), str(ca) if ca.is_file() and ca.stat().st_size else "")
+    out = []
+    for name, (value, ca) in found.items():
+        if not TARGET_NAME.match(name):
+            raise DatabaseError(f"reporting target {name!r}: letters, digits, - and _ only")
+        try:
+            out.append((name, connection(value, ca)))
+        except DatabaseError as exc:
+            raise DatabaseError(f"reporting target {name}: {exc}") from None
+    return sorted(out, key=lambda t: (t[0] != "default", t[0]))
+
+
+def connection(value: str, ca: str = "") -> str:
+    """A connection string from a value (libpq string, URI, or a file holding one) and the server's
+    certificate (file or PEM text); see `dsn`."""
     from psycopg import conninfo
 
-    environ = os.environ if environ is None else environ
-    value = (given or env("REPORTING_DSN", "", environ=environ)).strip()
+    value = value.strip()
     if value and "=" not in value and "://" not in value and Path(value).is_file():
         value = Path(value).read_text(encoding="utf-8").strip()
     if not value:
-        raise DatabaseError("no reporting database: --dsn or the CI/CD variable A2VM_REPORTING_DSN")
+        raise DatabaseError("empty connection string")
     try:
         params = conninfo.conninfo_to_dict(value)
     except Exception:  # the message would quote the string, password included
@@ -62,12 +98,24 @@ def dsn(given: str | None = None, environ=None) -> str:
             "the reporting database connection string is not valid: key=value pairs "
             "(host=… dbname=… user=… password=…) or a URI (postgresql://user:password@host/dbname)"
         ) from None
-    ca = env("REPORTING_CA", "", environ=environ)
     if ca and "sslrootcert" not in params:
         params["sslrootcert"] = _ca_file(ca)
         params.setdefault("sslmode", "verify-full")
     params.setdefault("sslmode", "require")
     return conninfo.make_conninfo(**params)
+
+
+def dsn(given: str | None = None, environ=None) -> str:
+    """Connection string: `given`, else A2VM_REPORTING_DSN, a libpq string (`host=… user=…`) or a
+    URI (`postgresql://user:password@host/a2vm`, which GitLab can mask), or a file holding one.
+    With A2VM_REPORTING_CA (the server's certificate, file or text), the server is verified
+    (verify-full); without, the connection is encrypted (require). Never in clear text. Errors
+    never quote the string: it holds a password."""
+    environ = os.environ if environ is None else environ
+    value = (given or env("REPORTING_DSN", "", environ=environ)).strip()
+    if not value:
+        raise DatabaseError("no reporting database: --dsn or the CI/CD variable A2VM_REPORTING_DSN")
+    return connection(value, env("REPORTING_CA", "", environ=environ))
 
 
 def connect(conninfo: str):
@@ -103,7 +151,8 @@ def grant(
     admin_dsn: str, role: str, tenants: list[str], password: str | None = None, rotate: bool = False
 ) -> str | None:
     """Create (or update) a reading role limited to `tenants` ('*' = all); returns the password
-    when one was generated (new role, or `rotate`), to give once to the tool that reads."""
+    when one was generated (new role, or `rotate`), to give once to the tool that reads. A given
+    `password` (v0.20.3: the portal chart keeps it in a Secret) is set every time, nothing returned."""
     import psycopg
     from psycopg import sql
 
@@ -111,8 +160,11 @@ def grant(
     with connect(admin_dsn) as conn:
         try:
             exists = conn.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (role,)).fetchone()
-            if not exists or rotate:
-                generated = password or secrets.token_urlsafe(24)
+            if password:
+                verb = "ALTER ROLE {} PASSWORD {}" if exists else "CREATE ROLE {} LOGIN PASSWORD {}"
+                conn.execute(sql.SQL(verb).format(sql.Identifier(role), sql.Literal(password)))
+            elif not exists or rotate:
+                generated = secrets.token_urlsafe(24)
                 verb = "ALTER ROLE {} PASSWORD {}" if exists else "CREATE ROLE {} LOGIN PASSWORD {}"
                 conn.execute(sql.SQL(verb).format(sql.Identifier(role), sql.Literal(generated)))
             dbname = conn.info.dbname
