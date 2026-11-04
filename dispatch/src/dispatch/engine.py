@@ -31,6 +31,7 @@ from .store import TicketStore
 
 log = logging.getLogger("dispatch.engine")
 REQUEST_FILTERS = ("asset", "cve", "level", "zone", "exposure", "kev", "product", "q", "overdue")
+REQUEST_FILTERS += ("priority", "sla_overdue")  # the client's SLA (v0.21.0)
 
 
 class DispatchError(RuntimeError):
@@ -153,6 +154,7 @@ class Dispatcher:
             mine = old.findings.get(f.id)
             if mine is not None:
                 mine.level, mine.due, mine.kev, mine.epss = f.level, f.due, f.kev, f.epss
+                mine.priority, mine.priority_rank, mine.bod_due = f.priority, f.priority_rank, f.bod_due
         for f in added:
             old.findings[f.id] = f
         if new.origin == "request" and new.requested_by:
@@ -197,7 +199,8 @@ class Dispatcher:
                 continue
             if f.id in seen:
                 d = seen[f.id]
-                f.state, f.level, f.due = "open", d["level"], d.get("due_date")
+                f.state = "open"
+                f.refresh(d)
             elif f.id in closed:
                 f.state, f.fixed_at = "fixed", (closed[f.id].get("closed_at") or at)[:10]
                 fixed_now.append(f)
@@ -283,6 +286,7 @@ class Dispatcher:
                     "asset_name": t.asset_name,
                     "fix": t.fix,
                     "level": t.level,
+                    "priority": t.priority,
                     "due": t.due,
                     "cves": sorted(f.cve for f in t.findings.values()),
                     "status": "new" if old is None or old.state in ("fixed", "dropped", "lost") else old.state,

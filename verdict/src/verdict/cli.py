@@ -8,6 +8,7 @@ verdict db …             administer the reporting database: `verdict db -h`
 verdict grafana …        Grafana dashboards reading the reporting database: `verdict grafana -h`
 verdict serve …          the decision service of one tenant: read API on its latest runs
 verdict push …           push a run's triage to the decision service
+verdict sla-state …      read the SLA state of the tenant's findings before a run (v0.21.0)
 verdict tools …          tool server of the conversational search, on the decision service
 verdict chat-retention … delete the analysts' chats older than the tenant's retention
 """
@@ -23,13 +24,14 @@ from a2vm.io import ExchangeError, read_assets, read_findings, read_records
 from a2vm.llm import LlmClient
 from a2vm.profile import ProfileError, load_profile
 
+from . import priority
 from .assets.coverage import read_coverage
 from .assets.gaps import read_gaps
 from .report import write_all
 from .triage import Triage
 
 RESTITUTION = {"publish", "db", "grafana"}
-SERVICE = {"serve", "push", "tools", "chat-retention"}
+SERVICE = {"serve", "push", "sla-state", "tools", "chat-retention"}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -57,6 +59,7 @@ def main(argv: list[str] | None = None) -> int:
         ("grafana", "Grafana dashboards"),
         ("serve", "the decision service of one tenant"),
         ("push", "push a run's triage to the decision service"),
+        ("sla-state", "read the SLA state of the tenant's findings before a run"),
         ("tools", "tool server of the conversational search"),
         ("chat-retention", "delete the analysts' chats older than the tenant's retention"),
     ):
@@ -72,6 +75,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     r.add_argument("--out", default="output")
     r.add_argument("--no-llm", action="store_true", help="deterministic run, template rationales")
+    r.add_argument(
+        "--sla-state",
+        help="state of the tenant's database before this run (`verdict sla-state`, v0.21.0): when each "
+        "decision entered its priority; absent or unreadable, the SLA delays start at the first observation",
+    )
     args = parser.parse_args(args_in)
 
     settings = load_settings(args.settings)
@@ -100,6 +108,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"{base}: files of {a_client!r}/{f_client!r}, expected {profile.id!r}", file=sys.stderr)
                 return 2
             run = triage.run(profile, records, assets, findings, not_affected, len(requested), errors)
+            priority.apply(run, _sla_state(args.sla_state, profile) if profile.sla else None)
             try:
                 run.exposure_gaps = read_gaps(base / "exposure_gaps.json", profile.id)
                 run.coverage = read_coverage(base / "coverage.json", profile.id)
@@ -114,6 +123,13 @@ def main(argv: list[str] | None = None) -> int:
                 f"review={sum(r.needs_review for r in run.rows)} errors={len(run.errors)} ignored={len(run.ignored)} "
                 f"llm_calls={triage.llm_calls} llm_fallbacks={len(llm_failures)} -> {target}"
             )
+            if run.sla:
+                by = priority.counts(run.rows, run.sla["today"])
+                print(
+                    "  SLA: "
+                    + (" ".join(f"{p}={c['open']}/{c['overdue']} overdue" for p, c in by.items()) or "no priority")
+                    + ("" if run.sla["history"] else " (no history: delays from the first observation)")
+                )
             if triage.llm_stopped:
                 print(f"  LLM not used for the rest of the run: {triage.llm_stopped}", file=sys.stderr)
             for row in llm_failures[:20]:
@@ -124,6 +140,20 @@ def main(argv: list[str] | None = None) -> int:
         if llm:
             llm.close()
     return 0
+
+
+def _sla_state(path: str | None, profile) -> dict | None:  # noqa: ANN001 - a ClientProfile
+    """The state of the tenant's database for the SLA, None when not given or not readable (a warning)."""
+    if not path:
+        return None
+    if not Path(path).is_file():
+        print(f"WARN {path}: no SLA state, the delays start at the first observation", file=sys.stderr)
+        return None
+    try:
+        return priority.read_state(path, profile.id, profile.sla.timezone)
+    except (ValueError, KeyError, OSError) as exc:
+        print(f"WARN {exc}: the delays start at the first observation", file=sys.stderr)
+        return None
 
 
 if __name__ == "__main__":

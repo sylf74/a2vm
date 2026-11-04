@@ -15,6 +15,7 @@ from collections import Counter, defaultdict
 from a2vm.models import TriageRun
 
 from .i18n import has, lang_of, t
+from .priority import counts as sla_counts
 
 DECISIONS = ("ACT", "ATTEND", "TRACK")
 BOD_ORDER = ["3 days & forensic investigation", "3 days", "14 days", "60 days", "fix on system upgrade"]
@@ -159,6 +160,16 @@ def render_dashboard(run: TriageRun, language: str | None = None) -> str:
     legend = "".join(
         f'<span><span class="dot" style="background:var(--{d.lower()})"></span> {d}</span>' for d in DECISIONS
     )
+    sla_html = ""
+    if run.sla:  # the client's priorities (v0.21.0, D19)
+        by = sla_counts(rows, run.sla["today"])
+        body = "".join(
+            f"<tr><td>{_e(p)}</td><td class=n>{c['open']}</td><td class=n>{c['overdue']}</td>"
+            f"<td class=n>{c['due_soon']}</td></tr>"
+            for p, c in by.items()
+        )
+        inner = "<table>" + t(lang, "dash.sla.head") + body + "</table>" if body else _e(t(lang, "report.sla.none"))
+        sla_html = f'<h2>{_e(t(lang, "dash.sla"))}</h2>\n<div class="card">{inner}</div>\n'
     at = run.generated_at[:16].replace("T", " ")
     sub = t(lang, "dash.sub", at=at, cves=run.cve_count, n=len(rows))
     return f"""<!doctype html><html lang="{lang}"><head><meta charset="utf-8">
@@ -171,7 +182,7 @@ def render_dashboard(run: TriageRun, language: str | None = None) -> str:
 <div class="card"><div class="legend">{legend}</div>{assets_html}</div>
 <h2>{_e(t(lang, "dash.delays"))}</h2>
 <div class="card">{_bars(delay_items, lang) if delay_items else _e(t(lang, "dash.no_delay"))}</div>
-<h2>{_e(t(lang, "dash.act"))}</h2>
+{sla_html}<h2>{_e(t(lang, "dash.act"))}</h2>
 <div class="card">{act_html}</div>
 <footer>{_e(t(lang, "dash.footer"))}</footer>
 </main></body></html>

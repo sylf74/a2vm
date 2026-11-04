@@ -33,7 +33,8 @@ LEVELS = ("ACT", "ATTEND", "TRACK")
 COLUMNS = ["level", "cve", "asset", "ssvc", "kev", "epss", "cvss", "due_date", "product", "title"]
 DOCX_WIDTHS_CM = (1.6, 2.9, 3.4, 1.3, 1.1, 1.4, 1.2, 2.0, 3.0, 8.8)  # 26.7 cm: A4 landscape, 1.5 cm margins
 FILTERS = ("level", "cve", "asset", "exposure", "zone", "kev", "needs_review", "source", "min_epss", "min_cvss")
-FILTERS += ("product", "q")
+FILTERS += ("product", "q", "priority", "sla_overdue")
+CSV_EXTRA = ["priority", "sla_due"]  # the client's SLA (v0.21.0), in the CSV only (the tables keep their width)
 SSVC_INPUTS = ("exploitation", "automatable", "technical_impact")
 
 
@@ -83,6 +84,12 @@ def _explanation(detail: dict[str, Any], lang: str = "en") -> list[tuple[str, st
     lines.append((t(lang, "x.fixes"), sep.join(fixes[:10]) + more if fixes else t(lang, "x.fixes.none")))
     if detail.get("rationale_source"):
         lines.append((t(lang, "x.rationale_source"), detail["rationale_source"]))
+    s = detail.get("sla") or {}
+    if s.get("priority"):  # the client's SLA (v0.21.0)
+        calendar = t(lang, f"x.sla.{s.get('calendar', 'calendar')}")
+        text = t(lang, "x.sla", priority=s["priority"], date=s.get("due", "—"), rule=s.get("rule", "—"),
+                 days=s.get("days", "—"), calendar=calendar, bod=s.get("bod_due") or "—")  # fmt: skip
+        lines.append((t(lang, "x.col.priority"), text))
     return lines
 
 
@@ -102,9 +109,9 @@ def build(kind: str, meta: dict[str, Any], items: list[dict[str, Any]], details:
 def _csv(items: list[dict[str, Any]], lang: str = "en") -> bytes:
     out = io.StringIO()
     w = csv.writer(out, delimiter=";")
-    w.writerow(["id", *(_label(lang, k) for k in COLUMNS)])
+    w.writerow(["id", *(_label(lang, k) for k in COLUMNS + CSV_EXTRA)])
     for it in items:
-        w.writerow([it.get("id", ""), *(cell(it, k, lang) for k in COLUMNS)])
+        w.writerow([it.get("id", ""), *(cell(it, k, lang) for k in COLUMNS + CSV_EXTRA)])
     return ("﻿" + out.getvalue()).encode("utf-8")  # BOM: Excel reads the accents
 
 

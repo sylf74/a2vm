@@ -144,7 +144,8 @@ components:
         asset: {type: string}
         fix: {type: string}
         level: {enum: [ACT, ATTEND, TRACK]}
-        due: {type: [string, "null"]}
+        priority: {type: string, description: "most urgent priority of the client's SLA among its open findings, \"\" without one (since v0.21.0)"}
+        due: {type: [string, "null"], description: "earliest due date of its open findings: the SLA due date of a finding with a priority, else BOD 26-04 (since v0.21.0)"}
         state: {enum: [proposed, sent, in-progress, claimed-fixed, fixed, dropped, lost]}
         origin: {enum: [rule, request]}
         requested_by: {type: string}

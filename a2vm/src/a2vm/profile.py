@@ -10,6 +10,7 @@ from typing import Any
 import jsonschema
 import yaml
 
+from . import sla as sla_policy
 from .io import load_schema
 from .models import (
     DEFAULT_EXPECTED,
@@ -55,6 +56,10 @@ def validate_profile_data(data: Any, source: str = "<profile>") -> list[str]:
             if asset["id"] in seen:
                 errors.append(f"{source}: duplicate asset id {asset['id']!r}")
             seen.add(asset["id"])
+        try:
+            sla_policy.parse(data.get("sla"), f"{source}: sla")
+        except sla_policy.SlaError as exc:
+            errors.append(str(exc))
     return errors
 
 
@@ -68,6 +73,10 @@ def load_profile(path: str | Path) -> ClientProfile:
     if errors:
         raise ProfileError("\n".join(errors))
     warnings = _normalise_exposures(data)
+    try:
+        sla = sla_policy.parse(data.get("sla"), f"{path}: sla")
+    except sla_policy.SlaError as exc:
+        raise ProfileError(str(exc)) from exc
     assets = [DeclaredAsset(**a) for a in data.get("assets", [])]
     rules = [AttributeRule(**r) for r in data.get("rules", [])]
     client = data["client"]
@@ -85,6 +94,7 @@ def load_profile(path: str | Path) -> ClientProfile:
         published=[PublishedEndpoint(**p) for p in data.get("published", [])],
         language=client.get("language", "en"),
         coverage=_coverage(data.get("coverage") or {}),
+        sla=sla,
     )
 
 

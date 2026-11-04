@@ -6,7 +6,8 @@ update user requests in the tenant's organisation. The tickets come from a Perso
 be given to a Team (`team`), and are linked to the CMDB item of their asset when it is known.
 
   create   core/create UserRequest: org_id, caller_id, team_id, title, description (HTML), impact,
-           urgency, functionalcis_list
+           urgency (from the priority of the client's SLA when `priorities` maps it, v0.21.0, else from
+           the level), functionalcis_list
   comment  core/update: an entry in public_log
   resolve  core/apply_stimulus ev_resolve (solution, resolution_code "software patch")
   reopen   core/apply_stimulus ev_reopen
@@ -44,6 +45,10 @@ class ItopConnector:
         self.caller = str(s["caller"])
         self.team = str(s.get("team") or "")
         self.cls = str(s.get("class") or "UserRequest")
+        # Priority of the client's SLA -> (impact, urgency) (v0.21.0); else those of the level.
+        self.priorities = {
+            str(k): (str(v["impact"]), str(v["urgency"])) for k, v in (s.get("priorities") or {}).items()
+        }
         self._password = password
         self.http = httpx.Client(
             timeout=httpx.Timeout(float(s.get("timeout_seconds", 60)), connect=10.0),
@@ -92,7 +97,7 @@ class ItopConnector:
 
     # -- connector ---------------------------------------------------------------------------------
     def create(self, ticket: Ticket, text: str, title: str) -> External:
-        impact, urgency = PRIORITY.get(ticket.level, PRIORITY["TRACK"])
+        impact, urgency = self.priorities.get(ticket.priority) or PRIORITY.get(ticket.level, PRIORITY["TRACK"])
         fields: dict[str, Any] = {
             "org_id": {"name": self.organization},
             "caller_id": {"name": self.caller},

@@ -5,6 +5,47 @@ analyst and, under **Upgrade**, what a tenant must do when it moves to that tag 
 `A2VM_REF` in its `.gitlab-ci.yml`). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
 §11) and the LLDs. A release adds its entry here in the same merge request (CLAUDE.md, Releasing).
 
+## v0.21.0 — 2026-11-04
+
+Priorities and SLA per client, within the levels (HLD D19).
+
+- BOD 26-04 stays the default SLA. A client may set its own priorities (free names: P0..Pn, Q0...) and
+  their delays in its profile, section `sla` of `client.yaml`: rules of which the first that matches a
+  decision applies, on its level, KEV, exposure, zone, EPSS, CVSS and the fields of its asset's CMDB
+  item (criticality, class, status, organization, type); delays in calendar days (24/7) or business
+  days (weekends, public holidays `FR` and the client's own days left out), in the client's time zone,
+  for the client or per rule. ACT, ATTEND and TRACK do not change: a priority sorts a decision, it
+  never changes it. The section is checked by the job `validate` (`docs/sla.md`).
+- A delay starts on the day verdict puts the decision into its priority, kept in the tenant's
+  database: a priority that goes up gets a new delay from the change, never beyond the due date
+  already set; one that goes down keeps the due date announced. The daily run on Kubernetes reads that
+  state before the triage (`verdict sla-state`, `GET sla-state` of `verdict.v1`, the publish token)
+  and gives it to `verdict run --sla-state`; without it (GitLab pipeline mode, decision service not
+  reached), the delays start at the first observation and the decisions and the report say so. The
+  decisions open at the upgrade start from the day they got their level.
+- Each decision records its priority, the rule applied, the start and its source, its SLA due date
+  and the BOD 26-04 due date beside it (`sla` in `triage.json`; library `a2vm.sla`, owned by pillar
+  3; deterministic, no LLM).
+- Where it shows: `triage.csv` (`priority`, `sla_due`, `bod_due`); the daily report and the run page
+  (section "Priorities and SLA", a column priority in the ACT and ATTEND tables); `verdict.v1`
+  (`priority`, `priority_rank`, `sla_due` on each decision, filters `priority`, `sla_overdue`,
+  `sla_due_before`, sorts `priority`, `sla_due`, `summary.sla`, `lifecycle.sla` and `priorities`); the
+  chat (the same filters, the priorities in the summary, the CSV export, the explanation of the Word
+  and PowerPoint documents); the reporting dataset and database, schema 5 (priority, SLA due date,
+  `sla_status`, `deadline`, `within_sla`, SLA counts of each run); a new dashboard `sla` (priorities
+  and SLA, its French and RSSI versions) and the priority of the findings fixed in `remediation`; the
+  tickets (title `[A2VM ACT P1] …`, the SLA due date as the ticket's due date, the BOD one beside it,
+  iTop impact and urgency per priority with `priorities` in the target of `dispatch.yaml`). The page
+  of the requests accepts `priority` and `sla_overdue`.
+- `tests/test_v0203.py`: the test of `db grant --password-file` is skipped without a disposable
+  PostgreSQL, as the other database tests.
+
+**Upgrade**: move `ref` and `A2VM_REF` to `v0.21.0` and push. Run `verdict db init` once on each
+reporting database (schema 5, `docs/reporting.md`; a portal on Kubernetes does it at its upgrade),
+then import the dashboard `sla` on a portal set up by hand. The tenant's database takes its
+migration at the start of the decision service. A client with an SLA: add the section `sla` to its
+`client.yaml` (`docs/sla.md`); without it, nothing changes.
+
 ## v0.20.3 — 2026-11-04
 
 Several portals, and a portal on Kubernetes (D13 revised).

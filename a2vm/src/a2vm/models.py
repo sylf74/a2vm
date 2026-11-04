@@ -197,6 +197,7 @@ class ClientProfile:
     published: list[PublishedEndpoint] = field(default_factory=list)
     language: str = "en"  # language of the client's deliverables (v0.17.3): en, fr
     coverage: CoveragePolicy = field(default_factory=CoveragePolicy)  # scan coverage (v0.19.0)
+    sla: Any = None  # a2vm.sla.SlaPolicy, the client's priorities and SLA (v0.21.0); None: BOD 26-04 only
 
     def declared(self, asset_id: str) -> DeclaredAsset:
         for a in self.assets:
@@ -411,6 +412,9 @@ class TriageRow:
     kev_date_added: str = ""
     kev_due_date: str = ""
     epss_date: str = ""
+    # Priority and SLA of the client (v0.21.0, D19): priority, rank, rule, days, calendar, since,
+    # since_source, due, bod_due; {} when the client has no `sla` section.
+    sla: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -430,3 +434,4 @@ class TriageRun:
     coverage: dict[str, Any] = field(default_factory=dict)  # scan coverage, from the assets stage (v0.19.0)
     # Every asset of the run, with or without a finding (v0.18.1): who scanned it and when.
     assets: list[dict[str, Any]] = field(default_factory=list)
+    sla: dict[str, Any] = field(default_factory=dict)  # the client's SLA in force and its history (v0.21.0)

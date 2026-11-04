@@ -2,8 +2,8 @@
 """HTTP API of the decision service (contract: a2vm/schemas/openapi/verdict.v1.yaml).
 
 Plain HTTP inside the cluster, one service per tenant namespace; every call names the tenant and
-the service refuses another one. Roles: `publish` (the daily run pushes its triage) and `read`
-(analysts' tools). Acceptance of a push, in order, nothing stored on failure:
+the service refuses another one. Roles: `publish` (the daily run pushes its triage, and reads the
+SLA state it carries, v0.21.0) and `read` (analysts' tools). Acceptance of a push, in order, nothing stored on failure:
   1. publish token, Idempotency-Key; a retry is answered from the key at once      401 / 400
   2. size limit, gzip (one complete stream), JSON, a2vm.triage/1                     413 / 400 / 422
   3. client id = tenant, generated_at not in the future                             422
@@ -109,6 +109,21 @@ class Service:
             time.monotonic() - started,
         )
         return receipt.to_dict()
+
+    def sla_state(self, tenant: str, token: str | None, now: dt.datetime | None = None) -> dict[str, Any]:
+        """The state of the findings the next run needs for the client's SLA (v0.21.0, D19): every
+        finding not closed, its level, the day it got it and its priority; for the daily run."""
+        self._check_tenant(tenant)
+        self.tokens.require(token, "publish")
+        if not self.store.history:
+            raise Problem(HTTPStatus.NOT_FOUND, "the SLA state needs the tenant's database (v0.18.0)")
+        now = now or dt.datetime.now(dt.UTC)
+        return {
+            "schema": "a2vm.sla_state/1",
+            "tenant": tenant,
+            "generated_at": now.isoformat(timespec="seconds"),
+            "findings": self.store.sla_state(tenant),
+        }
 
     # -- read ---------------------------------------------------------------------------------
     def _reader(self, tenant: str, token: str | None) -> None:
@@ -239,6 +254,9 @@ def make_handler(service: Service) -> type[JsonHandler]:
                 return
             try:
                 tenant, rest, query = self._route()
+                if rest == "sla-state":
+                    self.send_json(HTTPStatus.OK, service.sla_state(tenant, self.bearer()))
+                    return
                 self.send_json(HTTPStatus.OK, service.read(tenant, self.bearer(), rest, query))
             except Problem as p:
                 self.send_problem(p)

@@ -320,6 +320,223 @@
           }
         }
       }
+    },
+    "sla": {
+      "description": "Priorities and SLA of the client (v0.21.0, HLD D19): the BOD 26-04 timelines are the default; the first rule that matches a decision gives its priority and its delay, from the day the decision enters that priority. The level (ACT, ATTEND, TRACK) does not change.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rules"
+      ],
+      "properties": {
+        "timezone": {
+          "type": "string",
+          "description": "IANA time zone of the client's days (default UTC), e.g. Europe/Paris."
+        },
+        "calendar": {
+          "enum": [
+            "calendar",
+            "business"
+          ],
+          "description": "calendar: every day counts (24/7, follow the sun); business: Monday to Friday, less the public holidays."
+        },
+        "holidays": {
+          "oneOf": [
+            {
+              "enum": [
+                "FR"
+              ]
+            },
+            {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "FR"
+                ]
+              }
+            }
+          ],
+          "description": "Public holidays left out of business days: FR (metropolitan France)."
+        },
+        "extra_holidays": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          },
+          "description": "Other days left out of business days (a closure, a local holiday), YYYY-MM-DD."
+        },
+        "rules": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Most urgent priority first; the first rule that matches applies.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "priority",
+              "days"
+            ],
+            "properties": {
+              "priority": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,15}$",
+                "description": "Free name: P0, P1, Q0..."
+              },
+              "days": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Delay, counted in the rule's calendar."
+              },
+              "calendar": {
+                "enum": [
+                  "calendar",
+                  "business"
+                ],
+                "description": "calendar: every day counts (24/7, follow the sun); business: Monday to Friday, less the public holidays."
+              },
+              "holidays": {
+                "oneOf": [
+                  {
+                    "enum": [
+                      "FR"
+                    ]
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "enum": [
+                        "FR"
+                      ]
+                    }
+                  }
+                ],
+                "description": "Public holidays left out of business days: FR (metropolitan France)."
+              },
+              "extra_holidays": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+                },
+                "description": "Other days left out of business days (a closure, a local holiday), YYYY-MM-DD."
+              },
+              "when": {
+                "type": "object",
+                "additionalProperties": false,
+                "description": "Every criterion must hold; none: every decision.",
+                "properties": {
+                  "level": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "minItems": 1
+                      }
+                    ]
+                  },
+                  "kev": {
+                    "type": "boolean"
+                  },
+                  "exposure": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "minItems": 1
+                      }
+                    ]
+                  },
+                  "zone": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "minItems": 1
+                      }
+                    ]
+                  },
+                  "epss": {
+                    "oneOf": [
+                      {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "minProperties": 1,
+                        "properties": {
+                          "min": {
+                            "type": "number"
+                          },
+                          "max": {
+                            "type": "number"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "cvss": {
+                    "oneOf": [
+                      {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "minProperties": 1,
+                        "properties": {
+                          "min": {
+                            "type": "number"
+                          },
+                          "max": {
+                            "type": "number"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "cmdb": {
+                    "type": "object",
+                    "description": "Fields of the asset's CMDB item: criticality, class, status, organization, type...",
+                    "additionalProperties": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "minItems": 1
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "allOf": [

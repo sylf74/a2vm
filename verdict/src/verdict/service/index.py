@@ -8,9 +8,11 @@ a list carries a few fields per decision, one decision carries everything the ru
 from __future__ import annotations
 
 import datetime as dt
-import re
 from collections import Counter
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from a2vm import sla
 
 LEVELS = ("ACT", "ATTEND", "TRACK")
 EXPOSURES = ("open", "controlled", "small")
@@ -18,7 +20,7 @@ TITLE_MAX = 140
 LIMIT_DEFAULT = 25
 LIMIT_MAX = 200
 DECISIONS_MAX = 2000  # pages of GET decisions, for the services that read them all (v0.20.2, pillar 4)
-SORTS = ("level", "epss", "cvss", "due_date", "cve", "asset")
+SORTS = ("level", "epss", "cvss", "due_date", "cve", "asset", "priority", "sla_due")
 
 
 class QueryError(ValueError):
@@ -50,14 +52,18 @@ def row_id(row: dict[str, Any]) -> str:
 
 def due_date(row: dict[str, Any]) -> str | None:
     """First observation + the BOD 26-04 delay, as in the reporting dataset."""
-    m = re.match(r"(\d+) days", row.get("bod_timeline") or "")
-    first = (row.get("first_seen") or "")[:10]
-    if not m or not first:
-        return None
-    try:
-        return (dt.date.fromisoformat(first) + dt.timedelta(days=int(m.group(1)))).isoformat()
-    except ValueError:
-        return None
+    return sla.bod_due(row.get("bod_timeline") or "", row.get("first_seen") or "")
+
+
+def priority(row: dict[str, Any]) -> dict[str, Any] | None:
+    """The decision's priority in the client's SLA (v0.21.0), None in none or without an SLA."""
+    s = row.get("sla") or {}
+    return s if s.get("priority") and s.get("due") else None
+
+
+def sla_due(row: dict[str, Any]) -> str | None:
+    s = priority(row)
+    return s["due"] if s else None
 
 
 def _cvss(row: dict[str, Any]) -> float | None:
@@ -100,6 +106,11 @@ def compact(row: dict[str, Any]) -> dict[str, Any]:
         "first_seen": (row.get("first_seen") or "")[:10] or None,
         "cve_updated": (row.get("cve_updated") or "")[:10] or None,
         "fixes": list(row.get("fixes") or []),  # the fixes the scanners reported (v0.20.0, pillar 4)
+        # The client's SLA (v0.21.0): its priority, rank (0 the most urgent) and due date; due_date
+        # stays the BOD 26-04 one.
+        "priority": (priority(row) or {}).get("priority", ""),
+        "priority_rank": (priority(row) or {}).get("rank"),
+        "sla_due": sla_due(row),
     }
 
 
@@ -162,6 +173,10 @@ def _sort_key(sort: str):  # noqa: ANN202
         return lambda r: (-(_cvss(r) or 0), r["cve_id"])
     if sort == "due_date":
         return lambda r: (due_date(r) or "9999", level[r["delivery_decision"]], r["cve_id"])
+    if sort == "priority":  # no priority last, then the due date
+        return lambda r: ((priority(r) or {}).get("rank", 9999), sla_due(r) or "9999", r["cve_id"], _asset(r))
+    if sort == "sla_due":
+        return lambda r: (sla_due(r) or "9999", (priority(r) or {}).get("rank", 9999), r["cve_id"], _asset(r))
     if sort == "cve":
         return lambda r: (r["cve_id"], _asset(r))
     return lambda r: (_asset(r), level[r["delivery_decision"]], r["cve_id"])
@@ -223,6 +238,16 @@ class RunIndex:
                 return a
         return None
 
+    def today(self) -> str:
+        """The day in the client's time zone (its SLA's, v0.21.0), else UTC."""
+        tz = (self.document.get("sla") or {}).get("timezone")
+        if tz:
+            try:
+                return dt.datetime.now(ZoneInfo(tz)).date().isoformat()
+            except (ZoneInfoNotFoundError, ValueError):
+                pass
+        return dt.datetime.now(dt.UTC).date().isoformat()
+
     @property
     def run(self) -> dict[str, Any]:
         language = (self.document.get("client") or {}).get("language") or "en"
@@ -260,6 +285,32 @@ class RunIndex:
                 for k in ("cmdb", "counts", "expected_assets", "covered_share", "stale_days")
                 if k in self.coverage_doc
             },
+            **({"sla": self.sla_summary()} if self.document.get("sla") else {}),
+        }
+
+    def sla_summary(self, today: str | None = None) -> dict[str, Any]:
+        """The client's SLA (v0.21.0): per priority, the open decisions, the overdue and those due within
+        7 days, on the day of the question."""
+        today = today or self.today()
+        soon = (dt.date.fromisoformat(today) + dt.timedelta(days=sla.SOON_DAYS)).isoformat()
+        by: dict[str, dict[str, Any]] = {}
+        for r in self.rows:
+            s = priority(r)
+            if s is None:
+                continue
+            c = by.setdefault(s["priority"], {"rank": s.get("rank", 0), "open": 0, "overdue": 0, "due_soon": 0})
+            c["open"] += 1
+            c["overdue"] += s["due"] < today
+            c["due_soon"] += today <= s["due"] <= soon
+        policy = self.document["sla"]
+        return {
+            "today": today,
+            "timezone": policy.get("timezone"),
+            "calendar": policy.get("calendar"),
+            "priorities": policy.get("priorities") or [],
+            "history": policy.get("history"),
+            "by_priority": dict(sorted(by.items(), key=lambda kv: (kv[1]["rank"], kv[0]))),
+            "unclassified": sum(1 for r in self.rows if priority(r) is None),
         }
 
     def decisions(self, query: dict[str, str]) -> dict[str, Any]:
@@ -312,6 +363,16 @@ class RunIndex:
             want = _bool(query["overdue"], "overdue")
             today = query.get("today") or dt.date.today().isoformat()
             rows = [r for r in rows if (bool(due_date(r)) and due_date(r) < today) == want]
+        if "priority" in query:
+            wanted = {p.strip().casefold() for p in query["priority"].split(",") if p.strip()}
+            rows = [r for r in rows if (priority(r) or {}).get("priority", "").casefold() in wanted]
+        if "sla_overdue" in query:
+            want = _bool(query["sla_overdue"], "sla_overdue")
+            today = query.get("today") or self.today()
+            rows = [r for r in rows if (bool(sla_due(r)) and sla_due(r) < today) == want]
+        if "sla_due_before" in query:
+            limit_day = _day(query["sla_due_before"], "sla_due_before")
+            rows = [r for r in rows if (sla_due(r) or "9999") <= limit_day]
         sort = query.get("sort", "level")
         if sort not in SORTS:
             raise QueryError(f"sort: one of {', '.join(SORTS)}")
@@ -459,12 +520,14 @@ class RunIndex:
         for fix, rs in groups.items():
             counts = Counter(r["delivery_decision"] for r in rs)
             dues = sorted(d for d in (due_date(r) for r in rs) if d)
+            sla_dues = sorted(d for d in (sla_due(r) for r in rs) if d)
             plan.append(
                 {
                     "fix": fix,
                     "clears": {lv: counts.get(lv, 0) for lv in LEVELS},
                     "kev": sum(1 for r in rs if r.get("in_kev")),
                     "earliest_due_date": dues[0] if dues else None,
+                    "earliest_sla_due": sla_dues[0] if sla_dues else None,
                     "cves": sorted(
                         {r["cve_id"] for r in rs},
                         key=lambda c: min(_level_rank(r["delivery_decision"]) for r in rs if r["cve_id"] == c),

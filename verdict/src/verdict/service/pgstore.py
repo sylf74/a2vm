@@ -6,7 +6,8 @@ the same interface as the files of `RunStore`, plus the life of each finding acr
   verdict.push_keys  idempotency: key of the push -> run
   verdict.findings   one row per finding (CVE on asset) ever decided: opened, last seen, closed
                      (absent from a newer run: fixed or no longer detected), its level and the
-                     changes of its level
+                     changes of its level; since v0.21.0 its priority in the client's SLA (D19):
+                     the priority, the day it entered it and its due date, and their changes
 
 The last `keep` runs are kept; the findings outlive them. Only the newest run moves the findings:
 a run pushed late (older than the newest) is kept and readable, and changes no finding.
@@ -77,7 +78,28 @@ ALTER TABLE verdict.findings ADD COLUMN seen_by jsonb NOT NULL DEFAULT '{}';
 ALTER TABLE verdict.findings ADD COLUMN unverified_since timestamptz;
 """,
     ),
+    # v0.21.0 (D19): the priority of the client's SLA. NULL: never computed (before v0.21.0, or a client
+    # without an SLA), {"priority": ""}: in no priority.
+    Migration(
+        3,
+        """
+ALTER TABLE verdict.findings ADD COLUMN sla jsonb;
+ALTER TABLE verdict.findings ADD COLUMN priorities jsonb NOT NULL DEFAULT '[]';
+""",
+    ),
 ]
+
+PRIORITIES_KEPT = 50  # changes of priority kept per finding
+
+
+def kept_sla(old: dict[str, Any] | None, new: dict[str, Any] | None) -> dict[str, Any] | None:
+    """The SLA stored for a finding after a run. A run that did not know the history (its delays from
+    the first observation) never replaces what the database knows of an unchanged priority."""
+    if not new:
+        return None
+    if old and new.get("since_source") == "first_seen" and old.get("priority") == new.get("priority"):
+        return old
+    return new
 
 
 def rescanned(seen_by: dict[str, str], scans: dict[str, str]) -> bool:
@@ -192,10 +214,10 @@ class PgRunStore:
         current: dict[str, dict[str, Any]] = {row_id(r): r for r in document["rows"]}
         scans = {a["id"]: a.get("scans") or {} for a in document.get("assets") or []}
         known = {
-            f: (level, closed, unverified, levels, seen_by, asset)
-            for f, level, closed, unverified, levels, seen_by, asset in conn.execute(
-                "SELECT finding, level, closed_at, unverified_since, levels, seen_by, asset FROM verdict.findings "
-                "WHERE tenant = %s",
+            f: (level, closed, unverified, levels, seen_by, asset, sla, priorities)
+            for f, level, closed, unverified, levels, seen_by, asset, sla, priorities in conn.execute(
+                "SELECT finding, level, closed_at, unverified_since, levels, seen_by, asset, sla, priorities "
+                "FROM verdict.findings WHERE tenant = %s",
                 (tenant,),
             ).fetchall()
         }
@@ -205,28 +227,41 @@ class PgRunStore:
                 level = r["delivery_decision"]
                 asset = r.get("asset_id_full") or r["asset_id"]
                 seen = json.dumps(r.get("seen_by") or {})
+                new_sla = r.get("sla") or None
                 if fid not in known:
+                    entry = (
+                        [{"at": stamp, "priority": new_sla["priority"], "due": new_sla.get("due"), "run": rid}]
+                        if new_sla
+                        else []
+                    )
                     cur.execute(
                         "INSERT INTO verdict.findings (tenant, finding, cve, asset, opened_at, last_seen_at, "
-                        "last_run, level, level_since, levels, seen_by) "
-                        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                        "last_run, level, level_since, levels, seen_by, sla, priorities) "
+                        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
                         (tenant, fid, r["cve_id"], asset, at, at, rid, level, at,
-                         json.dumps([{"at": stamp, "level": level, "run": rid}]), seen),
+                         json.dumps([{"at": stamp, "level": level, "run": rid}]), seen,
+                         json.dumps(new_sla) if new_sla else None, json.dumps(entry)),
                     )  # fmt: skip
                     continue
-                old_level, closed, _, levels, _, _ = known[fid]
+                old_level, closed, _, levels, _, _, old_sla, priorities = known[fid]
                 changed = old_level != level or closed is not None
                 if changed:
                     levels = (levels + [{"at": stamp, "level": level, "run": rid}])[-LEVELS_KEPT:]
+                if closed is not None:
+                    old_sla = None  # reopened: a new entry into its priority
+                stored = kept_sla(old_sla, new_sla)
+                if stored and (old_sla or {}).get("priority") != stored.get("priority"):
+                    entry = {"at": stamp, "priority": stored["priority"], "due": stored.get("due"), "run": rid}
+                    priorities = (priorities + [entry])[-PRIORITIES_KEPT:]
                 cur.execute(
                     "UPDATE verdict.findings SET last_seen_at = %s, last_run = %s, closed_at = NULL, "
                     "closed_run = NULL, unverified_since = NULL, reopened = reopened + %s, level = %s, "
-                    "level_since = CASE WHEN %s THEN %s ELSE level_since END, levels = %s, seen_by = %s "
-                    "WHERE tenant = %s AND finding = %s",
+                    "level_since = CASE WHEN %s THEN %s ELSE level_since END, levels = %s, seen_by = %s, "
+                    "sla = %s, priorities = %s WHERE tenant = %s AND finding = %s",
                     (at, rid, 1 if closed is not None else 0, level, changed, at, json.dumps(levels), seen,
-                     tenant, fid),
+                     json.dumps(stored) if stored else None, json.dumps(priorities), tenant, fid),
                 )  # fmt: skip
-            for fid, (_, closed, unverified, _, seen_by, asset) in known.items():
+            for fid, (_, closed, unverified, _, seen_by, asset, _, _) in known.items():
                 if closed is not None or fid in current:
                     continue
                 if rescanned(seen_by or {}, scans.get(asset) or {}):
@@ -290,7 +325,8 @@ class PgRunStore:
     # -- life of the findings ----------------------------------------------------------------------
     @staticmethod
     def _finding(row: tuple) -> dict[str, Any]:
-        fid, cve, asset, opened, last, last_run, closed, closed_run, reopened, level, since, levels, unverified = row
+        fid, cve, asset, opened, last, last_run, closed, closed_run, reopened, level, since, levels = row[:12]
+        unverified, sla, priorities = row[12:15]
         state = "closed" if closed is not None else "unverified" if unverified is not None else "open"
         out = {
             "id": fid,
@@ -308,6 +344,9 @@ class PgRunStore:
             "level_since": _iso(since),
             "levels": levels,
         }
+        if sla is not None:  # v0.21.0: the priority of the client's SLA and its changes
+            out["sla"] = sla
+            out["priorities"] = priorities
         for key in ("closed_at", "closed_run", "unverified_since"):
             if out[key] is None:
                 out.pop(key)
@@ -315,7 +354,7 @@ class PgRunStore:
 
     _COLUMNS = (
         "finding, cve, asset, opened_at, last_seen_at, last_run, closed_at, closed_run, reopened, level, "
-        "level_since, levels, unverified_since"
+        "level_since, levels, unverified_since, sla, priorities"
     )
 
     def lifecycle(self, tenant: str, finding: str) -> dict[str, Any] | None:
@@ -344,6 +383,17 @@ class PgRunStore:
                 (tenant, since, limit, offset),
             ).fetchall()
         return total, [self._finding(r) for r in rows]
+
+    def sla_state(self, tenant: str) -> list[dict[str, Any]]:
+        """What the next run needs to carry the SLA (v0.21.0): every finding not closed, its level, the
+        day it got it, and its SLA (null: never computed)."""
+        with self.db.tx(tenant) as conn:
+            rows = conn.execute(
+                "SELECT finding, level, level_since, sla FROM verdict.findings WHERE tenant = %s "
+                "AND closed_at IS NULL ORDER BY finding",
+                (tenant,),
+            ).fetchall()
+        return [{"id": f, "level": lv, "level_since": _iso(since), "sla": sla} for f, lv, since, sla in rows]
 
     def closed(self, tenant: str, since: dt.datetime, limit: int, offset: int) -> tuple[int, list[dict[str, Any]]]:
         return self.findings(tenant, "closed", since, limit, offset)

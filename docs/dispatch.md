@@ -48,6 +48,25 @@ are kept there); for the page, the analysts' sign-in (`docs/sign-in.md`).
 Start in `mode: dry-run`: the tickets are proposed and recorded, nothing reaches iTop; read them
 (§4), then set `mode: live`.
 
+When the client has priorities and an SLA (v0.21.0, `docs/sla.md`), a ticket carries the most urgent
+priority of its findings in its title (`[A2VM ACT P1] …`) and its text, and its due date is the
+earliest SLA due date of its findings (the BOD 26-04 one is shown beside it). By default iTop's
+impact and urgency come from the level; a target may map them per priority, a priority not listed
+keeping those of its level:
+
+```yaml
+targets:
+  itsm:
+    type: itop
+    # ...
+    priorities:
+      P0: {impact: 1, urgency: 1}   # impact 1 a department, 2 a service, 3 a person
+      P1: {impact: 2, urgency: 1}   # urgency 1 critical .. 4 low
+```
+
+A ticket already created keeps its impact and urgency; its findings, their priority and due date
+are updated at each run.
+
 | Key | Value | Options |
 | --- | --- | --- |
 | `A2VM_DISPATCH_<TARGET>_PASSWORD` | Password of the account of a target of `dispatch.yaml`, `<TARGET>` its name in capitals, `-` as `_` (e.g. `A2VM_DISPATCH_ITSM_PASSWORD`) | Masked, protected |
@@ -68,7 +87,7 @@ its origin among the *Web origins* of the tenant's client.
 
 ## 3. Grafana
 
-The dashboards `remediation` and `coverage` have an RSSI version with the links "Remediate":
+The dashboards `remediation`, `coverage` and `sla` (v0.21.0) have an RSSI version with the links "Remediate":
 
 ```bash
 verdict grafana dashboard coverage --rssi > coverage.rssi.json

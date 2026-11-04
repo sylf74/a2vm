@@ -81,6 +81,29 @@ def cmd_push(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_sla_state(args: argparse.Namespace) -> int:
+    """0 written; 3 the service unreachable, busy or without the tenant's database (a warning: the run
+    starts the SLA delays at the first observation); 1 refused. The file is written only when complete."""
+    import json
+
+    from .client import PushError, sla_state
+
+    token = _read_secret(args.token_file)
+    try:
+        data = sla_state(args.url, args.tenant, token, args.ca_file, timeout=args.timeout_seconds)
+    except PushError as exc:
+        print(f"{args.tenant}: {exc}", file=sys.stderr)
+        return 3 if exc.retry else 1
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    tmp = out.with_name(f".{out.name}.tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    tmp.replace(out)
+    known = sum(1 for f in data["findings"] if f.get("sla") is not None)
+    print(f"{args.tenant}: SLA state of {len(data['findings'])} open findings ({known} with a priority) -> {out}")
+    return 0
+
+
 def cmd_tools(args: argparse.Namespace) -> int:
     from a2vm.service import TokenSet
 
@@ -145,6 +168,14 @@ def main(argv: list[str]) -> int:
     p.add_argument("--ca-file")
     p.add_argument("--timeout-seconds", type=float, default=600)
     p.set_defaults(func=cmd_push)
+    st = sub.add_parser("sla-state", help="read the SLA state of the tenant's findings before a run (v0.21.0)")
+    st.add_argument("--url", required=True, help="decision service, e.g. http://a2vm-lab-verdict:8080")
+    st.add_argument("--tenant", required=True)
+    st.add_argument("--token-file", required=True, help="the publish token")
+    st.add_argument("--out", required=True, help="the file `verdict run --sla-state` reads")
+    st.add_argument("--ca-file")
+    st.add_argument("--timeout-seconds", type=float, default=120)
+    st.set_defaults(func=cmd_sla_state)
     t = sub.add_parser("tools", help="tool server of the conversational search, on the decision service")
     t.add_argument("--tenant", required=True)
     t.add_argument("--verdict-url", required=True, help="decision service, e.g. http://a2vm-lab-verdict:8080")

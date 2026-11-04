@@ -20,6 +20,7 @@ reporting database and the dashboards that read it show its decisions and nothin
 | Consolidate observations into one inventory per tenant, each attribute with its source | Collect observations (pillar 2) or vulnerability records (pillar 1) |
 | Reconcile declared and observed assets, internal and external | Dispatch actions or follow remediation (pillar 4) |
 | Take one SSVC decision per finding (ACT, ATTEND or TRACK) with its BOD 26-04 timeline, reasons, review flags and rationale | Let AI decide (strategy D11) |
+| Sort the decisions into the client's priorities and give each its SLA due date (D19, v0.21.0) | Change a level for a priority: the client's rules sort, the SSVC decision and the policy decide |
 | Apply accepted risks | Send anything to the client without analyst validation |
 | Publish each run's decisions into the reporting database and ship the dashboards that read it (overview, per asset, per CVE) | Compute in a dashboard a rule the decision did not apply |
 
@@ -41,9 +42,9 @@ reporting database and the dashboards that read it show its decisions and nothin
 | Block | Responsibility | Reads → writes |
 | --- | --- | --- |
 | Asset context (`verdict assets build`) | Consolidates observations into one inventory per tenant and sets each attribute with its source (exposure as SSVC value, zone, mission, well-being, owner); reconciles declared and observed assets, internal and external | Detections → `assets.json`, `findings.json` |
-| Decision (`verdict run`) | One SSVC decision per finding, BOD 26-04 timeline, reasons, review flags, rationale; risk acceptance | Records, assets, findings → `triage.json`, `triage.csv`, report, run page, `reporting.json` |
+| Decision (`verdict run`) | One SSVC decision per finding, BOD 26-04 timeline, reasons, review flags, rationale; risk acceptance; the client's priority and SLA due date (D19, `verdict.priority` on `a2vm.sla`) | Records, assets, findings, SLA state of the tenant's database → `triage.json`, `triage.csv`, report, run page, `reporting.json` |
 | Restitution (`verdict publish`, `verdict db`, `verdict grafana`) | Loads each run's reporting dataset into the reporting database (history kept, a reading role per tenant); ships the Grafana dashboards: overview of a client, which assets to fix first, which CVEs to fix first | `reporting.json` → PostgreSQL schema `a2vm`; dashboards (JSON) |
-| Decision service (`verdict serve`, `verdict push`) | Keeps the last runs of a tenant pushed by the daily run and answers short, paged reads for analysts and their tools (D15 step 3, read side) | `triage.json` → read API `verdict.v1` |
+| Decision service (`verdict serve`, `verdict push`, `verdict sla-state`) | Keeps the last runs of a tenant pushed by the daily run and answers short, paged reads for analysts and their tools (D15 step 3, read side); keeps the life of each finding, its priority and the day it entered it, which the next run reads (v0.21.0) | `triage.json` → read API `verdict.v1`; SLA state → the next run |
 | Tool server (`verdict tools`) | Read operations for the model of the analysts' chat (Open WebUI in the namespace): short answers that name their run, vendor text kept as data | Read API `verdict.v1` → OpenAPI tools |
 
 ## 4. Asset context
@@ -74,7 +75,7 @@ by the decision service, the chat and a Grafana dashboard.
 ## 5. Flows
 
 1. Asset context consolidates the observations, pulls the external report and reconciles it through the `published` section (public endpoint → internal asset).
-2. Decision takes each finding with its asset's exposure and mission, and the CVE's exploitation, automatability and technical impact from the evidence (AI only proposes a missing value, flagged for review); the CISA Coordinator tree, the BOD 26-04 timelines and the policy then give ACT, ATTEND or TRACK with a rationale.
+2. Decision takes each finding with its asset's exposure and mission, and the CVE's exploitation, automatability and technical impact from the evidence (AI only proposes a missing value, flagged for review); the CISA Coordinator tree, the BOD 26-04 timelines and the policy then give ACT, ATTEND or TRACK with a rationale. When the client has an SLA (D19), its rules then sort each decision into a priority, whose delay starts on the day the decision entered it (the SLA state the daily run reads from the decision service before deciding).
 3. Results are published as reports, client bulletins and dashboard data; analysts validate before delivery.
 4. Restitution loads the run's reporting dataset into the reporting database (job `publish`); the dashboards show a snapshot (each client's latest run on or before a day) compared with an earlier one, counted in exposures (asset × CVE) or in distinct CVEs.
 
@@ -91,14 +92,15 @@ by the decision service, the chat and a Grafana dashboard.
 | --- | --- |
 | Policy as code | The decision policy is versioned, changed by merge request with a second reviewer, its combinations leading to ACT tested in CI; each decision carries the policy version, and a new version comes with a report of the priorities it changes |
 | Risk acceptance | An accepted risk has a justification, an approver and an expiry date, kept in the tenant project and changed by merge request; at expiry the finding comes back |
-| Determinism | Same records, assets, findings and policy version give the same decisions |
+| Determinism | Same records, assets, findings and policy version give the same decisions; same rules and history give the same priorities and due dates |
+| Client's priorities (D19) | The BOD 26-04 timelines are the default SLA; the client's rules sort the decisions into its priorities, the first that matches applies; a due date announced never moves later while a decision stays in a priority; the rule applied and the BOD 26-04 due date are kept on each decision, so the client's SLA is always compared with the BOD |
 | Reporting contract | Pillar 3 publishes one reporting dataset per tenant and run (`reporting.json`, versioned schema); it fills the reporting database that dashboards read, so internal changes never break a dashboard |
 
 ## 8. Status, risks and open points
 
 | Item | Content |
 | --- | --- |
-| In place | v0.9.0: SSVC decision with BOD 26-04 timelines, exposure model with source and zone; v0.11.2: external detection pulled by the tenant project and joined through `published` endpoints (exposure `open`, source `external-scan`); v0.11.3: reporting dataset `reporting.json` for the client portal; v0.11.4: exposure gaps (hosts the external scan reaches that the profile does not describe) at the top of the report; v0.11.5: reporting database and overview dashboard; v0.11.6: restitution in this pillar, dashboards per asset and per CVE, decisions carry CVSS rating, fix availability, product type and sources; v0.14.0: decision service `verdict serve` (read side of D15 step 3), `triage.json` versioned as `a2vm.triage/1`; v0.15.0: conversational search for analysts (tool server `verdict tools`, Open WebUI in the namespace) |
+| In place | v0.9.0: SSVC decision with BOD 26-04 timelines, exposure model with source and zone; v0.11.2: external detection pulled by the tenant project and joined through `published` endpoints (exposure `open`, source `external-scan`); v0.11.3: reporting dataset `reporting.json` for the client portal; v0.11.4: exposure gaps (hosts the external scan reaches that the profile does not describe) at the top of the report; v0.11.5: reporting database and overview dashboard; v0.11.6: restitution in this pillar, dashboards per asset and per CVE, decisions carry CVSS rating, fix availability, product type and sources; v0.14.0: decision service `verdict serve` (read side of D15 step 3), `triage.json` versioned as `a2vm.triage/1`; v0.15.0: conversational search for analysts (tool server `verdict tools`, Open WebUI in the namespace); v0.21.0: the client's priorities and SLA (D19), their dashboard and their columns in the reporting database (schema 5) |
 | Planned | The client portal in service; alert on a new exposure gap; Qlik Sense connector once specified |
 | Risks | Incomplete asset data from clients (safe defaults when criticality or exposure is unknown); AI proposes a wrong decision point (flagged, analyst validation) |
-| Open points | Exposure gap: immediate alert through the watch (pillar 1), or a section of the daily report |
+| Open points | Exposure gap: immediate alert through the watch (pillar 1), or a section of the daily report; client's SLA: public holidays of other countries than France, an hour as unit of a delay (the day is the unit today), automatic tickets by priority (`dispatch.yaml` names levels) |

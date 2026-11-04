@@ -158,7 +158,8 @@ class RequestPage:
             ref = f" <a href='{e(t['url'])}'>{e(t['ref'])}</a>" if t["url"] else (f" {e(t['ref'])}" if t["ref"] else "")
             cves = ", ".join(t["cves"][:12]) + (f" (+{len(t['cves']) - 12})" if len(t["cves"]) > 12 else "")
             rows.append(
-                f"<tr><td>{box}</td><td>{e(t['asset_name'])}</td><td>{e(t['fix'])}</td><td>{e(t['level'])}</td>"
+                f"<tr><td>{box}</td><td>{e(t['asset_name'])}</td><td>{e(t['fix'])}</td>"
+                f"<td>{e(t['level'])}{(' ' + e(t['priority'])) if t.get('priority') else ''}</td>"
                 f"<td>{e(t['due'] or '')}</td><td>{e(cves)}</td>"
                 f"<td>{e(STATUS_TEXT.get(t['status'], t['status']))}{ref}</td></tr>"
             )

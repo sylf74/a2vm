@@ -17,7 +17,7 @@ LLD = {
     "verdict": ROOT / "docs" / "lld" / "triage-prioritization.md",
     "dispatch": ROOT / "docs" / "lld" / "dispatch-capitalization.md",
 }
-LIBRARIES = {"a2vm.declared": ("detect", "via"), "a2vm.ssvc": ("verdict", "via")}
+LIBRARIES = {"a2vm.declared": ("detect", "via"), "a2vm.ssvc": ("verdict", "via"), "a2vm.sla": ("verdict", "via")}
 
 
 def _section(text: str, heading: str) -> str:
