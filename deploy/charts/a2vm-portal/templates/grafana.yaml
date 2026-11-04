@@ -1,0 +1,366 @@
+{{- /*
+Grafana of the portal: the reporting database as its data source (a reading role limited to
+.Values.tenants), the A2VM dashboards of the version provisioned in the folder "A2VM" (and the RSSI
+versions in "A2VM — requests for remediation" when dashboards.dispatchUrl is set, D18), sign-in
+with the identity provider when grafana.oidc.enabled. Its admin password and the reading role's
+password are made once and kept (Secret <release>-portal-grafana).
+*/ -}}
+{{- $name := include "a2vm-portal.name" . }}
+{{- $db := include "a2vm-portal.db" . }}
+{{- $g := .Values.grafana }}
+{{- $o := $g.oidc }}
+{{- $ing := $g.ingress }}
+{{- $tls := $ing.tlsSecret | default (ternary (printf "%s-tls" $name) "" (ne $ing.clusterIssuer "")) }}
+{{- $secret := printf "%s-grafana" $name }}
+{{- $boards := list "overview" "assets" "cves" "remediation" "coverage" }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $secret }}
+  labels:
+    {{- include "a2vm-portal.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana
+  annotations:
+    helm.sh/resource-policy: keep
+type: Opaque
+stringData:
+  admin-password: {{ include "a2vm-portal.keep" (dict "root" . "secret" $secret "key" "admin-password") | quote }}
+  db-password: {{ include "a2vm-portal.keep" (dict "root" . "secret" $secret "key" "db-password") | quote }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}-provisioning
+  labels:
+    {{- include "a2vm-portal.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana
+data:
+  datasource.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: A2VM
+        uid: a2vm-reporting
+        type: grafana-postgresql-datasource
+        url: {{ $db }}-rw:5432
+        user: a2vm_grafana
+        isDefault: true
+        editable: false
+        jsonData:
+          database: a2vm
+          sslmode: verify-full
+          tlsConfigurationMethod: file-path
+          sslRootCertFile: /etc/a2vm-db-ca/ca.crt
+          postgresVersion: 1600
+        secureJsonData:
+          password: ${A2VM_DB_PASSWORD}
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+      - name: a2vm
+        folder: A2VM
+        type: file
+        disableDeletion: true
+        allowUiUpdates: false
+        options: {path: /var/lib/a2vm-dashboards/a2vm}
+      {{- if .Values.dashboards.dispatchUrl }}
+      - name: a2vm-rssi
+        folder: A2VM — requests for remediation
+        type: file
+        disableDeletion: true
+        allowUiUpdates: false
+        options: {path: /var/lib/a2vm-dashboards/rssi}
+      {{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}-dashboards
+  labels:
+    {{- include "a2vm-portal.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana
+data:
+  {{- range $lang := .Values.dashboards.languages }}
+  {{- $suffix := ternary "" (printf ".%s" $lang) (eq $lang "en") }}
+  {{- range $board := $boards }}
+  {{ printf "%s%s.json" $board $suffix }}: {{ $.Files.Get (printf "dashboards/%s%s.json" $board $suffix) | replace "${DS_A2VM}" "a2vm-reporting" | quote }}
+  {{- end }}
+  {{- end }}
+{{- if .Values.dashboards.dispatchUrl }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}-dashboards-rssi
+  labels:
+    {{- include "a2vm-portal.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana
+data:
+  {{- range $lang := .Values.dashboards.languages }}
+  {{- $suffix := ternary ".rssi" (printf ".rssi.%s" $lang) (eq $lang "en") }}
+  {{- range $board := list "remediation" "coverage" }}
+  {{ printf "%s%s.json" $board $suffix }}: {{ $.Files.Get (printf "dashboards/%s%s.json" $board $suffix) | replace "${DS_A2VM}" "a2vm-reporting" | replace "${VAR_DISPATCH_URL}" ($.Values.dashboards.dispatchUrl | trimSuffix "/") | quote }}
+  {{- end }}
+  {{- end }}
+{{- end }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $name }}-grafana
+  labels:
+    {{- include "a2vm-portal.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana
+spec:
+  accessModes: [ReadWriteOnce]
+  {{- if $g.storage.storageClass }}
+  storageClassName: {{ $g.storage.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ $g.storage.size | quote }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}-grafana
+  labels:
+    {{- include "a2vm-portal.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "a2vm-portal.selector" (dict "root" . "component" "grafana") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "a2vm-portal.labels" . | nindent 8 }}
+        app.kubernetes.io/component: grafana
+      annotations:
+        checksum/dashboards: {{ printf "%s%s" .Values.dashboards.languages .Values.dashboards.dispatchUrl | sha256sum | quote }}
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 472
+        runAsGroup: 472
+        fsGroup: 472
+        seccompProfile:
+          type: RuntimeDefault
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: grafana
+          image: {{ $g.image | quote }}
+          imagePullPolicy: IfNotPresent
+          env:
+            - {name: GF_SERVER_ROOT_URL, value: {{ printf "https://%s/" (required "grafana.host is required" $g.host) | quote }}}
+            - {name: GF_SECURITY_ADMIN_USER, value: admin}
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom: {secretKeyRef: {name: {{ $secret }}, key: admin-password}}
+            - name: A2VM_DB_PASSWORD
+              valueFrom: {secretKeyRef: {name: {{ $secret }}, key: db-password}}
+            - {name: GF_USERS_ALLOW_SIGN_UP, value: "false"}
+            - {name: GF_AUTH_ANONYMOUS_ENABLED, value: "false"}
+            - {name: GF_ANALYTICS_REPORTING_ENABLED, value: "false"}
+            - {name: GF_ANALYTICS_CHECK_FOR_UPDATES, value: "false"}
+            - {name: GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES, value: "false"}
+            - {name: GF_NEWS_NEWS_FEED_ENABLED, value: "false"}
+            - {name: GF_PATHS_PROVISIONING, value: /etc/grafana/provisioning}
+            {{- if $o.enabled }}
+            {{- $issuer := required "grafana.oidc.issuerUrl is required" $o.issuerUrl | trimSuffix "/" }}
+            - {name: GF_AUTH_GENERIC_OAUTH_ENABLED, value: "true"}
+            - {name: GF_AUTH_GENERIC_OAUTH_NAME, value: SSO}
+            - {name: GF_AUTH_GENERIC_OAUTH_CLIENT_ID, value: {{ required "grafana.oidc.clientId is required" $o.clientId | quote }}}
+            - name: GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET
+              valueFrom: {secretKeyRef: {name: {{ $name }}-oidc, key: oidc-client-secret}}
+            - {name: GF_AUTH_GENERIC_OAUTH_SCOPES, value: "openid email profile"}
+            - {name: GF_AUTH_GENERIC_OAUTH_AUTH_URL, value: {{ printf "%s/protocol/openid-connect/auth" $issuer | quote }}}
+            - {name: GF_AUTH_GENERIC_OAUTH_TOKEN_URL, value: {{ printf "%s/protocol/openid-connect/token" $issuer | quote }}}
+            - {name: GF_AUTH_GENERIC_OAUTH_API_URL, value: {{ printf "%s/protocol/openid-connect/userinfo" $issuer | quote }}}
+            - {name: GF_AUTH_GENERIC_OAUTH_USE_PKCE, value: "true"}
+            - {name: GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_STRICT, value: "true"}
+            - name: GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_PATH
+              value: {{ include "a2vm-portal.roles" $o | quote }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: 3000
+          readinessProbe:
+            httpGet: {path: /api/health, port: http}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /api/health, port: http}
+            periodSeconds: 30
+            initialDelaySeconds: 60
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/grafana}
+            - {name: tmp, mountPath: /tmp}
+            - {name: provisioning, mountPath: /etc/grafana/provisioning/datasources/a2vm.yaml, subPath: datasource.yaml, readOnly: true}
+            - {name: provisioning, mountPath: /etc/grafana/provisioning/dashboards/a2vm.yaml, subPath: dashboards.yaml, readOnly: true}
+            - {name: dashboards, mountPath: /var/lib/a2vm-dashboards/a2vm, readOnly: true}
+            {{- if .Values.dashboards.dispatchUrl }}
+            - {name: dashboards-rssi, mountPath: /var/lib/a2vm-dashboards/rssi, readOnly: true}
+            {{- end }}
+            - {name: db-ca, mountPath: /etc/a2vm-db-ca, readOnly: true}
+          {{- with $g.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ $name }}-grafana
+        - name: tmp
+          emptyDir: {}
+        - name: provisioning
+          configMap:
+            name: {{ $name }}-provisioning
+        - name: dashboards
+          configMap:
+            name: {{ $name }}-dashboards
+        {{- if .Values.dashboards.dispatchUrl }}
+        - name: dashboards-rssi
+          configMap:
+            name: {{ $name }}-dashboards-rssi
+        {{- end }}
+        - name: db-ca
+          secret:
+            secretName: {{ $db }}-ca
+            items:
+              - {key: ca.crt, path: ca.crt}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}-grafana
+  labels:
+    {{- include "a2vm-portal.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "a2vm-portal.selector" (dict "root" . "component" "grafana") | nindent 4 }}
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+{{- if and (eq $ing.controller "traefik") $ing.allowFrom }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ $name }}-allow
+  labels:
+    {{- include "a2vm-portal.labels" . | nindent 4 }}
+spec:
+  ipAllowList:
+    sourceRange:
+      {{- range $ing.allowFrom }}
+      - {{ . | quote }}
+      {{- end }}
+{{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $name }}-grafana
+  labels:
+    {{- include "a2vm-portal.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana
+  annotations:
+    {{- if and (eq $ing.controller "nginx") $ing.allowFrom }}
+    nginx.ingress.kubernetes.io/whitelist-source-range: {{ join "," $ing.allowFrom | quote }}
+    {{- else if and (eq $ing.controller "traefik") $ing.allowFrom }}
+    traefik.ingress.kubernetes.io/router.middlewares: {{ printf "%s-%s-allow@kubernetescrd" .Release.Namespace $name | quote }}
+    {{- end }}
+    {{- if $ing.clusterIssuer }}
+    cert-manager.io/cluster-issuer: {{ $ing.clusterIssuer | quote }}
+    {{- end }}
+    {{- with $ing.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  {{- if $ing.className }}
+  ingressClassName: {{ $ing.className | quote }}
+  {{- end }}
+  tls:
+    - hosts: [{{ $g.host | quote }}]
+      {{- if $tls }}
+      secretName: {{ $tls | quote }}
+      {{- end }}
+  rules:
+    - host: {{ $g.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $name }}-grafana
+                port:
+                  name: http
+{{- if .Values.networkPolicy.enabled }}
+---
+# In: the ingress controller. Out: the reporting database, the identity provider, the DNS.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $name }}-grafana
+  labels:
+    {{- include "a2vm-portal.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "a2vm-portal.selector" (dict "root" . "component" "grafana") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $ing.namespace | quote }}
+      ports:
+        - {port: 3000, protocol: TCP}
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: {{ $db }}
+      ports:
+        - {port: 5432, protocol: TCP}
+    {{- range $o.egress }}
+    - to:
+        - ipBlock:
+            cidr: {{ .cidr | quote }}
+      ports:
+        - {port: {{ .port }}, protocol: TCP}
+    {{- end }}
+    {{- if $o.inCluster }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $ing.namespace | quote }}
+    {{- end }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.database.dnsNamespace | quote }}
+      ports:
+        - {port: 53, protocol: UDP}
+        - {port: 53, protocol: TCP}
+{{- end }}

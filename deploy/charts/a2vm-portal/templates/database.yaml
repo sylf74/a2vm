@@ -1,0 +1,117 @@
+{{- /*
+The reporting database (HLD D14): a CloudNativePG Cluster, database `a2vm` owned by the writer role
+`a2vm_writer`, whose connection string the daily runs use (Secret <release>-portal-db-app, key uri).
+The superuser (Secret <release>-portal-db-superuser) is used by the job that creates the schema and
+the reading role of Grafana only. The cluster and its volumes survive an uninstall.
+*/ -}}
+{{- $db := include "a2vm-portal.db" . }}
+{{- $d := .Values.database }}
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ $db }}
+  labels:
+    {{- include "a2vm-portal.labels" . | nindent 4 }}
+    app.kubernetes.io/component: database
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  instances: {{ $d.instances }}
+  {{- if $d.imageName }}
+  imageName: {{ $d.imageName | quote }}
+  {{- end }}
+  enableSuperuserAccess: true
+  bootstrap:
+    initdb:
+      database: a2vm
+      owner: a2vm_writer
+  storage:
+    size: {{ $d.storage.size | quote }}
+    {{- if $d.storage.storageClass }}
+    storageClass: {{ $d.storage.storageClass | quote }}
+    {{- end }}
+  {{- with $d.resources }}
+  resources:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.nodeSelector }}
+  affinity:
+    nodeSelector:
+      {{- toYaml . | nindent 6 }}
+  {{- end }}
+{{- if $d.external.allowFrom }}
+---
+# Publishers outside the cluster: the primary instance, to these addresses only.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $db }}-external
+  labels:
+    {{- include "a2vm-portal.labels" . | nindent 4 }}
+    app.kubernetes.io/component: database
+  {{- with $d.external.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: LoadBalancer
+  loadBalancerSourceRanges:
+    {{- range $d.external.allowFrom }}
+    - {{ . | quote }}
+    {{- end }}
+  selector:
+    cnpg.io/cluster: {{ $db }}
+    cnpg.io/instanceRole: primary
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+{{- end }}
+{{- if .Values.networkPolicy.enabled }}
+---
+# In: Grafana, the schema job, the daily runs of the writer namespaces, the external addresses,
+# the instances themselves and the operator. Egress is left open: the instances talk to the API.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $db }}
+  labels:
+    {{- include "a2vm-portal.labels" . | nindent 4 }}
+    app.kubernetes.io/component: database
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/cluster: {{ $db }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        {{- range list "grafana" "schema" }}
+        - podSelector:
+            matchLabels:
+              {{- include "a2vm-portal.selector" (dict "root" $ "component" .) | nindent 14 }}
+        {{- end }}
+        {{- range $d.writerNamespaces }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ . | quote }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: daily
+        {{- end }}
+        {{- range $d.external.allowFrom }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+      ports:
+        - {port: 5432, protocol: TCP}
+    - from:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: {{ $db }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $d.operatorNamespace | quote }}
+      ports:
+        - {port: 5432, protocol: TCP}
+        - {port: 8000, protocol: TCP}
+{{- end }}

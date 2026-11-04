@@ -5,6 +5,26 @@ analyst and, under **Upgrade**, what a tenant must do when it moves to that tag 
 `A2VM_REF` in its `.gitlab-ci.yml`). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
 §11) and the LLDs. A release adds its entry here in the same merge request (CLAUDE.md, Releasing).
 
+## v0.20.3 — 2026-11-04
+
+Several portals, and a portal on Kubernetes (D13 revised).
+
+- A run publishes into several reporting databases: `A2VM_REPORTING_DSN` and each
+  `A2VM_REPORTING_DSN_<NAME>` (with `A2VM_REPORTING_CA_<NAME>`), e.g. the operator's portal and one at
+  the client; one that fails does not stop the others (exit 3, a warning). On Kubernetes
+  `deploy-k8s` copies them into the tenant's Secret (`reporting-dsn-<name>`).
+- Chart `deploy/charts/a2vm-portal`: the reporting database (CloudNativePG, writer `a2vm_writer`) and
+  Grafana on Kubernetes; the data source and the dashboards of the version provisioned (the RSSI
+  versions with the page's address when `dashboards.dispatchUrl` is set), no import by hand; a job
+  runs `verdict db init` and gives Grafana its reading role after each install and upgrade; sign-in
+  with the identity provider (`viewers`, `admins`); NetworkPolicies; an optional LoadBalancer for
+  publishers outside the cluster.
+- `verdict db grant --password-file`: a password kept elsewhere (a Secret) instead of a new one.
+- HLD D13 revised: portals wherever their readers want them, several possible.
+
+**Upgrade**: move `ref` and `A2VM_REF` to `v0.20.3` and push; nothing else changes for a tenant.
+For a portal on Kubernetes or another portal: `docs/reporting.md`.
+
 ## v0.20.2 — 2026-11-03
 
 The page of the requests for remediation answers on large selections.

@@ -23,6 +23,8 @@ import re
 from pathlib import Path
 
 OUT = Path(__file__).resolve().parents[1] / "verdict" / "src" / "verdict" / "restitution" / "grafana"
+# A copy for the portal chart, which provisions them (Helm reads files of its own folder only).
+PORTAL = Path(__file__).resolve().parents[1] / "deploy" / "charts" / "a2vm-portal" / "dashboards"
 DS = {"type": "grafana-postgresql-datasource", "uid": "${DS_A2VM}"}
 LEVELS = ("ACT", "ATTEND", "TRACK")
 SEVERITIES = ("Critical", "High", "Medium", "Low", "Unknown")
@@ -1487,9 +1489,12 @@ def main() -> None:
         if name in RSSI:
             versions += [(".rssi", rssi(board, name, "en")), (".rssi.fr", rssi(french(board), name, "fr"))]
         for suffix, data in versions:
-            path = OUT / f"{name}{suffix}.json"
-            path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-            print(path)
+            text = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
+            for folder in (OUT, PORTAL):
+                folder.mkdir(parents=True, exist_ok=True)
+                path = folder / f"{name}{suffix}.json"
+                path.write_text(text, encoding="utf-8")
+                print(path)
 
 
 if __name__ == "__main__":

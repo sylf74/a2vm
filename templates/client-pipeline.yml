@@ -13,7 +13,7 @@
 #
 #     include:
 #       - project: vulnops/a2vm
-#         ref: v0.20.2
+#         ref: v0.20.3
 #         file: templates/client-pipeline.yml
 #     variables:
 #       A2VM_REF: v0.19.0        # same version as the include
@@ -326,6 +326,11 @@ deploy-k8s:
       put gvm-password "${A2VM_GVM_PASSWORD:-}"
       put reporting-dsn "${A2VM_REPORTING_DSN:-}"
       put reporting-ca "${A2VM_REPORTING_CA:-}"
+      for v in $(env | sed -n 's/^A2VM_REPORTING_DSN_\([A-Z0-9_]*\)=.*/\1/p' | sort -u); do
+        n="$(echo "$v" | tr 'A-Z_' 'a-z-')"
+        eval "put reporting-dsn-$n \"\${A2VM_REPORTING_DSN_$v:-}\""
+        eval "put reporting-ca-$n \"\${A2VM_REPORTING_CA_$v:-}\""
+      done
       put gitlab-token "${A2VM_GITLAB_TOKEN:-}"
       put gitlab-ca "${CI_SERVER_TLS_CA_FILE:-}"
       put detect-read-token "$READ_TOKEN"
