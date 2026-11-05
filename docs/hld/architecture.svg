@@ -1,0 +1,242 @@
+<svg viewBox="0 0 1440 940" role="img" aria-label="Deployment of A2VM: GitLab deploys a namespace per client and the watch team&#x27;s namespace on Kubernetes; collectors and the cloud scanner bring detections in; tickets go to iTop." xmlns="http://www.w3.org/2000/svg">
+<style>svg{--bg:#f5f6f4;--fg:#1d2329;--muted:#5d6771;--edge:#56606b;--k8s:#eaeef3;--k8s-line:#9fb0c4;--ns-line:#b7c3d0;--client:#f0ece4;--client-line:#c8bca6;--ext:#ffffff;--ext-line:#b9c0c7;--p1:#0f7f74;--p1-bg:#e1f2ef;--p2:#a96a12;--p2-bg:#f8ecd9;--p3:#2c58a8;--p3-bg:#e3eaf7;--p4:#a83b65;--p4-bg:#f6e3ea;--db-bg:#e9e6f3;--db:#6a5aa6;--label-bg:#f5f6f4}@media (prefers-color-scheme: dark){svg{--bg:#14181c;--fg:#e4e8ec;--muted:#9aa5b0;--edge:#a3adb8;--k8s:#1b2229;--k8s-line:#3d4c5c;--ns-line:#364350;--client:#221f1a;--client-line:#4f4636;--ext:#1f252b;--ext-line:#45505b;--p1:#4cc2b4;--p1-bg:#12302c;--p2:#e0a650;--p2-bg:#33260f;--p3:#7fa4ea;--p3-bg:#172640;--p4:#e588ab;--p4-bg:#3a1a27;--db-bg:#252038;--db:#a597de;--label-bg:#1b2229}}svg>rect.page{fill:var(--bg)}svg { font-family: 'IBM Plex Sans Condensed', 'Arial Narrow', 'Roboto Condensed', 'Helvetica Neue', Arial, sans-serif; color: var(--edge); }
+.r-k8s { fill: var(--k8s); stroke: var(--k8s-line); stroke-width: 1.5; }
+.r-ns { fill: none; stroke: var(--ns-line); stroke-width: 1.2; stroke-dasharray: 6 4; }
+.r-ext { fill: none; stroke: var(--ext-line); stroke-width: 1.2; }
+.r-client { fill: var(--client); stroke: var(--client-line); stroke-width: 1.2; }
+.box { stroke-width: 1.5; }
+.b-ext { fill: var(--ext); stroke: var(--ext-line); }
+.b-p1 { fill: var(--p1-bg); stroke: var(--p1); }
+.b-p2 { fill: var(--p2-bg); stroke: var(--p2); }
+.b-p3 { fill: var(--p3-bg); stroke: var(--p3); }
+.b-p4 { fill: var(--p4-bg); stroke: var(--p4); }
+.b-db { fill: var(--db-bg); stroke: var(--db); }
+.t-region { fill: var(--fg); font-size: 13px; font-weight: 600; }
+.t-region-sub { fill: var(--muted); font-size: 12px; font-weight: 400; }
+.t-title { fill: var(--fg); font-size: 13px; font-weight: 600; }
+.t-line { fill: var(--fg); font-size: 12px; }
+.t-mono { fill: var(--muted); font-family: 'IBM Plex Mono', ui-monospace, Menlo, Consolas, monospace; font-size: 10.5px; }
+.t-chip { fill: var(--fg); font-family: 'IBM Plex Mono', ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+.t-strip { fill: var(--muted); font-size: 12px; }
+.t-edge { fill: var(--fg); font-size: 11px; }
+.t-note { fill: var(--muted); font-size: 12.5px; }
+.lbl-bg { fill: var(--label-bg); opacity: .92; }
+.edge { fill: none; stroke: var(--edge); stroke-width: 1.4; }
+.edge.thin { stroke-width: 1.1; }
+.edge.dashed { stroke-dasharray: 5 4; }
+.halo { fill: none; stroke: var(--k8s); stroke-width: 6; }
+.arrowhead { fill: var(--edge); }
+</style>
+<defs><marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="arrowhead"/></marker></defs>
+<rect class="page" x="0" y="0" width="1440" height="940"/>
+<rect x="300" y="14" width="840" height="96" rx="10" class="r-ext"/>
+<text x="314" y="34" class="t-region">GitLab<tspan dx="10" class="t-region-sub">code, configuration, results</tspan></text>
+<rect x="20" y="410" width="250" height="216" rx="10" class="r-client"/>
+<text x="34" y="430" class="t-region">Client network</text>
+<rect x="300" y="132" width="840" height="790" rx="10" class="r-k8s"/>
+<text x="314" y="152" class="t-region">Kubernetes cluster<tspan dx="10" class="t-region-sub">deployed by deploy-k8s (Helm, GitLab agent)</tspan></text>
+<rect x="316" y="170" width="808" height="188" rx="10" class="r-ns"/>
+<text x="330" y="190" class="t-region">namespace a2vm-via<tspan dx="10" class="t-region-sub">the watch team</tspan></text>
+<rect x="316" y="384" width="808" height="522" rx="10" class="r-ns"/>
+<text x="330" y="896" class="t-region">namespace a2vm-&lt;tenant&gt;<tspan dx="10" class="t-region-sub">one per client, e.g. lab</tspan></text>
+<line x1="422" y1="449" x2="432" y2="449" class="edge thin"/>
+<line x1="520" y1="449" x2="530" y2="449" class="edge thin"/>
+<line x1="618" y1="449" x2="628" y2="449" class="edge thin"/>
+<line x1="716" y1="449" x2="726" y2="449" class="edge thin"/>
+<line x1="814" y1="449" x2="824" y2="449" class="edge thin"/>
+<line x1="912" y1="449" x2="922" y2="449" class="edge thin"/>
+<line x1="1010" y1="449" x2="1020" y2="449" class="edge thin"/>
+<polyline points="991,98 991,132" class="edge" marker-end="url(#a1)"/>
+<polyline points="145,776 145,762 8,762 8,69 316,69" class="edge" marker-end="url(#a1)"/>
+<polyline points="316,88 286,88 286,449 334,449" class="edge" marker-end="url(#a1)"/>
+<polyline points="270,262 334,262" class="edge" marker-end="url(#a1)"/>
+<polyline points="254,600 308,600 308,727 334,727" class="edge" marker-end="url(#a1)"/>
+<polyline points="145,656 145,626" class="edge" marker-end="url(#a1)"/>
+<polyline points="570,250 600,250" class="edge" marker-end="url(#a1)"/>
+<polyline points="830,250 860,250" class="edge" marker-end="url(#a1)"/>
+<polyline points="984,324 984,340 520,340 520,324" class="halo"/>
+<polyline points="984,324 984,340 520,340 520,324" class="edge" marker-end="url(#a1)"/>
+<polyline points="476,432 476,324" class="halo"/>
+<polyline points="476,432 476,324" class="edge" marker-end="url(#a1)"/>
+<polyline points="1108,254 1170,254" class="edge" marker-end="url(#a1)"/>
+<polyline points="378,466 378,566" class="halo"/>
+<polyline points="378,466 378,566" class="edge" marker-end="url(#a1)"/>
+<polyline points="868,466 868,566" class="halo"/>
+<polyline points="868,466 868,566" class="edge" marker-end="url(#a1)"/>
+<polyline points="966,466 966,506 600,506 600,566" class="halo"/>
+<polyline points="966,466 966,506 600,506 600,566" class="edge" marker-end="url(#a1)"/>
+<polyline points="1064,466 1064,566" class="halo"/>
+<polyline points="1064,466 1064,566" class="edge" marker-end="url(#a1)"/>
+<polyline points="986,432 986,372 1170,372" class="halo"/>
+<polyline points="986,432 986,372 1170,372" class="edge" marker-end="url(#a1)"/>
+<polyline points="680,566 680,548 1000,548 1000,566" class="halo"/>
+<polyline points="680,566 680,548 1000,548 1000,566" class="edge" marker-end="url(#a1)"/>
+<polyline points="1108,600 1170,600" class="edge" marker-end="url(#a1)"/>
+<polyline points="824,696 824,658" class="halo"/>
+<polyline points="824,696 824,658" class="edge" marker-end="url(#a1)"/>
+<polyline points="910,790 926,790 926,640 910,640" class="halo"/>
+<polyline points="910,790 926,790 926,640 910,640" class="edge" marker-end="url(#a1)"/>
+<polyline points="910,812 1170,812" class="halo"/>
+<polyline points="910,812 1170,812" class="edge" marker-end="url(#a1)"/>
+<polyline points="1170,470 1140,470 1140,727 1108,727" class="halo"/>
+<polyline points="1170,470 1140,470 1140,727 1108,727" class="edge" marker-end="url(#a1)"/>
+<polyline points="420,696 420,658" class="halo"/>
+<polyline points="420,696 420,658" class="edge" marker-end="url(#a1)"/>
+<polyline points="1140,176 1170,176" class="edge" marker-end="url(#a1)"/>
+<polyline points="1140,322 1170,322" class="edge dashed" marker-end="url(#a1)"/>
+<rect x="316" y="40" width="255" height="58" rx="6" class="box b-ext"/>
+<text x="326" y="59" class="t-title">External project</text>
+<text x="326" y="74" class="t-line">&lt;tenant&gt;-external: scan results</text>
+<rect x="587" y="40" width="255" height="58" rx="6" class="box b-ext"/>
+<text x="597" y="59" class="t-title">Tenant projects</text>
+<text x="597" y="74" class="t-line">client.yaml, targets, dispatch.yaml</text>
+<rect x="858" y="40" width="266" height="58" rx="6" class="box b-ext"/>
+<text x="868" y="59" class="t-title">Code project vulnops/a2vm</text>
+<text x="868" y="74" class="t-line">images, chart, pipeline template</text>
+<rect x="20" y="140" width="250" height="214" rx="6" class="box b-ext"/>
+<text x="30" y="159" class="t-title">Public sources</text>
+<text x="30" y="174" class="t-mono">read by the shared service</text>
+<text x="30" y="189" class="t-line">CVE.org records, NVD</text>
+<text x="30" y="204" class="t-line">CISA KEV, FIRST EPSS</text>
+<text x="30" y="219" class="t-line">CERT-FR, vendor advisories</text>
+<text x="30" y="234" class="t-line">Research and news sites</text>
+<text x="30" y="249" class="t-line">Google TI (optional)</text>
+<rect x="36" y="440" width="218" height="170" rx="6" class="box b-p2"/>
+<text x="46" y="459" class="t-title">Collector VM</text>
+<text x="46" y="474" class="t-mono">detect agent</text>
+<text x="46" y="489" class="t-line">SSH: Trivy, dnf updateinfo</text>
+<text x="46" y="504" class="t-line">OpenVAS (Greenbone)</text>
+<text x="46" y="519" class="t-line">iTop connector (CMDB)</text>
+<text x="46" y="534" class="t-line">systemd timers, spool</text>
+<rect x="20" y="656" width="250" height="78" rx="6" class="box b-ext"/>
+<text x="30" y="675" class="t-title">iTop CMDB</text>
+<text x="30" y="690" class="t-line">servers, VMs, devices</text>
+<text x="30" y="705" class="t-line">read only (core/get)</text>
+<rect x="20" y="776" width="250" height="112" rx="6" class="box b-ext"/>
+<text x="30" y="795" class="t-title">Cloud scanner</text>
+<text x="30" y="810" class="t-line">Greenbone in containers</text>
+<text x="30" y="825" class="t-line">runner tagged scan-cloud</text>
+<text x="30" y="840" class="t-line">scans public addresses</text>
+<rect x="334" y="206" width="236" height="118" rx="6" class="box b-p1"/>
+<text x="344" y="225" class="t-title">Shared intelligence service</text>
+<text x="344" y="240" class="t-mono">via intel-serve · intel.v1</text>
+<text x="344" y="255" class="t-line">records collected once</text>
+<text x="344" y="270" class="t-line">technologies 48 h, no identity</text>
+<text x="344" y="285" class="t-line">feed of the radar&#x27;s events</text>
+<rect x="600" y="206" width="230" height="118" rx="6" class="box b-p1"/>
+<text x="610" y="225" class="t-title">Radar</text>
+<text x="610" y="240" class="t-mono">watch CronJob, every 10 min</text>
+<text x="610" y="255" class="t-line">items gathered into events</text>
+<text x="610" y="270" class="t-line">magnitude: info 4, urgent 7</text>
+<text x="610" y="285" class="t-line">zero-days before their CVE</text>
+<rect x="860" y="206" width="248" height="118" rx="6" class="box b-p1"/>
+<text x="870" y="225" class="t-title">Review page and sender</text>
+<text x="870" y="240" class="t-mono">oauth2-proxy · via service</text>
+<text x="870" y="255" class="t-line">the team validates</text>
+<text x="870" y="270" class="t-line">daily run suspended</text>
+<text x="398" y="488" text-anchor="start" class="t-strip">Daily run · CronJob, steps in order</text>
+<rect x="334" y="432" width="88" height="34" rx="5" class="box b-p2"/>
+<text x="378.0" y="453.0" text-anchor="middle" class="t-chip">collect</text>
+<rect x="432" y="432" width="88" height="34" rx="5" class="box b-p1"/>
+<text x="476.0" y="453.0" text-anchor="middle" class="t-chip">via</text>
+<rect x="530" y="432" width="88" height="34" rx="5" class="box b-p2"/>
+<text x="574.0" y="453.0" text-anchor="middle" class="t-chip">detect</text>
+<rect x="628" y="432" width="88" height="34" rx="5" class="box b-p3"/>
+<text x="672.0" y="453.0" text-anchor="middle" class="t-chip">assets</text>
+<rect x="726" y="432" width="88" height="34" rx="5" class="box b-p3"/>
+<text x="770.0" y="453.0" text-anchor="middle" class="t-chip">triage</text>
+<rect x="824" y="432" width="88" height="34" rx="5" class="box b-p1"/>
+<text x="868.0" y="453.0" text-anchor="middle" class="t-chip">inventory</text>
+<rect x="922" y="432" width="88" height="34" rx="5" class="box b-p3"/>
+<text x="966.0" y="453.0" text-anchor="middle" class="t-chip">publish</text>
+<rect x="1020" y="432" width="88" height="34" rx="5" class="box b-p4"/>
+<text x="1064.0" y="453.0" text-anchor="middle" class="t-chip">dispatch</text>
+<rect x="334" y="566" width="172" height="92" rx="6" class="box b-p2"/>
+<text x="344" y="585" class="t-title">Detection service</text>
+<text x="344" y="600" class="t-mono">detect serve</text>
+<text x="344" y="615" class="t-line">detections of each source</text>
+<rect x="536" y="566" width="172" height="92" rx="6" class="box b-p3"/>
+<text x="546" y="585" class="t-title">Decision service</text>
+<text x="546" y="600" class="t-mono">verdict serve</text>
+<text x="546" y="615" class="t-line">runs, SSVC decisions, SLA</text>
+<rect x="738" y="566" width="172" height="92" rx="6" class="box b-p1"/>
+<text x="748" y="585" class="t-title">Watch service</text>
+<text x="748" y="600" class="t-mono">via serve</text>
+<text x="748" y="615" class="t-line">alerts, inventory, state</text>
+<rect x="940" y="566" width="168" height="92" rx="6" class="box b-p4"/>
+<text x="950" y="585" class="t-title">Dispatch service</text>
+<text x="950" y="600" class="t-mono">dispatch serve</text>
+<text x="950" y="615" class="t-line">tickets, scan follow-up</text>
+<rect x="334" y="696" width="172" height="62" rx="6" class="box b-p2"/>
+<text x="344" y="715" class="t-title">Intake ingress</text>
+<text x="344" y="730" class="t-line">pushes of the collectors</text>
+<rect x="536" y="696" width="172" height="62" rx="6" class="box b-p3"/>
+<text x="546" y="715" class="t-title">Analysts&#x27; chat</text>
+<text x="546" y="730" class="t-line">Open WebUI + tools</text>
+<rect x="738" y="696" width="172" height="62" rx="6" class="box b-p1"/>
+<text x="748" y="715" class="t-title">Watch</text>
+<text x="748" y="730" class="t-line">CronJob, every 10 min</text>
+<rect x="940" y="696" width="168" height="62" rx="6" class="box b-p4"/>
+<text x="950" y="715" class="t-title">Request page</text>
+<text x="950" y="730" class="t-line">Remediate → confirm</text>
+<rect x="738" y="772" width="172" height="56" rx="6" class="box b-p1"/>
+<text x="748" y="791" class="t-title">Review page, sender</text>
+<text x="748" y="806" class="t-line">analysts validate</text>
+<rect x="334" y="836" width="774" height="44" rx="6" class="box b-db"/>
+<text x="344" y="855" class="t-title">Tenant PostgreSQL (CloudNativePG)</text>
+<text x="344" y="870" class="t-line">stores of the detection, decision, watch and dispatch services</text>
+<rect x="1170" y="140" width="250" height="74" rx="6" class="box b-ext"/>
+<text x="1180" y="159" class="t-title">LLM endpoint (vLLM)</text>
+<text x="1180" y="174" class="t-line">sheet prose, translation, chat</text>
+<rect x="1170" y="226" width="250" height="56" rx="6" class="box b-ext"/>
+<text x="1180" y="245" class="t-title">Microsoft Teams</text>
+<text x="1180" y="260" class="t-line">analysts&#x27; channel (webhook)</text>
+<rect x="1170" y="294" width="250" height="56" rx="6" class="box b-ext"/>
+<text x="1180" y="313" class="t-title">Keycloak (OIDC)</text>
+<text x="1180" y="328" class="t-line">sign-in of every page</text>
+<rect x="1170" y="370" width="250" height="112" rx="6" class="box b-ext"/>
+<text x="1180" y="389" class="t-title">Portal</text>
+<text x="1180" y="404" class="t-mono">chart a2vm-portal</text>
+<text x="1180" y="419" class="t-line">reporting PostgreSQL</text>
+<text x="1180" y="434" class="t-line">Grafana dashboards</text>
+<text x="1180" y="449" class="t-line">RSSI: Remediate links</text>
+<rect x="1170" y="548" width="250" height="92" rx="6" class="box b-ext"/>
+<text x="1180" y="567" class="t-title">iTop ITSM</text>
+<text x="1180" y="582" class="t-line">one request per asset and fix</text>
+<text x="1180" y="597" class="t-line">resolved or reopened by scans</text>
+<rect x="1170" y="770" width="250" height="66" rx="6" class="box b-ext"/>
+<text x="1180" y="789" class="t-title">Mail (SMTP)</text>
+<text x="1180" y="804" class="t-line">alert sheets to client contacts</text>
+<rect x="1006" y="113" width="87" height="15" rx="3" class="lbl-bg"/>
+<text x="1050" y="124" text-anchor="middle" class="t-edge">deploy, images</text>
+<rect x="79" y="51" width="142" height="15" rx="3" class="lbl-bg"/>
+<text x="150" y="62" text-anchor="middle" class="t-edge">scan results (artifacts)</text>
+<rect x="275" y="243" width="54" height="15" rx="3" class="lbl-bg"/>
+<text x="302" y="254" text-anchor="middle" class="t-edge">collects</text>
+<rect x="265" y="582" width="32" height="15" rx="3" class="lbl-bg"/>
+<text x="281" y="593" text-anchor="middle" class="t-edge">push</text>
+<rect x="169" y="634" width="54" height="15" rx="3" class="lbl-bg"/>
+<text x="196" y="645" text-anchor="middle" class="t-edge">read CIs</text>
+<rect x="664" y="333" width="175" height="15" rx="3" class="lbl-bg"/>
+<text x="752" y="344" text-anchor="middle" class="t-edge">validated events into the feed</text>
+<rect x="482" y="361" width="48" height="15" rx="3" class="lbl-bg"/>
+<text x="506" y="372" text-anchor="middle" class="t-edge">records</text>
+<rect x="383" y="509" width="38" height="15" rx="3" class="lbl-bg"/>
+<text x="402" y="520" text-anchor="middle" class="t-edge">fetch</text>
+<rect x="834" y="525" width="60" height="15" rx="3" class="lbl-bg"/>
+<text x="864" y="536" text-anchor="middle" class="t-edge">inventory</text>
+<rect x="653" y="490" width="54" height="15" rx="3" class="lbl-bg"/>
+<text x="680" y="501" text-anchor="middle" class="t-edge">push run</text>
+<rect x="1067" y="509" width="54" height="15" rx="3" class="lbl-bg"/>
+<text x="1094" y="520" text-anchor="middle" class="t-edge">POST run</text>
+<rect x="1025" y="356" width="70" height="15" rx="3" class="lbl-bg"/>
+<text x="1060" y="367" text-anchor="middle" class="t-edge">publish run</text>
+<rect x="740" y="541" width="60" height="15" rx="3" class="lbl-bg"/>
+<text x="770" y="552" text-anchor="middle" class="t-edge">decisions</text>
+<rect x="836" y="671" width="43" height="15" rx="3" class="lbl-bg"/>
+<text x="858" y="682" text-anchor="middle" class="t-edge">alerts</text>
+<rect x="972" y="795" width="136" height="15" rx="3" class="lbl-bg"/>
+<text x="1040" y="806" text-anchor="middle" class="t-edge">validated sheets (Word)</text>
+<rect x="1107" y="679" width="60" height="15" rx="3" class="lbl-bg"/>
+<text x="1112" y="690" text-anchor="start" class="t-edge">Remediate</text>
+</svg>

@@ -23,6 +23,8 @@ design: LLD vulnerability-intelligence §3.10 to §3.12).
  each client's watch (source a2vm-intel)  ->  matched with ITS assets  ->  its own alert to validate
 ```
 
+![The watch: shared service, radar and the clients' watches](hld/watch.svg)
+
 ## 1. What makes an event major
 
 The radar gathers the items of every source into events: the same CVE; else titles sharing most of
