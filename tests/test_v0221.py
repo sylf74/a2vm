@@ -50,3 +50,12 @@ def test_daily_suspend_from_variable() -> None:
 def test_intel_serve_quiet_httpx() -> None:
     cli = CHART.parents[3] / "via" / "src" / "via" / "intel" / "cli.py"
     assert 'logging.getLogger("httpx").setLevel(logging.WARNING)' in cli.read_text(encoding="utf-8")
+
+
+def test_radar_summary_line() -> None:
+    from via.alert import radar
+
+    state = {"events": {"a": {"score": 2, "title": "Low"}, "b": {"score": 5, "title": "Exploited RCE"}}}
+    line = radar.summary(state, radar.RadarConfig())
+    assert line.startswith("radar: 2 events in 14 days, alert at 4 (urgent 7); best: 5 'Exploited RCE', 2 'Low'")
+    assert radar.summary({}, radar.RadarConfig()).endswith("best: none")

@@ -43,6 +43,9 @@ again when it moves up a level, and once more when it gets its first CVE ids. A 
 on a pre-authentication RCE exploited in the wild is urgent on its own (1 + 3 + 2 + 1 + 1 = 8); a
 flaw that three research sites report is `info` (1 + 4).
 
+Each passage logs the events followed and the best scores against the thresholds, so that a passage
+without alerts can be read: `radar: 12 events in 14 days, alert at 4 (urgent 7); best: 3 '…', …`.
+
 ## 2. The watch team's tenant `via`
 
 A tenant project like the others (`vulnops/clients/via`, namespace `a2vm-via`), on Kubernetes, with
