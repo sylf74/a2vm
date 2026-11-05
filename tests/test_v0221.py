@@ -37,3 +37,11 @@ def test_watch_cache_in_tmp() -> None:
     text = (CHART / "watch.yaml").read_text(encoding="utf-8")
     assert 'include "a2vm-tenant.envCommon"' in text and "/tmp/cache" in text
     assert "A2VM_CACHE_DIR" not in _helper("a2vm-tenant.envCommon")
+
+
+def test_daily_suspend_from_variable() -> None:
+    pipeline = (CHART.parents[3] / "templates" / "client-pipeline.yml").read_text(encoding="utf-8")
+    assert '--set daily.suspend="${A2VM_K8S_SUSPEND:-false}"' in pipeline
+    docs = CHART.parents[3] / "docs"
+    assert "A2VM_K8S_SUSPEND" in (docs / "kubernetes.md").read_text(encoding="utf-8")
+    assert "A2VM_K8S_SUSPEND" in (docs / "radar.md").read_text(encoding="utf-8")

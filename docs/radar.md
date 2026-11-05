@@ -60,14 +60,15 @@ alerts:
   radar: {info: 4, urgent: 7, window_hours: 72, keep_days: 14}
 ```
 
-The daily run has nothing to scan: suspend it once deployed
-(`kubectl -n a2vm-via patch cronjob a2vm-via-daily -p '{"spec":{"suspend":true}}'`). Its
+The daily run has nothing to scan: `A2VM_K8S_SUSPEND` `true` keeps its CronJob suspended (a
+`kubectl patch` would be undone by the next deployment). Its
 `contacts.yaml` names the team (the validated radar alerts are mailed to them). Its CI/CD
 variables, beside those of every tenant on Kubernetes:
 
 | Variable | Value |
 | --- | --- |
 | `A2VM_RUN_MODE` | `kubernetes` |
+| `A2VM_K8S_SUSPEND` | `true` |
 | `A2VM_INTEL_SERVE` | `true`: the shared intelligence service runs in this namespace |
 | `A2VM_VERDICT_SERVICE` | `false`: no decision service, nothing to decide |
 | `A2VM_ALERTS_HOST`, `A2VM_OIDC_*` | the review page of the team (`docs/sign-in.md`) |

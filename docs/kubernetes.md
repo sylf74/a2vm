@@ -100,6 +100,7 @@ CI/CD variables of the tenant project (or of a subgroup):
 | `A2VM_K8S_CONTEXT` | The agent context, `<agent project path>:<agent name>`, e.g. `vulnops/k8s:homelab` | Visible |
 | `A2VM_K8S_NAMESPACE` | Optional, default `a2vm-<project name>` | Visible |
 | `A2VM_K8S_SCHEDULE` | Optional, cron in Europe/Paris, default `45 5 * * *` | Visible |
+| `A2VM_K8S_SUSPEND` | Optional, `true` keeps the daily CronJob suspended from one deployment to the next (the radar tenant, `docs/radar.md`), default `false` | Visible |
 | `A2VM_IMAGE_REGISTRY` | Optional, default `<registry>/<code project path>` | Visible |
 | `A2VM_VERDICT_SERVICE` | Optional, `false` to deploy no decision service (default `true`, v0.14.0) | Visible |
 | `A2VM_RUN_MODE` | In the tenant's `.gitlab-ci.yml`: `gitlab` (default) or `kubernetes`, the daily run and the watch in the namespace only (§4) | — |
