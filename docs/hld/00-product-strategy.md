@@ -476,6 +476,22 @@ external scanning in the cloud.
 | AI inference | Default LLM endpoint (OpenAI-compatible API) on GPU capacity operated by the service, on premises or in the cloud; reached only by the internal runner | Hardware and hosting chosen in the DAT on cost and confidentiality |
 | Cloud | Development and qualification VMs; external scanner host acting as a GitLab runner | Internet-facing scans originate outside the corporate network |
 
+### Software architecture on Kubernetes
+
+What runs where since v0.22: GitLab deploys one namespace per client and one for the watch team; the
+collectors and the cloud scanner bring the detections in; the decisions go to the portal and the
+tickets to the ITSM. The colour of a box is the pillar that owns it (1 teal, 2 amber, 3 blue, 4 rose).
+Drawn by `scripts/make_architecture_diagrams.py`.
+
+![Software architecture of A2VM on Kubernetes](architecture.svg)
+
+The watch (D17): the sources are read once by the shared intelligence service; the radar of the
+watch team publishes the events it validates to a feed; each client's watch matches the records and
+the feed with its own assets, and sends back the technologies it watches without saying whose they
+are (chapter 10, `docs/radar.md`).
+
+![The watch: shared service, radar and the clients' watches](watch.svg)
+
 ## 10. Cross-cutting concerns
 
 Security and AI governance apply to every pillar; each pillar chapter and LLD details how its

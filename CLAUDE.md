@@ -29,7 +29,7 @@ other files of `docs/`; day-to-day operation: `docs/operations.md`.
 | `deploy/collector/` | Install script of a collector on its VM (`docs/collectors.md` §2) |
 | `deploy/cnpg/` | Installation of the CloudNativePG operator, once per Kubernetes cluster (the tenants' PostgreSQL, `docs/kubernetes.md` §5) |
 | `images/` | Dockerfile of the pillar images (one per pillar, built by the `images` job on tags) |
-| `scripts/` | Generators of committed files: dashboards, decision diagrams, neutral Word template |
+| `scripts/` | Generators of committed files: dashboards, decision diagrams, architecture diagrams, neutral Word template |
 
 Pillars import only `a2vm` and themselves, never another pillar (D12, `tests/test_architecture.py`).
 What several pillars run is a library of `a2vm` (e.g. `a2vm.ssvc`, `a2vm.declared`); what a pillar
@@ -61,7 +61,7 @@ them (`tests/test_interfaces.py`).
   Claude session or conversation.
 - Generated files are never edited by hand: change the script, run it, commit both
   (`scripts/make_grafana_dashboards.py`, `scripts/make_decision_diagrams.py`,
-  `scripts/make_alert_template.py`).
+  `scripts/make_alert_template.py`, `scripts/make_architecture_diagrams.py`).
 
 ## Checks before a merge request
 
@@ -70,6 +70,7 @@ pip install -r requirements-dev.txt
 ruff check . && ruff format --check .
 A2VM_TEST_DSN="host=localhost dbname=postgres user=postgres password=… sslmode=disable" pytest -q
 python scripts/make_decision_diagrams.py --check
+python scripts/make_architecture_diagrams.py --check
 ```
 
 Without `A2VM_TEST_DSN` (a disposable PostgreSQL 16+), the database tests are skipped; the CI test
