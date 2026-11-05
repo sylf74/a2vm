@@ -45,3 +45,8 @@ def test_daily_suspend_from_variable() -> None:
     docs = CHART.parents[3] / "docs"
     assert "A2VM_K8S_SUSPEND" in (docs / "kubernetes.md").read_text(encoding="utf-8")
     assert "A2VM_K8S_SUSPEND" in (docs / "radar.md").read_text(encoding="utf-8")
+
+
+def test_intel_serve_quiet_httpx() -> None:
+    cli = CHART.parents[3] / "via" / "src" / "via" / "intel" / "cli.py"
+    assert 'logging.getLogger("httpx").setLevel(logging.WARNING)' in cli.read_text(encoding="utf-8")
