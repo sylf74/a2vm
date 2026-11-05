@@ -1,4 +1,4 @@
-# Operator's manual (v0.18.1)
+# Operator's manual (v0.22.1)
 
 Day-to-day operation of a tenant deployed on Kubernetes (`A2VM_RUN_MODE: kubernetes`): where each
 part runs, the usual actions, how to check the state, the known failures and their remedies,
@@ -13,6 +13,8 @@ repeat it. The examples use the tenant `lab` (namespace `a2vm-lab`); replace it 
 | SSH collection, OpenVAS, external scan | [`scanning.md`](scanning.md), [`openvas.md`](openvas.md) |
 | Alerts, Word sheet, analysts' sign-in and review page | [`alerts.md`](alerts.md), [`alert-word.md`](alert-word.md), [`sign-in.md`](sign-in.md) |
 | Chat, reporting database and Grafana, GTI | [`chat.md`](chat.md), [`reporting.md`](reporting.md), [`gti.md`](gti.md) |
+| Remediation tickets, priorities and SLA | [`dispatch.md`](dispatch.md), [`sla.md`](sla.md) |
+| The radar of the watch team, the shared intelligence service | [`radar.md`](radar.md) |
 
 ## 1. Where each part runs
 
@@ -21,11 +23,14 @@ repeat it. The examples use the tenant `lab` (namespace `a2vm-lab`); replace it 
 | Internal scans: SSH (Trivy, dnf) and OpenVAS | Collector VM near the network (`a2vm-collector@<connector>`, Docker or Podman) | Its systemd timer (`install-collector.sh --schedule`, default 07:30) | systemd |
 | CMDB (iTop, read only, v0.19.0) | Connector `itop` of the collector (`a2vm-collector@<connector>`), source `cmdb` | Its systemd timer, before the daily run | systemd |
 | External scan (OpenVAS from the internet) | Pipeline of the project `<tenant>-external`, on the runner of the cloud scanner (tag `scan-cloud`; deployed by `deploy/scanner` since v0.18.2) | Its pipeline schedule | GitLab |
-| Daily run: collect → via → detect → assets → triage → publish, inventory | CronJob `a2vm-<tenant>-daily` | `daily.schedule` (default 05:45, Europe/Paris) | Kubernetes |
+| Daily run: collect → via → detect → assets → triage → publish, inventory, dispatch | CronJob `a2vm-<tenant>-daily` | `daily.schedule` (default 05:45, Europe/Paris; suspended with `A2VM_K8S_SUSPEND=true`) | Kubernetes |
 | Watch | CronJob `a2vm-<tenant>-watch` | Every 10 minutes | Kubernetes |
 | Detection, watch and decision services | Deployments `a2vm-<tenant>-detect`, `-via`, `-verdict` | Always | Kubernetes |
 | Review page and sender | Deployments `a2vm-<tenant>-review` (oauth2-proxy), `-sender` | Always | Kubernetes |
 | Chat | Deployments `a2vm-<tenant>-chat`, `-tools` | Always | Kubernetes |
+| Remediation tickets and the page of the requests | Deployments `a2vm-<tenant>-dispatch`, `-dispatch-page`; the step `dispatch` of the daily run | Always; tickets at the end of each daily run | Kubernetes |
+| Shared intelligence service (v0.22.0) | Deployment `a2vm-<team>-intel` of the watch team's tenant (`A2VM_INTEL_SERVE=true`) | Always; GTI search every 6 hours when enabled | Kubernetes |
+| Radar (v0.22.0) | The watch of the watch team's tenant (`alerts.mode: radar`) | Every 10 minutes | Kubernetes |
 | Tenant's database | CloudNativePG cluster `a2vm-<tenant>-db` (with `A2VM_DATABASE=true`) | Always | The operator |
 | Reporting database and Grafana | The portal (`deploy/portal`) or a PostgreSQL of your own | Always | — |
 
@@ -64,6 +69,10 @@ In GitLab: project `<tenant>-external` > Build > Pipelines > Run pipeline on `ma
 must be online (Settings > CI/CD > Runners); a cloud scanner billed by the hour must be started
 first. Nothing is started by hand on the scanner.
 
+```bash
+glab api "runners?tag_list=scan-cloud" | jq '.[] | {id, description, status}'
+```
+
 ### Run the daily run now
 
 ```bash
@@ -99,12 +108,62 @@ kubectl -n a2vm-lab logs deploy/a2vm-lab-sender --tail=20
 ```
 
 Analysts validate the alerts on the review page (`https://<A2VM_ALERTS_HOST>`); the sender mails
-them within a minute.
+them within a minute. An alert never makes a ticket. The last watch passage in one command (expected:
+`sources: …`, `intel: N/N records from the shared service` with the shared service, `lab: N new
+items, N alerts`, no `ERROR`):
+
+```bash
+kubectl -n a2vm-lab get jobs --sort-by=.metadata.creationTimestamp -o name | grep watch | tail -1 | xargs kubectl -n a2vm-lab logs --all-containers --tail=30
+```
+
+### The radar and the shared intelligence service (v0.22.0)
+
+The watch team's tenant (`team` here, namespace `a2vm-team`) runs the shared intelligence service
+and the radar; the other tenants read their CVE records and the radar's feed from it
+(`docs/radar.md`).
+
+```bash
+kubectl -n a2vm-team logs deployment/a2vm-team-intel | grep -v httpx | head -5
+kubectl -n a2vm-team get jobs --sort-by=.metadata.creationTimestamp -o name | grep watch | tail -1 | xargs kubectl -n a2vm-team logs --all-containers --tail=30
+```
+
+The service starts with `intel: tokens radar 1, read 1; …`, then logs the requests it serves. Each
+radar passage logs `radar: N events in 14 days, alert at 4 (urgent 7); best: …` (v0.22.1): a
+passage without alerts shows how far the best events are from the thresholds. The team's daily run
+has nothing to scan: `A2VM_K8S_SUSPEND=true` keeps it suspended (a `kubectl patch` is undone by the
+next deployment).
+
+### Remediation tickets (v0.20.0)
+
+The step `dispatch` at the end of each daily run sends the tickets of `tickets.automatic` in
+`dispatch.yaml` (`act`: the ACT decisions only); a person sends others from the page of the
+requests. In `mode: dry-run` they stay `proposed`; the first daily run in `live` sends them. A change
+of `dispatch.yaml` takes effect at the next deployment.
+
+```bash
+kubectl -n a2vm-lab get jobs --sort-by=.metadata.creationTimestamp -o name | grep daily | tail -1 | xargs kubectl -n a2vm-lab logs -c dispatch
+kubectl -n a2vm-lab logs deployment/a2vm-lab-dispatch --tail=20
+```
+
+The step ends with `dispatch of run … (<mode>): proposed n, sent n, updated n, fixed n, …`. The
+tickets themselves: `docs/dispatch.md` §4.
+
+### Deploy again
+
+`deploy-k8s` runs on a push to the default branch or a "Run pipeline" from the GitLab page; a
+pipeline made through the API (`glab ci run`) does not deploy, and an old job may not be retried.
+To deploy again without a change:
+
+```bash
+git commit --allow-empty -m "Redeploy"
+git push
+```
 
 ## 3. Check the state
 
 | Command | Expected |
 | --- | --- |
+| `kubectl -n a2vm-lab get pods \| grep -v -E "Running\|Completed"` | The header line only |
 | `kubectl -n a2vm-lab get pods` | Services `Running`; the last daily job `Completed`; watch jobs `Completed` every 10 minutes |
 | `kubectl -n a2vm-lab get deploy -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.spec.template.spec.containers[0].image}{"\n"}{end}'` | Every A2VM image at the tag of the tenant's `.gitlab-ci.yml` |
 | `kubectl -n a2vm-lab logs deploy/a2vm-lab-verdict \| head -1` | `store postgresql … (TLS verified)` with the tenant's database, else `store files …`; then `latest run …` |
@@ -112,7 +171,8 @@ them within a minute.
 | `kubectl -n a2vm-lab get pods -l cnpg.io/cluster=a2vm-lab-db` | The database instance(s) `Running` |
 | `kubectl -n a2vm-lab logs deploy/a2vm-lab-verdict --tail=5` | A `push tenant=lab run=… rows=…` line after each daily run |
 | `kubectl -n a2vm-lab logs deploy/a2vm-lab-dispatch \| head -1` | With `dispatch.yaml` (v0.20.0): its store, mode (dry-run or live), targets, automatic levels and targets of the requests; each daily run's container `dispatch` ends with `dispatch of run … : proposed n, sent n, …` (`docs/dispatch.md`) |
-| `helm -n a2vm-lab get values a2vm -o yaml` | What `deploy-k8s` set (database, chat, watch, sign-in, dispatch) |
+| `helm -n a2vm-lab get values a2vm -o yaml` | What `deploy-k8s` set (database, chat, watch, sign-in, dispatch, intel) |
+| `kubectl -n a2vm-team logs deployment/a2vm-team-intel \| grep -v httpx \| head -1` | `intel: tokens radar 1, read N; …` (the watch team's tenant, v0.22.0) |
 
 In the chat: "summary of the latest run" names the run and its date; "details of asset web01"
 shows an asset, with its scans since v0.18.1, even when it has no finding.
@@ -139,6 +199,14 @@ shows an asset, with its scans since v0.18.1, even when it has no finding.
 | The chat does not find an asset | Before v0.18.1, an asset with no finding was not listed; since, an asset not scanned in the run | Since v0.18.1, check its scans in the remediation dashboard ("Assets by last scan") and the collector |
 | A finding "gone without a new scan" (v0.18.1) | Its asset was not scanned again by the source that had seen it | The asset's scans (collector journal, targets); it is counted fixed only after a new scan |
 | A French Grafana bar chart shows no bar (v0.17.3) | Dashboard imported before v0.18.1 | Import the French dashboards again |
+| `deploy-k8s`: `UPGRADE FAILED: cannot patch "a2vm-<tenant>-watch" … $setElementOrder` | The watch CronJob of v0.21.0 or v0.22.0 gave `A2VM_CACHE_DIR` twice, which breaks the patch once the environment changes (fixed in v0.22.1) | `kubectl -n a2vm-lab delete cronjob a2vm-lab-watch`, then deploy again (§2); before moving to v0.22.1, delete it the same way |
+| A job `Pending`: "no runners … scan-cloud" | The cloud scanner is stopped or its runner is offline | Start the scanner, or `sudo systemctl restart gitlab-runner` on it; the job starts by itself |
+| `glab ci retry`: "Job is not retryable" | A newer pipeline exists | Deploy again (§2) |
+| Sender: "LibreOffice is not installed in the job" | `alerts.attach: [pdf]`, and the sender's image has no LibreOffice | `attach: [docx]`, then validate the alert again |
+| No ticket in the ITSM | `mode: dry-run`, no decision of the automatic levels, or no daily run since `live` | The line `dispatch of run …` of the last daily run (§2) |
+| Watch or daily log: "records read from the sources directly" | The shared intelligence service did not answer | Its log (§2), `A2VM_INTEL_URL` and `A2VM_INTEL_TOKEN` of the group |
+| Review page: Keycloak "Invalid redirect URI" | The page's address is not declared in the client | Add `https://<A2VM_ALERTS_HOST>/oauth2/callback` to the client's redirect URIs |
+| The watch team's daily run is no longer suspended | A deployment undid a `kubectl patch` | `A2VM_K8S_SUSPEND=true` (v0.22.1) |
 
 ## 5. Upgrades
 

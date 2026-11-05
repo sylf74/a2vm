@@ -59,3 +59,10 @@ def test_radar_summary_line() -> None:
     line = radar.summary(state, radar.RadarConfig())
     assert line.startswith("radar: 2 events in 14 days, alert at 4 (urgent 7); best: 5 'Exploited RCE', 2 'Low'")
     assert radar.summary({}, radar.RadarConfig()).endswith("best: none")
+
+
+def test_operations_manual_current() -> None:
+    text = (CHART.parents[3] / "docs" / "operations.md").read_text(encoding="utf-8")
+    assert text.startswith("# Operator's manual (v0.22.1)")
+    for needle in ("a2vm-team-intel", "A2VM_K8S_SUSPEND", "dispatch of run", "$setElementOrder", "scan-cloud"):
+        assert needle in text, needle
