@@ -13,7 +13,7 @@ other files of `docs/`; day-to-day operation: `docs/operations.md`.
 | Path | What |
 | --- | --- |
 | `a2vm/` | Common contract: data model, JSON schemas of the exchange files and OpenAPI contracts of the services, settings, profiles, LLM client and guard, CISA SSVC tables, matching of declared assets, connection to the tenant's database (`a2vm.db`) |
-| `via/` | Pillar 1, intelligence (records) and watch (alerts); watch service, review page and sender on Kubernetes (`via serve`, `via service`) |
+| `via/` | Pillar 1, intelligence (records) and watch (alerts); watch service, review page and sender on Kubernetes (`via serve`, `via service`); the shared intelligence service of every tenant and the radar of the watch team (`via intel-serve`, v0.22.0) |
 | `detect/` | Pillar 2, detection: SSH collection, OpenVAS, declared inventory, external scan; collector agent and detection service (`detect agent`, `detect serve`, `detect fetch`) |
 | `verdict/` | Pillar 3, asset context, SSVC decision, restitution (reporting database, Grafana); decision service and tool server of the analysts' chat (`verdict serve`, `verdict push`, `verdict tools`) |
 | `dispatch/` | Pillar 4, dispatch: remediation tickets in the ITSM (iTop), followed until a scan confirms the fix; page of the requests for remediation (`dispatch serve`, `dispatch run`) |

@@ -36,6 +36,8 @@ Sources (`config/watch-sources.yaml`, or `watch-sources.yaml` in a client projec
 | `rss` | RSS 2.0, Atom, RDF | CVE ids and product names taken from title and summary |
 | `csaf` | CSAF provider metadata, then `changes.csv` or ROLIE | products, fixes and severity in the sheet |
 | `cna` | nothing by itself | labels the CVE records of a vendor without a feed |
+| `intel` | the feed of the shared intelligence service (v0.22.0) | the radar's validated events and GTI's vulnerabilities on the technologies watched, matched like any publication (`docs/radar.md`); nothing without `A2VM_INTEL_URL` |
+| `gti` | a GTI search (v0.22.0, licensed) | the radar of the watch team only |
 
 A source is read for the first time only to record its current state (no flood of old news).
 Sources marked `enabled: false` have URLs still to be checked from the runner:
@@ -234,6 +236,13 @@ Word file of a French contact is filled in French (`templates/alert.fr.docx`, el
 `templates/alert.docx`, else the neutral French template). English and French have their labels in
 A2VM; another language gets the translated text and an English Word file. Through GitLab
 (`send-alerts`), every recipient gets the English reference. Detail: LLD intelligence §3.9.
+
+## Teams (v0.22.0)
+
+Every alert drafted can also be posted to the analysts' Teams channel, beside their mail: the
+webhook's address as the masked variable `A2VM_TEAMS_WEBHOOK` (Kubernetes: the key `teams-webhook`
+of the tenant's secret, put there by the deployment). An Adaptive Card: level, title, CVE ids,
+tenant, a button to the review page or the pipeline (`docs/radar.md` §5).
 
 ## Limits (to address with the PostgreSQL storage)
 

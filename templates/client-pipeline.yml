@@ -13,7 +13,7 @@
 #
 #     include:
 #       - project: vulnops/a2vm
-#         ref: v0.21.0
+#         ref: v0.22.0
 #         file: templates/client-pipeline.yml
 #     variables:
 #       A2VM_REF: v0.19.0        # same version as the include
@@ -295,6 +295,26 @@ deploy-k8s:
       elif [ -f dispatch.yaml ]; then
         echo "WARN dispatch.yaml but no decision service (A2VM_VERDICT_SERVICE=false): nothing dispatched"
       fi
+    # The shared intelligence service (HLD D17, v0.22.0, docs/radar.md): every tenant with A2VM_INTEL_URL
+    # and the read token A2VM_INTEL_TOKEN (a group variable: the service does not tell the tenants
+    # apart); the watch team's project, with A2VM_INTEL_SERVE=true, runs it: the digests of that read
+    # token (and of the lines `read <sha256>` of the File variable A2VM_INTEL_DIGESTS) and of its own
+    # radar token, made once and kept in the Secret a2vm-tenant, in the Secret a2vm-intel.
+    - |
+      INTEL=""; N="$(mktemp -d)"; chmod 700 "$N"
+      if [ -n "${A2VM_INTEL_URL:-}" ]; then INTEL="--set intel.url=$A2VM_INTEL_URL"; fi
+      if [ "${A2VM_INTEL_SERVE:-false}" = "true" ]; then
+        if [ -z "${A2VM_INTEL_TOKEN:-}" ]; then echo "ERROR A2VM_INTEL_SERVE=true needs A2VM_INTEL_TOKEN"; exit 1; fi
+        kubectl -n "$NS" get secret a2vm-tenant -o jsonpath='{.data.intel-radar-token}' 2>/dev/null | base64 -d > "$N/intel-radar-token" 2>/dev/null || true
+        if [ "$(wc -c < "$N/intel-radar-token")" -lt 32 ]; then od -An -tx1 -N32 /dev/urandom | tr -d ' \n' > "$N/intel-radar-token"; fi
+        printf 'read %s\nradar %s\n' "$(printf '%s' "$A2VM_INTEL_TOKEN" | sha256sum | cut -d' ' -f1)" \
+          "$(sha256sum < "$N/intel-radar-token" | cut -d' ' -f1)" > "$N/digests"
+        if [ -f "${A2VM_INTEL_DIGESTS:-}" ]; then grep -E '^read [0-9a-f]{64}$' "$A2VM_INTEL_DIGESTS" >> "$N/digests" || true; fi
+        kubectl -n "$NS" create secret generic a2vm-intel --from-file=digests="$N/digests" --dry-run=client -o yaml | kubectl apply -f -
+        INTEL="$INTEL --set intel.serve.enabled=true --set intel.serve.digestsSecret=a2vm-intel"
+        INTEL="$INTEL --set intel.serve.digestsChecksum=$(sha256sum "$N/digests" | cut -d' ' -f1)"
+        echo "A2VM_INTEL_SERVE=true: the shared intelligence service runs in $NS ($(grep -c '^read ' "$N/digests") read token(s))"
+      fi
     # Sign-in of the analysts with the tenant's identity provider (v0.17.0), when A2VM_OIDC_ISSUER is
     # set: the chat and, with A2VM_ALERTS_HOST, the review page of the alerts behind oauth2-proxy. The
     # proxy's cookie key and the key of the page's forms are made once and kept in the Secret a2vm-tenant.
@@ -343,6 +363,9 @@ deploy-k8s:
       put via-read-token "$(cat "$W/via-read-token" 2>/dev/null)"
       put smtp-password "${A2VM_SMTP_PASSWORD:-}"
       put graph-client-secret "${A2VM_GRAPH_CLIENT_SECRET:-}"
+      put intel-token "${A2VM_INTEL_TOKEN:-}"
+      put intel-radar-token "$(cat "$N/intel-radar-token" 2>/dev/null)"
+      put teams-webhook "${A2VM_TEAMS_WEBHOOK:-}"
       if [ -n "$DISPATCH" ]; then
         put dispatch-run-token "$(cat "$D/dispatch-run-token")"
         put dispatch-read-token "$(cat "$D/dispatch-read-token")"
@@ -390,13 +413,14 @@ deploy-k8s:
         --set image.tag="$A2VM_REF" \
         --set secret.name=a2vm-tenant \
         --set daily.schedule="${A2VM_K8S_SCHEDULE:-45 5 * * *}" \
-        $PULL $FILES $INTAKE $VERDICT $DATABASE $CHAT $WATCH $SIGNIN $DISPATCH -f "$ENVF"
-      rm -rf "$I" "$V" "$C" "$W" "$O" "$D"
+        $PULL $FILES $INTAKE $VERDICT $DATABASE $CHAT $WATCH $SIGNIN $DISPATCH $INTEL -f "$ENVF"
+      rm -rf "$I" "$V" "$C" "$W" "$O" "$D" "$N"
       kubectl -n "$NS" get cronjob,pvc
       if [ -n "$INTAKE" ]; then kubectl -n "$NS" get deployment,service,ingress -l app.kubernetes.io/component=detect; fi
       if [ -n "$VERDICT" ]; then kubectl -n "$NS" get deployment,service -l app.kubernetes.io/component=verdict; fi
       if [ -n "$CHAT" ]; then kubectl -n "$NS" get deployment,ingress -l 'app.kubernetes.io/component in (chat,tools)'; fi
       if [ -n "$WATCH" ]; then kubectl -n "$NS" get deployment,cronjob -l 'app.kubernetes.io/component in (via,watch)'; fi
+      if [ "${A2VM_INTEL_SERVE:-false}" = "true" ]; then kubectl -n "$NS" get deployment,service -l app.kubernetes.io/component=intel; fi
       if [ -n "$SIGNIN" ] && [ -n "${A2VM_ALERTS_HOST:-}" ]; then kubectl -n "$NS" get deployment,ingress -l 'app.kubernetes.io/component in (review,send)'; fi
       if [ -n "$DATABASE" ]; then kubectl -n "$NS" get cluster -l app.kubernetes.io/component=database; fi
       if [ -n "$DISPATCH" ]; then kubectl -n "$NS" get deployment,ingress -l 'app.kubernetes.io/component in (dispatch,dispatch-page)'; fi

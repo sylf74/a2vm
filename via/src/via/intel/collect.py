@@ -1,6 +1,10 @@
 # SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 """Collect vulnerability records: CVE JSON 5 record + KEV + EPSS (+ GTI when enabled), merged into one
-VulnRecord each."""
+VulnRecord each.
+
+With a shared intelligence service (D17, v0.22.0, `sources.intel_url`), the records come from it:
+collected and enriched once for every tenant. When it cannot answer, the job reads the sources
+itself and says so."""
 
 from __future__ import annotations
 
@@ -13,6 +17,7 @@ from a2vm.models import REJECTED, VulnRecord
 
 from .gti import enrich
 from .record import parse_record
+from .remote import IntelClient, IntelError
 from .sources import SourceError, Sources
 
 
@@ -51,6 +56,30 @@ def _fetch(sources: Sources, cve_id: str) -> tuple[dict[str, Any] | None, Except
 
 
 def collect(sources: Sources, cve_ids: list[str]) -> Collection:
+    if sources.settings.intel_url and not sources.fixtures and cve_ids:
+        try:
+            return collect_shared(sources, cve_ids)
+        except IntelError as exc:
+            out = collect_direct(sources, cve_ids)
+            out.notes.insert(0, f"intel: {exc}; records read from the sources directly")
+            return out
+    return collect_direct(sources, cve_ids)
+
+
+def collect_shared(sources: Sources, cve_ids: list[str], transport=None) -> Collection:  # noqa: ANN001
+    """The records from the shared intelligence service."""
+    client = IntelClient.from_settings(sources.settings, transport)
+    assert client is not None
+    try:
+        records, errors, notes = client.records(cve_ids)
+    finally:
+        client.close()
+    out = Collection(requested=list(cve_ids), records=records, errors=errors, notes=notes)
+    out.notes.append(f"intel: {len(records)}/{len(cve_ids)} records from the shared service")
+    return out
+
+
+def collect_direct(sources: Sources, cve_ids: list[str]) -> Collection:
     out = Collection(requested=list(cve_ids))
     kev = sources.kev()
     epss = sources.epss(cve_ids)

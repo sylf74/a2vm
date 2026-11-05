@@ -217,15 +217,19 @@ def build(
 
     # Why now, and which assets.
     why = [f"- {_cap(reason_text(lang, r))}" for r in alert.reasons] or [f"- {t(lang, 'why.default')}"]
+    if alert.radar:  # the radar of the watch team (v0.22.0): its magnitude, signals and sources
+        why = _radar_why(alert, lang) + [f"- {_cap(reason_text(lang, r))}" for r in alert.reasons]
     if item.source:
         category = (
             t(lang, f"cat.{item.category}")
-            if item.category in ("institutional", "vendor", "research")
+            if item.category in ("institutional", "vendor", "research", "radar")
             else (item.category)
         )
         why.append(f"- {t(lang, 'why.source', source=item.source, category=category)}")
     fiche.sections.append((t(lang, "h.why"), why))
     concerned, worst_exposed, rows = _concerned(alert, pub.source if pub else t(lang, "the_source"), lang)
+    if alert.radar:
+        concerned = [t(lang, "radar.assets")]
     fiche.sections.append((t(lang, "h.assets"), concerned))
     fiche.facts["actifs"] = rows
 
@@ -321,6 +325,20 @@ def build(
     fiche.facts["description"] = description
     fiche.facts["liens"] = [line.rsplit("(", 1)[-1].rstrip(")") if line.endswith(")") else line[2:] for line in unique]
     return fiche
+
+
+def _radar_why(alert: Alert, lang: str) -> list[str]:
+    r = alert.radar
+    lines = [
+        f"- {t(lang, 'radar.why.' + r.get('why', 'new'), score=r.get('score', 0), cves=', '.join(r.get('cves') or []))}"
+    ]
+    if r.get("markers"):
+        signals = ", ".join(t(lang, f"radar.marker.{m}") for m in r["markers"])
+        lines.append(f"- {t(lang, 'radar.signals', signals=signals)}")
+    n = len({s["source"] for s in r.get("sources") or []})
+    if n > 1:
+        lines.append(f"- {t(lang, 'radar.sources', n=n)}")
+    return lines
 
 
 def _cap(text: str) -> str:

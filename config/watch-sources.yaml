@@ -1,6 +1,6 @@
 # Watch sources read by via (watch mode), every 10 minutes.
 #
-#   category  institutional | vendor | research
+#   category  institutional | vendor | research | radar
 #   kind      certfr   CERT-FR alerts / advisories (RSS + JSON of each publication)
 #             kev      CISA Known Exploited Vulnerabilities
 #             cvelist  new CVE records (cvelistV5), matched against the client's assets and watchlist
@@ -8,6 +8,13 @@
 #             csaf     CSAF provider (url = provider-metadata.json, or its changes.csv): products and fixes
 #             cna      no feed: the vendor publishes its CVEs as a CNA; its records arrive through
 #                      cvelist and are labelled with the vendor's name (vendors = names in the records)
+#             intel    the feed of the shared intelligence service (v0.22.0, D17): the radar's validated
+#                      events and GTI's vulnerabilities on the technologies watched; nothing without
+#                      A2VM_INTEL_URL
+#             gti      a GTI search (v0.22.0, licensed): for the radar only; nothing unless GTI is enabled;
+#                      `query` replaces the radar's filter (via.intel.gti.RADAR_FILTER)
+#   radar_only  read by the radar of the watch team only (alerts.mode: radar, docs/radar.md), never by
+#             a client's watch (v0.22.0)
 #   urgent    every publication of the source is urgent (otherwise: urgent when exploited, KEV, or
 #             critical on an Internet-exposed asset; info otherwise)
 #   enabled   false until the source has been checked from the runner:
@@ -102,3 +109,22 @@ sources:
   - {id: zdi, category: research, kind: rss,
      url: "https://www.zerodayinitiative.com/rss/published/",
      name: "Zero Day Initiative — published advisories"}
+
+  # -- Shared intelligence service and radar (v0.22.0, docs/radar.md) ----------------------------
+  - {id: a2vm-intel, category: radar, kind: intel,
+     name: "A2VM — radar and shared intelligence"}
+  - {id: gti-radar, category: research, kind: gti, radar_only: true,
+     name: "Google Threat Intelligence — exploited, zero-day or critical"}
+  # Research and news read by the radar only; to check from the runner before enabling them.
+  - {id: oss-security, category: research, kind: rss, radar_only: true, enabled: false,
+     url: "https://seclists.org/rss/oss-sec.rss", name: "oss-security (Openwall list)"}
+  - {id: full-disclosure, category: research, kind: rss, radar_only: true, enabled: false,
+     url: "https://seclists.org/rss/fulldisclosure.rss", name: "Full Disclosure"}
+  - {id: watchtowr, category: research, kind: rss, radar_only: true, enabled: false,
+     url: "https://labs.watchtowr.com/rss/", name: "watchTowr Labs"}
+  - {id: horizon3, category: research, kind: rss, radar_only: true, enabled: false,
+     url: "https://www.horizon3.ai/feed/", name: "Horizon3.ai — attack research"}
+  - {id: rapid7, category: research, kind: rss, radar_only: true, enabled: false,
+     url: "https://www.rapid7.com/blog/rss/", name: "Rapid7 — blog"}
+  - {id: bleepingcomputer, category: research, kind: rss, radar_only: true, enabled: false,
+     url: "https://www.bleepingcomputer.com/feed/", name: "BleepingComputer"}

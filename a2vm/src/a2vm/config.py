@@ -45,6 +45,10 @@ class SourceSettings:
     gti_cache_hours: float = 24
     gti_workers: int = 4
     gti_max_calls: int = 2000  # network lookups per run (cached answers are free); most urgent CVEs first
+    # The shared intelligence service (D17, v0.22.0): records collected and enriched once for every
+    # tenant, the radar's events. Empty: the job reads the sources itself, as before.
+    intel_url: str = ""
+    intel_token_file: str = ""  # file holding the reading token of the shared service
 
     @property
     def gti_api_key(self) -> str | None:
@@ -97,6 +101,8 @@ _ENV_OVERRIDES = {
     "CVE_RECORD_URL": ("sources", "cve_record_url"),
     "GTI_ENABLED": ("sources", "gti_enabled"),
     "GTI_MAX_CALLS": ("sources", "gti_max_calls"),
+    "INTEL_URL": ("sources", "intel_url"),
+    "INTEL_TOKEN_FILE": ("sources", "intel_token_file"),
 }
 ENV_PREFIXES = ("A2VM_", "VULNOPS_", "VERDICT_")
 LEGACY_PREFIXES = ENV_PREFIXES[1:]  # read when the A2VM_ name is absent, with a warning (removed later)
@@ -170,6 +176,16 @@ def describe_llm(settings: Settings) -> str:
         return "LLM: disabled"
     key = "set" if llm.api_key else "not set"
     return f"LLM: enabled, base_url={', '.join(llm.base_urls)}, model={llm.model}, api key {key}"
+
+
+def describe_intel(settings: Settings) -> str:
+    """One log line on the shared intelligence service (D17), never its token."""
+    src = settings.sources
+    if not src.intel_url:
+        return "intel: the sources directly (no shared service)"
+    has = (src.intel_token_file and Path(src.intel_token_file).is_file()) or env("INTEL_TOKEN")
+    token = "set" if has else "NOT SET"
+    return f"intel: shared service {src.intel_url}, token {token}"
 
 
 def describe_gti(settings: Settings) -> str:

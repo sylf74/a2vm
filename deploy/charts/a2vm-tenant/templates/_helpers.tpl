@@ -108,6 +108,9 @@ if [ ! -s /secrets/via-run-token ]; then echo "No via-run-token: the watch servi
 {{- if .Values.verdict.enabled -}}
 {{- $_ := required "verdict.digestsSecret is required (Secret with the key digests)" .Values.verdict.digestsSecret -}}
 {{- end -}}
+{{- if .Values.intel.serve.enabled -}}
+{{- $_ := required "intel.serve.digestsSecret is required (Secret with the key digests)" .Values.intel.serve.digestsSecret -}}
+{{- end -}}
 {{- if .Values.watch.enabled -}}
 {{- $_ := required "watch.digestsSecret is required (Secret with the key digests)" .Values.watch.digestsSecret -}}
 {{- if not .Values.secret.name -}}
@@ -211,6 +214,18 @@ if [ ! -s /secrets/via-run-token ]; then echo "No via-run-token: the watch servi
 {{- range $key, $value := .Values.env }}
 - name: {{ $key }}
   value: {{ $value | quote }}
+{{- end }}
+{{- if .Values.intel.url }}
+- name: A2VM_INTEL_URL
+  value: {{ .Values.intel.url | quote }}
+- name: A2VM_INTEL_TOKEN_FILE
+  value: /secrets/intel-token
+- name: A2VM_INTEL_RADAR_TOKEN_FILE
+  value: /secrets/intel-radar-token
+{{- end }}
+{{- if .Values.secret.name }}
+- name: A2VM_TEAMS_WEBHOOK_FILE
+  value: /secrets/teams-webhook
 {{- end }}
 {{- if .Values.secret.name }}
 {{- range $var, $key := dict "LLM_API_KEY" "llm-api-key" "GTI_API_KEY" "gti-api-key" "A2VM_GVM_USER" "gvm-user" "A2VM_GVM_PASSWORD" "gvm-password" "A2VM_REPORTING_DSN" "reporting-dsn" "A2VM_GITLAB_TOKEN" "gitlab-token" "A2VM_SMTP_PASSWORD" "smtp-password" "A2VM_GRAPH_CLIENT_SECRET" "graph-client-secret" }}

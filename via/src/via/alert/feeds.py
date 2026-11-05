@@ -23,8 +23,8 @@ from via.intel.sources import SourceError, Sources
 
 from .certfr import CVE_RE, Publication
 
-KINDS = ("certfr", "kev", "cvelist", "rss", "csaf", "cna")
-CATEGORIES = ("institutional", "vendor", "research")
+KINDS = ("certfr", "kev", "cvelist", "rss", "csaf", "cna", "intel", "gti")  # intel, gti: v0.22.0
+CATEGORIES = ("institutional", "vendor", "research", "radar")
 MAX_NEW_PER_RUN = 40  # per source: a feed that resets itself must not flood the analysts
 
 
@@ -40,6 +40,8 @@ class Source:
     urgent: bool = False  # every publication of this source is urgent (e.g. CERT-FR alerts)
     enabled: bool = True
     notes: str = ""
+    query: str = ""  # gti: the search filter (default: the radar's, via.intel.gti.RADAR_FILTER)
+    radar_only: bool = False  # read by the radar of the watch team only (v0.22.0)
 
 
 def load_catalogue(path: str | Path) -> list[Source]:

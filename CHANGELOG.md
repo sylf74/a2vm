@@ -5,6 +5,40 @@ analyst and, under **Upgrade**, what a tenant must do when it moves to that tag 
 `A2VM_REF` in its `.gitlab-ci.yml`). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
 §11) and the LLDs. A release adds its entry here in the same merge request (CLAUDE.md, Releasing).
 
+## v0.22.0 — 2026-11-05
+
+The shared intelligence service and the radar of the watch team (HLD D17).
+
+- **Shared intelligence service** (`via intel-serve`, contract `intel.v1.yaml`, in the watch team's
+  namespace `a2vm-via`): the records collected and enriched once for every tenant (CVE record, KEV,
+  EPSS, GTI when enabled); `via collect` asks it for them when `A2VM_INTEL_URL` is set, and reads the
+  sources itself when it cannot answer (said in the log). Each tenant's watch sends the technologies
+  it watches (declared products and watchlist) at most twice a day; the service keeps them 48 hours
+  without who sent them. One read token for the tenants (`A2VM_INTEL_TOKEN`, a group variable).
+- **Radar of the watch team** (`alerts.mode: radar`, tenant `via`): the items of every source gathered
+  into events (a shared CVE, titles sharing most of their words, a new CVE on the product of an event
+  without one), zero-days before their CVE included; a deterministic magnitude (weight of the strongest
+  source, markers in English and French: exploited in the wild, zero-day, without authentication,
+  remote code execution, proof of concept; independent sources); alerts at 4 (info) and 7 (urgent),
+  again when it rises and when its CVE appears. The sheet has the usual headings, the magnitude and
+  every source. Research and news sources for the radar only (`radar_only`, disabled until checked).
+- **To the clients**: a radar alert validated by the team is published to the shared service; every
+  client's watch reads its feed (source `a2vm-intel`) and matches each event with its own assets,
+  urgent when the radar said so. The radar never knows who has what.
+- **GTI as discovery** (optional, off by default): the radar searches the vulnerabilities exploited,
+  tagged zero-day or rated critical (source `gti-radar`); the shared service searches the
+  technologies watched every 6 hours and puts the new ones in the feed with GTI's facts only.
+- **Teams**: every alert drafted can also be posted to the analysts' Teams channel (an Adaptive
+  Card with a button to the review page; the webhook's address in `A2VM_TEAMS_WEBHOOK`, never logged).
+- Chart: `intel.url` (every tenant), `intel.serve.*` (the watch team), keys `intel-token`,
+  `intel-radar-token`, `teams-webhook` of the tenant's secret; the deployment job makes them.
+- Roadmap: the respect of the SLA measured on when a fix happened becomes v0.22.1 (consolidation).
+
+**Upgrade**: move `ref` and `A2VM_REF` to `v0.22.0` and push; nothing changes until the group has
+`A2VM_INTEL_URL`. To use the radar and the shared service, follow `docs/radar.md`: the project `via`
+(`A2VM_INTEL_SERVE=true`, its profile in radar mode, its review page), then the group variables
+`A2VM_INTEL_TOKEN` and `A2VM_INTEL_URL`, then a deployment of every tenant. GTI and Teams are optional.
+
 ## v0.21.0 — 2026-11-04
 
 Priorities and SLA per client, within the levels (HLD D19).

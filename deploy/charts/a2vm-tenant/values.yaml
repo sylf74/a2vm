@@ -313,6 +313,31 @@ watch:
   networkPolicy:
     enabled: true
 
+# The shared intelligence service (HLD D17, v0.22.0, docs/radar.md): the records collected and enriched
+# once for every tenant, the radar's validated events in a feed the tenants' watches read.
+intel:
+  # Every tenant: the service's address (e.g. http://a2vm-via-intel.a2vm-via.svc:8080); its token is the
+  # key intel-token of secret.name (the watch team's sender also intel-radar-token). Empty: the jobs
+  # read the sources themselves, as before.
+  url: ""
+  # The watch team's release only (tenant via, namespace a2vm-via): the service itself.
+  serve:
+    enabled: false
+    # Secret with the key `digests`: `read <sha256>` per tenant, `radar <sha256>` (the team's sender).
+    digestsSecret: ""
+    digestsChecksum: ""
+    gtiEveryHours: 6    # GTI enabled (env A2VM_GTI_ENABLED, key gti-api-key): search the technologies watched
+    # Namespaces whose daily run, watch and sender may call it; empty: every namespace of the cluster.
+    allowNamespaces: []
+    storage:
+      size: 1Gi
+      storageClass: ""
+    resources:
+      requests: {cpu: 50m, memory: 128Mi}
+      limits: {memory: 1Gi}
+    networkPolicy:
+      enabled: true
+
 # Sign-in of the analysts with the tenant's identity provider (OIDC, v0.17.0; Keycloak first, any
 # provider with discovery): the chat (Open WebUI) and the review page of the alerts. Empty issuerUrl:
 # the chat keeps its local accounts. The client secret is the key oidc-client-secret of secret.name.
@@ -368,6 +393,9 @@ daily:
 #   via-run-token   token of the tenant's jobs on the watch service (watch.enabled)
 #   via-read-token   token of the tool server on the watch service (watch.enabled, chat.enabled)
 #   smtp-password, graph-client-secret   the mail of the watch (A2VM_SMTP_PASSWORD, A2VM_GRAPH_CLIENT_SECRET)
+#   intel-token     token of the tenant's jobs on the shared intelligence service (intel.url, v0.22.0)
+#   intel-radar-token   token of the watch team's sender, which publishes the radar's events (tenant via)
+#   teams-webhook   address of the analysts' Teams webhook (Workflows), optional (v0.22.0)
 secret:
   name: ""
 
