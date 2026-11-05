@@ -5,6 +5,29 @@ analyst and, under **Upgrade**, what a tenant must do when it moves to that tag 
 `A2VM_REF` in its `.gitlab-ci.yml`). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
 §11) and the LLDs. A release adds its entry here in the same merge request (CLAUDE.md, Releasing).
 
+## v0.22.1 — 2026-11-05
+
+Fixes after the first deployment of v0.22.0. The consolidation planned as v0.22.1 becomes v0.22.2.
+
+- **Chart**: the watch CronJob set `A2VM_CACHE_DIR` twice (shared environment, then its own). The
+  next `helm upgrade` that changed its environment failed (`cannot patch "a2vm-<tenant>-watch" …
+  $setElementOrder`), as v0.22.0 did. It is now set once; a test checks no container gives a name
+  twice.
+- **Pipeline**: `A2VM_K8S_SUSPEND` (`true`) keeps the daily CronJob suspended from one deployment to
+  the next: the watch team's tenant has nothing to scan, and a `kubectl patch` was undone by the next
+  deployment.
+- **Shared intelligence service**: no log line per HTTP request it makes (one per CVE record).
+- **Radar**: each passage logs the events it follows and how far the best are from the thresholds
+  (`radar: N events in 14 days, alert at 4 (urgent 7); best: …`).
+- **Operator's manual** (`docs/operations.md`) brought from v0.18.1 to this version: dispatch, the
+  shared service and the radar, deploying again, the runner of the external scan, the failures met.
+
+**Upgrade**: just before moving a tenant, delete its watch CronJob, which the deployment recreates
+(the one of v0.22.0 still has the duplicate, and the upgrade would fail on it):
+`kubectl -n a2vm-<tenant> delete cronjob a2vm-<tenant>-watch`. Then move `ref` and `A2VM_REF` to
+`v0.22.1` and push. For the watch team's tenant, set the variable `A2VM_K8S_SUSPEND` to `true`
+first. No database change.
+
 ## v0.22.0 — 2026-11-05
 
 The shared intelligence service and the radar of the watch team (HLD D17).
@@ -32,7 +55,7 @@ The shared intelligence service and the radar of the watch team (HLD D17).
   Card with a button to the review page; the webhook's address in `A2VM_TEAMS_WEBHOOK`, never logged).
 - Chart: `intel.url` (every tenant), `intel.serve.*` (the watch team), keys `intel-token`,
   `intel-radar-token`, `teams-webhook` of the tenant's secret; the deployment job makes them.
-- Roadmap: the respect of the SLA measured on when a fix happened becomes v0.22.1 (consolidation).
+- Roadmap: the respect of the SLA measured on when a fix happened becomes a consolidation release (v0.22.2 since v0.22.1).
 
 **Upgrade**: move `ref` and `A2VM_REF` to `v0.22.0` and push; nothing changes until the group has
 `A2VM_INTEL_URL`. To use the radar and the shared service, follow `docs/radar.md`: the project `via`

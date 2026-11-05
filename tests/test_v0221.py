@@ -66,3 +66,11 @@ def test_operations_manual_current() -> None:
     assert text.startswith("# Operator's manual (v0.22.1)")
     for needle in ("a2vm-team-intel", "A2VM_K8S_SUSPEND", "dispatch of run", "$setElementOrder", "scan-cloud"):
         assert needle in text, needle
+
+
+def test_release_recorded() -> None:
+    root = CHART.parents[3]
+    hld = (root / "docs" / "hld" / "00-product-strategy.md").read_text(encoding="utf-8")
+    assert re.search(r"^\| v0\.22\.1 \(current\) \| Fixes after the first deployment", hld, re.M)
+    assert re.search(r"^\| v0\.22\.2 \(consolidation, to confirm\) \|", hld, re.M)
+    assert "## v0.22.1 — " in (root / "CHANGELOG.md").read_text(encoding="utf-8")
