@@ -203,10 +203,16 @@ if [ ! -s /secrets/via-run-token ]; then echo "No via-run-token: the watch servi
 {{- printf "%s/%s:%s" (required "image.registry is required" $root.Values.image.registry) .pillar $tag -}}
 {{- end -}}
 
-{{/* Environment shared by every step. */}}
+{{/* Environment shared by every step of the daily run: the cache on the data volume. */}}
 {{- define "a2vm-tenant.env" -}}
 - name: A2VM_CACHE_DIR
   value: /data/.cache
+{{ include "a2vm-tenant.envCommon" . }}
+{{- end -}}
+
+{{/* Environment shared by every container, without A2VM_CACHE_DIR: each caller sets it once, since a
+name given twice breaks the next "helm upgrade" that changes the list. */}}
+{{- define "a2vm-tenant.envCommon" -}}
 - name: A2VM_SINCE
   value: {{ .Values.daily.since | quote }}
 - name: HOME

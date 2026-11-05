@@ -13,7 +13,7 @@
 #
 #     include:
 #       - project: vulnops/a2vm
-#         ref: v0.22.0
+#         ref: v0.22.1
 #         file: templates/client-pipeline.yml
 #     variables:
 #       A2VM_REF: v0.19.0        # same version as the include
@@ -413,6 +413,7 @@ deploy-k8s:
         --set image.tag="$A2VM_REF" \
         --set secret.name=a2vm-tenant \
         --set daily.schedule="${A2VM_K8S_SCHEDULE:-45 5 * * *}" \
+        --set daily.suspend="${A2VM_K8S_SUSPEND:-false}" \
         $PULL $FILES $INTAKE $VERDICT $DATABASE $CHAT $WATCH $SIGNIN $DISPATCH $INTEL -f "$ENVF"
       rm -rf "$I" "$V" "$C" "$W" "$O" "$D" "$N"
       kubectl -n "$NS" get cronjob,pvc

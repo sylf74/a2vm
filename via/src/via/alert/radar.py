@@ -279,6 +279,14 @@ def payload(event: dict[str, Any], level: str) -> dict[str, Any]:
     }
 
 
+def summary(radar_state: dict[str, Any], cfg: RadarConfig, top: int = 3) -> str:
+    """One log line: the events followed, the best scores against the thresholds."""
+    events = sorted(radar_state.get("events", {}).values(), key=lambda e: -int(e["score"]))
+    best = ", ".join(f"{e['score']} {e['title'][:60]!r}" for e in events[:top]) or "none"
+    return (f"radar: {len(events)} events in {cfg.keep_days} days, alert at {cfg.info} (urgent {cfg.urgent}); "
+            f"best: {best}")  # fmt: skip
+
+
 def alerts(items: list[Any], profile: ClientProfile, sources: Any, state: Any, now: dt.datetime | None = None) -> list:
     """The radar's alerts of this passage (`via watch` for a profile in radar mode)."""
     from via.intel.collect import collect
@@ -292,8 +300,11 @@ def alerts(items: list[Any], profile: ClientProfile, sources: Any, state: Any, n
         records = {r.cve_id: r for r in collection.records}
         for note in collection.notes:
             print(note)
+    cfg = RadarConfig.of(profile)
+    found = assess(items, records, state.radar, cfg, now)
+    print(summary(state.radar, cfg))
     out = []
-    for event, why in assess(items, records, state.radar, RadarConfig.of(profile), now):
+    for event, why in found:
         suffix = f"-{event['alerts']}" if event["alerts"] > 1 else ""
         reasons = sorted({s for src in event["sources"] for s in src["signals"] if s in ("kev", "gti_active")})
         out.append(

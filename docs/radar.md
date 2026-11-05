@@ -43,6 +43,9 @@ again when it moves up a level, and once more when it gets its first CVE ids. A 
 on a pre-authentication RCE exploited in the wild is urgent on its own (1 + 3 + 2 + 1 + 1 = 8); a
 flaw that three research sites report is `info` (1 + 4).
 
+Each passage logs the events followed and the best scores against the thresholds, so that a passage
+without alerts can be read: `radar: 12 events in 14 days, alert at 4 (urgent 7); best: 3 '…', …`.
+
 ## 2. The watch team's tenant `via`
 
 A tenant project like the others (`vulnops/clients/via`, namespace `a2vm-via`), on Kubernetes, with
@@ -60,14 +63,15 @@ alerts:
   radar: {info: 4, urgent: 7, window_hours: 72, keep_days: 14}
 ```
 
-The daily run has nothing to scan: suspend it once deployed
-(`kubectl -n a2vm-via patch cronjob a2vm-via-daily -p '{"spec":{"suspend":true}}'`). Its
+The daily run has nothing to scan: `A2VM_K8S_SUSPEND` `true` keeps its CronJob suspended (a
+`kubectl patch` would be undone by the next deployment). Its
 `contacts.yaml` names the team (the validated radar alerts are mailed to them). Its CI/CD
 variables, beside those of every tenant on Kubernetes:
 
 | Variable | Value |
 | --- | --- |
 | `A2VM_RUN_MODE` | `kubernetes` |
+| `A2VM_K8S_SUSPEND` | `true` |
 | `A2VM_INTEL_SERVE` | `true`: the shared intelligence service runs in this namespace |
 | `A2VM_VERDICT_SERVICE` | `false`: no decision service, nothing to decide |
 | `A2VM_ALERTS_HOST`, `A2VM_OIDC_*` | the review page of the team (`docs/sign-in.md`) |

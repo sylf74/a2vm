@@ -95,6 +95,8 @@ def serve(args: argparse.Namespace) -> int:
     from .service import serve as http_serve
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    # One line per CVE record fetched would drown the service's own lines.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     settings = load_settings(args.settings)
     settings.sources.intel_url = ""
     try:

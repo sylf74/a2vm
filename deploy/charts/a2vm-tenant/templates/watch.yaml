@@ -46,9 +46,9 @@ containers:
         {{- include "a2vm-tenant.watchFiles" $root | nindent 8 }}
         {{- .script | nindent 8 }}
     env:
-      {{- include "a2vm-tenant.env" $root | nindent 6 }}
       - name: A2VM_CACHE_DIR
         value: /tmp/cache
+      {{- include "a2vm-tenant.envCommon" $root | nindent 6 }}
       - name: A2VM_SEND_PIPELINE_URL
         value: {{ $root.Values.watch.sendPipelineUrl | quote }}
       - name: A2VM_SEND_REF

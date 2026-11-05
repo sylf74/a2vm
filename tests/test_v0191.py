@@ -67,4 +67,4 @@ def test_decisions_d17_and_d18_are_recorded():
     hld = (ROOT / "docs" / "hld" / "00-product-strategy.md").read_text()
     assert re.search(r"^\| D17 \| Vulnerability knowledge is shared", hld, re.M)
     assert re.search(r"^\| D18 \| Dashboards show, A2VM acts", hld, re.M)
-    assert re.search(r"^\| v0.22.0 \((to confirm|current)\) \| D17", hld, re.M)  # v0.22.0 since v0.21.0
+    assert re.search(r"^\| v0.22.0( \((to confirm|current)\))? \| D17", hld, re.M)  # v0.22.0 since v0.21.0
