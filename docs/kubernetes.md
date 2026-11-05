@@ -202,6 +202,10 @@ With the analysts' sign-in and `A2VM_ALERTS_HOST` (v0.17.0, `docs/sign-in.md`), 
 the review page instead: a validator corrects, validates or dismisses there, and the sender
 (`a2vm-<tenant>-sender`) mails the validated alerts; GitLab then only deploys.
 
+The shared intelligence service (v0.22.0, `docs/radar.md`): with the group variables
+`A2VM_INTEL_URL` and `A2VM_INTEL_TOKEN`, the daily run takes its records from it and the watch reads
+its feed; the watch team's project runs it (`A2VM_INTEL_SERVE=true`, namespace `a2vm-via`).
+
 Back to GitLab: `A2VM_RUN_MODE: gitlab` and push; the watch's state stays in the service's volume
 (`a2vm-<tenant>-watch`), the GitLab watch starts from its own cache.
 

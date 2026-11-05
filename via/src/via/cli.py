@@ -2,6 +2,7 @@
 """`via`: pillar 1 commands.
 
   via collect …         build a records file for a set of CVEs (intel)
+  via intel-serve …     the shared intelligence service of every tenant and the radar's feed (intel, D17)
   via watch …           draft alerts for what is new since the last run (alert)
   via send …            mail the alerts of a watch run to the client (alert)
   via check-sources …   read every watch source once and report (alert)
@@ -18,7 +19,7 @@ from __future__ import annotations
 
 import sys
 
-INTEL = {"collect"}
+INTEL = {"collect", "intel-serve"}
 ALERT = {"watch", "send", "check-sources", "contacts", "test-mail", "check-template"}
 SERVICE = {"serve", "service"}
 

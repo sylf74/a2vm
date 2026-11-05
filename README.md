@@ -194,6 +194,7 @@ docs/collectors.md                         collectors near the networks and the 
 docs/chat.md                               analysts' conversational search (Open WebUI) in the tenant's namespace
 docs/sign-in.md                            analysts' sign-in (OIDC, Keycloak) and the review page of the alerts
 docs/sla.md                                priorities and SLA of a client, within the levels (v0.21.0)
+docs/radar.md                              the watch team's radar and the shared intelligence service (v0.22.0)
 CHANGELOG.md                               release notes, one entry per tag
 tests/                                     tests and offline fixtures
 scripts/run-pipeline.sh                    the CI pipeline, locally

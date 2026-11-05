@@ -16,6 +16,7 @@ links to it. Nothing reaches a client without that step.
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 import os
 import re
@@ -30,7 +31,7 @@ from a2vm.llm import LlmClient
 from a2vm.profile import ProfileError, load_profile
 from via.intel.sources import Sources
 
-from . import journal, word
+from . import journal, radar, teams, word
 from .contacts import ContactsError, load_contacts, recipients
 from .feeds import load_catalogue
 from .fiche import build, markdown_html
@@ -156,15 +157,24 @@ def cmd_watch(args: argparse.Namespace) -> int:
             enabled = [c for c in catalogue if c.enabled]
             by_cat = {k: sum(c.category == k for c in enabled) for k in ("institutional", "vendor", "research")}
             print(f"sources: {args.sources}, {len(enabled)} enabled ({by_cat})")
+        if catalogue and not radar.is_radar(profile):  # a GTI search and the news sites: the radar's only
+            catalogue = [s for s in catalogue if not (s.radar_only or s.kind == "gti")]
         items, errors = discover(sources, state, catalogue=catalogue)
         if state.new:
             print(f"{profile.id}: first run, baseline recorded ({len(state.certfr)} CERT-FR, {len(state.kev)} KEV)")
             state.save()
             (out / "index.json").write_text("[]", encoding="utf-8")
             return 0
-        matcher = DeclaredMatcher(settings, llm)
-        inventory = _inventory(args.inventory, profile.id)
-        alerts = relevant(items, profile, sources, settings, matcher, state, catalogue, inventory)
+        if radar.is_radar(profile):  # the watch team's radar (v0.22.0): events, whoever they concern
+            alerts = radar.alerts(items, profile, sources, state)
+        else:
+            matcher = DeclaredMatcher(settings, llm)
+            inventory = _inventory(args.inventory, profile.id)
+            alerts = relevant(items, profile, sources, settings, matcher, state, catalogue, inventory)
+            if not args.fixtures:
+                note = push_technologies(settings, profile, state)
+                if note:
+                    print(note)
         index = []
         template = _word_template(profile, args.profile)
         try:
@@ -183,6 +193,9 @@ def cmd_watch(args: argparse.Namespace) -> int:
                 "prose": fiche.prose_source,
                 "cves": list(alert.item.cves),
             }
+            if alert.radar:  # published to the shared service once validated
+                event = state.radar["events"][alert.radar["id"]]
+                entry["radar"] = radar.payload(event, alert.level)
             if template:
                 try:
                     path = word.render(template, word.context(fiche, today=_today()), out / word.filename(alert.id))
@@ -260,9 +273,53 @@ def cmd_watch(args: argparse.Namespace) -> int:
             print(f"  ERROR mail to analysts: {exc}", file=sys.stderr)
             errors.append(str(exc))
             events.append(journal.event("analysts", a, to=analysts, error=str(exc)))
+    for number, a in enumerate(index, start=1):  # the analysts' Teams channel (v0.22.0), optional
+        link = _review_url(a["id"]) or pipeline
+        try:
+            result = teams.notify(profile, a, number, len(index), link)
+        except teams.TeamsError as exc:
+            print(f"  ERROR Teams: {exc}", file=sys.stderr)
+            errors.append(str(exc))
+            events.append(journal.event("analysts", a, to=["teams"], error=str(exc)))
+            break
+        if result:
+            print(f"  analysts: {result}")
+            events.append(journal.event("analysts", a, to=["teams"], result=result))
     journal.append(log_path, events)
     journal.publish(log_path, out)
     return 3 if errors else 0
+
+
+def _review_url(alert_id: str) -> str:
+    review = env("REVIEW_URL").rstrip("/")
+    return f"{review}/alerts/{quote(alert_id, safe='')}" if review else ""
+
+
+def push_technologies(settings, profile, state, transport=None) -> str:  # noqa: ANN001
+    """Send the technologies the client watches to the shared intelligence service, at most every 12
+    hours: its declared products and watchlist, never which client sent them (D17)."""
+    from via.intel.remote import IntelClient, IntelError
+
+    last = state.marks.get("intel:technologies", "")
+    now = dt.datetime.now(dt.UTC)
+    if last and now - dt.datetime.fromisoformat(last) < dt.timedelta(hours=12):
+        return ""
+    items = [{"vendor": a.vendor, "product": a.product, "cpe": a.cpe or ""} for a in profile.assets]
+    for entry in profile.alerts.get("watchlist", []):
+        vendor, _, product = entry.partition(" ")
+        items.append({"vendor": vendor if product else "", "product": product or vendor, "cpe": ""})
+    try:
+        client = IntelClient.from_settings(settings.sources, transport)
+        if client is None or not items:
+            return ""
+        try:
+            client.technologies(items)
+        finally:
+            client.close()
+    except IntelError as exc:
+        return f"  WARN  intel: technologies not sent: {exc}"
+    state.marks["intel:technologies"] = now.isoformat(timespec="seconds")
+    return f"intel: {len(items)} technologies sent to the shared service"
 
 
 def cmd_send(args: argparse.Namespace) -> int:
@@ -319,6 +376,8 @@ def cmd_send(args: argparse.Namespace) -> int:
             result = send(msg, out / "outbox")
             print(f"{a['id']}: {result} — {', '.join(c.label() for c in to)}")
             entry = journal.event("sent", a, to=emails, result=result, edited=edited, files=[f.name for f in files])
+            if a.get("radar"):  # v0.22.0: the validated event goes to the tenants' watches
+                print(f"{a['id']}: {radar.publish(a)}")
         except MailError as exc:
             print(f"{a['id']}: ERROR {exc}", file=sys.stderr)
             failed += 1
@@ -440,6 +499,19 @@ def cmd_check_sources(args: argparse.Namespace) -> int:
                     kind, index = csaf_index(sources, src.url)
                     entries = csaf_entries(kind, index, sources.fetch_text(index))
                     detail = f"{len(entries)} documents ({kind}), latest {entries[0][1] if entries else '-'}"
+                elif src.kind == "intel":
+                    from via.intel.remote import IntelClient
+
+                    client = IntelClient.from_settings(settings.sources)
+                    if client is None:
+                        detail = "no shared service (A2VM_INTEL_URL): not read"
+                    else:
+                        try:
+                            detail = f"{len(client.feed().get('items') or [])} items in the shared feed"
+                        finally:
+                            client.close()
+                elif src.kind == "gti":
+                    detail = "GTI search, radar only" + ("" if settings.sources.gti_enabled else " (GTI disabled)")
                 else:
                     detail = "via cvelistV5" + (f" ({', '.join(src.vendors)})" if src.vendors else "")
                 print(f"OK  {flag} {src.category:<13} {src.id:<18} {detail}")

@@ -565,6 +565,6 @@ def test_decision_d19_and_the_release_are_recorded():
 
     hld = (ROOT / "docs" / "hld" / "00-product-strategy.md").read_text()
     assert re.search(r"^\| D19 \| The client's priorities and SLA, within the levels", hld, re.M)
-    assert "| v0.21.0 (current) | D19" in hld and "`a2vm.sla`" in hld
+    assert re.search(r"^\| v0.21.0( \(current\))? \| D19", hld, re.M) and "`a2vm.sla`" in hld
     assert "## 17. Priorities and SLA" in (ROOT / "docs" / "lld" / "triage-prioritization.md").read_text()
     assert (ROOT / "docs" / "sla.md").is_file()

@@ -97,6 +97,6 @@ def test_catalogue_is_valid():
     from via.alert.feeds import load_catalogue
 
     cat = load_catalogue(ROOT / "config" / "watch-sources.yaml")
-    assert {s.category for s in cat} == {"institutional", "vendor", "research"}
+    assert {s.category for s in cat} == {"institutional", "vendor", "research", "radar"}  # radar: v0.22.0
     assert any(s.id == "supermicro" and "Supermicro" in s.vendors for s in cat)
     assert Path(ROOT / "config" / "watch-sources.yaml").read_text().count("kind: cna") >= 10

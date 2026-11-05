@@ -228,6 +228,8 @@
           ],
           "description": "urgent (default): exploited, CERT-FR alert or Internet-exposed critical; all: also CERT-FR advisories on the client's products."
         },
+        "mode": {"enum": ["client", "radar"], "description": "client (default): the news matched with this client's assets and watchlist; radar (v0.22.0): the watch team's radar, the major vulnerabilities whoever they concern, gathered into events (docs/radar.md)."},
+        "radar": {"type": "object", "additionalProperties": false, "description": "Thresholds of the radar (mode radar): the magnitude of an event to alert it as info (default 4) or urgent (default 7), the hours within which items gather into one event (72), the days an event is kept (14).", "properties": {"info": {"type": "integer", "minimum": 1}, "urgent": {"type": "integer", "minimum": 1}, "window_hours": {"type": "integer", "minimum": 1, "maximum": 720}, "keep_days": {"type": "integer", "minimum": 1, "maximum": 90}}},
         "watchlist": {
           "type": "array",
           "items": {

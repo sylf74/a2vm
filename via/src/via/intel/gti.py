@@ -17,6 +17,7 @@ Access needs a GTI Enterprise or Enterprise Plus licence. Disabled unless source
 from __future__ import annotations
 
 import datetime as dt
+import re
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
@@ -122,3 +123,31 @@ def enrich(sources: Sources, records: list[VulnRecord]) -> list[str]:
     found = sum(1 for r in records if r.gti)
     notes.append(f"GTI: {found}/{len(records)} CVE known to GTI ({sources.gti_calls} lookups, rest from cache)")
     return notes
+
+
+# -- discovery (v0.22.0): what GTI knows that no CVE id asked for ------------------------------------
+CVE_NAME = re.compile(r"CVE-\d{4}-\d{4,}", re.I)
+# The radar's search (docs/radar.md): vulnerabilities exploited, or tagged zero-day, or rated critical,
+# changed since a day; the day is added by the caller. Check it against the GTI documentation of
+# GET /collections (filters exploitation_state, vulnerability_filter, risk_rating).
+RADAR_FILTER = (
+    "collection_type:vulnerability AND (exploitation_state:confirmed OR exploitation_state:wide OR "
+    'vulnerability_filter:"zero day" OR risk_rating:critical)'
+)
+
+
+def discovered(sources: Sources, query: str, limit: int = 40) -> list[dict[str, Any]]:
+    """The facts of the vulnerabilities a GTI search finds: `parse_gti` views with `cve` (None when
+    GTI has no CVE id for it yet) and `title`. Raises SourceError."""
+    out = []
+    for obj in sources.gti_search(query, limit):
+        try:
+            view = parse_gti(obj)
+        except (AttributeError, TypeError):
+            continue
+        a = obj.get("attributes") or {}
+        found = CVE_NAME.search(view.get("name") or "") or CVE_NAME.search(view.get("id") or "")
+        view["cve"] = found.group(0).upper() if found else None
+        view["title"] = str(a.get("title") or a.get("name") or view["id"])[:300]
+        out.append(view)
+    return out

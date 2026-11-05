@@ -235,5 +235,23 @@ class Sources:
             self.gti_calls += 1
         return self._get_json(url, self.settings.gti_cache_hours, headers={"x-apikey": key}, retries_429=3)
 
+    def gti_search(self, query: str, limit: int = 40, max_age_hours: float = 1) -> list[dict[str, Any]]:
+        """GTI vulnerability objects matching a search filter (v0.22.0): GET {gti_url}/collections
+        ?filter=<query>. Only the filter leaves the network: a technology name or the radar's criteria,
+        never a client. Counts as one call."""
+        if self.fixtures:
+            name = hashlib.sha256(query.encode()).hexdigest()[:16]
+            data = self._fixture(f"gti/search/{name}.json") or {}
+            return list(data.get("data") or [])
+        key = self.settings.gti_api_key
+        if not key:
+            raise SourceAuthError(f"GTI API key missing: set the variable {self.settings.gti_api_key_env}")
+        url = f"{self.settings.gti_url.rstrip('/')}/collections"
+        params = {"filter": query, "limit": str(limit), "order": "last_modification_date-"}
+        if not self._cached(url + "?" + json.dumps(params, sort_keys=True), max_age_hours):
+            self.gti_calls += 1
+        data = self._get_json(url, max_age_hours, params=params, headers={"x-apikey": key}, retries_429=3)
+        return list((data or {}).get("data") or [])
+
     def close(self) -> None:
         self._client.close()

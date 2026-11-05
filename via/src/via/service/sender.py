@@ -121,6 +121,10 @@ def send_validated(
             if not groups:
                 events.append(journal.event("send-failed", a, error="no recipient left"))
                 failed += 1
+            if a.get("radar") and any(e["event"] == "sent" for e in events):  # v0.22.0: to the tenants
+                from via.alert.radar import publish
+
+                print(f"{tenant}: {a['id']}: {publish(a)}", flush=True)
         for e in events:
             e.pop("pipeline", None)
         # Failures last: an alert with one language failed stays `failed` until validated again.

@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-a2vm-proprietary
-"""`via collect`: fetch and normalise vulnerability records into a records file."""
+"""`via collect`: fetch and normalise vulnerability records into a records file.
+`via intel-serve`: the shared intelligence service of every tenant (D17, v0.22.0)."""
 
 from __future__ import annotations
 
@@ -8,7 +9,7 @@ import datetime as dt
 import sys
 from pathlib import Path
 
-from a2vm.config import describe_gti, load_settings
+from a2vm.config import describe_gti, describe_intel, load_settings
 from a2vm.io import detection_files, read_detection, write_records
 
 from .collect import collect, select_cve_ids
@@ -44,10 +45,22 @@ def main(argv: list[str] | None = None) -> int:
     )
     c.add_argument("--fixtures", help="read sources from a local fixtures directory (no network)")
     c.add_argument("--out", default="work/records.json")
+    s = sub.add_parser("intel-serve", help="the shared intelligence service of every tenant (D17)")
+    s.add_argument("--settings", default="config/settings.yaml")
+    s.add_argument("--digests", required=True, help="token digests: `read <sha256>` per tenant, `radar <sha256>`")
+    s.add_argument("--store", default="/data/intel", help="technologies and feed (a volume)")
+    s.add_argument("--host", default="0.0.0.0")  # noqa: S104 - in a pod
+    s.add_argument("--port", type=int, default=8080)
+    s.add_argument(
+        "--gti-every-hours", type=float, default=6, help="GTI enabled: search the technologies watched this often"
+    )
     args = parser.parse_args(argv)
+    if args.command == "intel-serve":
+        return serve(args)
 
     settings = load_settings(args.settings)
     print(describe_gti(settings))
+    print(describe_intel(settings))
     sources = Sources(settings.sources, fixtures_dir=args.fixtures)
     try:
         explicit = list(args.cve or []) + (read_cve_file(args.cve_file) if args.cve_file else [])
@@ -69,6 +82,48 @@ def main(argv: list[str] | None = None) -> int:
     print(
         f"{len(result.requested)} CVE requested, {len(result.records)} records, {len(result.errors)} errors -> {path}"
     )
+    return 0
+
+
+def serve(args: argparse.Namespace) -> int:
+    import logging
+    import threading
+
+    from a2vm.service import TokenSet
+
+    from .service import ROLES, IntelService, IntelStore
+    from .service import serve as http_serve
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    settings = load_settings(args.settings)
+    settings.sources.intel_url = ""
+    try:
+        tokens = TokenSet.load(args.digests, ROLES)
+        store = IntelStore(args.store)
+    except (ValueError, OSError) as exc:
+        print(exc, file=sys.stderr)
+        return 2
+    service = IntelService(tokens, store, settings)
+    roles = ", ".join(f"{r} {len(tokens.digests.get(r, []))}" for r in sorted(ROLES))
+    print(f"intel: tokens {roles}; {describe_gti(settings)}; {len(store.technologies())} technologies, "
+          f"{len(store.feed())} items in the feed", flush=True)  # fmt: skip
+
+    def search_loop() -> None:
+        wait, stop = 5.0, threading.Event()
+        while not stop.wait(wait):
+            for line in service.search_technologies():
+                print(f"intel: {line}", flush=True)
+            wait = args.gti_every_hours * 3600
+
+    if settings.sources.gti_enabled:
+        threading.Thread(target=search_loop, daemon=True).start()
+    httpd = http_serve(service, args.host, args.port)
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        httpd.server_close()
     return 0
 
 
