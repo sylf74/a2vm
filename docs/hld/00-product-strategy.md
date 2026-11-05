@@ -492,6 +492,13 @@ are (chapter 10, `docs/radar.md`).
 
 ![The watch: shared service, radar and the clients' watches](watch.svg)
 
+Several tenants on one cluster: each client's namespace has its own services, pages, secrets and
+database, and calls only the LLM approved for it; nothing flows between client namespaces. The shared
+intelligence service (one read token, no client identity) and the portal (row-level security and a
+Grafana organisation per tenant) are the only shared parts.
+
+![Several tenants on one cluster](tenants.svg)
+
 ## 10. Cross-cutting concerns
 
 Security and AI governance apply to every pillar; each pillar chapter and LLD details how its
