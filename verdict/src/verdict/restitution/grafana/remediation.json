@@ -574,7 +574,7 @@
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT asset_name AS \"Asset\", cve AS \"CVE\", level AS \"Level\", first_seen AS \"First seen\", day AS \"Fixed on\", days_open AS \"Days open\", within_due AS \"On time\" FROM a2vm.finding_closures WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND $__timeFilter(closed_at) AND outcome = 'fixed' ORDER BY closed_at DESC, level_rank, cve LIMIT 500"
+          "rawSql": "SELECT asset_name AS \"Asset\", cve AS \"CVE\", level AS \"Level\", first_seen AS \"First seen\", day AS \"Fixed on\", days_open AS \"Days open\", within_due AS \"On time\", priority AS \"Priority\", sla_due AS \"SLA due\", within_sla AS \"Within SLA\" FROM a2vm.finding_closures WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND $__timeFilter(closed_at) AND outcome = 'fixed' ORDER BY closed_at DESC, level_rank, cve LIMIT 500"
         }
       ],
       "options": {

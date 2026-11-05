@@ -141,6 +141,7 @@ kubectl -n $NS logs deploy/a2vm-lab-chat -c retention --tail=5
 | "Quand a-t-elle été mise à jour ?", "depuis quand au KEV ?" | `get_cve`, `get_decision`: published, updated, added to KEV, KEV due date, EPSS day, first seen |
 | "Que dois-je appliquer sur web01, dans quel ordre ?" | `get_fix_plan`: the fix that clears most ACT first |
 | "Qu'est-ce qui arrive à échéance cette semaine ?", "qu'est-ce qui est en retard ?" | `search_decisions` with `due_before`, `overdue` |
+| "Quels P1 sont en retard sur le SLA ?", "qu'est-ce qui tombe cette semaine pour le client ?" (v0.21.0) | `search_decisions` with `priority`, `sla_overdue`, `sla_due_before`, sorted by `priority` or `sla_due`; `get_run_summary` lists the priorities of the client's SLA (`docs/sla.md`) |
 | "Sommes-nous concernés par CVE-… ?" | `get_cve`: concerned assets, or the assets that have the product outside the vulnerable range, or none |
 | "Quelles alertes cette semaine ?", "celle-ci a-t-elle été envoyée ?" | `list_alerts`, `get_alert` (watch on Kubernetes, v0.16.0): alerts of the watch, their status (pending, sent, failed) and their sheet |
 

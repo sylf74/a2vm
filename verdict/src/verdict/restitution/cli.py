@@ -5,9 +5,9 @@
   verdict db init --dsn …                   create or update the schema (administrator, once per version)
   verdict db grant ROLE TENANT… --dsn …     reading role for a tool (Grafana, Qlik Sense), limited to tenants
   verdict grafana dashboard NAME            print a Grafana dashboard (JSON, to import): overview, assets, cves,
-                                            remediation, coverage;
+                                            remediation, coverage, sla;
                                             --language fr for its French version; --rssi (remediation,
-                                            coverage) for the version with the links "Remediate" (D18)
+                                            coverage, sla) for the version with the links "Remediate" (D18)
 
 The jobs read the connection from A2VM_REPORTING_DSN and the server's certificate from
 A2VM_REPORTING_CA. Exit codes: 0 done, 2 bad input, 3 database unreachable or refused (warning).
@@ -83,13 +83,13 @@ def cmd_db_grant(args: argparse.Namespace) -> int:
     return 0
 
 
-DASHBOARDS = ("overview", "assets", "cves", "remediation", "coverage")
+DASHBOARDS = ("overview", "assets", "cves", "remediation", "coverage", "sla")
 
 
 LANGUAGES = ("en", "fr")
 
 
-RSSI_DASHBOARDS = ("remediation", "coverage")
+RSSI_DASHBOARDS = ("remediation", "coverage", "sla")
 
 
 def dashboard(name: str, language: str = "en", rssi: bool = False) -> str:
@@ -139,11 +139,11 @@ def main(argv: list[str] | None = None) -> int:
     gr = sub.add_parser("grafana", help="Grafana resources")
     gr.add_argument("what", choices=["dashboard"])
     gr.add_argument("name", nargs="?", default="overview", choices=DASHBOARDS,
-                    help="overview (default), assets, cves, remediation (what was fixed)")  # fmt: skip
+                    help="overview (default), assets, cves, remediation, coverage, sla (v0.21.0)")  # fmt: skip
     gr.add_argument("--language", default="en", choices=LANGUAGES,
                     help="language of the titles, descriptions and columns (default en)")  # fmt: skip
     gr.add_argument("--rssi", action="store_true",
-                    help="remediation, coverage: the version with the links to the remediation page")  # fmt: skip
+                    help="remediation, coverage, sla: the version with the links to the remediation page")  # fmt: skip
     gr.set_defaults(func=cmd_grafana)
 
     args = parser.parse_args(argv)

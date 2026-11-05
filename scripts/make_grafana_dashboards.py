@@ -6,7 +6,9 @@
 - cves.json: "which CVEs to fix first?" - distinct CVEs of a snapshot, each decided by its most
   urgent finding;
 - remediation.json: what was fixed and how fast, and the assets whose scans are missing (v0.18.1);
-- coverage.json: the assets against the CMDB and their means of detection, the scan coverage (v0.19.0).
+- coverage.json: the assets against the CMDB and their means of detection, the scan coverage (v0.19.0);
+- sla.json: the client's priorities and SLA, the decisions past their SLA due date, the respect of the
+  SLA compared with BOD 26-04 (v0.21.0, HLD D19).
 
 Each has a French version (`<name>.fr.json`, own uid `<uid>-fr`), translated by code below (v0.17.3).
 They read the reporting database only (PostgreSQL data source, chosen at import). A snapshot is,
@@ -892,7 +894,8 @@ def remediation_dashboard() -> dict:
         table(
             "Recently fixed",
             f"SELECT asset_name AS \"Asset\", cve AS \"CVE\", level AS \"Level\", first_seen AS \"First seen\", "
-            f"day AS \"Fixed on\", days_open AS \"Days open\", within_due AS \"On time\" FROM {CLOSURES} "
+            f"day AS \"Fixed on\", days_open AS \"Days open\", within_due AS \"On time\", "
+            f"priority AS \"Priority\", sla_due AS \"SLA due\", within_sla AS \"Within SLA\" FROM {CLOSURES} "
             f"WHERE {IN_RANGE} AND outcome = 'fixed' ORDER BY closed_at DESC, level_rank, cve LIMIT 500",
             "The findings fixed in the time range, most recent first.",
             [level_text("Level")],
@@ -925,6 +928,154 @@ def remediation_dashboard() -> dict:
     board = dashboard(
         "A2VM — remediation",
         "a2vm-remediation",
+        b.panels,
+        [SNAPSHOT_VARS[0]],
+        ["stat", "table", "timeseries"],
+    )
+    board["time"] = {"from": "now-30d", "to": "now"}
+    return board
+
+
+# -- priorities and SLA of the client (v0.21.0, HLD D19) ------------------------------------------
+LATEST_FACTS = (
+    "a2vm.decision_facts f WHERE f.run_id IN (SELECT run_id FROM a2vm.latest_runs WHERE tenant = ANY (" + TENANTS + "))"
+)
+
+
+def sla_dashboard() -> dict:
+    """The client's priorities and SLA: the open decisions per priority of each client's latest run, those
+    past their SLA due date, and the findings fixed within it, the BOD 26-04 due date beside it."""
+    b = Board()
+
+    def stat(title: str, sql: str, x: int, color: str, unit: str = "none", desc: str = "") -> None:
+        b.add(
+            {
+                "type": "stat",
+                "title": title,
+                "description": desc,
+                "targets": [target(sql)],
+                "options": {
+                    "colorMode": "background",
+                    "graphMode": "none",
+                    "reduceOptions": {"calcs": ["lastNotNull"]},
+                },
+                "fieldConfig": {
+                    "defaults": {"unit": unit, "decimals": 0 if unit == "none" else 1,
+                                 "color": {"mode": "fixed", "fixedColor": color}},
+                    "overrides": [],
+                },
+            },
+            x, 0, 4, 4,
+        )  # fmt: skip
+
+    stat(
+        "Open with a priority",
+        f"SELECT count(*) AS value FROM {LATEST_FACTS} AND f.priority IS NOT NULL",
+        0, "blue",
+        desc="Decisions of the latest run in a priority of the client's SLA.",
+    )  # fmt: skip
+    stat(
+        "Past their SLA due date",
+        f"SELECT count(*) AS value FROM {LATEST_FACTS} AND f.sla_status = 'overdue'",
+        4, "red",
+        desc="Decisions of the latest run past the due date of their priority.",
+    )  # fmt: skip
+    stat(
+        "SLA due within 7 days",
+        f"SELECT count(*) AS value FROM {LATEST_FACTS} AND f.sla_due BETWEEN f.day AND f.day + 7",
+        8, "orange",
+        desc="Decisions of the latest run whose SLA due date is within the next 7 days.",
+    )  # fmt: skip
+    stat(
+        "Fixed within the SLA",
+        f"SELECT 100.0 * avg(CASE WHEN within_sla THEN 1 ELSE 0 END) AS value FROM {CLOSURES} "
+        f"WHERE {IN_RANGE} AND outcome = 'fixed' AND within_sla IS NOT NULL",
+        12, "green", unit="percent",
+        desc="Share of the findings with a priority fixed on or before their SLA due date (dashboard time range).",
+    )  # fmt: skip
+    stat(
+        "Same findings within BOD 26-04",
+        f"SELECT 100.0 * avg(CASE WHEN within_due THEN 1 ELSE 0 END) AS value FROM {CLOSURES} "
+        f"WHERE {IN_RANGE} AND outcome = 'fixed' AND within_sla IS NOT NULL AND within_due IS NOT NULL",
+        16, "purple", unit="percent",
+        desc="The same findings against their BOD 26-04 due date, for comparison.",
+    )  # fmt: skip
+    stat(
+        "ACT and ATTEND in no priority",
+        f"SELECT count(*) AS value FROM {LATEST_FACTS} AND f.priority IS NULL AND f.level IN ('ACT', 'ATTEND') "
+        "AND EXISTS (SELECT 1 FROM a2vm.runs x WHERE x.run_id = f.run_id AND x.sla_overdue IS NOT NULL)",
+        20, "dark-orange",
+        desc="Decisions to remediate that no rule of the client's SLA sorts: their BOD 26-04 due date applies.",
+    )  # fmt: skip
+    b.add(
+        table(
+            "By priority",
+            "WITH o AS (SELECT f.priority, min(f.priority_rank) AS rk, count(*) AS n, "
+            "count(*) FILTER (WHERE f.sla_status = 'overdue') AS late, "
+            "count(*) FILTER (WHERE f.sla_due BETWEEN f.day AND f.day + 7) AS soon "
+            f"FROM {LATEST_FACTS} AND f.priority IS NOT NULL GROUP BY f.priority),\n"
+            "c AS (SELECT priority, min(priority_rank) AS rk, count(*) AS n, "
+            "round(100.0 * avg(CASE WHEN within_sla THEN 1 ELSE 0 END), 1) AS pct, round(avg(days_open), 1) AS d "
+            f"FROM {CLOSURES} WHERE {IN_RANGE} AND outcome = 'fixed' AND priority IS NOT NULL GROUP BY priority)\n"
+            "SELECT priority AS \"Priority\", coalesce(o.n, 0) AS \"Open\", coalesce(o.late, 0) AS \"Overdue\", "
+            "coalesce(o.soon, 0) AS \"Due within 7 days\", coalesce(c.n, 0) AS \"Fixed\", "
+            "c.pct AS \"Fixed within the SLA (%)\", c.d AS \"Mean days\"\n"
+            "FROM o FULL JOIN c USING (priority) ORDER BY coalesce(o.rk, c.rk), priority",
+            "Per priority: open decisions of the latest run, past their SLA due date, due within 7 days; findings "
+            "fixed in the time range, the share fixed on time and the mean days from the first observation.",
+        ),
+        0, 4, 12, 8,
+    )  # fmt: skip
+    b.add(
+        {
+            "type": "timeseries",
+            "title": "Past their SLA due date per day",
+            "description": "Each day's latest run: decisions past their SLA due date and due within 7 days.",
+            "targets": [
+                target(
+                    "SELECT x.generated_at::date::timestamptz AS time, sum(x.sla_overdue) AS \"Overdue\", "
+                    "sum(x.sla_due_soon) AS \"Due within 7 days\" FROM " + day_runs() + " JOIN a2vm.runs x "
+                    "USING (run_id) WHERE x.sla_overdue IS NOT NULL GROUP BY 1 ORDER BY 1",
+                    "time_series",
+                )
+            ],
+            "fieldConfig": {
+                "defaults": {"custom": {"drawStyle": "line", "lineWidth": 2, "pointSize": 5, "showPoints": "always"}},
+                "overrides": [_color("Overdue", "red"), _color("Due within 7 days", "orange")],
+            },
+            "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+        },
+        12, 4, 12, 8,
+    )  # fmt: skip
+    b.add(
+        table(
+            "Overdue decisions",
+            "SELECT f.asset_name AS \"Asset\", f.cve AS \"CVE\", f.level AS \"Level\", f.priority AS \"Priority\", "
+            "f.sla_due AS \"SLA due\", (f.day - f.sla_due) AS \"Days late\", f.sla_since AS \"In priority since\", "
+            "f.due_date AS \"BOD 26-04 due\", f.kev_label AS \"KEV\", f.title AS \"Description\" "
+            f"FROM {LATEST_FACTS} AND f.sla_status = 'overdue' "
+            "ORDER BY f.sla_due, f.priority_rank, f.level_rank, f.cve LIMIT 1000",
+            "Decisions of the latest run past their SLA due date, the oldest due date first.",
+            [level_text("Level")],
+        ),
+        0, 12, 24, 10,
+    )  # fmt: skip
+    b.add(
+        table(
+            "Due within 7 days",
+            "SELECT f.asset_name AS \"Asset\", f.cve AS \"CVE\", f.level AS \"Level\", f.priority AS \"Priority\", "
+            "f.sla_due AS \"SLA due\", f.due_date AS \"BOD 26-04 due\", f.kev_label AS \"KEV\", "
+            "f.title AS \"Description\" "
+            f"FROM {LATEST_FACTS} AND f.sla_due BETWEEN f.day AND f.day + 7 "
+            "ORDER BY f.sla_due, f.priority_rank, f.level_rank, f.cve LIMIT 1000",
+            "Decisions of the latest run whose SLA due date is within the next 7 days.",
+            [level_text("Level")],
+        ),
+        0, 22, 24, 8,
+    )  # fmt: skip
+    board = dashboard(
+        "A2VM — priorities and SLA",
+        "a2vm-sla",
         b.panels,
         [SNAPSHOT_VARS[0]],
         ["stat", "table", "timeseries"],
@@ -1087,6 +1238,40 @@ def coverage_dashboard() -> dict:
 # values the queries compare stay as they are. A string with no translation fails the build.
 FR_TEXT = {
     "": "",
+    # priorities and SLA (v0.21.0)
+    "A2VM — priorities and SLA": "A2VM — priorités et SLA",
+    "ACT and ATTEND in no priority": "ACT et ATTEND sans priorité",
+    "By priority": "Par priorité",
+    "Decisions of the latest run in a priority of the client's SLA.": "Décisions du dernier run dans une priorité du "
+    "SLA du client.",
+    "Decisions of the latest run past the due date of their priority.": "Décisions du dernier run dont l'échéance de "
+    "leur priorité est dépassée.",
+    "Decisions of the latest run past their SLA due date, the oldest due date first.": "Décisions du dernier run dont "
+    "l'échéance SLA est dépassée, la plus ancienne échéance d'abord.",
+    "Decisions of the latest run whose SLA due date is within the next 7 days.": "Décisions du dernier run dont "
+    "l'échéance SLA tombe dans les 7 prochains jours.",
+    "Decisions to remediate that no rule of the client's SLA sorts: their BOD 26-04 "
+    "due date applies.": "Décisions à corriger qu'aucune règle du SLA du client ne classe : leur échéance BOD 26-04 "
+    "s'applique.",
+    "Each day's latest run: decisions past their SLA due date and due within 7 days.": "Dernier run de chaque jour : "
+    "décisions dont l'échéance SLA est dépassée, et échéance sous 7 jours.",
+    "Fixed within the SLA": "Corrigés dans le SLA",
+    "Open with a priority": "Ouvertes avec une priorité",
+    "Overdue decisions": "Décisions en retard",
+    "Past their SLA due date": "Échéance SLA dépassée",
+    "Past their SLA due date per day": "Échéance SLA dépassée par jour",
+    "Per priority: open decisions of the latest run, past their SLA due date, due "
+    "within 7 days; findings fixed in the time range, the share fixed on time and the"
+    " mean days from the first observation.": "Par priorité : décisions ouvertes du dernier run, échéance SLA "
+    "dépassée, échéance sous 7 jours ; constats corrigés dans la période, la part corrigée à temps et le "
+    "nombre moyen de jours depuis la première observation.",
+    "SLA due within 7 days": "Échéance SLA sous 7 jours",
+    "Same findings within BOD 26-04": "Mêmes constats dans la BOD 26-04",
+    "Share of the findings with a priority fixed on or before their SLA due date "
+    "(dashboard time range).": "Part des constats avec une priorité corrigés au plus tard à leur échéance SLA (période"
+    " du tableau de bord).",
+    "The same findings against their BOD 26-04 due date, for comparison.": "Les mêmes constats rapportés à leur "
+    "échéance BOD 26-04, pour comparaison.",
     "A2VM": "A2VM",
     "A2VM — overview of a client": "A2VM — vue d'ensemble d'un client",
     "A2VM — which CVEs to fix first": "A2VM — quelles CVE corriger d'abord",
@@ -1278,6 +1463,17 @@ FR_TEXT = {
     "States of the coverage shown in the table": "États de couverture affichés dans le tableau",
 }
 FR_COLUMN = {
+    # priorities and SLA (v0.21.0)
+    "BOD 26-04 due": "Échéance BOD 26-04",
+    "Days late": "Jours de retard",
+    "Description": "Description",
+    "Due within 7 days": "Échéance sous 7 jours",
+    "Fixed within the SLA (%)": "Corrigés dans le SLA (%)",
+    "In priority since": "Dans la priorité depuis",
+    "Open": "Ouvertes",
+    "Priority": "Priorité",
+    "SLA due": "Échéance SLA",
+    "Within SLA": "Dans le SLA",
     "ACT": "ACT",
     "ATTEND": "ATTEND",
     "TRACK": "TRACK",
@@ -1405,7 +1601,11 @@ def french(board: dict) -> dict:
 # The same dashboard with links "Remediate" to the page of the requests of pillar 4: a dashboard
 # shows, A2VM acts. The address of the page is a constant asked at import (dispatch_url). Imported in
 # a folder for the persons who may ask for remediation; the reading version stays as it is.
-RSSI = {"remediation": ("Assets by last scan",), "coverage": ("Assets and their means of detection",)}
+RSSI = {
+    "remediation": ("Assets by last scan",),
+    "coverage": ("Assets and their means of detection",),
+    "sla": ("Overdue decisions", "Due within 7 days"),
+}
 RSSI_TEXT = {
     "en": {
         "suffix": " (requests for remediation)",
@@ -1478,6 +1678,7 @@ BUILDERS = {
     "cves": cves_dashboard,
     "remediation": remediation_dashboard,
     "coverage": coverage_dashboard,
+    "sla": sla_dashboard,
 }
 
 

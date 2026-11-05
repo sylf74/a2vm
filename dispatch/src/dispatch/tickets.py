@@ -37,6 +37,11 @@ class Finding:
     title: str = ""
     state: str = "open"  # open, fixed (closed by a scan), unverified, gone (absent, not dispatched again)
     fixed_at: str | None = None
+    # The client's SLA (v0.21.0, D19): `due` is its SLA due date when the decision has a priority, else
+    # the BOD 26-04 one, which `bod_due` always keeps.
+    priority: str = ""
+    priority_rank: int | None = None
+    bod_due: str | None = None
 
     @classmethod
     def from_decision(cls, d: dict[str, Any]) -> Finding:
@@ -47,10 +52,27 @@ class Finding:
             kev=bool(d.get("kev")),
             epss=d.get("epss"),
             cvss=d.get("cvss"),
-            due=d.get("due_date"),
+            due=deadline(d),
             product=d.get("product") or "",
             title=d.get("title") or "",
+            priority=d.get("priority") or "",
+            priority_rank=d.get("priority_rank"),
+            bod_due=d.get("due_date"),
         )
+
+    def refresh(self, d: dict[str, Any]) -> None:
+        """Bring the finding up to date with a decision of a newer run."""
+        self.level, self.due, self.kev, self.epss = d["level"], deadline(d), bool(d.get("kev")), d.get("epss")
+        self.priority, self.priority_rank, self.bod_due = (
+            d.get("priority") or "",
+            d.get("priority_rank"),
+            d.get("due_date"),
+        )
+
+
+def deadline(d: dict[str, Any]) -> str | None:
+    """The due date a decision must meet: its SLA due date when it has a priority, else BOD 26-04."""
+    return d.get("sla_due") if d.get("priority") and d.get("sla_due") else d.get("due_date")
 
 
 @dataclass
@@ -89,6 +111,21 @@ class Ticket:
         return dues[0] if dues else None
 
     @property
+    def priority(self) -> str:
+        """The most urgent priority of the client's SLA among the open findings; "" without one."""
+        ranked = [f for f in self.open_findings if f.priority] or [f for f in self.findings.values() if f.priority]
+        if not ranked:
+            return ""
+        return min(
+            ranked, key=lambda f: (f.priority_rank if f.priority_rank is not None else 9999, f.priority)
+        ).priority
+
+    @property
+    def bod_due(self) -> str | None:
+        dues = sorted(f.bod_due for f in self.open_findings if f.bod_due)
+        return dues[0] if dues else None
+
+    @property
     def is_open(self) -> bool:
         return self.state in OPEN_STATES
 
@@ -102,6 +139,7 @@ class Ticket:
         out["findings"] = [asdict(f) for f in self.findings.values()]
         out["level"] = self.level
         out["due"] = self.due
+        out["priority"] = self.priority
         return out
 
     @classmethod
@@ -109,6 +147,7 @@ class Ticket:
         d = dict(data)
         d.pop("level", None)
         d.pop("due", None)
+        d.pop("priority", None)
         findings = {f["id"]: Finding(**f) for f in d.pop("findings", [])}
         return cls(**d, findings=findings)
 
@@ -178,16 +217,23 @@ def build(
 def title(t: Ticket) -> str:
     what = f"apply {t.fix}" if t.fix != NO_FIX else "mitigate, no known fix"
     cves = len(t.open_findings) or len(t.findings)
-    return f"[A2VM {t.level}] {t.asset_name}: {what} ({cves} CVE{'s' if cves > 1 else ''})"[:250]
+    tag = f"{t.level} {t.priority}" if t.priority else t.level
+    return f"[A2VM {tag}] {t.asset_name}: {what} ({cves} CVE{'s' if cves > 1 else ''})"[:250]
 
 
 def description(t: Ticket, base_url: str = "") -> str:
     """The ticket's text (HTML, which iTop and ServiceNow render)."""
     e = html.escape
     rows = sorted(t.findings.values(), key=lambda f: (LEVEL_RANK.get(f.level, 9), f.due or "9999", f.cve))
+    if t.priority:  # the client's SLA (v0.21.0)
+        due = (
+            f"<br><b>Priority</b>: {e(t.priority)}<br><b>Due date</b> (SLA): {e(t.due or 'none')}"
+            f"<br><b>Due date</b> (BOD 26-04, for comparison): {e(t.bod_due or 'none')}"
+        )
+    else:
+        due = f"<br><b>Due date</b> (BOD 26-04): {e(t.due or 'none')}"
     lines = [
-        f"<p><b>Asset</b>: {e(t.asset)}<br><b>Fix</b>: {e(t.fix)}<br><b>Level</b>: {e(t.level)}"
-        f"<br><b>Due date</b> (BOD 26-04): {e(t.due or 'none')}</p>",
+        f"<p><b>Asset</b>: {e(t.asset)}<br><b>Fix</b>: {e(t.fix)}<br><b>Level</b>: {e(t.level)}{due}</p>",
         "<p>This ticket was opened by A2VM"
         + (f" at the request of {e(t.requested_by)}" if t.origin == "request" and t.requested_by else "")
         + ". It is closed when a new scan no longer sees these vulnerabilities: closing it here does not"
@@ -196,12 +242,15 @@ def description(t: Ticket, base_url: str = "") -> str:
     if t.comment:
         lines.append(f"<p><b>Comment</b>: {e(t.comment)}</p>")
     lines.append(
-        "<table><tr><th>CVE</th><th>Level</th><th>KEV</th><th>EPSS</th><th>CVSS</th><th>Due</th>"
-        "<th>Product</th><th>State</th></tr>"
+        "<table><tr><th>CVE</th><th>Level</th>"
+        + ("<th>Priority</th>" if t.priority else "")
+        + "<th>KEV</th><th>EPSS</th><th>CVSS</th><th>Due</th><th>Product</th><th>State</th></tr>"
     )
     for f in rows:
         lines.append(
-            f"<tr><td>{e(f.cve)}</td><td>{e(f.level)}</td><td>{'yes' if f.kev else ''}</td>"
+            f"<tr><td>{e(f.cve)}</td><td>{e(f.level)}</td>"
+            + (f"<td>{e(f.priority)}</td>" if t.priority else "")
+            + f"<td>{'yes' if f.kev else ''}</td>"
             f"<td>{'' if f.epss is None else f'{f.epss:.3f}'}</td><td>{'' if f.cvss is None else f.cvss}</td>"
             f"<td>{e(f.due or '')}</td><td>{e(f.product)}</td><td>{e(f.state)}</td></tr>"
         )

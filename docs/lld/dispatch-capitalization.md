@@ -33,7 +33,7 @@ No LLM: the title and the text of a ticket come from templates, the facts from t
 | --- | --- | --- | --- | --- | --- | --- |
 | Provides | Dispatch service (`dispatch serve`, §6) | API | `dispatch.v1.yaml` | Daily run (step `dispatch`, role `run`); tools (role `read`) | Run and read tokens | The daily run warns; the next run dispatches |
 | Provides | Page of the requests for remediation (§3.2) | Web page behind oauth2-proxy | — | Persons of the groups `A2VM_OIDC_REMEDIATORS`, from the links of the RSSI dashboards (D18) | OIDC sign-in | — |
-| Consumes | Decision service | API | `verdict.v1.yaml` (`GET runs`, `decisions` with their `fixes`, `assets/{asset}`, `findings/closed`) | verdict (`verdict serve`) | Read token | Nothing dispatched, the step warns (exit 3) |
+| Consumes | Decision service | API | `verdict.v1.yaml` (`GET runs`, `decisions` with their `fixes` and, since v0.21.0, `priority`, `priority_rank`, `sla_due`, `assets/{asset}`, `findings/closed`) | verdict (`verdict serve`) | Read token | Nothing dispatched, the step warns (exit 3) |
 | Consumes | Rules of the tenant (`dispatch.yaml`, §4) | Exchange file (tenant project) | `dispatch.schema.json` | Tenant project | ConfigMap | Without the file the service is not deployed |
 
 ## 2. Ticket
@@ -51,8 +51,8 @@ name. The decisions of an asset without a known fix make one ticket `<asset> / n
 | Field | Content |
 | --- | --- |
 | `key`, `asset`, `asset_name`, `fix`, `zone` | Identity |
-| `findings` | The decisions it covers by finding id, each with its CVE, level, KEV, EPSS, CVSS, due date, product and state: `open`, `unverified` (absent from the newest run, its asset not scanned again), `fixed` (closed by a scan, with the day) |
-| `level`, `due` | Highest level and earliest due date (BOD 26-04) of its open findings |
+| `findings` | The decisions it covers by finding id, each with its CVE, level, KEV, EPSS, CVSS, due date, product and state: `open`, `unverified` (absent from the newest run, its asset not scanned again), `fixed` (closed by a scan, with the day); since v0.21.0 its priority in the client's SLA (`priority`, `priority_rank`) and `bod_due`; its `due` is its SLA due date when it has a priority, else the BOD 26-04 one |
+| `level`, `priority`, `due` | Highest level, most urgent priority of the client's SLA (v0.21.0, HLD D19; "" without one) and earliest due date of its open findings |
 | `cmdb` | Class and key of the CMDB item of the asset (v0.19.0), read from the asset's card when the ticket is created: the ticket is linked to it |
 | `origin`, `requested_by`, `requested_at`, `comment` | `rule` (§3.1) or `request` (§3.2): who asked, when, their comment |
 | `target`, `external` | The target of `dispatch.yaml`; the tool's reference, URL and status |
@@ -70,9 +70,11 @@ proposed ──► sent ──► in-progress ──► fixed (every finding clo
 A ticket `fixed` or `lost` whose key comes back with new findings is sent again as a new ticket in
 the tool, its history kept.
 
-Title: `[A2VM <level>] <asset name>: apply <fix> (<n> CVEs)`. Text (HTML): asset, fix, level, due
-date, that closing the ticket does not close the vulnerabilities, the requester and comment, and a
-table of the CVEs (level, KEV, EPSS, CVSS, due date, product, state).
+Title: `[A2VM <level>] <asset name>: apply <fix> (<n> CVEs)`, `[A2VM <level> <priority>] …` when a
+finding has a priority (v0.21.0). Text (HTML): asset, fix, level, due date (with a priority: the
+priority, the SLA due date and, for comparison, the BOD 26-04 one), that closing the ticket does not
+close the vulnerabilities, the requester and comment, and a table of the CVEs (level, priority, KEV,
+EPSS, CVSS, due date, product, state).
 
 ## 3. Flows
 
@@ -104,8 +106,9 @@ https://dispatch-<tenant>.<domain>/remediate?asset=web01.lab.example
 https://dispatch-<tenant>.<domain>/remediate?level=ACT
 ```
 
-Filters accepted: `asset`, `cve`, `level`, `zone`, `exposure`, `kev`, `product`, `q`, `overdue`
-(those of `GET decisions`); `level` is cut to the levels of `requests.levels`.
+Filters accepted: `asset`, `cve`, `level`, `zone`, `exposure`, `kev`, `product`, `q`, `overdue`,
+and since v0.21.0 `priority`, `sla_overdue` (those of `GET decisions`; the RSSI version of the
+dashboard `sla` links its overdue decisions by asset); `level` is cut to the levels of `requests.levels`.
 
 1. oauth2-proxy signs the person in and lets in the members of the remediators' groups only; the
    page checks the groups again and shows nothing before (401, 403).
@@ -130,7 +133,7 @@ For each open ticket, against the newest run and the findings closed since the t
 
 | Finding | Becomes |
 | --- | --- |
-| In the newest run | `open`, its level and due date updated |
+| In the newest run | `open`, its level, priority and due date updated |
 | Closed by a scan | `fixed`, with the day; a comment in the tool lists the CVEs fixed |
 | Absent, not closed | `unverified`: not a fix (the asset was not scanned again) |
 
@@ -156,6 +159,9 @@ targets:
     organization: Lab
     caller: A2VM           # the iTop Person the tickets come from
     team: Linux            # optional: the iTop Team they are given to
+    priorities:            # optional (v0.21.0): priority of the client's SLA -> impact, urgency
+      P0: {impact: 1, urgency: 1}
+      P1: {impact: 2, urgency: 1}
 tickets:
   target: itsm
   automatic: act           # none | act (default) | act-attend
@@ -187,7 +193,7 @@ pillar 2, allowed to create and update user requests in the tenant's organisatio
 
 | A2VM | iTop (`UserRequest`) |
 | --- | --- |
-| create | `core/create`: `org_id` (`organization`), `caller_id` (Person `caller`), `team_id` (`team`), `title`, `description` (HTML), `impact` and `urgency` from the level (ACT 2/1, ATTEND 3/2, TRACK 3/3), `functionalcis_list` (the CMDB item) |
+| create | `core/create`: `org_id` (`organization`), `caller_id` (Person `caller`), `team_id` (`team`), `title`, `description` (HTML), `impact` and `urgency` from the priority of the client's SLA when `priorities` maps it (v0.21.0), else from the level (ACT 2/1, ATTEND 3/2, TRACK 3/3); a ticket already created keeps them, `functionalcis_list` (the CMDB item) |
 | comment | `core/update`: an entry in `public_log` |
 | resolve | `core/apply_stimulus` `ev_resolve`, `solution`, `resolution_code` "software patch" |
 | reopen | `core/apply_stimulus` `ev_reopen`, then a comment |

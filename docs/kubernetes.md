@@ -156,7 +156,10 @@ except for a tenant that uses the watch (see above).
 tokens once and keeps them in the Secret `a2vm-tenant` (`verdict-publish-token`,
 `verdict-read-token`), their digests in the Secret `a2vm-verdict`; none appears in the job log. The
 `publish` step of each run pushes `triage.json`; the service keeps the last 7 runs (LLD triage
-§15). Only the daily run and pods labelled `a2vm.io/verdict-reader=true` reach it. To read it
+§15). Since v0.21.0 the `triage` step first reads from it the state of the tenant's findings
+(`verdict sla-state`, the publish token): when each decision entered its priority of the client's
+SLA (`docs/sla.md`); when the service cannot answer, a warning, and the delays of that run start at
+the first observation. Only the daily run and pods labelled `a2vm.io/verdict-reader=true` reach it. To read it
 from a workstation (the token is mounted in the pod, never in its spec or a command line):
 
 ```bash

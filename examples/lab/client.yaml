@@ -21,6 +21,21 @@ client:
 #     behind: [node08]
 #     zone: dmz
 
+# Priorities and SLA of the client (v0.21.0, docs/sla.md): BOD 26-04 is the default; the first rule
+# that matches a decision gives its priority and its delay, from the day it enters that priority. The
+# level (ACT, ATTEND, TRACK) does not change. Without this section, BOD 26-04 only.
+sla:
+  calendar: business
+  holidays: FR
+  timezone: Europe/Paris
+  rules:
+    - {priority: P0, days: 2, calendar: calendar, when: {kev: true}}
+    - {priority: P1, days: 5, when: {level: ACT, exposure: open}}
+    - {priority: P2, days: 10, when: {level: ACT, exposure: controlled}}
+    - {priority: P3, days: 15, when: {level: ACT}}
+    - {priority: P4, days: 30, when: {level: ATTEND, exposure: open}}
+    - {priority: P5, days: 90, when: {level: ATTEND}}
+
 alerts:
   recipients: [admin@lab.example]
   level: urgent

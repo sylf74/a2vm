@@ -36,7 +36,8 @@
             }
           }
         },
-        "cve_count": {"type": "integer", "minimum": 0}
+        "cve_count": {"type": "integer", "minimum": 0},
+        "sla": {"type": "object", "description": "The client's SLA in force (since v0.21.0): time zone, calendar, priorities, day of the run, history known"}
       }
     },
     "totals": {
@@ -64,7 +65,17 @@
       "properties": {
         "overdue": {"type": "integer", "minimum": 0},
         "due_soon": {"type": "integer", "minimum": 0, "description": "Due within 7 days"},
-        "by_timeline": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}}
+        "by_timeline": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
+        "sla": {
+          "type": "object",
+          "description": "The client's SLA (since v0.21.0): open decisions with a priority, past their SLA due date, due within 7 days, and those in no priority",
+          "properties": {
+            "overdue": {"type": "integer", "minimum": 0},
+            "due_soon": {"type": "integer", "minimum": 0},
+            "unclassified": {"type": "integer", "minimum": 0},
+            "by_priority": {"type": "object", "additionalProperties": {"type": "object"}}
+          }
+        }
       }
     },
     "decisions": {
@@ -98,7 +109,14 @@
           "product": {"type": "string"},
           "product_type": {"enum": ["application", "os", "hardware", "unknown"], "description": "CPE part of the vulnerable product"},
           "sources": {"type": "array", "items": {"type": "string"}, "description": "Detection sources that observed the finding"},
-          "seen_by": {"type": "object", "additionalProperties": {"type": "string"}, "description": "Last observation of the finding per source (since v0.18.1)"}
+          "seen_by": {"type": "object", "additionalProperties": {"type": "string"}, "description": "Last observation of the finding per source (since v0.18.1)"},
+          "priority": {"type": "string", "description": "Priority of the client's SLA, \"\" in none or without an SLA (since v0.21.0, HLD D19)"},
+          "priority_rank": {"type": ["integer", "null"], "description": "0 for the most urgent priority of the client"},
+          "sla_rule": {"type": ["integer", "null"], "description": "Rule of the client's SLA applied, 1 for the first"},
+          "sla_since": {"type": ["string", "null"], "description": "Day the decision entered its priority"},
+          "sla_due": {"type": ["string", "null"], "description": "Due date of the client's SLA; due_date stays the BOD 26-04 one"},
+          "sla_since_source": {"type": "string", "description": "run, history, level_since or first_seen (no history known)"},
+          "sla_status": {"enum": ["on-track", "overdue", null], "description": "Past its SLA due date or not, on the day of the run"}
         }
       }
     },

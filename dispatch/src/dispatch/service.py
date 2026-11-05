@@ -110,6 +110,7 @@ def _summary(t: Any) -> dict[str, Any]:
         "asset": t.asset,
         "fix": t.fix,
         "level": t.level,
+        "priority": t.priority,  # v0.21.0: the most urgent priority of the client's SLA, "" without
         "due": t.due,
         "state": t.state,
         "origin": t.origin,

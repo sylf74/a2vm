@@ -115,6 +115,70 @@
             "items": {
               "type": "string"
             }
+          },
+          "sla": {
+            "type": "object",
+            "description": "Priority and SLA of the client (since v0.21.0, HLD D19): absent or empty when the client has no `sla` section; priority \"\" when no rule matches (the BOD 26-04 due date stays the only one).",
+            "properties": {
+              "priority": {
+                "type": "string"
+              },
+              "rank": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "0 for the most urgent priority (the first named in the rules)"
+              },
+              "rule": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "the rule applied, 1 for the first of the profile"
+              },
+              "days": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "calendar": {
+                "enum": [
+                  "calendar",
+                  "business"
+                ]
+              },
+              "holidays": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "extra_holidays": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "since": {
+                "type": "string",
+                "format": "date",
+                "description": "the day the decision entered this priority"
+              },
+              "since_source": {
+                "enum": [
+                  "run",
+                  "history",
+                  "level_since",
+                  "first_seen"
+                ]
+              },
+              "due": {
+                "type": "string",
+                "format": "date"
+              },
+              "bod_due": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
           }
         }
       }
@@ -307,6 +371,37 @@
               }
             }
           }
+        }
+      }
+    },
+    "sla": {
+      "type": "object",
+      "description": "The client's SLA in force for this run (since v0.21.0): time zone, calendar, priorities and rules, the day of the run in that time zone, and whether the history of the tenant's database was known.",
+      "properties": {
+        "timezone": {
+          "type": "string"
+        },
+        "calendar": {
+          "enum": [
+            "calendar",
+            "business"
+          ]
+        },
+        "priorities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "rules": {
+          "type": "array"
+        },
+        "today": {
+          "type": "string",
+          "format": "date"
+        },
+        "history": {
+          "type": "boolean"
         }
       }
     }

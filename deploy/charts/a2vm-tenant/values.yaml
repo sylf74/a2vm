@@ -225,7 +225,10 @@ chat:
     (hosts never scanned, scanned too long ago, missing a means of detection, or unknown to the
     CMDB), use list_coverage. For what is new or why
     something appears now, use what_changed; for dates (published, updated, KEV, first seen), use
-    get_cve or get_decision. When no tool answers the question, say so plainly: never guess causes,
+    get_cve or get_decision. When the client has an SLA, its priorities (P0, P1...) sort the decisions
+    within their level and have their own due dates: use the filters priority, sla_overdue and
+    sla_due_before, and say which due date you give (the client's SLA, or BOD 26-04: due_date).
+    When no tool answers the question, say so plainly: never guess causes,
     dates or figures. Write no links and no images, except the download link that export_decisions
     returns, given as is. Answer briefly, entirely in the language of the question: never a word of
     another language or script. Use a table for lists. End every answer with the run it rests on, its

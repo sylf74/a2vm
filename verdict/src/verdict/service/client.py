@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-a2vm-proprietary
-"""The daily run's push of its triage to the decision service."""
+"""The daily run's calls to the decision service: the push of its triage, and the SLA state it reads
+before deciding (v0.21.0)."""
 
 from __future__ import annotations
 
@@ -53,3 +54,37 @@ def push(
     except ValueError:
         detail = r.text[:200]
     raise PushError(f"push refused ({r.status_code}): {detail}", retry=r.status_code >= 500 or r.status_code == 429)
+
+
+def sla_state(
+    base_url: str,
+    tenant: str,
+    token: str,
+    ca_file: str | None = None,
+    transport: httpx.BaseTransport | None = None,
+    timeout: float = TIMEOUT,
+) -> dict[str, Any]:
+    """The state of the tenant's findings for the client's SLA (`a2vm.sla_state/1`)."""
+    try:
+        with httpx.Client(
+            base_url=base_url.rstrip("/"),
+            headers={"Authorization": f"Bearer {token}", "User-Agent": "a2vm-verdict"},
+            verify=ca_file or True,
+            timeout=httpx.Timeout(timeout, connect=15.0),
+            transport=transport,
+        ) as c:
+            r = c.get(f"/v1/tenants/{tenant}/sla-state")
+    except httpx.HTTPError as exc:
+        raise PushError(f"decision service unreachable: {exc}", retry=True) from exc
+    if r.status_code == 200:
+        data = r.json()
+        if data.get("schema") != "a2vm.sla_state/1" or data.get("tenant") != tenant:
+            raise PushError("the decision service answered something else than the SLA state", retry=False)
+        return data
+    try:
+        detail = r.json().get("detail") or r.text[:200]
+    except ValueError:
+        detail = r.text[:200]
+    # 404: a service without the tenant's database; like a service down, the run goes on without history.
+    retry = r.status_code >= 500 or r.status_code in (404, 429)
+    raise PushError(f"SLA state refused ({r.status_code}): {detail}", retry=retry)

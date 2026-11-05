@@ -11,7 +11,7 @@ import pytest
 from verdict.restitution import db
 
 from .conftest import ROOT
-from .test_restitution import reporting_db  # noqa: F401, F811 - the fixture
+from .test_restitution import needs_db, reporting_db  # noqa: F401, F811 - the fixture
 
 CHART = ROOT / "deploy" / "charts" / "a2vm-portal"
 
@@ -76,6 +76,7 @@ def test_portal_chart_provisions_the_dashboards_of_the_version():
     json.loads((CHART / "dashboards" / "overview.json").read_text())
 
 
+@needs_db  # v0.21.0: skipped without a disposable PostgreSQL, as the other database tests
 def test_grant_sets_a_given_password(reporting_db):  # noqa: F811 - the fixture
     import psycopg
 

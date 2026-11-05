@@ -14,7 +14,7 @@ Restitution is part of pillar 3 (`verdict.restitution`): it publishes the decisi
 reads nothing but the reporting dataset, and computes no rule of its own. Design: LLD
 triage-prioritization §13.
 
-## Tables (schema `a2vm`, version 4)
+## Tables (schema `a2vm`, version 5)
 
 | Table / view | Content |
 | --- | --- |
@@ -26,6 +26,7 @@ triage-prioritization §13.
 | `snapshot_runs(tenants, day)` (function, version 2) | A snapshot: for each tenant, its latest run on or before the day |
 | `run_pairs`, `finding_closures`, `latest_asset_scans` (views, version 3) | Each run with the one before; each finding gone, fixed or unverified; the assets of the latest run with their last scan |
 | `coverage`, `coverage_facts`, `latest_coverage` (version 4) | The scan coverage of each host asset of a run against the CMDB: state, class, CMDB status, criticality, means expected and missing, scans, last scan (`docs/cmdb.md`) |
+| Priorities and SLA (version 5, v0.21.0) | `decisions`: `priority`, `priority_rank`, `sla_rule`, `sla_since`, `sla_due`, `sla_since_source` (`due_date` stays the BOD 26-04 due date); `runs`: `sla_overdue`, `sla_due_soon`, `sla_unclassified`; `decision_facts`: `priority`, `sla_due`, `sla_status` (`overdue`, `on-track`), `deadline`; `finding_closures`: `priority`, `sla_due`, `within_sla` (`docs/sla.md`) |
 | `tenant_roles` | Which tenants a reading role sees (`*` = all) |
 
 The writer role owns the tables. Reading roles get `SELECT` and see only their tenants (row-level
@@ -76,6 +77,16 @@ Run `verdict db init` once, as above, before the first daily run of v0.19.0: it 
 the configuration item of each asset, keeps every run and re-grants the reading roles. Until then
 `publish` stops with "schema version 3 … run `verdict db init`" (exit code 3, a warning). Then
 import the dashboard `coverage` (and its French version).
+
+### Upgrading to schema version 5 (v0.21.0)
+
+Run `verdict db init` once, as above, before the first daily run of v0.21.0: it adds the priority of
+the client's SLA to each decision (priority, rule, start, SLA due date), the SLA counts of each run,
+and the columns `sla_status`, `deadline` and `within_sla` of the views, keeps every run and re-grants
+the reading roles. Until then `publish` stops with "schema version 4 … run `verdict db init`" (exit
+code 3, a warning). Then import the dashboard `sla` (and its French and RSSI versions). The runs
+published before, and the clients without an SLA, have no priority: the dashboard shows them in no
+priority (`docs/sla.md`).
 
 ## Client projects
 
@@ -154,7 +165,7 @@ helm upgrade --install portal deploy/charts/a2vm-portal -n a2vm-portal --create-
    choose the data source of step 1. Importing again replaces the dashboard of the same uid.
    For French readers: `verdict grafana dashboard NAME --language fr` (or `NAME.fr.json`), a
    dashboard of its own (uid `<uid>-fr`) with the same queries and French titles and columns.
-3. RSSI versions (v0.20.0, D18): `verdict grafana dashboard remediation --rssi` and `coverage --rssi`
+3. RSSI versions (v0.20.0, D18): `verdict grafana dashboard remediation --rssi`, `coverage --rssi` and `sla --rssi` (v0.21.0)
    (with `--language fr` too; files `*.rssi.json`, `*.rssi.fr.json`, uid `<uid>-rssi`): the same
    dashboards with a link "Remediate" on each asset and in their header, to the page of the requests
    for remediation of pillar 4. Grafana asks the page's address at import (`https://<A2VM_DISPATCH_HOST>`).
@@ -166,7 +177,8 @@ helm upgrade --install portal deploy/charts/a2vm-portal -n a2vm-portal --create-
 | `assets` | A2VM — which assets to fix first | Exposures: one CVE on one asset | Counters: exposures, assets concerned, KEV exposures, ACT exposures, assets with ACT, overdue, share with a fix, EPSS ≥ 10 %; decision × severity matrix and its KEV part; assets ranked (ACT, KEV, overdue, critical) with the change of ACT; trend per day; exposures per zone and exposure |
 | `cves` | A2VM — which CVEs to fix first | Distinct CVEs; a CVE takes the most urgent decision among its findings | Counters: distinct CVEs, KEV CVEs, KEV exposures, CVEs decided ACT, share with a fix, EPSS ≥ 10 %; decision × severity matrix and its KEV part; CVEs ranked (decision, KEV, EPSS, CVSS) with "new" or the earlier decision; trend per day; products with the most CVEs |
 | `coverage` | A2VM — assets and scan coverage (v0.19.0) | Host of the latest run, against the CMDB and the means of detection its class expects | Covered share, in production, never scanned, stale, partial, not in the CMDB, retired but alive, not scannable; one row per host with its class, CMDB status, criticality, coverage, means missing and the last date each means (OpenVAS, Trivy, dnf, external scan, other) saw it; coverage per class; covered share run after run |
-| `remediation` | A2VM — remediation (v0.18.1) | Findings fixed: gone from a run while their asset was scanned again by the source that had seen them | Fixed findings, mean days to fix an ACT, share of ACT and ATTEND fixed on time (BOD 26-04), gone without a new scan, assets not scanned for 7 days, reopened; fixed per day; time to fix per level; recently fixed; assets by last scan |
+| `remediation` | A2VM — remediation (v0.18.1) | Findings fixed: gone from a run while their asset was scanned again by the source that had seen them | Fixed findings, mean days to fix an ACT, share of ACT and ATTEND fixed on time (BOD 26-04), gone without a new scan, assets not scanned for 7 days, reopened; fixed per day; time to fix per level; recently fixed (with the priority, its SLA due date and whether it was met, v0.21.0); assets by last scan |
+| `sla` | A2VM — priorities and SLA (v0.21.0) | Decisions of the latest run of each client with a priority of its SLA; findings fixed in the time range | Open with a priority, past their SLA due date, SLA due within 7 days, share fixed within the SLA and the same findings within BOD 26-04, ACT and ATTEND in no priority; per priority (open, overdue, due soon, fixed, fixed within the SLA, mean days); overdue per day; overdue decisions and those due within 7 days, with the BOD 26-04 due date (`docs/sla.md`) |
 | `overview` | A2VM — overview of a client | Findings of the latest run | One client: totals per level, overdue, due within 7 days, to review, exposure gaps, trend run after run, decisions to act on, assets, detection sources |
 
 The `assets` and `cves` dashboards share their variables, kept when moving from one to the other

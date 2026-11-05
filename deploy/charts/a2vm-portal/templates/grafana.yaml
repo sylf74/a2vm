@@ -12,7 +12,7 @@ password are made once and kept (Secret <release>-portal-grafana).
 {{- $ing := $g.ingress }}
 {{- $tls := $ing.tlsSecret | default (ternary (printf "%s-tls" $name) "" (ne $ing.clusterIssuer "")) }}
 {{- $secret := printf "%s-grafana" $name }}
-{{- $boards := list "overview" "assets" "cves" "remediation" "coverage" }}
+{{- $boards := list "overview" "assets" "cves" "remediation" "coverage" "sla" }}
 apiVersion: v1
 kind: Secret
 metadata:
@@ -97,7 +97,7 @@ metadata:
 data:
   {{- range $lang := .Values.dashboards.languages }}
   {{- $suffix := ternary ".rssi" (printf ".rssi.%s" $lang) (eq $lang "en") }}
-  {{- range $board := list "remediation" "coverage" }}
+  {{- range $board := list "remediation" "coverage" "sla" }}
   {{ printf "%s%s.json" $board $suffix }}: {{ $.Files.Get (printf "dashboards/%s%s.json" $board $suffix) | replace "${DS_A2VM}" "a2vm-reporting" | replace "${VAR_DISPATCH_URL}" ($.Values.dashboards.dispatchUrl | trimSuffix "/") | quote }}
   {{- end }}
   {{- end }}

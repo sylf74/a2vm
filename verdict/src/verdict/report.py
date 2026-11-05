@@ -16,6 +16,7 @@ from a2vm.ssvc import BOD_EN
 from . import reporting
 from .dashboard import render_dashboard
 from .i18n import has, lang_of, t
+from .priority import counts
 
 CSV_FIELDS = [
     "decision",
@@ -36,6 +37,9 @@ CSV_FIELDS = [
     "affected_versions",
     "needs_review",
     "rationale",
+    "priority",  # v0.21.0: the client's SLA (empty without one)
+    "sla_due",
+    "bod_due",
 ]
 
 
@@ -77,6 +81,8 @@ def write_json(run: TriageRun, path: Path) -> None:
         "assets": run.assets,
         "coverage": run.coverage,
     }
+    if run.sla:
+        data["sla"] = run.sla
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
@@ -105,6 +111,9 @@ def write_csv(run: TriageRun, path: Path) -> None:
                     "affected_versions": ",".join(r.affected_versions),
                     "needs_review": "yes" if r.needs_review else "no",
                     "rationale": r.rationale,
+                    "priority": (r.sla or {}).get("priority", ""),
+                    "sla_due": (r.sla or {}).get("due", "") if (r.sla or {}).get("priority") else "",
+                    "bod_due": reporting.due_date(r) or "",
                 }
             )
 
@@ -143,6 +152,47 @@ def _worst_bod(rows: list[TriageRow], lang: str = "en") -> str:
 
 def _exploitation_cell(r: TriageRow, lang: str = "en") -> str:
     return t(lang, f"expl.{r.exploitation.value}") + (" (KEV)" if r.in_kev else "")
+
+
+def _priority_cell(rows: list[TriageRow], lang: str = "en") -> str:
+    """The most urgent priority of a CVE's findings and their earliest SLA due date; — without."""
+    ranked = [r.sla for r in rows if (r.sla or {}).get("priority")]
+    if not ranked:
+        return "—"
+    top = min(ranked, key=lambda s: (s.get("rank", 0), s["due"]))
+    due = min(s["due"] for s in ranked)
+    return t(lang, "report.priority.cell", priority=top["priority"], due=due)
+
+
+def _sla_section(run: TriageRun, lang: str = "en") -> list[str]:
+    """Open decisions per priority of the client's SLA, the overdue and those due within 7 days."""
+    s = run.sla
+    if s.get("calendar") == "business" and s.get("holidays"):
+        calendar = t(lang, "report.sla.holidays", codes=", ".join(s["holidays"]))
+    else:
+        calendar = t(lang, f"report.sla.{s.get('calendar', 'calendar')}")
+    lines = ["## " + t(lang, "report.sla"), "", t(lang, "report.sla.text", calendar=calendar,
+             tz=s.get("timezone", "UTC"), today=s.get("today", "")), ""]  # fmt: skip
+    by = counts(run.rows, s["today"])
+    days: dict[str, list[int]] = {}
+    for rule in s.get("rules") or []:
+        days.setdefault(rule["priority"], [])
+        if rule["days"] not in days[rule["priority"]]:
+            days[rule["priority"]].append(rule["days"])
+    if by:
+        lines += [t(lang, "report.sla.head"), "|---|---|---|---|---|"]
+        for p, c in by.items():
+            delay = " / ".join(t(lang, "report.sla.days", n=n) for n in days.get(p, []))
+            lines.append(f"| {_md_escape(p)} | {delay} | {c['open']} | {c['overdue']} | {c['due_soon']} |")
+    else:
+        lines.append(t(lang, "report.sla.none"))
+    lines.append("")
+    unclassified = sum(1 for r in run.rows if not (r.sla or {}).get("priority"))
+    if unclassified:
+        lines += [t(lang, "report.sla.unclassified", n=unclassified), ""]
+    if not s.get("history"):
+        lines += [t(lang, "report.sla.no_history"), ""]
+    return lines
 
 
 def _details(groups: list[tuple[str, list[TriageRow]]], lang: str = "en") -> list[str]:
@@ -187,6 +237,9 @@ def render_markdown(run: TriageRun, language: str | None = None) -> str:
         t(lang, "report.finding"),
         "",
     ]
+    sla = bool(run.sla)
+    if sla:
+        lines += _sla_section(run, lang)
     if run.exposure_gaps:
         lines += [
             "## " + t(lang, "report.gaps"),
@@ -221,12 +274,13 @@ def render_markdown(run: TriageRun, language: str | None = None) -> str:
     if not cves_by["ACT"]:
         lines += [t(lang, "report.none"), ""]
     else:
-        lines += [t(lang, "report.act.head"), "|---|---|---|---|---|"]
+        head = "report.act.head.sla" if sla else "report.act.head"
+        lines += [t(lang, head), "|---|---|---|---|---|" + ("---|" if sla else "")]
         for cve, rs in cves_by["ACT"]:
             epss = "—" if rs[0].epss is None else f"{rs[0].epss:.3f}"
             lines.append(
                 f"| {cve} | {_assets_cell(rs, lang)} | {_exploitation_cell(rs[0], lang)} | {epss} "
-                f"| {_worst_bod(rs, lang)} |"
+                f"| {_worst_bod(rs, lang)} |" + (f" {_priority_cell(rs, lang)} |" if sla else "")
             )
         lines.append("")
         lines += _details(cves_by["ACT"], lang)
@@ -237,13 +291,14 @@ def render_markdown(run: TriageRun, language: str | None = None) -> str:
         lines += [t(lang, "report.none"), ""]
     else:
         shown = cves_by["ATTEND"][:ATTEND_TABLE_LIMIT]
-        lines += [t(lang, "report.attend.head"), "|---|---|---|---|---|---|"]
+        head = "report.attend.head.sla" if sla else "report.attend.head"
+        lines += [t(lang, head), "|---|---|---|---|---|---|" + ("---|" if sla else "")]
         for cve, rs in shown:
             epss = "—" if rs[0].epss is None else f"{rs[0].epss:.3f}"
             fix = t(lang, "yes") if any(r.fixes for r in rs) else t(lang, "no")
             lines.append(
                 f"| {cve} | {_assets_cell(rs, lang)} | {_exploitation_cell(rs[0], lang)} | {epss} "
-                f"| {_worst_bod(rs, lang)} | {fix} |"
+                f"| {_worst_bod(rs, lang)} | {fix} |" + (f" {_priority_cell(rs, lang)} |" if sla else "")
             )
         lines.append("")
         rest = len(cves_by["ATTEND"]) - len(shown)

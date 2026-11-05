@@ -78,7 +78,20 @@ rm -rf /data/work/assets && mv /data/work/assets.new /data/work/assets
 {{- define "a2vm-tenant.step.triage" -}}
 {{ include "a2vm-tenant.settings" . }}
 rm -rf /data/output
+{{- if .Values.verdict.enabled }}
+# The client's SLA (v0.21.0): when each decision entered its priority, from the tenant's database.
+rm -f /data/work/sla-state.json
+if [ -s /secrets/verdict-publish-token ]; then
+  src=0
+  verdict sla-state --url {{ include "a2vm-tenant.verdictUrl" . | quote }} --tenant {{ .Values.tenant | quote }} \
+    --token-file /secrets/verdict-publish-token --out /data/work/sla-state.json || src=$?
+  if [ "$src" -ne 0 ]; then echo "WARN no SLA state (exit $src): the SLA delays of this run start at the first observation"; fi
+fi
+verdict run /config/client.yaml --settings "$SETTINGS" --records /data/work/records.json --assets /data/work/assets --out /data/output \
+  --sla-state /data/work/sla-state.json
+{{- else }}
 verdict run /config/client.yaml --settings "$SETTINGS" --records /data/work/records.json --assets /data/work/assets --out /data/output
+{{- end }}
 {{- end -}}
 
 {{- define "a2vm-tenant.release" -}}

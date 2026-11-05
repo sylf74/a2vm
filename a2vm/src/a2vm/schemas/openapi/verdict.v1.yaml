@@ -66,11 +66,47 @@ paths:
                 properties:
                   items: {type: array, items: {$ref: "#/components/schemas/RunReceipt"}}
         "401": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/sla-state:
+    get:
+      tags: [publish]
+      operationId: getSlaState
+      summary: >-
+        The state the daily run carries for the client's SLA (since v0.21.0, HLD D19): every finding not
+        closed, its level, the day it got it and its priority as stored (null: never computed); with the
+        tenant's database only (404 without it)
+      security:
+        - publishToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+      responses:
+        "200":
+          description: The state (a2vm.sla_state/1)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [schema, tenant, generated_at, findings]
+                properties:
+                  schema: {const: a2vm.sla_state/1}
+                  tenant: {type: string}
+                  generated_at: {type: string}
+                  findings:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, level]
+                      properties:
+                        id: {type: string}
+                        level: {enum: [ACT, ATTEND, TRACK]}
+                        level_since: {type: [string, "null"]}
+                        sla: {type: [object, "null"], additionalProperties: true}
+        "401": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
   /v1/tenants/{tenant}/summary:
     get:
       tags: [read]
       operationId: summary
-      summary: Counts of a run per level, exposure and KEV; assets and CVEs with most ACT
+      summary: Counts of a run per level, exposure and KEV; assets and CVEs with most ACT; per priority of the client's SLA (since v0.21.0)
       security:
         - readToken: []
       parameters:
@@ -104,7 +140,10 @@ paths:
         - {name: q, in: query, schema: {type: string}, description: Part of the CVE id, asset or description}
         - {name: due_before, in: query, schema: {type: string, format: date}, description: Due on or before this day (since v0.15.2)}
         - {name: overdue, in: query, schema: {type: boolean}, description: Past their due date (since v0.15.2)}
-        - {name: sort, in: query, schema: {type: string, enum: [level, epss, cvss, due_date, cve, asset]}}
+        - {name: priority, in: query, schema: {type: string}, description: "Priorities of the client's SLA, comma-separated (since v0.21.0)"}
+        - {name: sla_overdue, in: query, schema: {type: boolean}, description: "Past their SLA due date, on the day in the client's time zone (since v0.21.0)"}
+        - {name: sla_due_before, in: query, schema: {type: string, format: date}, description: "SLA due on or before this day (since v0.21.0)"}
+        - {name: sort, in: query, schema: {type: string, enum: [level, epss, cvss, due_date, cve, asset, priority, sla_due]}, description: "priority and sla_due since v0.21.0"}
         - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 2000, default: 25}, description: "Up to 2000 here (since v0.20.2: the services that read every decision), 200 elsewhere"}
         - $ref: "#/components/parameters/offset"
       responses:
@@ -428,6 +467,9 @@ components:
               first_seen: {type: [string, "null"]}
               cve_updated: {type: [string, "null"]}
               fixes: {type: array, items: {type: string}, description: "the fixes the scanners reported, `<package> <fixed version>` (since v0.20.0)"}
+              priority: {type: string, description: "priority of the client's SLA, \"\" in none (since v0.21.0)"}
+              priority_rank: {type: [integer, "null"], description: "0 for the most urgent priority (since v0.21.0)"}
+              sla_due: {type: [string, "null"], description: "due date of the client's SLA; due_date stays the BOD 26-04 one (since v0.21.0)"}
     Decision:
       type: object
       description: A row of the triage (a2vm.triage/1) with its run, id and due date; its other fields as in the triage.
@@ -465,6 +507,17 @@ components:
             properties:
               at: {type: string}
               level: {type: string}
+              run: {type: string}
+        sla: {type: object, description: "the priority of the client's SLA as stored after the last run (since v0.21.0; absent when never computed)", additionalProperties: true}
+        priorities:
+          type: array
+          description: "changes of the priority (since v0.21.0)"
+          items:
+            type: object
+            properties:
+              at: {type: string}
+              priority: {type: string}
+              due: {type: [string, "null"]}
               run: {type: string}
     RunRef:
       type: object

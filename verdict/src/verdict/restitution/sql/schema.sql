@@ -1,5 +1,5 @@
 -- SPDX-License-Identifier: LicenseRef-a2vm-proprietary
--- Reporting database of A2VM (schema a2vm, version 4): the reporting datasets of every run and
+-- Reporting database of A2VM (schema a2vm, version 5): the reporting datasets of every run and
 -- tenant, read by dashboarding and reporting tools. Idempotent: run again on every init; an
 -- upgrade only adds (columns, views, functions), so a database of an earlier version is kept.
 -- Objects are owned by the writer role (the A2VM jobs); readers get SELECT, limited to their
@@ -8,7 +8,7 @@
 CREATE SCHEMA IF NOT EXISTS a2vm;
 
 CREATE TABLE IF NOT EXISTS a2vm.schema_version (version integer PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now());
-INSERT INTO a2vm.schema_version (version) VALUES (1), (2), (3), (4) ON CONFLICT DO NOTHING;
+INSERT INTO a2vm.schema_version (version) VALUES (1), (2), (3), (4), (5) ON CONFLICT DO NOTHING;
 
 -- Which tenants a reading role may see; tenant '*' = all of them (the Grafana of the MSSP).
 CREATE TABLE IF NOT EXISTS a2vm.tenant_roles (
@@ -140,6 +140,20 @@ CREATE TABLE IF NOT EXISTS a2vm.coverage (
     last_scan   timestamptz
 );
 CREATE INDEX IF NOT EXISTS coverage_run ON a2vm.coverage (run_id);
+-- Version 5 (v0.21.0, HLD D19): the priority of each decision in the client's SLA, the rule applied,
+-- the day it entered that priority and its SLA due date (due_date stays the BOD 26-04 one, for
+-- comparison); the SLA counts of each run. NULL for runs published before and clients without an SLA.
+ALTER TABLE a2vm.decisions
+    ADD COLUMN IF NOT EXISTS priority         text,
+    ADD COLUMN IF NOT EXISTS priority_rank    integer,
+    ADD COLUMN IF NOT EXISTS sla_rule         integer,
+    ADD COLUMN IF NOT EXISTS sla_since        date,
+    ADD COLUMN IF NOT EXISTS sla_due          date,
+    ADD COLUMN IF NOT EXISTS sla_since_source text;
+ALTER TABLE a2vm.runs
+    ADD COLUMN IF NOT EXISTS sla_overdue      integer,
+    ADD COLUMN IF NOT EXISTS sla_due_soon     integer,
+    ADD COLUMN IF NOT EXISTS sla_unclassified integer;
 CREATE TABLE IF NOT EXISTS a2vm.sources (
     run_id           bigint NOT NULL REFERENCES a2vm.runs ON DELETE CASCADE,
     tenant           text NOT NULL,
@@ -185,7 +199,13 @@ CREATE OR REPLACE VIEW a2vm.decision_facts AS
                 WHEN d.epss < 0.5 THEN 'EPSS 10-50%' ELSE 'EPSS >= 50%' END AS epss_band,
            coalesce(d.fix_available, false) AS fix_available,
            d.vendor, d.product, coalesce(nullif(d.product_type, ''), 'unknown') AS product_type,
-           coalesce(nullif(d.sources, '{}'), ARRAY['unknown']) AS sources
+           coalesce(nullif(d.sources, '{}'), ARRAY['unknown']) AS sources,
+           -- Version 5: the client's SLA. sla_status on the day of the run; deadline: the SLA due
+           -- date when the decision has a priority, else the BOD 26-04 one.
+           nullif(d.priority, '') AS priority, d.priority_rank, d.sla_rule, d.sla_since, d.sla_due,
+           CASE WHEN d.sla_due IS NULL THEN NULL WHEN r.generated_at::date > d.sla_due THEN 'overdue'
+                ELSE 'on-track' END AS sla_status,
+           coalesce(d.sla_due, d.due_date) AS deadline
     FROM a2vm.decisions d JOIN a2vm.runs r USING (run_id);
 ALTER VIEW a2vm.decision_facts SET (security_invoker = true);
 
@@ -222,7 +242,10 @@ CREATE OR REPLACE VIEW a2vm.finding_closures AS
                CROSS JOIN LATERAL jsonb_each_text(coalesce(d.seen_by, '{}'::jsonb)) s (source, seen)
                WHERE a.run_id = p.run_id AND a.asset = d.asset AND a.scans ? s.source
                  AND (a.scans ->> s.source)::timestamptz > s.seen::timestamptz
-           ) THEN 'fixed' ELSE 'unverified' END AS outcome
+           ) THEN 'fixed' ELSE 'unverified' END AS outcome,
+           -- Version 5: the client's SLA, met when fixed on or before its SLA due date.
+           nullif(d.priority, '') AS priority, d.priority_rank, d.sla_due,
+           CASE WHEN d.sla_due IS NULL THEN NULL ELSE p.generated_at::date <= d.sla_due END AS within_sla
     FROM a2vm.run_pairs p
     JOIN a2vm.decisions d ON d.run_id = p.previous_run_id
     WHERE NOT EXISTS (SELECT 1 FROM a2vm.decisions c WHERE c.run_id = p.run_id AND c.finding_id = d.finding_id);

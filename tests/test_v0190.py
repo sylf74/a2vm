@@ -457,7 +457,7 @@ def test_coverage_is_published_and_the_dashboard_counts_it(settings, sources, pr
     data = {"schema": "a2vm.reporting/1", **build(run, settings.policy)}
     assert data["coverage"]["cmdb"] is True and any(a.get("coverage") for a in data["assets"])
     rdb = reporting_db
-    assert db.init(ADMIN, rdb["writer"]).startswith("schema a2vm version 4")
+    assert db.init(ADMIN, rdb["writer"]).startswith(f"schema a2vm version {db.SCHEMA_VERSION}")
     path = tmp_path / "r.json"
     path.write_text(json.dumps(data))
     assert main(["publish", str(path), "--dsn", rdb["as_writer"]]) == 0

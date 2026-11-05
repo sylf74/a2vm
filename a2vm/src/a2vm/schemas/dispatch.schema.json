@@ -49,7 +49,17 @@
         "caller": {"type": "string", "minLength": 1, "description": "name of the iTop Person the tickets come from"},
         "class": {"enum": ["UserRequest"]},
         "team": {"type": "string", "description": "optional: name of the iTop Team the tickets are assigned to"},
-        "timeout_seconds": {"type": "number", "minimum": 1, "maximum": 600}
+        "timeout_seconds": {"type": "number", "minimum": 1, "maximum": 600},
+        "priorities": {
+          "type": "object",
+          "description": "optional (v0.21.0): priority of the client's SLA -> impact and urgency of iTop (impact 1 a department, 2 a service, 3 a person; urgency 1 critical .. 4 low); a priority not listed, or a decision without one, takes those of its level",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["impact", "urgency"],
+            "properties": {"impact": {"enum": [1, 2, 3, "1", "2", "3"]}, "urgency": {"enum": [1, 2, 3, 4, "1", "2", "3", "4"]}}
+          }
+        }
       }
     }
   }

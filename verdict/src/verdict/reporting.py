@@ -14,11 +14,11 @@ import datetime as dt
 import hashlib
 import json
 import os
-import re
 from collections import Counter
 from typing import Any
 
 import a2vm
+from a2vm import sla
 from a2vm.models import TriageRow, TriageRun
 
 LEVELS = ("ACT", "ATTEND", "TRACK")
@@ -35,11 +35,29 @@ def policy_hash(policy: dict[str, Any]) -> str:
 
 def due_date(row: TriageRow) -> str | None:
     """First observation + the BOD 26-04 delay ('3 days', '14 days & …'); none for 'fix on system upgrade'."""
-    m = re.match(r"(\d+) days", row.bod_timeline or "")
-    if not m or not row.first_seen:
-        return None
-    start = dt.date.fromisoformat(row.first_seen[:10])
-    return (start + dt.timedelta(days=int(m.group(1)))).isoformat()
+    return sla.bod_due(row.bod_timeline, row.first_seen)
+
+
+def _sla(row: TriageRow, today: dt.date) -> dict[str, Any]:
+    """The priority of the decision in the client's SLA (v0.21.0); empty values without one."""
+    s = row.sla or {}
+    if not s.get("priority"):
+        return {"priority": "", "priority_rank": None, "sla_rule": None, "sla_since": None, "sla_due": None,
+                "sla_since_source": "", "sla_status": None}  # fmt: skip
+    return {
+        "priority": s["priority"],
+        "priority_rank": s.get("rank", 0),
+        "sla_rule": s.get("rule"),
+        "sla_since": s.get("since"),
+        "sla_due": s["due"],
+        "sla_since_source": s.get("since_source", ""),
+        "sla_status": sla.status(s["due"], today),
+    }
+
+
+def _sla_summary(policy: dict[str, Any]) -> dict[str, Any]:
+    keys = ("timezone", "calendar", "holidays", "priorities", "today", "history")
+    return {k: policy[k] for k in keys if k in policy}
 
 
 SEVERITIES = ("Critical", "High", "Medium", "Low", "Unknown")
@@ -113,6 +131,7 @@ def build(run: TriageRun, policy: dict[str, Any] | None = None, today: dt.date |
                 "product_type": r.product_type or "unknown",
                 "sources": _sources(r),
                 "seen_by": dict(r.seen_by),
+                **_sla(r, today),
             }
         )
 
@@ -126,6 +145,22 @@ def build(run: TriageRun, policy: dict[str, Any] | None = None, today: dt.date |
             deadlines["overdue"] += left < 0
             deadlines["due_soon"] += 0 <= left <= SOON_DAYS
     deadlines["by_timeline"] = dict(sorted(deadlines["by_timeline"].items()))
+    if run.sla:  # the client's SLA (v0.21.0): open decisions per priority, overdue, due within 7 days
+        by: dict[str, dict[str, int]] = {}
+        for d in decisions:
+            if not d["priority"]:
+                continue
+            c = by.setdefault(d["priority"], {"rank": d["priority_rank"], "open": 0, "overdue": 0, "due_soon": 0})
+            left = (dt.date.fromisoformat(d["sla_due"]) - today).days
+            c["open"] += 1
+            c["overdue"] += left < 0
+            c["due_soon"] += 0 <= left <= SOON_DAYS
+        deadlines["sla"] = {
+            "overdue": sum(c["overdue"] for c in by.values()),
+            "due_soon": sum(c["due_soon"] for c in by.values()),
+            "unclassified": sum(1 for d in decisions if not d["priority"]),
+            "by_priority": dict(sorted(by.items(), key=lambda kv: (kv[1]["rank"], kv[0]))),
+        }
 
     by_asset: dict[str, list[TriageRow]] = {}
     for r in rows:
@@ -178,6 +213,7 @@ def build(run: TriageRun, policy: dict[str, Any] | None = None, today: dt.date |
             },
             "sources": sorted(sources.values(), key=lambda s: s["name"]),
             "cve_count": run.cve_count,
+            **({"sla": _sla_summary(run.sla)} if run.sla else {}),
         },
         "totals": {
             "findings": _counts(rows),

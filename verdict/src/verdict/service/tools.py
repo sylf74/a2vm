@@ -97,13 +97,16 @@ _SEARCH: list[dict[str, Any]] = [
     _q("q", "string", "Free text found in the CVE id, the asset or the description"),
     _q("min_epss", "number", "Lowest EPSS probability, 0 to 1"),
     _q("min_cvss", "number", "Lowest CVSS base score, 0 to 10"),
-    _q("due_before", "string", "Only decisions due on or before this day, YYYY-MM-DD (e.g. the end of this week)"),
-    _q("overdue", "boolean", "true: only decisions past their due date"),
+    _q("due_before", "string", "Only decisions due (BOD 26-04) on or before this day, YYYY-MM-DD (e.g. this week)"),
+    _q("overdue", "boolean", "true: only decisions past their BOD 26-04 due date"),
+    _q("priority", "string", "Priorities of the client's SLA, comma-separated (e.g. P0,P1); see get_run_summary"),
+    _q("sla_overdue", "boolean", "true: only decisions past the due date of the client's SLA"),
+    _q("sla_due_before", "string", "Only decisions whose SLA due date is on or before this day, YYYY-MM-DD"),
     _q(
         "sort",
         "string",
-        "Order: level (default), epss, cvss, due_date, cve, asset",
-        enum=["level", "epss", "cvss", "due_date", "cve", "asset"],
+        "Order: level (default), epss, cvss, due_date (BOD 26-04), cve, asset, priority, sla_due",
+        enum=["level", "epss", "cvss", "due_date", "cve", "asset", "priority", "sla_due"],
     ),
     *_PAGE,
 ]
@@ -114,7 +117,8 @@ OPERATIONS: list[tuple[str, str, str, list[dict[str, Any]], str]] = [
         "/summary",
         "get_run_summary",
         "Overview of the tenant's latest run: counts of decisions per level (ACT, ATTEND, TRACK), per "
-        "exposure, KEV, the assets and CVEs with most ACT, exposure gaps. Start here for a general question.",
+        "exposure, KEV, the assets and CVEs with most ACT, exposure gaps, and when the client has an SLA its "
+        "priorities with the open, overdue and due-soon decisions. Start here for a general question.",
         [_RUN],
         "summary",
     ),
@@ -133,7 +137,8 @@ OPERATIONS: list[tuple[str, str, str, list[dict[str, Any]], str]] = [
         "/decisions/{id}",
         "get_decision",
         "One decision in full: why this level (rationale, reasons), the SSVC inputs with their sources, "
-        "the fixes and the due date. The id comes from search_decisions.",
+        "the fixes, the due date (BOD 26-04) and, when the client has an SLA, its priority, the rule applied, "
+        "the day it entered that priority and its SLA due date. The id comes from search_decisions.",
         [_p("id", "Decision id from search_decisions"), _RUN],
         "decisions/{id}",
     ),

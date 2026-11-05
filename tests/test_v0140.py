@@ -44,7 +44,8 @@ def test_every_tenant_call_carries_the_tenant_and_its_role():
         for method, op in item.items():
             if path.startswith("/v1/tenants/{tenant}"):
                 assert {"$ref": "#/components/parameters/tenant"} in op["parameters"], (path, method)
-                want = [{"publishToken": []}] if method == "post" else [{"readToken": []}]
+                publish = method == "post" or "publish" in op.get("tags", [])  # GET sla-state (v0.21.0)
+                want = [{"publishToken": []}] if publish else [{"readToken": []}]
                 assert op["security"] == want, (path, method)
 
 
@@ -63,6 +64,7 @@ def test_contract_names_the_routes_the_service_answers():
         "/v1/tenants/{tenant}/findings/closed",  # v0.18.0
         "/v1/tenants/{tenant}/findings/unverified",  # v0.18.1
         "/v1/tenants/{tenant}/coverage",  # v0.19.0
+        "/v1/tenants/{tenant}/sla-state",  # v0.21.0
         "/healthz",
         "/readyz",
     }

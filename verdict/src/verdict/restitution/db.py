@@ -21,7 +21,7 @@ from typing import Any
 
 from a2vm.config import env
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 PEM = "-----BEGIN CERTIFICATE-----"
 
 
@@ -184,7 +184,7 @@ RUN_COLUMNS = (
     "tenant", "tenant_name", "generated_at", "a2vm_version", "policy_hash", "pipeline_id", "pipeline_url",
     "cve_count", "act", "attend", "track", "assets_act", "assets_attend", "assets_track", "needs_review",
     "assumed_inputs", "not_affected", "errors", "overdue", "due_soon", "exposure_gaps",
-    "cmdb", "expected_assets", "covered_assets", "coverage_gaps",
+    "cmdb", "expected_assets", "covered_assets", "coverage_gaps", "sla_overdue", "sla_due_soon", "sla_unclassified",
 )  # fmt: skip
 COVERAGE_COLUMNS = (
     "asset", "name", "state", "cmdb_class", "cmdb_key", "cmdb_status", "criticality", "cmdb_type", "owner",
@@ -194,7 +194,7 @@ DECISION_COLUMNS = (
     "finding_id", "asset", "asset_name", "zone", "exposure", "exposure_source", "cve", "title", "level", "ssvc",
     "bod_timeline", "first_seen", "due_date", "kev", "epss", "needs_review", "rationale",
     "cvss_score", "cvss_version", "severity", "fix_available", "vendor", "product", "product_type", "sources",
-    "seen_by",
+    "seen_by", "priority", "priority_rank", "sla_rule", "sla_since", "sla_due", "sla_since_source",
 )  # fmt: skip
 JSON_COLUMNS = {"seen_by"}
 
@@ -224,7 +224,15 @@ def run_row(data: dict[str, Any]) -> dict[str, Any]:
         "due_soon": data["deadlines"]["due_soon"],
         "exposure_gaps": len(data.get("exposure_gaps", [])),
         **_coverage_totals(data.get("coverage") or {}),
+        **_sla_totals(data["deadlines"].get("sla")),
     }
+
+
+def _sla_totals(sla: dict[str, Any] | None) -> dict[str, Any]:
+    """The SLA counts on the run's row (v0.21.0); NULL for a client without an SLA."""
+    if not sla:
+        return dict.fromkeys(("sla_overdue", "sla_due_soon", "sla_unclassified"))
+    return {k: sla.get(k.removeprefix("sla_"), 0) for k in ("sla_overdue", "sla_due_soon", "sla_unclassified")}
 
 
 def _coverage_totals(coverage: dict[str, Any]) -> dict[str, Any]:
