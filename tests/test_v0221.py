@@ -86,3 +86,12 @@ def test_architecture_diagrams_are_generated() -> None:
     assert done.returncode == 0, done.stderr
     hld = (root / "docs" / "hld" / "00-product-strategy.md").read_text(encoding="utf-8")
     assert "](architecture.svg)" in hld and "](watch.svg)" in hld and "](tenants.svg)" in hld
+
+
+def test_d20_planned() -> None:
+    root = CHART.parents[3]
+    hld = (root / "docs" / "hld" / "00-product-strategy.md").read_text(encoding="utf-8")
+    assert re.search(r"^\| D20 \| \*\*Planned \(v0\.23\.0, to confirm\)\.\*\* Exposure from an inventory", hld, re.M)
+    assert re.search(r"^\| v0\.23\.0 \(to confirm\) \| D20", hld, re.M)
+    for chapter in ("20-vulnerability-detection.md", "30-triage-prioritization.md"):
+        assert "D20" in (root / "docs" / "hld" / chapter).read_text(encoding="utf-8"), chapter
