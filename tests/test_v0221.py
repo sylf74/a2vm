@@ -85,4 +85,4 @@ def test_architecture_diagrams_are_generated() -> None:
     done = subprocess.run([sys.executable, str(script), "--check"], capture_output=True, text=True)
     assert done.returncode == 0, done.stderr
     hld = (root / "docs" / "hld" / "00-product-strategy.md").read_text(encoding="utf-8")
-    assert "](architecture.svg)" in hld and "](watch.svg)" in hld
+    assert "](architecture.svg)" in hld and "](watch.svg)" in hld and "](tenants.svg)" in hld

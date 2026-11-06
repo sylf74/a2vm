@@ -1,0 +1,177 @@
+<svg viewBox="0 0 1500 800" role="img" aria-label="Several tenants on one cluster: a namespace per client with its own services, secrets and database; the watch team&#x27;s shared service and the portal are the only shared parts." xmlns="http://www.w3.org/2000/svg">
+<style>svg{--bg:#f5f6f4;--fg:#1d2329;--muted:#5d6771;--edge:#56606b;--k8s:#eaeef3;--k8s-line:#9fb0c4;--ns-line:#b7c3d0;--client:#f0ece4;--client-line:#c8bca6;--ext:#ffffff;--ext-line:#b9c0c7;--p1:#0f7f74;--p1-bg:#e1f2ef;--p2:#a96a12;--p2-bg:#f8ecd9;--p3:#2c58a8;--p3-bg:#e3eaf7;--p4:#a83b65;--p4-bg:#f6e3ea;--db-bg:#e9e6f3;--db:#6a5aa6;--label-bg:#f5f6f4}@media (prefers-color-scheme: dark){svg{--bg:#14181c;--fg:#e4e8ec;--muted:#9aa5b0;--edge:#a3adb8;--k8s:#1b2229;--k8s-line:#3d4c5c;--ns-line:#364350;--client:#221f1a;--client-line:#4f4636;--ext:#1f252b;--ext-line:#45505b;--p1:#4cc2b4;--p1-bg:#12302c;--p2:#e0a650;--p2-bg:#33260f;--p3:#7fa4ea;--p3-bg:#172640;--p4:#e588ab;--p4-bg:#3a1a27;--db-bg:#252038;--db:#a597de;--label-bg:#1b2229}}svg>rect.page{fill:var(--bg)}svg { font-family: 'IBM Plex Sans Condensed', 'Arial Narrow', 'Roboto Condensed', 'Helvetica Neue', Arial, sans-serif; color: var(--edge); }
+.r-k8s { fill: var(--k8s); stroke: var(--k8s-line); stroke-width: 1.5; }
+.r-ns { fill: none; stroke: var(--ns-line); stroke-width: 1.2; stroke-dasharray: 6 4; }
+.r-ext { fill: none; stroke: var(--ext-line); stroke-width: 1.2; }
+.r-client { fill: var(--client); stroke: var(--client-line); stroke-width: 1.2; }
+.box { stroke-width: 1.5; }
+.b-ext { fill: var(--ext); stroke: var(--ext-line); }
+.b-p1 { fill: var(--p1-bg); stroke: var(--p1); }
+.b-p2 { fill: var(--p2-bg); stroke: var(--p2); }
+.b-p3 { fill: var(--p3-bg); stroke: var(--p3); }
+.b-p4 { fill: var(--p4-bg); stroke: var(--p4); }
+.b-db { fill: var(--db-bg); stroke: var(--db); }
+.t-region { fill: var(--fg); font-size: 13px; font-weight: 600; }
+.t-region-sub { fill: var(--muted); font-size: 12px; font-weight: 400; }
+.t-title { fill: var(--fg); font-size: 13px; font-weight: 600; }
+.t-line { fill: var(--fg); font-size: 12px; }
+.t-mono { fill: var(--muted); font-family: 'IBM Plex Mono', ui-monospace, Menlo, Consolas, monospace; font-size: 10.5px; }
+.t-chip { fill: var(--fg); font-family: 'IBM Plex Mono', ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+.t-strip { fill: var(--muted); font-size: 12px; }
+.t-edge { fill: var(--fg); font-size: 11px; }
+.t-note { fill: var(--muted); font-size: 12.5px; }
+.lbl-bg { fill: var(--label-bg); opacity: .92; }
+.edge { fill: none; stroke: var(--edge); stroke-width: 1.4; }
+.edge.thin { stroke-width: 1.1; }
+.edge.dashed { stroke-dasharray: 5 4; }
+.halo { fill: none; stroke: var(--k8s); stroke-width: 6; }
+.arrowhead { fill: var(--edge); }
+</style>
+<defs><marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="arrowhead"/></marker></defs>
+<rect class="page" x="0" y="0" width="1500" height="800"/>
+<rect x="20" y="14" width="1210" height="96" rx="10" class="r-ext"/>
+<text x="34" y="34" class="t-region">GitLab group vulnops/clients<tspan dx="10" class="t-region-sub">group variables: shared service, mail, LLM</tspan></text>
+<rect x="20" y="130" width="1210" height="486" rx="10" class="r-k8s"/>
+<text x="34" y="150" class="t-region">Kubernetes cluster<tspan dx="10" class="t-region-sub">deploy-k8s, one namespace per project</tspan></text>
+<rect x="36" y="180" width="310" height="386" rx="10" class="r-ns"/>
+<text x="50" y="200" class="t-region">namespace a2vm-via</text>
+<rect x="360" y="180" width="260" height="386" rx="10" class="r-ns"/>
+<text x="374" y="200" class="t-region">namespace a2vm-client-a</text>
+<rect x="650" y="180" width="260" height="386" rx="10" class="r-ns"/>
+<text x="664" y="200" class="t-region">namespace a2vm-client-b</text>
+<rect x="940" y="180" width="260" height="386" rx="10" class="r-ns"/>
+<text x="954" y="200" class="t-region">namespace a2vm-client-n</text>
+<rect x="350" y="636" width="880" height="104" rx="10" class="r-client"/>
+<text x="364" y="730" class="t-region">Per client, outside the cluster</text>
+<polyline points="191,215 191,168 1170,168" class="edge"/>
+<polyline points="590,168 590,215" class="edge" marker-end="url(#a3)"/>
+<polyline points="880,168 880,215" class="edge" marker-end="url(#a3)"/>
+<polyline points="1170,168 1170,215" class="edge" marker-end="url(#a3)"/>
+<line x1="605" y1="566" x2="605" y2="590" class="edge"/>
+<line x1="895" y1="566" x2="895" y2="590" class="edge"/>
+<line x1="1185" y1="566" x2="1185" y2="590" class="edge"/>
+<polyline points="605,590 1245,590 1245,300 1262,300" class="edge" marker-end="url(#a3)"/>
+<polyline points="401,650 401,566" class="edge" marker-end="url(#a3)"/>
+<polyline points="490,566 490,650" class="edge" marker-end="url(#a3)"/>
+<polyline points="579,566 579,650" class="edge" marker-end="url(#a3)"/>
+<polyline points="691,650 691,566" class="edge" marker-end="url(#a3)"/>
+<polyline points="780,566 780,650" class="edge" marker-end="url(#a3)"/>
+<polyline points="869,566 869,650" class="edge" marker-end="url(#a3)"/>
+<polyline points="981,650 981,566" class="edge" marker-end="url(#a3)"/>
+<polyline points="1070,566 1070,650" class="edge" marker-end="url(#a3)"/>
+<polyline points="1159,566 1159,650" class="edge" marker-end="url(#a3)"/>
+<polyline points="191,650 191,566" class="edge" marker-end="url(#a3)"/>
+<rect x="40" y="40" width="290" height="56" rx="6" class="box b-ext"/>
+<text x="50" y="59" class="t-title">via</text>
+<text x="50" y="74" class="t-line">the watch team&#x27;s project</text>
+<rect x="360" y="40" width="260" height="56" rx="6" class="box b-ext"/>
+<text x="370" y="59" class="t-title">client-a</text>
+<text x="370" y="74" class="t-line">profile, contacts, secrets</text>
+<rect x="650" y="40" width="260" height="56" rx="6" class="box b-ext"/>
+<text x="660" y="59" class="t-title">client-b</text>
+<text x="660" y="74" class="t-line">profile, contacts, secrets</text>
+<rect x="940" y="40" width="260" height="56" rx="6" class="box b-ext"/>
+<text x="950" y="59" class="t-title">client-n</text>
+<text x="950" y="74" class="t-line">profile, contacts, secrets</text>
+<rect x="52" y="215" width="278" height="120" rx="6" class="box b-p1"/>
+<text x="62" y="234" class="t-title">Shared intelligence service</text>
+<text x="62" y="249" class="t-mono">one read token for every tenant</text>
+<text x="62" y="264" class="t-line">records collected once</text>
+<text x="62" y="279" class="t-line">feed of the radar&#x27;s events</text>
+<text x="62" y="294" class="t-line">technologies, without who sent them</text>
+<rect x="52" y="349" width="278" height="84" rx="6" class="box b-p1"/>
+<text x="62" y="368" class="t-title">Radar</text>
+<text x="62" y="383" class="t-line">events, magnitude</text>
+<text x="62" y="398" class="t-line">validated by the watch team</text>
+<rect x="52" y="447" width="278" height="48" rx="6" class="box b-p1"/>
+<text x="62" y="466" class="t-title">Review page, sender</text>
+<text x="62" y="481" class="t-line">the watch team</text>
+<rect x="376" y="215" width="228" height="48" rx="6" class="box b-ext"/>
+<text x="386" y="234" class="t-title">Daily run, watch</text>
+<text x="386" y="249" class="t-line">CronJobs of this client</text>
+<rect x="376" y="273" width="228" height="48" rx="6" class="box b-ext"/>
+<text x="386" y="292" class="t-title">Services</text>
+<text x="386" y="307" class="t-line">detect · verdict · via · dispatch</text>
+<rect x="376" y="331" width="228" height="48" rx="6" class="box b-ext"/>
+<text x="386" y="350" class="t-title">Pages, signed in</text>
+<text x="386" y="365" class="t-line">the client&#x27;s OIDC groups</text>
+<rect x="376" y="389" width="228" height="48" rx="6" class="box b-ext"/>
+<text x="386" y="408" class="t-title">Secret a2vm-tenant</text>
+<text x="386" y="423" class="t-line">its tokens, passwords, keys</text>
+<rect x="376" y="447" width="228" height="48" rx="6" class="box b-db"/>
+<text x="386" y="466" class="t-title">PostgreSQL</text>
+<text x="386" y="481" class="t-line">a2vm-client-a-db, own roles</text>
+<rect x="666" y="215" width="228" height="48" rx="6" class="box b-ext"/>
+<text x="676" y="234" class="t-title">Daily run, watch</text>
+<text x="676" y="249" class="t-line">CronJobs of this client</text>
+<rect x="666" y="273" width="228" height="48" rx="6" class="box b-ext"/>
+<text x="676" y="292" class="t-title">Services</text>
+<text x="676" y="307" class="t-line">detect · verdict · via · dispatch</text>
+<rect x="666" y="331" width="228" height="48" rx="6" class="box b-ext"/>
+<text x="676" y="350" class="t-title">Pages, signed in</text>
+<text x="676" y="365" class="t-line">the client&#x27;s OIDC groups</text>
+<rect x="666" y="389" width="228" height="48" rx="6" class="box b-ext"/>
+<text x="676" y="408" class="t-title">Secret a2vm-tenant</text>
+<text x="676" y="423" class="t-line">its tokens, passwords, keys</text>
+<rect x="666" y="447" width="228" height="48" rx="6" class="box b-db"/>
+<text x="676" y="466" class="t-title">PostgreSQL</text>
+<text x="676" y="481" class="t-line">a2vm-client-b-db, own roles</text>
+<rect x="956" y="215" width="228" height="48" rx="6" class="box b-ext"/>
+<text x="966" y="234" class="t-title">Daily run, watch</text>
+<text x="966" y="249" class="t-line">CronJobs of this client</text>
+<rect x="956" y="273" width="228" height="48" rx="6" class="box b-ext"/>
+<text x="966" y="292" class="t-title">Services</text>
+<text x="966" y="307" class="t-line">detect · verdict · via · dispatch</text>
+<rect x="956" y="331" width="228" height="48" rx="6" class="box b-ext"/>
+<text x="966" y="350" class="t-title">Pages, signed in</text>
+<text x="966" y="365" class="t-line">the client&#x27;s OIDC groups</text>
+<rect x="956" y="389" width="228" height="48" rx="6" class="box b-ext"/>
+<text x="966" y="408" class="t-title">Secret a2vm-tenant</text>
+<text x="966" y="423" class="t-line">its tokens, passwords, keys</text>
+<rect x="956" y="447" width="228" height="48" rx="6" class="box b-db"/>
+<text x="966" y="466" class="t-title">PostgreSQL</text>
+<text x="966" y="481" class="t-line">a2vm-client-n-db, own roles</text>
+<rect x="538" y="154" width="444" height="15" rx="3" class="lbl-bg"/>
+<text x="760" y="165" text-anchor="middle" class="t-edge">records and the radar&#x27;s feed down; technologies back, without the tenant&#x27;s name</text>
+<rect x="788" y="593" width="224" height="15" rx="3" class="lbl-bg"/>
+<text x="900" y="604" text-anchor="middle" class="t-edge">runs published, the tenant on every row</text>
+<rect x="1262" y="215" width="220" height="150" rx="6" class="box b-ext"/>
+<text x="1272" y="234" class="t-title">Portal</text>
+<text x="1272" y="249" class="t-mono">chart a2vm-portal</text>
+<text x="1272" y="264" class="t-line">reporting PostgreSQL</text>
+<text x="1272" y="279" class="t-line">row-level security per tenant</text>
+<text x="1272" y="294" class="t-line">Grafana: an organisation</text>
+<text x="1272" y="309" class="t-line">per tenant</text>
+<rect x="360" y="650" width="82" height="58" rx="6" class="box b-p2"/>
+<text x="370" y="669" class="t-title">Collectors</text>
+<text x="370" y="684" class="t-line">push</text>
+<rect x="449" y="650" width="82" height="58" rx="6" class="box b-ext"/>
+<text x="459" y="669" class="t-title">iTop ITSM</text>
+<text x="459" y="684" class="t-line">tickets</text>
+<rect x="538" y="650" width="82" height="58" rx="6" class="box b-ext"/>
+<text x="548" y="669" class="t-title">LLM</text>
+<text x="548" y="684" class="t-line">per client</text>
+<rect x="650" y="650" width="82" height="58" rx="6" class="box b-p2"/>
+<text x="660" y="669" class="t-title">Collectors</text>
+<text x="660" y="684" class="t-line">push</text>
+<rect x="739" y="650" width="82" height="58" rx="6" class="box b-ext"/>
+<text x="749" y="669" class="t-title">iTop ITSM</text>
+<text x="749" y="684" class="t-line">tickets</text>
+<rect x="828" y="650" width="82" height="58" rx="6" class="box b-ext"/>
+<text x="838" y="669" class="t-title">LLM</text>
+<text x="838" y="684" class="t-line">per client</text>
+<rect x="940" y="650" width="82" height="58" rx="6" class="box b-p2"/>
+<text x="950" y="669" class="t-title">Collectors</text>
+<text x="950" y="684" class="t-line">push</text>
+<rect x="1029" y="650" width="82" height="58" rx="6" class="box b-ext"/>
+<text x="1039" y="669" class="t-title">iTop ITSM</text>
+<text x="1039" y="684" class="t-line">tickets</text>
+<rect x="1118" y="650" width="82" height="58" rx="6" class="box b-ext"/>
+<text x="1128" y="669" class="t-title">LLM</text>
+<text x="1128" y="684" class="t-line">per client</text>
+<rect x="36" y="650" width="310" height="58" rx="6" class="box b-ext"/>
+<text x="46" y="669" class="t-title">Public sources</text>
+<text x="46" y="684" class="t-line">read once, for every tenant</text>
+<text x="36" y="768" text-anchor="start" class="t-note">Client namespaces never exchange anything: each has its own secrets, database, pages and NetworkPolicies, and calls only the LLM approved for it.</text>
+<text x="36" y="788" text-anchor="start" class="t-note">Shared: the intelligence service (one read token, no client identity) and the portal (row-level security and a Grafana organisation per tenant).</text>
+</svg>

@@ -125,6 +125,14 @@ class Svg:
             self.front.append(f'<rect x="{rx:.0f}" y="{ly - 11}" width="{tw:.0f}" height="15" rx="3" class="lbl-bg"/>')
             self.front.append(f'<text x="{lx}" y="{ly}" text-anchor="{anchor}" class="t-edge">{escape(label)}</text>')
 
+    def caption(self, s, at):
+        lx, ly = at
+        tw = len(s) * CW_SMALL + 10
+        self.front.append(
+            f'<rect x="{lx - tw / 2:.0f}" y="{ly - 11}" width="{tw:.0f}" height="15" rx="3" class="lbl-bg"/>'
+        )
+        self.front.append(f'<text x="{lx}" y="{ly}" text-anchor="middle" class="t-edge">{escape(s)}</text>')
+
     def note(self, x, y, s, cls="t-note", anchor="start"):
         self.front.append(f'<text x="{x}" y="{y}" text-anchor="{anchor}" class="{cls}">{escape(s)}</text>')
 
@@ -483,7 +491,100 @@ f2.note(1176, 264, "with its own assets, urgent when the radar", "t-note", "end"
 f2.note(1176, 282, "said so.", "t-note", "end")
 
 
-FILES = {OUT / "architecture.svg": f1, OUT / "watch.svg": f2}
+# ---------------------------------------------------------------- figure 3: the tenants
+f3 = Svg(
+    1500,
+    800,
+    "Several tenants on one cluster: a namespace per client with its own services, secrets and database; "
+    "the watch team's shared service and the portal are the only shared parts.",
+)
+f3.render("a3")
+COLS = {"client-a": 360, "client-b": 650, "client-n": 940}
+f3.region(20, 14, 1210, 96, "r-ext", "GitLab group vulnops/clients", "group variables: shared service, mail, LLM")
+f3.box(40, 40, 290, 56, "b-ext", "via", ["the watch team's project"])
+for name, x in COLS.items():
+    f3.box(x, 40, 260, 56, "b-ext", name, ["profile, contacts, secrets"])
+f3.region(20, 130, 1210, 486, "r-k8s", "Kubernetes cluster", "deploy-k8s, one namespace per project")
+f3.region(36, 180, 310, 386, "r-ns", "namespace a2vm-via")
+f3.box(
+    52,
+    215,
+    278,
+    120,
+    "b-p1",
+    "Shared intelligence service",
+    [
+        "records collected once",
+        "feed of the radar's events",
+        "technologies, without who sent them",
+    ],
+    sub="one read token for every tenant",
+)
+f3.box(52, 349, 278, 84, "b-p1", "Radar", ["events, magnitude", "validated by the watch team"])
+f3.box(52, 447, 278, 48, "b-p1", "Review page, sender", ["the watch team"])
+for name, x in COLS.items():
+    f3.region(x, 180, 260, 386, "r-ns", f"namespace a2vm-{name}")
+    f3.box(x + 16, 215, 228, 48, "b-ext", "Daily run, watch", ["CronJobs of this client"])
+    f3.box(x + 16, 273, 228, 48, "b-ext", "Services", ["detect · verdict · via · dispatch"])
+    f3.box(x + 16, 331, 228, 48, "b-ext", "Pages, signed in", ["the client's OIDC groups"])
+    f3.box(x + 16, 389, 228, 48, "b-ext", "Secret a2vm-tenant", ["its tokens, passwords, keys"])
+    f3.box(x + 16, 447, 228, 48, "b-db", "PostgreSQL", [f"a2vm-{name}-db, own roles"])
+# shared service -> every tenant
+f3.mid.append('<polyline points="191,215 191,168 1170,168" class="edge"/>')
+for x in COLS.values():
+    f3.edge([(x + 230, 168), (x + 230, 215)], halo=False)
+f3.caption("records and the radar's feed down; technologies back, without the tenant's name", (760, 165))
+# every tenant -> portal
+xs = [x + 245 for x in COLS.values()]
+for x in xs:
+    f3.mid.append(f'<line x1="{x}" y1="566" x2="{x}" y2="590" class="edge"/>')
+f3.edge(
+    [(xs[0], 590), (1245, 590), (1245, 300), (1262, 300)],
+    "runs published, the tenant on every row",
+    (900, 604),
+    halo=False,
+)
+f3.box(
+    1262,
+    215,
+    220,
+    150,
+    "b-ext",
+    "Portal",
+    [
+        "reporting PostgreSQL",
+        "row-level security per tenant",
+        "Grafana: an organisation",
+        "per tenant",
+    ],
+    sub="chart a2vm-portal",
+)
+# each client's own systems
+f3.region(350, 636, 880, 104, "r-client", "Per client, outside the cluster", bottom=True)
+for x in COLS.values():
+    f3.box(x, 650, 82, 58, "b-p2", "Collectors", ["push"])
+    f3.box(x + 89, 650, 82, 58, "b-ext", "iTop ITSM", ["tickets"])
+    f3.box(x + 178, 650, 82, 58, "b-ext", "LLM", ["per client"])
+    f3.edge([(x + 41, 650), (x + 41, 566)], halo=False)
+    f3.edge([(x + 130, 566), (x + 130, 650)], halo=False)
+    f3.edge([(x + 219, 566), (x + 219, 650)], halo=False)
+f3.box(36, 650, 310, 58, "b-ext", "Public sources", ["read once, for every tenant"])
+f3.edge([(191, 650), (191, 566)], halo=False)
+f3.note(
+    36,
+    768,
+    "Client namespaces never exchange anything: each has its own secrets, database, pages and "
+    "NetworkPolicies, and calls only the LLM approved for it.",
+)
+f3.note(
+    36,
+    788,
+    "Shared: the intelligence service (one read token, no client identity) and the portal "
+    "(row-level security and a Grafana organisation per tenant).",
+)
+
+
+FILES = {OUT / "architecture.svg": f1, OUT / "watch.svg": f2, OUT / "tenants.svg": f3}
 
 
 def main(argv: list[str]) -> int:
