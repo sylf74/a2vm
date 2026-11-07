@@ -989,6 +989,7 @@ server: an OpenAPI server whose operations a model calls. Code:
 | `what_changed` | `changes` | "What is new since yesterday", "why do I see this only today" (v0.15.2) |
 | `get_fix_plan` | `assets/{asset}/fixes` | "What do I apply on web01, in which order" (v0.15.2) |
 | `list_coverage` | `coverage` | "Which servers were never scanned", "what is not in the CMDB", "how well are we covered" (v0.19.0) |
+| `find_component` | `components` | "Which servers have openssl", "where is php 7 still installed": the assets that carry a package, vulnerable or not, from the packages listed on each host, with the counts computed by the service (assets with it, assets listed, hosts not listed, each version) (v0.22.2) |
 | `list_alerts`, `get_alert` | the watch service `via serve`: `alerts`, `alerts/{id}` | The watch's alerts and whether they were sent (v0.16.0, watch on Kubernetes; otherwise 503) |
 | `export_decisions` | `decisions` (pages), `decisions/{id}` | A Word, PowerPoint or CSV document of the decisions chosen by the filters of `search_decisions` (16.6) |
 

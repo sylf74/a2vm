@@ -260,6 +260,38 @@
                 "type": "string"
               }
             }
+          },
+          "components": {
+            "type": "array",
+            "description": "Every package installed on the asset (since v0.22.2)",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "version"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "version": {
+                  "type": "string"
+                },
+                "arch": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string"
+                },
+                "purl": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "components_seen": {
+            "type": "string",
+            "description": "When the components were observed (since v0.22.2)"
           }
         }
       }

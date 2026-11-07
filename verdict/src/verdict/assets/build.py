@@ -344,6 +344,10 @@ def build_inventory(profile: ClientProfile, detections: list[Detection]) -> Inve
                 for src in {o.source for o in group} - NOT_SCANS
             },
         )
+        listed = [o for o in group if o.components]
+        if listed:  # every package installed, from the newest observation that listed them (v0.22.2)
+            newest = max(listed, key=lambda o: o.observed_at)
+            asset.components, asset.components_seen = list(newest.components), newest.observed_at
         before = asset.attributes.pop("_before", None)
         gap = exposure_gap(asset, before, internal, external, profile)
         if gap:

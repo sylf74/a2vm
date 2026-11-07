@@ -8,7 +8,7 @@ from a2vm.config import Settings
 from a2vm.io import Detection, now
 from a2vm.models import AssetObservation
 from a2vm.profile import load_profile, validate_profile_data
-from detect.collect import DNF, TRIVY_HOST, collect, load_targets, plan, ssh_command
+from detect.collect import DNF, PACKAGES, TRIVY_HOST, collect, load_targets, plan, ssh_command
 from detect.scanners import Target, load_dnf_file, load_trivy_file, parse_trivy
 from verdict.assets.build import WORST_CASE, build_inventory
 from verdict.triage import Triage
@@ -122,6 +122,9 @@ def test_collect_with_fake_ssh(tmp_path):
 
     def fake_run(cmd, **kwargs):
         host = cmd[-2]
+        if cmd[-1] == PACKAGES:  # every package installed (v0.22.2); edge01 cannot list them
+            listed = "openssl\t1:3.0.7-27.el9\tx86_64\trpm\nbash\t0:5.1.8-9.el9\tx86_64\trpm\n"
+            return subprocess.CompletedProcess(cmd, 0, listed if host == "node00.lab.example" else "", "")
         code, out = outputs[host]
         assert cmd[-1] in (TRIVY_HOST, DNF)
         return subprocess.CompletedProcess(cmd, code, out, "ssh: connect to host down: refused" if code else "")
@@ -132,10 +135,13 @@ def test_collect_with_fake_ssh(tmp_path):
         load_targets(targets), tmp_path / "raw", runner=fake_run, log=lines.append, clock=lambda: next(ticks)
     )
     assert {d.source for d in detections} == {"trivy", "dnf-updateinfo"}
-    assert len(lines) == 3  # one line per target, as it ends
+    assert len(lines) == 4  # one line per target, as it ends, and the host whose packages are not listed
     assert lines[0].startswith("ok   node00.lab.example [trivy]: ") and lines[0].endswith(" findings (2 s)")
-    assert lines[1].startswith("ok   edge01.lab.example [dnf-updateinfo]: ")
-    assert lines[2].startswith("FAIL down.lab.example [trivy]: exit 255: ssh: connect to host down: refused")
+    assert lines[1].startswith("WARN edge01.lab.example [packages]: none listed")
+    assert lines[2].startswith("ok   edge01.lab.example [dnf-updateinfo]: ")
+    assert lines[3].startswith("FAIL down.lab.example [trivy]: exit 255: ssh: connect to host down: refused")
+    trivy = next(d for d in detections if d.source == "trivy")
+    assert [c["name"] for c in trivy.observations[0].components] == ["bash", "openssl"]
     assert len(errors) == 1 and "down.lab.example" in errors[0] and "255" in errors[0]
     dnf = next(d for d in detections if d.source == "dnf-updateinfo")
     assert dnf.observations[0].identifiers["ips"] == ["198.51.100.4"]

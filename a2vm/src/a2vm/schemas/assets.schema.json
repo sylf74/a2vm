@@ -373,6 +373,39 @@
             "type": "string"
           },
           "description": "When each source last observed the asset, a scan with no finding included (v0.18.1)."
+        },
+        "components": {
+          "type": "array",
+          "description": "Every package installed, from the newest observation that listed them (since v0.22.2)",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "version"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              },
+              "arch": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "purl": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "components_seen": {
+          "type": "string",
+          "description": "When the components were observed (since v0.22.2)"
         }
       }
     }

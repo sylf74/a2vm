@@ -65,6 +65,7 @@ def test_contract_names_the_routes_the_service_answers():
         "/v1/tenants/{tenant}/findings/unverified",  # v0.18.1
         "/v1/tenants/{tenant}/coverage",  # v0.19.0
         "/v1/tenants/{tenant}/sla-state",  # v0.21.0
+        "/v1/tenants/{tenant}/components",  # v0.22.2
         "/healthz",
         "/readyz",
     }

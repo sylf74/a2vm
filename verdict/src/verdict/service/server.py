@@ -197,6 +197,8 @@ class Service:
                 return idx.decisions(query)
             if rest == "assets":
                 return idx.assets(query)
+            if rest == "components":
+                return idx.components(query)
             if rest == "coverage":
                 try:
                     return idx.coverage(query)

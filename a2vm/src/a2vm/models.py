@@ -238,6 +238,8 @@ class AssetObservation:
     identifiers: dict[str, Any] = field(default_factory=dict)  # fqdn, hostname, ips[], image
     attributes: dict[str, str] = field(default_factory=dict)  # attributes seen by this source
     os: str | None = None
+    # Every package installed on the host (v0.22.2), vulnerable or not: {name, version, arch, type, purl}.
+    components: list[dict[str, str]] = field(default_factory=list)
 
 
 @dataclass
@@ -269,6 +271,9 @@ class Asset:
     # When each source last observed the asset (v0.18.1): a scan that found nothing still says the
     # asset was looked at, so a finding gone from it was fixed rather than left unchecked.
     scans: dict[str, str] = field(default_factory=dict)
+    # Every package installed (v0.22.2): from the newest observation that listed them, and when.
+    components: list[dict[str, str]] = field(default_factory=list)
+    components_seen: str = ""
 
     def attr(self, name: str) -> Attribute:
         return self.attributes[name]

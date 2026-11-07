@@ -254,6 +254,23 @@ OPERATIONS: list[tuple[str, str, str, list[dict[str, Any]], str]] = [
         "findings/unverified",
     ),
     (
+        "/components",
+        "find_component",
+        "The assets that carry a software component (a package), vulnerable or not, from the packages the "
+        "collection listed on each host: each asset with the versions found, and the counts already "
+        "computed (assets_with_it, assets_listed, hosts_not_listed, versions). Use it for 'which servers "
+        "have openssl', 'where is log4j installed', 'who still runs php 7'. Give the counts as returned, never "
+        "count yourself; say how many hosts are not listed, their packages being unknown.",
+        [
+            _q("name", "string", "Part of the package name, e.g. openssl, php, log4j"),
+            _q("exact", "boolean", "true: the whole package name only"),
+            _q("version", "string", "The beginning of the version, e.g. 7. or 3.0"),
+            *_PAGE,
+            _RUN,
+        ],
+        "components",
+    ),
+    (
         "/coverage",
         "list_coverage",
         "Scan coverage of the run, against the CMDB: for each host, its state (not-in-cmdb: scanned but unknown "
