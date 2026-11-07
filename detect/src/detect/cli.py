@@ -15,6 +15,7 @@
   collectors check the tenant's declaration of its collectors (collectors.yaml)
   cmdb       the tenant's CMDB: read it as a detection (fetch), or list the hosts scanned but not
              in it, as a CSV a person imports into the CMDB (export); A2VM never writes to it
+  wazuh      Wazuh's software inventory, read as a detection of source wazuh (fetch, v0.23.1)
 
 Output: <out>/<client>/<source>.json (default work/detect).
 """
@@ -282,6 +283,21 @@ def cmd_import(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_wazuh(args: argparse.Namespace) -> int:
+    import yaml
+
+    from .wazuh import WazuhConfig, WazuhError, fetch
+
+    try:
+        data = yaml.safe_load(Path(args.config).read_text(encoding="utf-8")) or {}
+        cfg = WazuhConfig.from_dict(data, args.config)
+        _write(args.out, fetch(cfg, args.tenant))
+    except (OSError, ValueError, yaml.YAMLError, WazuhError) as exc:
+        print(exc, file=sys.stderr)
+        return 2
+    return 0
+
+
 def cmd_cmdb(args: argparse.Namespace) -> int:
     import csv
     import json
@@ -411,6 +427,14 @@ def main(argv: list[str] | None = None) -> int:
     ce.add_argument("--organization", required=True, help="organisation of the CIs to create")
     ce.add_argument("--out", default="cmdb-candidates.csv")
     ce.set_defaults(func=cmd_cmdb)
+
+    wz = sub.add_parser("wazuh", help="Wazuh's software inventory: read it (fetch)")
+    wz_sub = wz.add_subparsers(dest="wazuh_command", required=True)
+    wf = wz_sub.add_parser("fetch", help="read the inventory into a detection of source wazuh")
+    wf.add_argument("--config", required=True, help="YAML with the settings of a wazuh connector")
+    wf.add_argument("--tenant", required=True)
+    wf.add_argument("--out", default="work/detect")
+    wf.set_defaults(func=cmd_wazuh)
 
     args = parser.parse_args(argv)
     return args.func(args)

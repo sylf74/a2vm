@@ -850,10 +850,11 @@ expected and missing, scans, last scan, owner. The assets stage prints one line 
 The components of each asset (`Asset.components`) gather what each source listed: since v0.22.2
 every package installed on a host (pillar 2, SSH: `rpm -qa`, `dpkg-query`), since v0.23.0 with its
 distribution (`distro`, from `/etc/os-release`), its source package (`source_package`) and a `purl`
-with namespace and distro. `consolidate_components` keeps, for each source of components (`ssh`;
-an EDR or an SBOM from v0.23.2), the newest observation that listed them, and every source: each
-component carries its `source` and the date that source last listed it (`seen`), the same package
-seen by two sources stays twice. `components_seen` is the newest date. They reach the triage file,
+with namespace and distro; since v0.23.1 the software inventory of Wazuh's agents (source `wazuh`).
+`consolidate_components` keeps, for each source of components (`ssh`, `wazuh`; SentinelOne and SBOMs
+later), the newest observation that listed them, and every source: each component carries its
+`source` and the date that source last listed it (`seen`, for Wazuh the date of the reading, or
+the last keep-alive of a disconnected agent), the same package seen by two sources stays twice. `components_seen` is the newest date. They reach the triage file,
 the decision service (`GET components`, §16 `find_component`) and the watch (through the inventory).
 
 `a2vm.packages`, owned here and run by the watch (LLD vulnerability-intelligence §3.4), compares

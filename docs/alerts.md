@@ -261,6 +261,7 @@ tenant, a button to the review page or the pipeline (`docs/radar.md` §5).
   is that they are drafted, matched and one click away when the analyst arrives.
 - The packages of the hosts are those of the last daily run: a package installed or updated since
   is seen at the next run. Other distributions than RHEL and its rebuilds, Debian and Ubuntu,
-  libraries loaded in memory, images, appliances and EDR inventories come with v0.23.1 to v0.23.3.
+  libraries loaded in memory, images, appliances and SentinelOne come with v0.23.2 to v0.23.4;
+  Wazuh's inventory since v0.23.1 (`docs/wazuh.md`).
 - The CERT-FR JSON view is read defensively: a missing field degrades the sheet (fewer details),
   it does not stop the watch.

@@ -152,13 +152,38 @@ def _source_package(kind: str, raw: str, name: str) -> str:
     return name
 
 
+def component(
+    name: str, version: str, arch: str, kind: str, src: str = "", distro: str = "", source: str = "ssh"
+) -> dict[str, str]:
+    """One package as a component of the common model: {name, version, arch, type, purl,
+    source_package, distro, source}. An rpm epoch 0 is left out of the version; the purl carries
+    the distribution's vendor as namespace (`pkg:rpm/rocky/...?distro=rocky-9.4`). Shared by the
+    SSH collection and the EDR connectors (Wazuh, v0.23.1)."""
+    if kind == "rpm" and version.startswith(("0:", "(none):")):
+        version = version.split(":", 1)[1]
+    epoch, _, bare = version.rpartition(":") if kind == "rpm" else ("", "", version)
+    vendor = distro.rsplit("-", 1)[0] if distro else ""
+    qualifiers = [f"arch={arch}"] if arch and arch != "(none)" else []
+    qualifiers += [f"distro={distro}"] if distro else []
+    qualifiers += [f"epoch={epoch}"] if epoch else []
+    namespace = f"{vendor}/" if vendor else ""
+    out = {"name": name, "version": version, "arch": arch, "type": kind}
+    if kind in ("rpm", "deb"):
+        out["purl"] = f"pkg:{kind}/{namespace}{name}@{bare}" + ("?" + "&".join(qualifiers) if qualifiers else "")
+    out["source_package"] = _source_package(kind, src, name)
+    if distro:
+        out["distro"] = distro
+    out["source"] = source
+    return out
+
+
 def parse_packages(text: str) -> list[dict[str, str]]:
     """The output of PACKAGES as components: {name, version, arch, type, purl, source_package,
     distro, source}, sorted, at most MAX_COMPONENTS. An rpm epoch 0 is left out of the version; dpkg
     lines not installed are skipped. The output of a v0.22.2 collector (no distribution, no source
     package) is still read."""
     out: dict[tuple[str, str, str], dict[str, str]] = {}
-    distro = vendor = ""
+    distro = ""
     for line in text.splitlines():
         parts = line.rstrip("\n").split("\t")
         if parts[0] == "os" and len(parts) == 3:
@@ -176,20 +201,8 @@ def parse_packages(text: str) -> list[dict[str, str]]:
         name, version, arch, kind, src = (p.strip() for p in parts)
         if name == "gpg-pubkey":  # the keys of the repositories, not software
             continue
-        if kind == "rpm" and version.startswith(("0:", "(none):")):
-            version = version.split(":", 1)[1]
-        epoch, _, bare = version.rpartition(":") if kind == "rpm" else ("", "", version)
-        qualifiers = [f"arch={arch}"] if arch and arch != "(none)" else []
-        qualifiers += [f"distro={distro}"] if distro else []
-        qualifiers += [f"epoch={epoch}"] if epoch else []
-        namespace = f"{vendor}/" if vendor else ""
-        purl = f"pkg:{kind}/{namespace}{name}@{bare}" + ("?" + "&".join(qualifiers) if qualifiers else "")
-        component = {"name": name, "version": version, "arch": arch, "type": kind, "purl": purl}
-        component["source_package"] = _source_package(kind, src, name)
-        if distro:
-            component["distro"] = distro
-        component["source"] = "ssh"
-        out[(name, version, arch)] = component
+        c = component(name, version, arch, kind, src, distro, "ssh")
+        out[(name, c["version"], arch)] = c
     return [out[k] for k in sorted(out)][:MAX_COMPONENTS]
 
 
