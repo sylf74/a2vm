@@ -8,7 +8,7 @@ the `targets.yaml` of the client project, runs one read-only command, and import
 | `trivy` | Ubuntu, Debian, Rocky/Alma/RHEL/CentOS 8–9 | `nice -n 19 ionice -c3 trivy rootfs --quiet --timeout 15m --format json --scanners vuln --pkg-types os /` | Trivy installed |
 | `trivy` + `images` | Docker hosts | `... trivy image --quiet --timeout 30m --format json --scanners vuln --pkg-types os,library --skip-dirs <CUDA dirs> <image>` | Trivy, access to the Docker socket |
 | `dnf-updateinfo` | Rocky/RHEL 10 (not covered by Trivy) | `nice -n 19 ionice -c3 dnf -q updateinfo list --security --with-cve` | nothing |
-| every host (v0.22.2) | Rocky/RHEL, Debian/Ubuntu | `nice -n 19 ionice -c3 sh -c '…rpm -qa --qf …'`, else `dpkg-query -W -f=…`: every package installed | nothing |
+| every host (v0.22.2) | Rocky/RHEL, Debian/Ubuntu | `nice -n 19 ionice -c3 sh -c '…rpm -qa --qf …'`, else `dpkg-query -W -f=…`: every package installed, with the distribution (`/etc/os-release`) and the source package since v0.23.0 | nothing |
 
 Why it is not intrusive:
 

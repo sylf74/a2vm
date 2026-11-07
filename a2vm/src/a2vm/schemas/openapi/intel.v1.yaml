@@ -36,6 +36,11 @@ paths:
               required: [cves]
               properties:
                 cves: {type: array, maxItems: 5000, items: {type: string, pattern: "^CVE-\\d{4}-\\d{4,}$"}}
+                packages:
+                  type: boolean
+                  description: >-
+                    true: each record also carries the package advisories of the distributions
+                    (`packages`, since v0.23.0), read by CVE id from Red Hat and OSV
       responses:
         "200":
           description: The records (the `records` of a2vm.records/1), the ids without one and why

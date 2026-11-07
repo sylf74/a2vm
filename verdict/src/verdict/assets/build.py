@@ -257,6 +257,27 @@ def exposure_gap(
     return None
 
 
+def consolidate_components(group: list[AssetObservation]) -> tuple[list[dict[str, str]], str]:
+    """The components of one asset (D20, v0.23.0), and when they were last listed: for each source of
+    components (ssh, later an EDR or an SBOM), its newest listing; every source kept, each component
+    with its source and the date it was seen. The same package seen by two sources stays twice: each
+    says what it saw and when."""
+    newest: dict[str, AssetObservation] = {}
+    for o in group:
+        for source in {c.get("source") or "ssh" for c in o.components}:
+            if source not in newest or o.observed_at > newest[source].observed_at:
+                newest[source] = o
+    out: dict[tuple[str, str, str, str], dict[str, str]] = {}
+    for source, o in sorted(newest.items()):
+        for c in o.components:
+            if (c.get("source") or "ssh") != source:
+                continue
+            item = {**c, "source": source, "seen": o.observed_at}
+            out[(source, item["name"], item["version"], item.get("arch", ""))] = item
+    seen = max((o.observed_at for o in newest.values()), default="")
+    return [out[k] for k in sorted(out, key=lambda k: (k[1], k[2], k[3], k[0]))], seen
+
+
 def build_inventory(profile: ClientProfile, detections: list[Detection]) -> Inventory:
     observations: list[AssetObservation] = []
     for d in detections:
@@ -344,10 +365,7 @@ def build_inventory(profile: ClientProfile, detections: list[Detection]) -> Inve
                 for src in {o.source for o in group} - NOT_SCANS
             },
         )
-        listed = [o for o in group if o.components]
-        if listed:  # every package installed, from the newest observation that listed them (v0.22.2)
-            newest = max(listed, key=lambda o: o.observed_at)
-            asset.components, asset.components_seen = list(newest.components), newest.observed_at
+        asset.components, asset.components_seen = consolidate_components(group)
         before = asset.attributes.pop("_before", None)
         gap = exposure_gap(asset, before, internal, external, profile)
         if gap:

@@ -159,11 +159,10 @@ def test_components_reach_the_asset_and_the_triage() -> None:
     inv = build_inventory(profile, [Detection(profile.id, "trivy", [obs_old], []),
                                     Detection(profile.id, "dnf-updateinfo", [obs_new], [])])  # fmt: skip
     (asset,) = [a for a in inv.assets if a.name == "web01"]
-    assert asset.components == [{"name": "bash", "version": "5.2"}]
+    # since v0.23.0 each component carries its source and when it was seen
+    assert [(c["name"], c["version"]) for c in asset.components] == [("bash", "5.2")]
     entry = run_asset(asset)
-    assert entry["components"] == [{"name": "bash", "version": "5.2"}] and entry["components_seen"].startswith(
-        "2026-11-07"
-    )
+    assert entry["components"][0]["version"] == "5.2" and entry["components_seen"].startswith("2026-11-07")
 
 
 def test_closed_findings_by_period_and_assets_with_counts(tenant_db, settings, sources, profile, tmp_path):
@@ -500,5 +499,5 @@ def test_release_0222_recorded() -> None:
 
     root = Path(__file__).resolve().parents[1]
     hld = (root / "docs" / "hld" / "00-product-strategy.md").read_text(encoding="utf-8")
-    assert re.search(r"^\| v0\.22\.2 \(current\) \| Consolidation", hld, re.M)
+    assert re.search(r"^\| v0\.22\.2( \(current\))? \| Consolidation", hld, re.M)
     assert "## v0.22.2 — " in (root / "CHANGELOG.md").read_text(encoding="utf-8")

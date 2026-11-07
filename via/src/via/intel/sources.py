@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-a2vm-proprietary
 """Data sources: CVE JSON 5 records, CISA KEV, FIRST EPSS, cvelistV5 delta log, CERT-FR feeds,
-Google Threat Intelligence (optional, licensed).
+package advisories of the distributions (Red Hat, OSV; v0.23.0), Google Threat Intelligence
+(optional, licensed).
 
 All network access goes through one httpx client (it honours HTTPS_PROXY / SSL_CERT_FILE) and a
 small file cache, so a daily run does not refetch what it already has. With `fixtures_dir`, the
@@ -212,6 +213,31 @@ class Sources:
             text = self.fetch_text(url)
             return json.loads(text) if text else None
         return self._get_json(url, max_age_hours)
+
+    # -- package advisories of the distributions (D20, v0.23.0) -----------------------------------
+    def package_advisory(self, source: str, cve_id: str) -> dict[str, Any] | None:
+        """Raw advisory of one distribution for one CVE: Red Hat's security data, or the OSV entry of
+        Debian or Ubuntu; None when it has none. Only the CVE id leaves; an answer without an
+        advisory is cached too, so a CVE that concerns no distribution is not asked again."""
+        cve_bucket(cve_id)
+        if self.fixtures:
+            name = cve_id if source == "redhat" else f"{source.upper()}-{cve_id}"
+            return self._fixture(f"packages/{source}/{name}.json")
+        if source == "redhat":
+            url = self.settings.redhat_url.format(cve_id=cve_id)
+        elif source in ("debian", "ubuntu"):
+            url = self.settings.osv_url.format(id=f"{source.upper()}-{cve_id}")
+        else:
+            raise SourceError(f"unknown package source {source!r}")
+        marker = self._cache_path(url).with_suffix(".none")
+        hours = self.settings.packages_cache_hours
+        if marker.exists() and time.time() - marker.stat().st_mtime < hours * 3600:
+            return None
+        data = self._get_json(url, hours)
+        if data is None:
+            marker.parent.mkdir(parents=True, exist_ok=True)
+            marker.write_text("", encoding="utf-8")
+        return data
 
     # -- Google Threat Intelligence ---------------------------------------------------------------
     def gti_url(self, cve_id: str) -> str:

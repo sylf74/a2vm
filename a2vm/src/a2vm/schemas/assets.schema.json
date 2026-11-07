@@ -399,6 +399,22 @@
               },
               "purl": {
                 "type": "string"
+              },
+              "source_package": {
+                "type": "string",
+                "description": "The source package it is built from (since v0.23.0)"
+              },
+              "distro": {
+                "type": "string",
+                "description": "The distribution, from /etc/os-release: <ID>-<VERSION_ID> (since v0.23.0)"
+              },
+              "source": {
+                "type": "string",
+                "description": "Where the component was seen: ssh (the package database) (since v0.23.0)"
+              },
+              "seen": {
+                "type": "string",
+                "description": "When this source last listed it (since v0.23.0)"
               }
             }
           }

@@ -15,9 +15,10 @@ Targets file (YAML), one per client — see examples/lab/targets.yaml:
 
 Every SSH command only reads: Trivy scans the OS package database (`--pkg-types os`, no file-system
 traversal) at the lowest CPU and I/O priority; dnf lists the security advisories that apply; the
-package database lists every package installed (`rpm -qa` or `dpkg-query`, v0.22.2), kept with the
-host's observation so that one can ask which hosts carry a component, vulnerable or not. Nothing is
-installed, changed or exploited on the targets.
+package database lists every package installed (`rpm -qa` or `dpkg-query`, v0.22.2), with the
+distribution and the source package of each (v0.23.0), kept with the host's observation so that one
+can ask which hosts carry a component, vulnerable or not, and match them against new advisories.
+Nothing is installed, changed or exploited on the targets.
 """
 
 from __future__ import annotations
@@ -50,13 +51,15 @@ TRIVY_IMAGE = (
     " --skip-dirs '**/dist-packages/nvidia' --skip-dirs '**/site-packages/nvidia'"
 )
 DNF = f"{LOW_PRIORITY} dnf -q updateinfo list --security --with-cve"
-# Every package installed, one per line: name, version, architecture, type. rpm first (Rocky, RHEL),
-# else dpkg (Debian, Ubuntu; installed ones only).
+# Every package installed, one per line: name, version, architecture, type, source package. rpm first
+# (Rocky, RHEL), else dpkg (Debian, Ubuntu; installed ones only). The first line names the
+# distribution (/etc/os-release, v0.23.0): the advisories of a package depend on it.
 PACKAGES = f"{LOW_PRIORITY} sh -c " + shlex.quote(
+    '( . /etc/os-release 2>/dev/null; printf \'os\\t%s\\t%s\\n\' "${ID:-}" "${VERSION_ID:-}" ); '
     "if command -v rpm >/dev/null 2>&1; then "
-    "rpm -qa --qf '%{NAME}\\t%{EPOCHNUM}:%{VERSION}-%{RELEASE}\\t%{ARCH}\\trpm\\n'; "
+    "rpm -qa --qf '%{NAME}\\t%{EPOCHNUM}:%{VERSION}-%{RELEASE}\\t%{ARCH}\\trpm\\t%{SOURCERPM}\\n'; "
     "elif command -v dpkg-query >/dev/null 2>&1; then "
-    "dpkg-query -W -f='${db:Status-Abbrev}\\t${Package}\\t${Version}\\t${Architecture}\\tdeb\\n'; fi"
+    "dpkg-query -W -f='${db:Status-Abbrev}\\t${Package}\\t${Version}\\t${Architecture}\\tdeb\\t${Source}\\n'; fi"
 )
 MAX_COMPONENTS = 20000
 DEFAULT_SSH_OPTIONS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=15", "-o", "StrictHostKeyChecking=accept-new"]
@@ -137,28 +140,56 @@ def plan(tf: TargetsFile) -> list[tuple[HostTarget, str, str, Target]]:
     return jobs
 
 
+def _source_package(kind: str, raw: str, name: str) -> str:
+    """The source package a binary one is built from: rpm `openssl-3.0.7-27.el9.src.rpm`, dpkg
+    `openssl` or `openssl (3.0.11-1)`; the binary name when none is given."""
+    raw = raw.strip()
+    if kind == "rpm" and raw.endswith(".src.rpm"):
+        parts = raw[: -len(".src.rpm")].rsplit("-", 2)
+        return parts[0] if len(parts) == 3 and parts[0] else name
+    if kind == "deb" and raw:
+        return raw.split(" ", 1)[0]
+    return name
+
+
 def parse_packages(text: str) -> list[dict[str, str]]:
-    """The output of PACKAGES as components: {name, version, arch, type, purl}, sorted, at most
-    MAX_COMPONENTS. An rpm epoch 0 is left out of the version; dpkg lines not installed are skipped."""
+    """The output of PACKAGES as components: {name, version, arch, type, purl, source_package,
+    distro, source}, sorted, at most MAX_COMPONENTS. An rpm epoch 0 is left out of the version; dpkg
+    lines not installed are skipped. The output of a v0.22.2 collector (no distribution, no source
+    package) is still read."""
     out: dict[tuple[str, str, str], dict[str, str]] = {}
+    distro = vendor = ""
     for line in text.splitlines():
         parts = line.rstrip("\n").split("\t")
-        if len(parts) == 5:  # dpkg: status first
-            if not parts[0].startswith("ii"):
+        if parts[0] == "os" and len(parts) == 3:
+            vendor = parts[1].strip().lower()
+            distro = f"{vendor}-{parts[2].strip()}".strip("-") if vendor else ""
+            continue
+        if len(parts) in (5, 6) and parts[4] == "deb":  # dpkg: status first
+            if not parts[0].startswith(("ii", "hi")):
                 continue
             parts = parts[1:]
-        if len(parts) != 4 or not parts[0] or not parts[1]:
+        if len(parts) == 4:
+            parts.append("")
+        if len(parts) != 5 or not parts[0] or not parts[1]:
             continue
-        name, version, arch, kind = (p.strip() for p in parts)
+        name, version, arch, kind, src = (p.strip() for p in parts)
         if name == "gpg-pubkey":  # the keys of the repositories, not software
             continue
         if kind == "rpm" and version.startswith(("0:", "(none):")):
             version = version.split(":", 1)[1]
         epoch, _, bare = version.rpartition(":") if kind == "rpm" else ("", "", version)
         qualifiers = [f"arch={arch}"] if arch and arch != "(none)" else []
+        qualifiers += [f"distro={distro}"] if distro else []
         qualifiers += [f"epoch={epoch}"] if epoch else []
-        purl = f"pkg:{kind}/{name}@{bare}" + ("?" + "&".join(qualifiers) if qualifiers else "")
-        out[(name, version, arch)] = {"name": name, "version": version, "arch": arch, "type": kind, "purl": purl}
+        namespace = f"{vendor}/" if vendor else ""
+        purl = f"pkg:{kind}/{namespace}{name}@{bare}" + ("?" + "&".join(qualifiers) if qualifiers else "")
+        component = {"name": name, "version": version, "arch": arch, "type": kind, "purl": purl}
+        component["source_package"] = _source_package(kind, src, name)
+        if distro:
+            component["distro"] = distro
+        component["source"] = "ssh"
+        out[(name, version, arch)] = component
     return [out[k] for k in sorted(out)][:MAX_COMPONENTS]
 
 

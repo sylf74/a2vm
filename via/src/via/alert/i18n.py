@@ -99,6 +99,13 @@ LABELS: dict[str, dict[str, str]] = {
         "t.fixed": "Fixed version",
         "t.owner": "Owner",
         "t.source": "Source",
+        "t.proof": "Proof",
+        "proof.confirmed": "confirmed",
+        "proof.exposed": "exposed",
+        "proof.possible": "possible",
+        "src.packages": "packages listed ({sources}, {date})",
+        "src.packages_possible": "package named like the product, version not decided",
+        "fix.none_yet": "no fix yet",
         "exp.open": "open (internet)",
         "exp.controlled": "controlled",
         "exp.small": "restricted",
@@ -227,6 +234,13 @@ LABELS: dict[str, dict[str, str]] = {
         "t.fixed": "Version corrigée",
         "t.owner": "Responsable",
         "t.source": "Source",
+        "t.proof": "Preuve",
+        "proof.confirmed": "confirmée",
+        "proof.exposed": "exposition",
+        "proof.possible": "possible",
+        "src.packages": "paquets listés ({sources}, {date})",
+        "src.packages_possible": "paquet du nom du produit, version non tranchée",
+        "fix.none_yet": "pas encore de correctif",
         "exp.open": "ouverte (Internet)",
         "exp.controlled": "contrôlée",
         "exp.small": "restreinte",
@@ -272,7 +286,7 @@ LABELS: dict[str, dict[str, str]] = {
 }
 HEADINGS = ("h.why", "h.assets", "h.cve", "h.product", "h.type", "h.cvss", "h.impact", "h.exploitation",
             "h.description", "h.delay", "h.links")  # fmt: skip
-TABLE = ("t.asset", "t.zone", "t.exposure", "t.installed", "t.fixed", "t.owner", "t.source")
+TABLE = ("t.asset", "t.zone", "t.exposure", "t.installed", "t.fixed", "t.owner", "t.source", "t.proof")
 NAMES = {"en": "English", "fr": "French", "de": "German", "es": "Spanish", "it": "Italian", "nl": "Dutch",
          "pt": "Portuguese"}  # fmt: skip
 

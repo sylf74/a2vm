@@ -58,7 +58,7 @@ TEXT = {
         "workarounds": "Workaround",
         "workarounds_none": "No workaround found in the sources to date.",
         "references": "References",
-        "table": ["Asset", "Zone", "Exposure", "Installed version", "Fixed version", "Owner", "Source"],
+        "table": ["Asset", "Zone", "Exposure", "Installed version", "Fixed version", "Owner", "Source", "Proof"],
     },
     "fr": {
         "sheet_title": "Fiche d'alerte",
@@ -100,7 +100,16 @@ TEXT = {
         "workarounds": "Solution de contournement",
         "workarounds_none": "Aucune mesure de contournement identifiée dans les sources à ce jour.",
         "references": "Références",
-        "table": ["Actif", "Zone", "Exposition", "Version installée", "Version corrigée", "Responsable", "Source"],
+        "table": [
+            "Actif",
+            "Zone",
+            "Exposition",
+            "Version installée",
+            "Version corrigée",
+            "Responsable",
+            "Source",
+            "Preuve",
+        ],  # fmt: skip
     },
 }
 
@@ -160,14 +169,14 @@ def build(lang: str) -> None:
 
     doc.add_heading(L["assets"], level=1)
     ctl("{%p if actifs %}")
-    table = doc.add_table(rows=4, cols=7)
+    table = doc.add_table(rows=4, cols=8)
     table.style = "Table Grid"
     table.alignment = WD_TABLE_ALIGNMENT.LEFT
     heads = L["table"]
     for cell, text in zip(table.rows[0].cells, heads, strict=True):
         cell.paragraphs[0].add_run(text).bold = True
     table.rows[1].cells[0].paragraphs[0].add_run("{%tr for a in actifs %}")
-    fields = ["nom", "zone", "exposition", "version_installee", "version_corrigee", "responsable", "source"]
+    fields = ["nom", "zone", "exposition", "version_installee", "version_corrigee", "responsable", "source", "preuve"]
     for cell, key in zip(table.rows[2].cells, fields, strict=True):
         cell.paragraphs[0].add_run("{{ a." + key + " }}")
     table.rows[3].cells[0].paragraphs[0].add_run("{%tr endfor %}")

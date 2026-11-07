@@ -24,6 +24,8 @@ KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulner
 EPSS_URL = "https://api.first.org/data/v1/epss"
 CERTFR_URL = "https://www.cert.ssi.gouv.fr"
 GTI_URL = "https://www.virustotal.com/api/v3"
+REDHAT_URL = "https://access.redhat.com/hydra/rest/securitydata/cve/{cve_id}.json"
+OSV_URL = "https://api.osv.dev/v1/vulns/{id}"
 
 
 @dataclass
@@ -49,6 +51,12 @@ class SourceSettings:
     # tenant, the radar's events. Empty: the job reads the sources itself, as before.
     intel_url: str = ""
     intel_token_file: str = ""  # file holding the reading token of the shared service
+    # Package advisories of the distributions (D20, v0.23.0): which source packages a CVE affects and
+    # from which version they are fixed, read by CVE id only, for the watch's inventory matching.
+    packages_sources: list[str] = field(default_factory=lambda: ["redhat", "debian", "ubuntu"])
+    redhat_url: str = REDHAT_URL
+    osv_url: str = OSV_URL
+    packages_cache_hours: float = 12
 
     @property
     def gti_api_key(self) -> str | None:
