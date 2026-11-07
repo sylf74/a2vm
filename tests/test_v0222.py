@@ -58,3 +58,25 @@ def test_bulk_cves_in_profile_schema() -> None:
     radar_props = load_schema("client_profile")["properties"]["alerts"]["properties"]["radar"]["properties"]
     assert "bulk_cves" in radar_props
     assert radar.RadarConfig().bulk_cves == 10
+
+
+def test_technologies_are_not_sent_unless_the_profile_shares_them(tmp_path) -> None:
+    from pathlib import Path
+
+    import httpx
+
+    from a2vm.config import load_settings
+    from a2vm.profile import load_profile
+    from via.alert.cli import push_technologies
+    from via.alert.watch import State
+
+    root = Path(__file__).resolve().parents[1]
+    sent = []
+    token = tmp_path / "token"
+    token.write_text("t" * 40)
+    settings = load_settings(root / "config" / "settings.yaml")
+    settings.sources.intel_url, settings.sources.intel_token_file = "http://intel.example", str(token)
+    profile = load_profile(root / "examples" / "example-client" / "client.yaml")
+    state = State.load(tmp_path / "state.json")
+    transport = httpx.MockTransport(lambda r: sent.append(r) or httpx.Response(200, json={"kept": 1}))
+    assert push_technologies(settings, profile, state, transport) == "" and not sent

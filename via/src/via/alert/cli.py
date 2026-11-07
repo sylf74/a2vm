@@ -297,9 +297,13 @@ def _review_url(alert_id: str) -> str:
 
 def push_technologies(settings, profile, state, transport=None) -> str:  # noqa: ANN001
     """Send the technologies the client watches to the shared intelligence service, at most every 12
-    hours: its declared products and watchlist, never which client sent them (D17)."""
+    hours: its declared products and watchlist, never which client sent them (D17). Only when the
+    profile says `alerts.share_technologies: true` (v0.22.2, off by default): without it, the client
+    keeps the shared records and the radar's feed and loses only GTI's search on its technologies."""
     from via.intel.remote import IntelClient, IntelError
 
+    if not profile.alerts.get("share_technologies", False):
+        return ""
     last = state.marks.get("intel:technologies", "")
     now = dt.datetime.now(dt.UTC)
     if last and now - dt.datetime.fromisoformat(last) < dt.timedelta(hours=12):

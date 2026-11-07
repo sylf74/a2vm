@@ -111,8 +111,10 @@ Then, at their next deployment, every tenant:
 
 - asks the shared service for its records (`via collect`), and reads the sources itself when it
   cannot answer (said in the log);
-- sends the technologies it watches (declared products and watchlist) at most twice a day: the
-  service keeps them 48 hours, without who sent them;
+- sends the technologies it watches (declared products and watchlist) at most twice a day, when
+  its profile says `alerts.share_technologies: true` (v0.22.2, off by default): the service keeps
+  them 48 hours, without who sent them, and GTI searches them; without it the client keeps the
+  shared records and the radar's feed and loses only that search;
 - reads the shared feed (source `a2vm-intel`): a validated radar event that names one of its
   products, or a CVE found on its assets, becomes its own alert to validate, urgent when the radar
   said so.

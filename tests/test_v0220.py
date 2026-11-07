@@ -306,6 +306,7 @@ def test_the_watch_sends_its_technologies_at_most_twice_a_day(tmp_path):
     settings = load_settings(ROOT / "config" / "settings.yaml")
     settings.sources.intel_url, settings.sources.intel_token_file = "http://intel.example", str(token)
     profile = load_profile(ROOT / "examples" / "example-client" / "client.yaml")
+    profile.alerts["share_technologies"] = True  # off by default since v0.22.2
     state = State.load(tmp_path / "state.json")
     note = push_technologies(settings, profile, state, httpx.MockTransport(answer))
     assert (
