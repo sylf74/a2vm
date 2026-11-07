@@ -164,10 +164,18 @@ connectors:
   #   password_file: /etc/a2vm/collector/itop-password
   #   ca_file: /etc/a2vm/collector/ca.pem
   #   organization: Lab
+  # - name: lan-wazuh                      # Wazuh's software inventory, read only (v0.23.1, docs/wazuh.md)
+  #   type: wazuh
+  #   url: https://wazuh-indexer.lab.example:9200
+  #   api: indexer                         # or manager (port 55000)
+  #   user: a2vm-inventory
+  #   password_file: /etc/a2vm/collector/wazuh-password
+  #   ca_file: /etc/a2vm/collector/wazuh-ca.pem
 ```
 
-A connector `itop` pushes the source `cmdb`: declare it in `collectors.yaml` with the collector's
-other sources (`sources: [trivy, dnf-updateinfo, openvas, cmdb]`).
+A connector `itop` pushes the source `cmdb`, a connector `wazuh` the source `wazuh`: declare them
+in `collectors.yaml` with the collector's other sources (`sources: [trivy, dnf-updateinfo, openvas,
+cmdb, wazuh]`).
 
 The image, with the group deploy token of the cluster (`docs/kubernetes.md` §1), the password read
 from a file:

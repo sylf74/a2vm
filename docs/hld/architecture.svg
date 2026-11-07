@@ -106,12 +106,12 @@
 <text x="46" y="474" class="t-mono">detect agent</text>
 <text x="46" y="489" class="t-line">SSH: Trivy, dnf updateinfo</text>
 <text x="46" y="504" class="t-line">OpenVAS (Greenbone)</text>
-<text x="46" y="519" class="t-line">iTop connector (CMDB)</text>
+<text x="46" y="519" class="t-line">iTop (CMDB), Wazuh (EDR)</text>
 <text x="46" y="534" class="t-line">systemd timers, spool</text>
 <rect x="20" y="656" width="250" height="78" rx="6" class="box b-ext"/>
-<text x="30" y="675" class="t-title">iTop CMDB</text>
-<text x="30" y="690" class="t-line">servers, VMs, devices</text>
-<text x="30" y="705" class="t-line">read only (core/get)</text>
+<text x="30" y="675" class="t-title">iTop CMDB, Wazuh</text>
+<text x="30" y="690" class="t-line">CMDB items, agents&#x27; packages</text>
+<text x="30" y="705" class="t-line">read only</text>
 <rect x="20" y="776" width="250" height="112" rx="6" class="box b-ext"/>
 <text x="30" y="795" class="t-title">Cloud scanner</text>
 <text x="30" y="810" class="t-line">Greenbone in containers</text>

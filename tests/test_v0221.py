@@ -93,6 +93,6 @@ def test_d20_planned() -> None:
     hld = (root / "docs" / "hld" / "00-product-strategy.md").read_text(encoding="utf-8")
     # planned in v0.22.1, in progress since v0.23.0
     assert re.search(r"^\| D20 \| \*\*(Planned|In progress).*?\*\* Exposure from an inventory", hld, re.M)
-    assert re.search(r"^\| v0\.23\.0 \((to confirm|current)\) \| D20", hld, re.M)
+    assert re.search(r"^\| v0\.23\.0( \((to confirm|current)\))? \| D20", hld, re.M)
     for chapter in ("20-vulnerability-detection.md", "30-triage-prioritization.md"):
         assert "D20" in (root / "docs" / "hld" / chapter).read_text(encoding="utf-8"), chapter

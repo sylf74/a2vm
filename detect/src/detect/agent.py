@@ -29,6 +29,13 @@ collector.yaml, on the collector's machine (secrets in files readable by the age
       password_file: /etc/a2vm/collector/itop-password
       ca_file: /etc/a2vm/collector/ca.pem
       organization: Lab                    # optional: the CIs of this organisation only
+    - name: edr
+      type: wazuh                          # Wazuh's software inventory, read only (source wazuh, v0.23.1)
+      url: https://wazuh-indexer.example.org:9200
+      api: indexer                         # or manager: https://wazuh.example.org:55000
+      user: a2vm-inventory
+      password_file: /etc/a2vm/collector/wazuh-password
+      ca_file: /etc/a2vm/collector/ca.pem
 
 `detect agent run` runs the connectors (or one, `--connector`) and pushes each detection; a
 system timer gives each connector its schedule (docs/collectors.md). A push that fails for a reason
@@ -59,6 +66,8 @@ from .intake.client import IntakeError, push
 from .intake.registry import ID
 from .openvas import load_openvas_file
 from .scanners import load_dnf_file, load_trivy_file, merge
+from .wazuh import WazuhConfig, WazuhError
+from .wazuh import fetch as fetch_wazuh
 
 SOURCES_BY_SUFFIX = {"trivy": ".json", "dnf-updateinfo": ".txt", "openvas": ".xml"}
 
@@ -142,6 +151,26 @@ class CmdbConnector:
 
 
 @dataclass
+class WazuhConnector:
+    """Wazuh's software inventory (indexer or manager API, read only): one detection of source `wazuh`."""
+
+    name: str
+    config: WazuhConfig
+
+    def run(self, tenant: str, work: Path, log: Callable[[str], None] = print) -> tuple[list[Detection], list[str]]:
+        started = time.monotonic()
+        try:
+            detection = fetch_wazuh(self.config, tenant, log=log)
+        except WazuhError as exc:
+            log(f"FAIL wazuh [{self.config.url}]: {exc} ({time.monotonic() - started:.0f} s)")
+            return [], [f"{self.name}: {exc}"]
+        log(
+            f"ok   wazuh [{self.config.url}]: {len(detection.observations)} agents ({time.monotonic() - started:.0f} s)"
+        )
+        return [detection], []
+
+
+@dataclass
 class AgentConfig:
     collector: str
     tenant: str
@@ -192,12 +221,17 @@ def load_config(path: str | Path) -> AgentConfig:
                 connectors.append(CmdbConnector(name, ItopConfig.from_dict(c, where)))
             except ValueError as exc:
                 raise AgentError(str(exc)) from exc
+        elif kind == "wazuh":
+            try:
+                connectors.append(WazuhConnector(name, WazuhConfig.from_dict(c, where)))
+            except ValueError as exc:
+                raise AgentError(str(exc)) from exc
         elif kind == "file-import":
             if c.get("source") not in SOURCES_BY_SUFFIX or not c.get("folder"):
                 raise AgentError(f"{where}: `source` ({', '.join(SOURCES_BY_SUFFIX)}) and `folder` are required")
             connectors.append(FileImportConnector(name, c["source"], Path(c["folder"]), int(c.get("min_qod", 70))))
         else:
-            raise AgentError(f"{where}: unknown type {kind!r} (targets, file-import, itop)")
+            raise AgentError(f"{where}: unknown type {kind!r} (targets, file-import, itop, wazuh)")
     if not connectors:
         raise AgentError(f"{path}: at least one connector is required")
     try:
