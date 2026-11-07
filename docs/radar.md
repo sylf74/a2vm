@@ -28,8 +28,12 @@ design: LLD vulnerability-intelligence §3.10 to §3.12).
 ## 1. What makes an event major
 
 The radar gathers the items of every source into events: the same CVE; else titles sharing most of
-their words; else a new CVE on the product an event without CVE names. Its magnitude is computed,
-never asked to the LLM:
+their words; else a new CVE on the product an event without CVE names. A publication that lists
+more than `bulk_cves` CVEs (10; a monthly vendor bulletin) never gathers by a shared CVE: its CVEs are
+many distinct flaws. Its magnitude is computed, never asked to the LLM: each source weighs its own
+weight and the markers of its own texts, the best source counts, then the other sources add their
+bonus (v0.22.2; before, the markers of every source were added together, which made a bulletin of
+twenty flaws look like one exploited pre-authentication RCE):
 
 | Part | Points |
 | --- | --- |
@@ -62,7 +66,7 @@ client:
   language: en
 alerts:
   mode: radar
-  radar: {info: 4, urgent: 7, window_hours: 72, keep_days: 14}
+  radar: {info: 4, urgent: 7, window_hours: 72, keep_days: 14, bulk_cves: 10}
 ```
 
 The daily run has nothing to scan: `A2VM_K8S_SUSPEND` `true` keeps its CronJob suspended (a

@@ -6,12 +6,16 @@ news against assets: it gathers the publications of every source into events and
 on the events whose magnitude passes a threshold, zero-days before their CVE included.
 
 - An event gathers the items that share a CVE, or, without one, whose titles share most of their
-  words, or that name the same product while the event has no CVE yet; within `window_hours`.
-- Its magnitude is deterministic (D11): the weight of its strongest source (an institutional alert,
-  KEV, exploitation confirmed by GTI: 3; any other source: 1; a CVSS of 9 or more: +1), the markers
-  found in the texts, English or French (exploited in the wild 3, also when KEV or GTI says so;
-  zero-day 2; unauthenticated 1; remote code execution 1; proof of concept 1), and 2 per other
-  independent source (6 at most).
+  words, or that name the same product while the event has no CVE yet; within `window_hours`. An
+  item that lists more than `bulk_cves` CVEs (a monthly vendor bulletin) never joins nor gathers
+  others by a shared CVE (v0.22.2): its CVEs are many distinct flaws, not one news.
+- Its magnitude is deterministic (D11): the best of its sources, each weighing its own weight (an
+  institutional alert, KEV, exploitation confirmed by GTI: 3; any other source: 1; a CVSS of 9 or
+  more: +1) plus the markers found in its own texts, English or French (exploited in the wild 3,
+  also when KEV or GTI says so; zero-day 2; unauthenticated 1; remote code execution 1; proof of
+  concept 1), then 2 per other independent source (6 at most). The markers of one source are not
+  added to the weight of another (v0.22.2): a bulletin that gathers many flaws does not add up the
+  markers of each.
 - An event is alerted when its score reaches `info` (4) or `urgent` (7), again when it moves up a
   level, and once more when it gets its first CVE ids.
 
@@ -65,6 +69,7 @@ class RadarConfig:
     urgent: int = 7
     window_hours: int = 72
     keep_days: int = 14
+    bulk_cves: int = 10
 
     @classmethod
     def of(cls, profile: ClientProfile) -> RadarConfig:
@@ -135,26 +140,34 @@ def _texts(item: Any, records: list[VulnRecord]) -> list[str]:
     return [t for t in texts if t]
 
 
+def _source_score(source: dict[str, Any], event: dict[str, Any]) -> int:
+    """One source's own weight and markers; a source kept before v0.22.2 has no markers of its own and
+    takes the event's."""
+    marks = source.get("markers", event["markers"])
+    return source["base"] + sum(MARKERS[m][1] for m in marks if m in MARKERS)
+
+
 def _score(event: dict[str, Any]) -> int:
-    base = max((s["base"] for s in event["sources"]), default=0)
-    marks = sum(MARKERS[m][1] for m in event["markers"])
+    best = max((_source_score(s, event) for s in event["sources"]), default=0)
     others = len({s["source"] for s in event["sources"]}) - 1
-    return base + marks + min(2 * max(others, 0), 6)
+    return best + min(2 * max(others, 0), 6)
 
 
 def _level(score: int, cfg: RadarConfig) -> str:
     return "urgent" if score >= cfg.urgent else "info" if score >= cfg.info else ""
 
 
-def _find(events: dict[str, dict], cves: list[str], wds: list[str], prods: list[dict], since: str) -> dict | None:
+def _find(
+    events: dict[str, dict], cves: list[str], wds: list[str], prods: list[dict], since: str, bulk: bool = False
+) -> dict | None:
     recent = [e for e in events.values() if e["last"] >= since]
     for e in recent:
-        if set(cves) & set(e["cves"]):
+        if not bulk and not e.get("bulk") and set(cves) & set(e["cves"]):
             return e
     for e in recent:
         if wds and _similar(wds, e["words"]):
             return e
-    if not cves:
+    if not cves or bulk:
         return None
     # A CVE published for an event without one yet: the same product, named by the event's sources or
     # found among the words of their titles.
@@ -188,25 +201,26 @@ def assess(
         recs = [records[c] for c in it.cves if c in records]
         prods = products(it, recs)
         wds = words(it.title if it.origin not in ("cve", "kev") else "")
-        event = _find(events, list(it.cves), wds, prods, since)
+        bulk = len(it.cves) > cfg.bulk_cves
+        event = _find(events, list(it.cves), wds, prods, since, bulk)
         if event is None:
             radar_state["seq"] = int(radar_state.get("seq", 0)) + 1
             eid = f"R{now:%Y%m%d}-{radar_state['seq']:04d}"
             event = events[eid] = {"id": eid, "first": at, "last": at, "title": "", "cves": [], "words": wds,
                                    "products": [], "sources": [], "markers": [], "score": 0, "alerted": "",
-                                   "alerted_cves": [], "alerts": 0}  # fmt: skip
+                                   "alerted_cves": [], "alerts": 0, "bulk": bulk}  # fmt: skip
         base, signals = weight(it, recs)
+        found = set(markers(_texts(it, recs)))
+        if {"kev", "gti_active"} & set(signals):  # KEV or GTI: exploitation known, whatever the texts say
+            found.add("in_the_wild")
         pub = it.publication
         event["sources"].append({
             "source": it.source or it.origin, "category": it.category, "title": it.title[:300],
             "link": (pub.link if pub else "") or "", "at": at, "base": base, "signals": signals,
-            "summary": ((pub.summary if pub else "") or "")[:1500],
+            "summary": ((pub.summary if pub else "") or "")[:1500], "markers": sorted(found),
         })  # fmt: skip
         event["sources"] = event["sources"][-30:]
         event["cves"] = sorted(set(event["cves"]) | set(it.cves))
-        found = set(markers(_texts(it, recs)))
-        if {"kev", "gti_active"} & set(signals):  # KEV or GTI: exploitation known, whatever the texts say
-            found.add("in_the_wild")
         event["markers"] = sorted(set(event["markers"]) | found)
         known = {(p["vendor"].lower(), p["product"].lower()) for p in event["products"]}
         event["products"] += [p for p in prods if (p["vendor"].lower(), p["product"].lower()) not in known]
