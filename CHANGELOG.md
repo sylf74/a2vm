@@ -5,6 +5,31 @@ analyst and, under **Upgrade**, what a tenant must do when it moves to that tag 
 `A2VM_REF` in its `.gitlab-ci.yml`). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
 §11) and the LLDs. A release adds its entry here in the same merge request (CLAUDE.md, Releasing).
 
+## v0.23.1 — 2026-11-07
+
+D20, second step: Wazuh's software inventory as a source of components, before the appliances
+(the roadmap is reordered: SentinelOne v0.23.2, appliances v0.23.3, libraries in memory and SBOMs
+v0.23.4).
+
+- **Connector `wazuh` of the collector** (`docs/wazuh.md`, LLD detection §3.6), read only: the
+  Wazuh indexer's inventory indices (`api: indexer`, recent versions) or the manager's API (`api:
+  manager`, every 4.x version). One host per agent (name, address, OS), every package as a
+  component of source `wazuh`, with the agent's distribution and the source package; a disconnected
+  agent dated by its last keep-alive, one never connected left out. No finding: Wazuh's own
+  vulnerability detection is not read. `detect wazuh fetch` for a test.
+- **Pillar 3**: the components of Wazuh and of SSH side by side on the same host, each with its
+  source and date; Wazuh is an inventory, not a scan of the host.
+- **Watch**: a host known by Wazuh only is named like the others (`packages listed (wazuh, <date>)`).
+  Windows and macOS software is kept, matched from v0.23.2.
+- The packages listed over SSH and by Wazuh are built by the same code (`detect.collect.component`).
+
+**Upgrade**:
+
+1. Move `ref` and `A2VM_REF` of the tenants (`via` first, then the clients) to `v0.23.1` and push.
+2. A read-only account in Wazuh (`docs/wazuh.md` §2), its password in a file of the collector.
+3. The collector at `detect:v0.23.1`, a connector `wazuh` in its `collector.yaml` and its timer
+   (`docs/wazuh.md` §3); the source `wazuh` in the tenant's `collectors.yaml`.
+
 ## v0.23.0 — 2026-11-07
 
 First step of D20, the exposure from an inventory of components: the watch names the hosts whose
