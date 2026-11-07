@@ -492,3 +492,13 @@ def test_the_sheet_shows_the_proposals_to_check() -> None:
     text = "\n".join(_radar_why(alert, "fr"))
     assert "produit proposé par le LLM, à vérifier : Exemple Gateway" in text
     assert "R20261107-0001" in text and "à vérifier" in text
+
+
+def test_release_0222_recorded() -> None:
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    hld = (root / "docs" / "hld" / "00-product-strategy.md").read_text(encoding="utf-8")
+    assert re.search(r"^\| v0\.22\.2 \(current\) \| Consolidation", hld, re.M)
+    assert "## v0.22.2 — " in (root / "CHANGELOG.md").read_text(encoding="utf-8")

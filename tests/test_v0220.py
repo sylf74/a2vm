@@ -405,7 +405,7 @@ def test_d17_and_the_release_are_recorded():
 
     hld = (ROOT / "docs" / "hld" / "00-product-strategy.md").read_text()
     assert re.search(r"^\| v0\.22\.0( \(current\))? \| D17: the shared intelligence service", hld, re.M)
-    assert re.search(r"^\| v0\.22\.[12] \(consolidation, to confirm\) \| Respect of the client's SLA", hld, re.M)
+    assert re.search(r"^\| v0\.22\.2 \(current\) \| Consolidation\. Respect of the client's SLA", hld, re.M)  # v0.22.2
     assert "`intel.v1.yaml`" in hld and "radar of the watch team" in hld
     lld = (ROOT / "docs" / "lld" / "vulnerability-intelligence.md").read_text()
     assert "### 3.10 The shared intelligence service" in lld and "### 3.11 The radar" in lld
