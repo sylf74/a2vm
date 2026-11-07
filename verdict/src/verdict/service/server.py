@@ -166,12 +166,34 @@ class Service:
             start = dt.datetime.fromisoformat(since).replace(tzinfo=dt.UTC)
         except ValueError as exc:
             raise Problem(HTTPStatus.BAD_REQUEST, "since: a day YYYY-MM-DD") from exc
+        end = None
+        if query.get("until"):  # the last day included (v0.22.2)
+            try:
+                end = dt.datetime.fromisoformat(query["until"]).replace(tzinfo=dt.UTC) + dt.timedelta(days=1)
+            except ValueError as exc:
+                raise Problem(HTTPStatus.BAD_REQUEST, "until: a day YYYY-MM-DD") from exc
+        assets = None
+        if query.get("asset"):  # one or several assets, comma-separated: ids or names (v0.22.2)
+            idx = self.index("latest")
+            names = [a.strip() for a in query["asset"].split(",") if a.strip()]
+            found = {n: idx._find_asset(n) for n in names}
+            unknown = [n for n, a in found.items() if a is None]
+            if unknown:
+                raise Problem(HTTPStatus.NOT_FOUND, f"no such asset in the latest run: {', '.join(unknown)}")
+            assets = sorted({a for a in found.values() if a})
         try:
             limit, offset = page(query)
         except QueryError as exc:
             raise Problem(HTTPStatus.BAD_REQUEST, str(exc)) from exc
-        total, items = self.store.findings(self.tenant, state, start, limit, offset)
+        total, items = self.store.findings(self.tenant, state, start, limit, offset, end, assets)
         out: dict[str, Any] = {"since": start.date().isoformat(), "total": total, "items": items}
+        if end is not None:
+            out["until"] = (end - dt.timedelta(days=1)).date().isoformat()
+        if assets:
+            out["assets"] = assets
+        counts = getattr(self.store, "finding_counts", None)
+        if counts is not None:
+            out["counts"] = counts(self.tenant, state, start, end, assets)
         if offset + limit < total:
             out["next_offset"] = offset + limit
         return out
@@ -197,6 +219,8 @@ class Service:
                 return idx.decisions(query)
             if rest == "assets":
                 return idx.assets(query)
+            if rest == "components":
+                return idx.components(query)
             if rest == "coverage":
                 try:
                     return idx.coverage(query)

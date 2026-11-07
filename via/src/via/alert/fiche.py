@@ -338,6 +338,13 @@ def _radar_why(alert: Alert, lang: str) -> list[str]:
     n = len({s["source"] for s in r.get("sources") or []})
     if n > 1:
         lines.append(f"- {t(lang, 'radar.sources', n=n)}")
+    props = r.get("proposals") or {}
+    if props.get("product"):  # proposals of the LLM (v0.22.2), to judge
+        p = props["product"]
+        lines.append(f"- {t(lang, 'radar.proposed_product', product=(p['vendor'] + ' ' + p['product']).strip())}")
+    if props.get("same_as"):
+        s = props["same_as"]
+        lines.append(f"- {t(lang, 'radar.proposed_same', event=s['event'], why=s['why'])}")
     return lines
 
 

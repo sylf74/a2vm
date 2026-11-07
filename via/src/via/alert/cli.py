@@ -166,7 +166,7 @@ def cmd_watch(args: argparse.Namespace) -> int:
             (out / "index.json").write_text("[]", encoding="utf-8")
             return 0
         if radar.is_radar(profile):  # the watch team's radar (v0.22.0): events, whoever they concern
-            alerts = radar.alerts(items, profile, sources, state)
+            alerts = radar.alerts(items, profile, sources, state, llm=llm)
         else:
             matcher = DeclaredMatcher(settings, llm)
             inventory = _inventory(args.inventory, profile.id)
@@ -297,9 +297,13 @@ def _review_url(alert_id: str) -> str:
 
 def push_technologies(settings, profile, state, transport=None) -> str:  # noqa: ANN001
     """Send the technologies the client watches to the shared intelligence service, at most every 12
-    hours: its declared products and watchlist, never which client sent them (D17)."""
+    hours: its declared products and watchlist, never which client sent them (D17). Only when the
+    profile says `alerts.share_technologies: true` (v0.22.2, off by default): without it, the client
+    keeps the shared records and the radar's feed and loses only GTI's search on its technologies."""
     from via.intel.remote import IntelClient, IntelError
 
+    if not profile.alerts.get("share_technologies", False):
+        return ""
     last = state.marks.get("intel:technologies", "")
     now = dt.datetime.now(dt.UTC)
     if last and now - dt.datetime.fromisoformat(last) < dt.timedelta(hours=12):

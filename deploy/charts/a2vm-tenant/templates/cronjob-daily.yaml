@@ -123,7 +123,16 @@ if [ -z "${A2VM_REPORTING_DSN:-}" ] && ! ls /secrets/reporting-dsn-* > /dev/null
 fi
 if [ -s /secrets/reporting-ca ]; then export A2VM_REPORTING_CA=/secrets/reporting-ca; fi
 rc=0
+{{- if .Values.dispatch.enabled }}
+# The fixes the team declared in the ITSM (v0.22.2), counted once a scan confirms them.
+DECLARED=""
+if [ -s /secrets/dispatch-read-token ]; then
+  DECLARED="--dispatch-url {{ include "a2vm-tenant.dispatchUrl" . }} --dispatch-token-file /secrets/dispatch-read-token"
+fi
+verdict publish /data/output/*/reporting.json $DECLARED || rc=$?
+{{- else }}
 verdict publish /data/output/*/reporting.json || rc=$?
+{{- end }}
 if [ "$rc" -eq 3 ]; then echo "WARN reporting database unreachable or refused: the next run publishes again"; exit 0; fi
 exit "$rc"
 {{- end -}}

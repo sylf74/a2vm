@@ -1073,6 +1073,35 @@ def sla_dashboard() -> dict:
         ),
         0, 22, 24, 8,
     )  # fmt: skip
+    # v0.22.2: when the fix happened, not when a run saw it (finding_closures.fix_status).
+    b.add(
+        table(
+            "Fixes against the SLA, when they happened",
+            "SELECT fix_status AS \"Status\", count(*) AS \"Findings\" "
+            f"FROM {CLOSURES} WHERE {IN_RANGE} AND outcome = 'fixed' AND fix_status IS NOT NULL "
+            "GROUP BY fix_status ORDER BY CASE fix_status WHEN 'met (observed)' THEN 1 "
+            "WHEN 'met (declared, verified)' THEN 2 WHEN 'to verify' THEN 3 ELSE 4 END",
+            "Findings fixed in the time range, against their deadline (SLA due date, else BOD 26-04), by when the "
+            "fix happened: between the last scan that still saw the flaw and the first that did not. Met "
+            "(observed): that scan is on time; missed: the flaw was still seen after the deadline; met "
+            "(declared, verified): the date the team declared in the ITSM lies in that interval and on time (after "
+            "it: missed); to verify: none of these.",
+        ),
+        0, 30, 8, 8,
+    )  # fmt: skip
+    b.add(
+        table(
+            "Fixes missed or to verify",
+            "SELECT asset_name AS \"Asset\", cve AS \"CVE\", priority AS \"Priority\", fix_status AS \"Status\", "
+            "deadline AS \"Deadline\", last_vulnerable AS \"Last seen vulnerable\", "
+            "first_clean AS \"First clean scan\", declared_at AS \"Declared in the ITSM\" "
+            f"FROM {CLOSURES} WHERE {IN_RANGE} AND outcome = 'fixed' AND fix_status IN ('missed', 'to verify') "
+            "ORDER BY deadline, asset_name, cve LIMIT 1000",
+            "The fixes of the time range that missed their deadline, or whose interval straddles it without a "
+            "declared date to place them: the scans before and after, and the date declared in the ITSM.",
+        ),
+        8, 30, 16, 8,
+    )  # fmt: skip
     board = dashboard(
         "A2VM — priorities and SLA",
         "a2vm-sla",
@@ -1256,6 +1285,22 @@ FR_TEXT = {
     "Each day's latest run: decisions past their SLA due date and due within 7 days.": "Dernier run de chaque jour : "
     "décisions dont l'échéance SLA est dépassée, et échéance sous 7 jours.",
     "Fixed within the SLA": "Corrigés dans le SLA",
+    "Fixes against the SLA, when they happened": "Corrections face au SLA, à leur date réelle",
+    "Fixes missed or to verify": "Corrections hors délai ou à vérifier",
+    "Findings fixed in the time range, against their deadline (SLA due date, else BOD 26-04), by when the "
+    "fix happened: between the last scan that still saw the flaw and the first that did not. Met "
+    "(observed): that scan is on time; missed: the flaw was still seen after the deadline; met "
+    "(declared, verified): the date the team declared in the ITSM lies in that interval and on time (after "
+    "it: missed); to verify: none of these.": "Constats corrigés "
+    "dans la période, face à leur échéance (SLA, sinon BOD 26-04), selon la date réelle "
+    "de la correction : entre le dernier scan qui voyait encore la faille et le premier qui ne la voyait "
+    "plus. Met (observed) : ce scan est dans les temps ; missed : la faille était encore vue après "
+    "l'échéance ; met (declared, verified) : la date déclarée dans l'ITSM tombe dans cet intervalle et "
+    "dans les temps (après : missed) ; to verify : aucun de ces cas.",
+    "The fixes of the time range that missed their deadline, or whose interval straddles it without a "
+    "declared date to place them: the scans before and after, and the date declared in the ITSM.": "Les "
+    "corrections de la période hors délai, ou dont l'intervalle chevauche l'échéance sans date déclarée pour "
+    "les situer : les scans avant et après, et la date déclarée dans l'ITSM.",
     "Open with a priority": "Ouvertes avec une priorité",
     "Overdue decisions": "Décisions en retard",
     "Past their SLA due date": "Échéance SLA dépassée",
@@ -1463,6 +1508,12 @@ FR_TEXT = {
     "States of the coverage shown in the table": "États de couverture affichés dans le tableau",
 }
 FR_COLUMN = {
+    # when the fix happened (v0.22.2)
+    "Status": "Statut",
+    "Deadline": "Échéance retenue",
+    "Last seen vulnerable": "Vu vulnérable pour la dernière fois",
+    "First clean scan": "Premier scan sans la faille",
+    "Declared in the ITSM": "Déclaré dans l'ITSM",
     # priorities and SLA (v0.21.0)
     "BOD 26-04 due": "Échéance BOD 26-04",
     "Days late": "Jours de retard",

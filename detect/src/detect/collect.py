@@ -14,8 +14,10 @@ Targets file (YAML), one per client — see examples/lab/targets.yaml:
     hosts: [192.0.2.0/24]
 
 Every SSH command only reads: Trivy scans the OS package database (`--pkg-types os`, no file-system
-traversal) at the lowest CPU and I/O priority; dnf lists the security advisories that apply.
-Nothing is installed, changed or exploited on the targets.
+traversal) at the lowest CPU and I/O priority; dnf lists the security advisories that apply; the
+package database lists every package installed (`rpm -qa` or `dpkg-query`, v0.22.2), kept with the
+host's observation so that one can ask which hosts carry a component, vulnerable or not. Nothing is
+installed, changed or exploited on the targets.
 """
 
 from __future__ import annotations
@@ -48,6 +50,15 @@ TRIVY_IMAGE = (
     " --skip-dirs '**/dist-packages/nvidia' --skip-dirs '**/site-packages/nvidia'"
 )
 DNF = f"{LOW_PRIORITY} dnf -q updateinfo list --security --with-cve"
+# Every package installed, one per line: name, version, architecture, type. rpm first (Rocky, RHEL),
+# else dpkg (Debian, Ubuntu; installed ones only).
+PACKAGES = f"{LOW_PRIORITY} sh -c " + shlex.quote(
+    "if command -v rpm >/dev/null 2>&1; then "
+    "rpm -qa --qf '%{NAME}\\t%{EPOCHNUM}:%{VERSION}-%{RELEASE}\\t%{ARCH}\\trpm\\n'; "
+    "elif command -v dpkg-query >/dev/null 2>&1; then "
+    "dpkg-query -W -f='${db:Status-Abbrev}\\t${Package}\\t${Version}\\t${Architecture}\\tdeb\\n'; fi"
+)
+MAX_COMPONENTS = 20000
 DEFAULT_SSH_OPTIONS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=15", "-o", "StrictHostKeyChecking=accept-new"]
 
 
@@ -124,6 +135,31 @@ def plan(tf: TargetsFile) -> list[tuple[HostTarget, str, str, Target]]:
         else:
             jobs.append((t, "dnf-updateinfo", DNF, host_target))
     return jobs
+
+
+def parse_packages(text: str) -> list[dict[str, str]]:
+    """The output of PACKAGES as components: {name, version, arch, type, purl}, sorted, at most
+    MAX_COMPONENTS. An rpm epoch 0 is left out of the version; dpkg lines not installed are skipped."""
+    out: dict[tuple[str, str, str], dict[str, str]] = {}
+    for line in text.splitlines():
+        parts = line.rstrip("\n").split("\t")
+        if len(parts) == 5:  # dpkg: status first
+            if not parts[0].startswith("ii"):
+                continue
+            parts = parts[1:]
+        if len(parts) != 4 or not parts[0] or not parts[1]:
+            continue
+        name, version, arch, kind = (p.strip() for p in parts)
+        if name == "gpg-pubkey":  # the keys of the repositories, not software
+            continue
+        if kind == "rpm" and version.startswith(("0:", "(none):")):
+            version = version.split(":", 1)[1]
+        epoch, _, bare = version.rpartition(":") if kind == "rpm" else ("", "", version)
+        qualifiers = [f"arch={arch}"] if arch and arch != "(none)" else []
+        qualifiers += [f"epoch={epoch}"] if epoch else []
+        purl = f"pkg:{kind}/{name}@{bare}" + ("?" + "&".join(qualifiers) if qualifiers else "")
+        out[(name, version, arch)] = {"name": name, "version": version, "arch": arch, "type": kind, "purl": purl}
+    return [out[k] for k in sorted(out)][:MAX_COMPONENTS]
 
 
 def _tail(text: str, limit: int = 600) -> str:
@@ -206,6 +242,24 @@ def collect(
         except (ValueError, KeyError) as exc:
             failed(where, f"unreadable output: {exc}", started, label)
             continue
+        if target.kind == "host":
+            _add_components(tf, t, target, detection, runner, log)
         by_source.setdefault(method, []).append(detection)
         done(label, detection, started)
     return [merge(ds) for ds in by_source.values()], errors
+
+
+def _add_components(tf: TargetsFile, t: HostTarget, target: Target, detection: Detection, runner, log) -> None:  # noqa: ANN001
+    """Every package installed on the host, kept with its observation; a failure only loses them."""
+    try:
+        proc = runner(ssh_command(tf, t, PACKAGES), capture_output=True, text=True, timeout=tf.timeout_seconds)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        log(f"WARN {t.host} [packages]: {exc}")
+        return
+    components = parse_packages(proc.stdout) if proc.returncode == 0 else []
+    if not components:
+        log(f"WARN {t.host} [packages]: none listed (exit {proc.returncode}: {_tail(proc.stderr, 200)})")
+        return
+    for o in detection.observations:
+        if o.ref == target.ref:
+            o.components = components

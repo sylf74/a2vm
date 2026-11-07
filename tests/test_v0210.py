@@ -430,7 +430,7 @@ def test_the_sla_dashboard_reads_schema_5(settings, sources, tmp_path, reporting
     for a in day2["assets"]:
         if a["id"] == fixed["asset"]:
             a["scans"] = {k: "2100-01-01T00:00:00+00:00" for k in fixed["seen_by"]}
-    assert db.init(ADMIN, rdb["writer"]).startswith("schema a2vm version 5")
+    assert db.init(ADMIN, rdb["writer"]).startswith(f"schema a2vm version {db.SCHEMA_VERSION}")
     for i, d in enumerate((day1, day2)):
         p = tmp_path / f"r{i}.json"
         p.write_text(json.dumps(d))

@@ -28,8 +28,12 @@ design: LLD vulnerability-intelligence §3.10 to §3.12).
 ## 1. What makes an event major
 
 The radar gathers the items of every source into events: the same CVE; else titles sharing most of
-their words; else a new CVE on the product an event without CVE names. Its magnitude is computed,
-never asked to the LLM:
+their words; else a new CVE on the product an event without CVE names. A publication that lists
+more than `bulk_cves` CVEs (10; a monthly vendor bulletin) never gathers by a shared CVE: its CVEs are
+many distinct flaws. Its magnitude is computed, never asked to the LLM: each source weighs its own
+weight and the markers of its own texts, the best source counts, then the other sources add their
+bonus (v0.22.2; before, the markers of every source were added together, which made a bulletin of
+twenty flaws look like one exploited pre-authentication RCE):
 
 | Part | Points |
 | --- | --- |
@@ -48,6 +52,13 @@ flaw that three research sites report is `info` (1 + 4).
 Each passage logs the events followed and the best scores against the thresholds, so that a passage
 without alerts can be read: `radar: 12 events in 14 days, alert at 4 (urgent 7); best: 3 '…', …`.
 
+With the tenant's LLM (v0.22.2), the radar asks two proposals for the events about to be alerted, at
+most `llm_calls` per passage (12; `0`: none): the product a publication is about when it names no
+structured system and has no CVE record, and the open event it may be the same news as (a French and
+an English title, a zero-day before its CVE). They are proposals (D11): shown on the sheet "to check",
+with the event's id, for the team to judge; they gather nothing and change no score. Without an LLM
+the radar works the same.
+
 ## 2. The watch team's tenant `via`
 
 A tenant project like the others (`vulnops/clients/via`, namespace `a2vm-via`), on Kubernetes, with
@@ -62,7 +73,7 @@ client:
   language: en
 alerts:
   mode: radar
-  radar: {info: 4, urgent: 7, window_hours: 72, keep_days: 14}
+  radar: {info: 4, urgent: 7, window_hours: 72, keep_days: 14, bulk_cves: 10}
 ```
 
 The daily run has nothing to scan: `A2VM_K8S_SUSPEND` `true` keeps its CronJob suspended (a
@@ -107,8 +118,10 @@ Then, at their next deployment, every tenant:
 
 - asks the shared service for its records (`via collect`), and reads the sources itself when it
   cannot answer (said in the log);
-- sends the technologies it watches (declared products and watchlist) at most twice a day: the
-  service keeps them 48 hours, without who sent them;
+- sends the technologies it watches (declared products and watchlist) at most twice a day, when
+  its profile says `alerts.share_technologies: true` (v0.22.2, off by default): the service keeps
+  them 48 hours, without who sent them, and GTI searches them; without it the client keeps the
+  shared records and the radar's feed and loses only that search;
 - reads the shared feed (source `a2vm-intel`): a validated radar event that names one of its
   products, or a CVE found on its assets, becomes its own alert to validate, urgent when the radar
   said so.

@@ -5,6 +5,53 @@ analyst and, under **Upgrade**, what a tenant must do when it moves to that tag 
 `A2VM_REF` in its `.gitlab-ci.yml`). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
 §11) and the LLDs. A release adds its entry here in the same merge request (CLAUDE.md, Releasing).
 
+## v0.22.2 — 2026-11-07
+
+Consolidation: the respect of the SLA measured on when a fix happened, the radar's precision and
+the LLM's proposals, three more questions for the chat, every package of each host.
+
+- **SLA, when a fix happened** (D19, `docs/sla.md` §4): the reporting database (schema 6) places each
+  fix between the last scan that still saw the flaw and the first that no longer did, and compares it
+  with the deadline (the SLA due date, else BOD 26-04): `met (observed)`, `missed`, `met (declared,
+  verified)` when the date the team declared in the ITSM lies in that interval on time, else `to
+  verify`. Dispatch reads iTop's `resolution_date` when a ticket is resolved (`GET fixes`); the daily
+  run's publication reads it with the dispatch read token. Dashboard `sla`: the fixes per status, and
+  those missed or to verify.
+- **Due date in iTop**: a target of `dispatch.yaml` may name a date field of the ticket (`due_field`,
+  added by an iTop extension) that receives A2VM's due date on create and whenever it changes.
+- **Radar** (`docs/radar.md`): each source weighs its own markers and the best counts; a publication
+  that lists more than `bulk_cves` CVEs (10, a monthly vendor bulletin) never gathers by a shared CVE.
+  With the tenant's LLM, the product of a publication that names none and the open event a new one
+  may be the same news as are proposed and shown on the sheet to check; they decide nothing (D11).
+- **Sharing the technologies** with the shared intelligence service is now optional per client,
+  off by default (`alerts.share_technologies: true` in `client.yaml`); without it the client keeps
+  the shared records and the radar's feed, and loses only GTI's search on its technologies.
+- **Every package of each host** (first brick of D20): the SSH collection lists them (`rpm -qa`,
+  else `dpkg-query`) after its method, the asset keeps them, the decision service answers `GET
+  components`.
+- **Analysts' chat**, each count computed by the services, never by the model:
+  `list_closed_findings` takes `until` and several assets and answers counts by level and by asset;
+  `list_tickets` gives the tickets sent to the ITSM between two days with their number (through the
+  dispatch service); `find_component` the assets that carry a package, vulnerable or not.
+- HLD: D20 (exposure from an inventory of components, planned v0.23.0, Wazuh then SentinelOne as the
+  first EDR connectors); architecture, watch and tenants diagrams (`scripts/make_architecture_diagrams.py`).
+
+**Upgrade**:
+
+1. On each reporting database, `verdict db init` once before the first daily run of v0.22.2 (schema
+   6, `docs/reporting.md`); a portal on Kubernetes does it at its upgrade. Import the dashboard `sla`
+   again on a portal set up by hand.
+2. Move `ref` and `A2VM_REF` to `v0.22.2` and push. The tools of the chat read the dispatch service
+   when it runs (its read token is already in the Secret).
+3. Watch: a client whose technologies should still feed GTI's search adds
+   `alerts: {share_technologies: true}` to its `client.yaml`.
+4. Optional: an iTop extension with a date field on `UserRequest`, named in `dispatch.yaml`
+   (`due_field`).
+5. The collectors list every package of their hosts once they run the v0.22.2 image: run the install
+   script again with `--image …/detect:v0.22.2`, or change the tag in the unit and pull the image
+   (`docs/collectors.md` §2). Until then the chat's `find_component` answers that the hosts are not
+   listed.
+
 ## v0.22.1 — 2026-11-05
 
 Fixes after the first deployment of v0.22.0. The consolidation planned as v0.22.1 becomes v0.22.2.

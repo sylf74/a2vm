@@ -95,6 +95,9 @@ def run_asset(asset: Asset) -> dict[str, Any]:
         "cmdb": [dict(item) for item in asset.identifiers.get("cmdb") or []],
         "scans": dict(sorted((asset.scans or {s: asset.last_seen for s in asset.sources}).items())),
         "last_seen": asset.last_seen,
+        **(
+            {"components": list(asset.components), "components_seen": asset.components_seen} if asset.components else {}
+        ),
     }
 
 

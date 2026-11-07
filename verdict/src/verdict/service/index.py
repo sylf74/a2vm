@@ -460,6 +460,45 @@ class RunIndex:
         limit, offset = page(query)
         return {"run": self.run, **_paged(items, limit, offset)}
 
+    def components(self, query: dict[str, str]) -> dict[str, Any]:
+        """The assets that carry a software component, vulnerable or not (v0.22.2), from the packages
+        the collection listed on each host: `name` (part of the package name, or the whole with
+        `exact=true`), `version` (its beginning). The counts are computed here, never by the model."""
+        name = (query.get("name") or "").strip().lower()
+        if not name:
+            raise QueryError("name: part of a package name, e.g. openssl")
+        exact = _bool(query["exact"], "exact") if "exact" in query else False
+        version = (query.get("version") or "").strip()
+        listed = {a: e for a, e in self.inventory.items() if e.get("components")}
+        items, versions = [], Counter()
+        for asset, entry in sorted(listed.items()):
+            found = [
+                c
+                for c in entry["components"]
+                if (c["name"].lower() == name if exact else name in c["name"].lower())
+                and c["version"].startswith(version)
+            ]
+            if not found:
+                continue
+            versions.update(f"{c['name']} {c['version']}" for c in found)
+            card = self._card(asset)
+            items.append({
+                "asset": asset, "name": card["name"], "zone": card["zone"], "exposure": card["exposure"],
+                "components": [{k: c.get(k, "") for k in ("name", "version", "type")} for c in found],
+                "components_seen": entry.get("components_seen", ""),
+            })  # fmt: skip
+        hosts = [a for a, e in self.inventory.items() if e.get("kind", "host") == "host"]
+        limit, offset = page(query)
+        return {
+            "run": self.run,
+            "query": {"name": name, "exact": exact, "version": version},
+            "assets_with_it": len(items),
+            "assets_listed": len(listed),
+            "hosts_not_listed": sum(1 for a in hosts if a not in listed),
+            "versions": dict(versions.most_common()),
+            **_paged(items, limit, offset),
+        }
+
     def coverage(self, query: dict[str, str]) -> dict[str, Any]:
         """Scan coverage of the run (v0.19.0): the state of each host asset, gaps first.
 

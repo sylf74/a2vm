@@ -6,17 +6,27 @@ news against assets: it gathers the publications of every source into events and
 on the events whose magnitude passes a threshold, zero-days before their CVE included.
 
 - An event gathers the items that share a CVE, or, without one, whose titles share most of their
-  words, or that name the same product while the event has no CVE yet; within `window_hours`.
-- Its magnitude is deterministic (D11): the weight of its strongest source (an institutional alert,
-  KEV, exploitation confirmed by GTI: 3; any other source: 1; a CVSS of 9 or more: +1), the markers
-  found in the texts, English or French (exploited in the wild 3, also when KEV or GTI says so;
-  zero-day 2; unauthenticated 1; remote code execution 1; proof of concept 1), and 2 per other
-  independent source (6 at most).
+  words, or that name the same product while the event has no CVE yet; within `window_hours`. An
+  item that lists more than `bulk_cves` CVEs (a monthly vendor bulletin) never joins nor gathers
+  others by a shared CVE (v0.22.2): its CVEs are many distinct flaws, not one news.
+- Its magnitude is deterministic (D11): the best of its sources, each weighing its own weight (an
+  institutional alert, KEV, exploitation confirmed by GTI: 3; any other source: 1; a CVSS of 9 or
+  more: +1) plus the markers found in its own texts, English or French (exploited in the wild 3,
+  also when KEV or GTI says so; zero-day 2; unauthenticated 1; remote code execution 1; proof of
+  concept 1), then 2 per other independent source (6 at most). The markers of one source are not
+  added to the weight of another (v0.22.2): a bulletin that gathers many flaws does not add up the
+  markers of each.
 - An event is alerted when its score reaches `info` (4) or `urgent` (7), again when it moves up a
   level, and once more when it gets its first CVE ids.
 
 A validated radar alert is published to the shared intelligence service, whose feed the tenants'
 watches read: each matches it with its own assets, the radar never knows who has what.
+
+With the tenant's LLM (v0.22.2), two proposals, never facts (D11): the product a publication names
+when it has no structured systems and no CVE record, and the open event a new one may be the same
+news as (two languages, a zero-day before its CVE). They are kept on the event with the model and
+shown on the sheet for the team to judge; the grouping, the magnitude and the thresholds stay the
+rules above, and the radar works the same without an LLM.
 """
 
 from __future__ import annotations
@@ -65,6 +75,8 @@ class RadarConfig:
     urgent: int = 7
     window_hours: int = 72
     keep_days: int = 14
+    bulk_cves: int = 10
+    llm_calls: int = 12  # proposals asked to the LLM per passage, at most (v0.22.2)
 
     @classmethod
     def of(cls, profile: ClientProfile) -> RadarConfig:
@@ -135,26 +147,34 @@ def _texts(item: Any, records: list[VulnRecord]) -> list[str]:
     return [t for t in texts if t]
 
 
+def _source_score(source: dict[str, Any], event: dict[str, Any]) -> int:
+    """One source's own weight and markers; a source kept before v0.22.2 has no markers of its own and
+    takes the event's."""
+    marks = source.get("markers", event["markers"])
+    return source["base"] + sum(MARKERS[m][1] for m in marks if m in MARKERS)
+
+
 def _score(event: dict[str, Any]) -> int:
-    base = max((s["base"] for s in event["sources"]), default=0)
-    marks = sum(MARKERS[m][1] for m in event["markers"])
+    best = max((_source_score(s, event) for s in event["sources"]), default=0)
     others = len({s["source"] for s in event["sources"]}) - 1
-    return base + marks + min(2 * max(others, 0), 6)
+    return best + min(2 * max(others, 0), 6)
 
 
 def _level(score: int, cfg: RadarConfig) -> str:
     return "urgent" if score >= cfg.urgent else "info" if score >= cfg.info else ""
 
 
-def _find(events: dict[str, dict], cves: list[str], wds: list[str], prods: list[dict], since: str) -> dict | None:
+def _find(
+    events: dict[str, dict], cves: list[str], wds: list[str], prods: list[dict], since: str, bulk: bool = False
+) -> dict | None:
     recent = [e for e in events.values() if e["last"] >= since]
     for e in recent:
-        if set(cves) & set(e["cves"]):
+        if not bulk and not e.get("bulk") and set(cves) & set(e["cves"]):
             return e
     for e in recent:
         if wds and _similar(wds, e["words"]):
             return e
-    if not cves:
+    if not cves or bulk:
         return None
     # A CVE published for an event without one yet: the same product, named by the event's sources or
     # found among the words of their titles.
@@ -188,25 +208,26 @@ def assess(
         recs = [records[c] for c in it.cves if c in records]
         prods = products(it, recs)
         wds = words(it.title if it.origin not in ("cve", "kev") else "")
-        event = _find(events, list(it.cves), wds, prods, since)
+        bulk = len(it.cves) > cfg.bulk_cves
+        event = _find(events, list(it.cves), wds, prods, since, bulk)
         if event is None:
             radar_state["seq"] = int(radar_state.get("seq", 0)) + 1
             eid = f"R{now:%Y%m%d}-{radar_state['seq']:04d}"
             event = events[eid] = {"id": eid, "first": at, "last": at, "title": "", "cves": [], "words": wds,
                                    "products": [], "sources": [], "markers": [], "score": 0, "alerted": "",
-                                   "alerted_cves": [], "alerts": 0}  # fmt: skip
+                                   "alerted_cves": [], "alerts": 0, "bulk": bulk}  # fmt: skip
         base, signals = weight(it, recs)
+        found = set(markers(_texts(it, recs)))
+        if {"kev", "gti_active"} & set(signals):  # KEV or GTI: exploitation known, whatever the texts say
+            found.add("in_the_wild")
         pub = it.publication
         event["sources"].append({
             "source": it.source or it.origin, "category": it.category, "title": it.title[:300],
             "link": (pub.link if pub else "") or "", "at": at, "base": base, "signals": signals,
-            "summary": ((pub.summary if pub else "") or "")[:1500],
+            "summary": ((pub.summary if pub else "") or "")[:1500], "markers": sorted(found),
         })  # fmt: skip
         event["sources"] = event["sources"][-30:]
         event["cves"] = sorted(set(event["cves"]) | set(it.cves))
-        found = set(markers(_texts(it, recs)))
-        if {"kev", "gti_active"} & set(signals):  # KEV or GTI: exploitation known, whatever the texts say
-            found.add("in_the_wild")
         event["markers"] = sorted(set(event["markers"]) | found)
         known = {(p["vendor"].lower(), p["product"].lower()) for p in event["products"]}
         event["products"] += [p for p in prods if (p["vendor"].lower(), p["product"].lower()) not in known]
@@ -236,6 +257,90 @@ def assess(
     for eid in [k for k, v in events.items() if v["last"] < cutoff]:
         del events[eid]
     return out
+
+
+# -- proposals of the LLM (v0.22.2, D11) ------------------------------------------------------------
+PRODUCT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["vendor", "product"],
+    "properties": {"vendor": {"type": "string", "maxLength": 80}, "product": {"type": "string", "maxLength": 120}},
+}
+SAME_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["event", "justification"],
+    "properties": {"event": {"type": "string", "maxLength": 40}, "justification": {"type": "string", "maxLength": 300}},
+}
+
+
+def _system(task: str) -> str:
+    from a2vm.llm import UNTRUSTED
+
+    return f"{task}\n{UNTRUSTED}\nAnswer in English."
+
+
+def _text(source: dict[str, Any]) -> str:
+    return f"<untrusted>\ntitle: {source['title'][:300]}\nsummary: {source.get('summary', '')[:1200]}\n</untrusted>"
+
+
+def propose(events: list[dict[str, Any]], radar_state: dict[str, Any], llm: Any, cfg: RadarConfig, since: str) -> int:
+    """Ask the LLM for the product of the events that name none, and whether a new event is the same
+    news as an open one; kept in `proposals` of the event, with the model. Returns the calls made."""
+    from a2vm.llm import LlmError
+
+    calls = 0
+    model = getattr(llm, "model", "")
+    for e in events:
+        if calls >= cfg.llm_calls:
+            break
+        props = e.setdefault("proposals", {})
+        best = max(e["sources"], key=lambda s: (s["base"], s["category"] == "institutional"))
+        if not e["products"] and "product" not in props:
+            calls += 1
+            try:
+                got = llm.structured(
+                    _system(
+                        "Name the software or hardware product the security publication below is about: its vendor "
+                        "and its product name, as the vendor writes them. Empty strings when it names none."
+                    ),
+                    _text(best),
+                    "radar_product",
+                    PRODUCT_SCHEMA,
+                )
+            except LlmError:
+                continue
+            if got["product"].strip():
+                props["product"] = {"vendor": got["vendor"].strip(), "product": got["product"].strip(), "model": model}
+        if "same_as" in props or e.get("alerts") or calls >= cfg.llm_calls:
+            continue
+        candidates = [
+            o for o in radar_state.get("events", {}).values()
+            if o["id"] != e["id"] and o["last"] >= since and not (set(o["cves"]) & set(e["cves"]))
+        ]  # fmt: skip
+        mine = set(e["words"]) | {w for p in e["products"] for w in words(f"{p['vendor']} {p['product']}")}
+        candidates.sort(key=lambda o: -len(mine & set(o["words"])))
+        candidates = [o for o in candidates[:5] if mine & set(o["words"])]
+        if not candidates:
+            continue
+        calls += 1
+        listing = "\n".join(f"{o['id']}: {o['title'][:200]}" for o in candidates)
+        try:
+            got = llm.structured(
+                _system(
+                    "Say whether the new security publication is about the same vulnerability as one of the open "
+                    "events listed (titles may be in English or French; a zero-day may have no CVE yet). Give "
+                    "that event's id, or an empty string when none is clearly the same."
+                ),
+                f"New publication:\n{_text(best)}\nOpen events:\n<untrusted>\n{listing}\n</untrusted>",
+                "radar_same_event",
+                SAME_SCHEMA,
+            )
+        except LlmError:
+            continue
+        if got["event"] in {o["id"] for o in candidates}:
+            props["same_as"] = {"event": got["event"], "why": got["justification"].strip(), "model": model}
+    return calls
 
 
 def item_of(event: dict[str, Any]) -> Any:
@@ -287,7 +392,14 @@ def summary(radar_state: dict[str, Any], cfg: RadarConfig, top: int = 3) -> str:
             f"best: {best}")  # fmt: skip
 
 
-def alerts(items: list[Any], profile: ClientProfile, sources: Any, state: Any, now: dt.datetime | None = None) -> list:
+def alerts(
+    items: list[Any],
+    profile: ClientProfile,
+    sources: Any,
+    state: Any,
+    now: dt.datetime | None = None,
+    llm: Any = None,
+) -> list:
     """The radar's alerts of this passage (`via watch` for a profile in radar mode)."""
     from via.intel.collect import collect
 
@@ -302,6 +414,12 @@ def alerts(items: list[Any], profile: ClientProfile, sources: Any, state: Any, n
             print(note)
     cfg = RadarConfig.of(profile)
     found = assess(items, records, state.radar, cfg, now)
+    if llm is not None:  # proposals on the events about to be alerted (v0.22.2)
+        at = now or dt.datetime.now(dt.UTC)
+        since = (at - dt.timedelta(hours=cfg.window_hours)).isoformat(timespec="seconds")
+        calls = propose([e for e, _ in found], state.radar, llm, cfg, since)
+        if calls:
+            print(f"radar: {calls} proposals asked to the LLM")
     print(summary(state.radar, cfg))
     out = []
     for event, why in found:
@@ -320,6 +438,7 @@ def alerts(items: list[Any], profile: ClientProfile, sources: Any, state: Any, n
                 reasons=reasons,
                 radar={
                     **{k: event[k] for k in ("id", "score", "markers", "cves", "products")},
+                    "proposals": dict(event.get("proposals") or {}),
                     "why": why,
                     "sources": [
                         {"source": s["source"], "title": s["title"], "link": s["link"]} for s in event["sources"]

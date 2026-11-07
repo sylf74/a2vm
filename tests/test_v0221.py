@@ -63,7 +63,7 @@ def test_radar_summary_line() -> None:
 
 def test_operations_manual_current() -> None:
     text = (CHART.parents[3] / "docs" / "operations.md").read_text(encoding="utf-8")
-    assert text.startswith("# Operator's manual (v0.22.1)")
+    assert re.match(r"# Operator's manual \(v0\.22\.[1-9]\)", text)  # kept current by each release
     for needle in ("a2vm-team-intel", "A2VM_K8S_SUSPEND", "dispatch of run", "$setElementOrder", "scan-cloud"):
         assert needle in text, needle
 
@@ -71,8 +71,8 @@ def test_operations_manual_current() -> None:
 def test_release_recorded() -> None:
     root = CHART.parents[3]
     hld = (root / "docs" / "hld" / "00-product-strategy.md").read_text(encoding="utf-8")
-    assert re.search(r"^\| v0\.22\.1 \(current\) \| Fixes after the first deployment", hld, re.M)
-    assert re.search(r"^\| v0\.22\.2 \(consolidation, to confirm\) \|", hld, re.M)
+    assert re.search(r"^\| v0\.22\.1( \(current\))? \| Fixes after the first deployment", hld, re.M)
+    assert re.search(r"^\| v0\.22\.2 \((consolidation, to confirm|current)\) \|", hld, re.M)
     assert "## v0.22.1 — " in (root / "CHANGELOG.md").read_text(encoding="utf-8")
 
 
@@ -86,3 +86,12 @@ def test_architecture_diagrams_are_generated() -> None:
     assert done.returncode == 0, done.stderr
     hld = (root / "docs" / "hld" / "00-product-strategy.md").read_text(encoding="utf-8")
     assert "](architecture.svg)" in hld and "](watch.svg)" in hld and "](tenants.svg)" in hld
+
+
+def test_d20_planned() -> None:
+    root = CHART.parents[3]
+    hld = (root / "docs" / "hld" / "00-product-strategy.md").read_text(encoding="utf-8")
+    assert re.search(r"^\| D20 \| \*\*Planned \(v0\.23\.0, to confirm\)\.\*\* Exposure from an inventory", hld, re.M)
+    assert re.search(r"^\| v0\.23\.0 \(to confirm\) \| D20", hld, re.M)
+    for chapter in ("20-vulnerability-detection.md", "30-triage-prioritization.md"):
+        assert "D20" in (root / "docs" / "hld" / chapter).read_text(encoding="utf-8"), chapter

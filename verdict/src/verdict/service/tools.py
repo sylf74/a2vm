@@ -237,11 +237,18 @@ OPERATIONS: list[tuple[str, str, str, list[dict[str, Any]], str]] = [
     (
         "/findings/closed",
         "list_closed_findings",
-        "Findings fixed since a day: decided in a run and absent from a newer one in which their asset was "
-        "scanned again by the source that had seen them, most recent first, each with when it was opened, "
-        "closed, reopened and its levels. Use it for 'what was fixed this month'. Needs the tenant's "
+        "Findings fixed between two days: decided in a run and absent from a newer one in which their asset "
+        "was scanned again by the source that had seen them, most recent first, each with when it was "
+        "opened, closed, reopened and its levels; with `counts` computed by the database (by level, by "
+        "asset) and `total`. Use it for 'what was fixed this month', 'how many remediations on web01 and "
+        "db01 in October'. Give the counts as returned, never count the items yourself. Needs the tenant's "
         "database: without it, say the history is not kept.",
-        [_q("since", "string", "A day YYYY-MM-DD (default: 30 days ago)"), *_PAGE],
+        [
+            _q("since", "string", "A day YYYY-MM-DD (default: 30 days ago)"),
+            _q("until", "string", "The last day included, YYYY-MM-DD (default: today)"),
+            _q("asset", "string", "One or several assets, comma-separated: ids or names (e.g. web01,db01)"),
+            *_PAGE,
+        ],
         "findings/closed",
     ),
     (
@@ -250,8 +257,30 @@ OPERATIONS: list[tuple[str, str, str, list[dict[str, Any]], str]] = [
         "Findings gone from the newest runs while their asset was not scanned again by the source that had seen "
         "them (scan failed, host off): not known to be fixed. Use it before saying something was fixed, and to "
         "find the assets whose scans are missing. Needs the tenant's database.",
-        [_q("since", "string", "A day YYYY-MM-DD (default: 30 days ago)"), *_PAGE],
+        [
+            _q("since", "string", "A day YYYY-MM-DD (default: 30 days ago)"),
+            _q("until", "string", "The last day included, YYYY-MM-DD (default: today)"),
+            _q("asset", "string", "One or several assets, comma-separated: ids or names"),
+            *_PAGE,
+        ],
         "findings/unverified",
+    ),
+    (
+        "/components",
+        "find_component",
+        "The assets that carry a software component (a package), vulnerable or not, from the packages the "
+        "collection listed on each host: each asset with the versions found, and the counts already "
+        "computed (assets_with_it, assets_listed, hosts_not_listed, versions). Use it for 'which servers "
+        "have openssl', 'where is log4j installed', 'who still runs php 7'. Give the counts as returned, never "
+        "count yourself; say how many hosts are not listed, their packages being unknown.",
+        [
+            _q("name", "string", "Part of the package name, e.g. openssl, php, log4j"),
+            _q("exact", "boolean", "true: the whole package name only"),
+            _q("version", "string", "The beginning of the version, e.g. 7. or 3.0"),
+            *_PAGE,
+            _RUN,
+        ],
+        "components",
     ),
     (
         "/coverage",
@@ -276,6 +305,29 @@ OPERATIONS: list[tuple[str, str, str, list[dict[str, Any]], str]] = [
         "The runs kept by the service, newest first, with their date and counts: to compare with an earlier run.",
         [],
         "runs",
+    ),
+    (
+        "/tickets",
+        "list_tickets",
+        "The remediation tickets dispatch created in the ITSM, one per asset and fix: each with its number in "
+        "the ITSM (`external.ref`), its link, its state (proposed: not sent, dry-run or failed; sent; "
+        "in-progress; claimed-fixed; fixed: a scan confirmed it; dropped; lost), level, priority, due date and "
+        "`sent_at`; with `total` and `counts` (by state, by level) computed by the service. Use it for 'how "
+        "many tickets were sent to the ITSM in October, with their numbers', 'which tickets are open for "
+        "web01'. Give the counts as returned, never count the items yourself.",
+        [
+            _q("since", "string", "Only the tickets sent to the ITSM on or after this day, YYYY-MM-DD"),
+            _q("until", "string", "Only the tickets sent on or before this day, YYYY-MM-DD"),
+            _q(
+                "state",
+                "string",
+                "open (every state not closed), or one of proposed, sent, in-progress, claimed-fixed, fixed, "
+                "dropped, lost",
+            ),
+            _q("asset", "string", "Only the tickets of this asset: its id"),
+            *_PAGE,
+        ],
+        "dispatch:tickets",
     ),
     (
         "/alerts",
@@ -396,8 +448,20 @@ class Tools:
         export_ttl: int = EXPORT_TTL,
         via_url: str = "",
         via_token: str = "",
+        dispatch_url: str = "",
+        dispatch_token: str = "",
     ):
         self.tenant = tenant
+        self._dispatch = (
+            httpx.Client(
+                base_url=dispatch_url.rstrip("/"),
+                headers={"Authorization": f"Bearer {dispatch_token}", "User-Agent": "a2vm-tools"},
+                timeout=httpx.Timeout(30.0, connect=5.0),
+                transport=transport,
+            )
+            if dispatch_url and dispatch_token
+            else None
+        )
         self._via = (
             httpx.Client(
                 base_url=via_url.rstrip("/"),
@@ -452,10 +516,14 @@ class Tools:
                 "findings/closed",
                 "findings/unverified",
                 "coverage",
+                "components",
+                "dispatch:tickets",
             ):
                 query["limit"] = "10"
             if upstream == "exports":
                 return self.export(query)
+            if upstream.startswith("dispatch:"):
+                return self._tickets(upstream[len("dispatch:") :], query)
             if upstream.startswith("via:"):
                 return self._alerts(upstream[4:].format(**{k: quote(v, safe="") for k, v in ids.items()}), query)
             target = upstream.format(**{k: quote(v, safe=":@") for k, v in ids.items()})
@@ -476,6 +544,25 @@ class Tools:
             raise Problem(status, detail or f"decision service answered {r.status_code}")
         answer = copy.deepcopy(r.json())
         answer["source"] = "A2VM decision service: decisions of the run named in `run`"
+        return fit(answer, self.max_chars)
+
+    def _tickets(self, target: str, query: dict[str, str]) -> Any:
+        """The remediation tickets of the dispatch service (v0.22.2), with their number in the ITSM."""
+        if self._dispatch is None:
+            raise Problem(HTTPStatus.SERVICE_UNAVAILABLE, "the dispatch service does not run for this tenant")
+        try:
+            r = self._dispatch.get(f"/v1/tenants/{self.tenant}/{target}", params=query)
+        except httpx.HTTPError as exc:
+            raise Problem(HTTPStatus.BAD_GATEWAY, "the dispatch service cannot be reached") from exc
+        if r.status_code != 200:
+            try:
+                detail = r.json().get("detail", "")
+            except ValueError:
+                detail = ""
+            status = HTTPStatus(r.status_code) if r.status_code in (400, 404) else HTTPStatus.BAD_GATEWAY
+            raise Problem(status, detail or f"dispatch service answered {r.status_code}")
+        answer = copy.deepcopy(r.json())
+        answer["source"] = "A2VM dispatch service: remediation tickets and their reference in the ITSM"
         return fit(answer, self.max_chars)
 
     def _alerts(self, target: str, query: dict[str, str]) -> Any:
@@ -589,6 +676,8 @@ class Tools:
         return entry[1], entry[2], entry[3]
 
     def close(self) -> None:
+        if self._dispatch is not None:
+            self._dispatch.close()
         self._http.close()
         if self._via is not None:
             self._via.close()

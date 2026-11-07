@@ -735,6 +735,94 @@
         "uid": "${DS_A2VM}"
       },
       "id": 10
+    },
+    {
+      "type": "table",
+      "title": "Fixes against the SLA, when they happened",
+      "description": "Findings fixed in the time range, against their deadline (SLA due date, else BOD 26-04), by when the fix happened: between the last scan that still saw the flaw and the first that did not. Met (observed): that scan is on time; missed: the flaw was still seen after the deadline; met (declared, verified): the date the team declared in the ITSM lies in that interval and on time (after it: missed); to verify: none of these.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_A2VM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT fix_status AS \"Status\", count(*) AS \"Findings\" FROM a2vm.finding_closures WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND $__timeFilter(closed_at) AND outcome = 'fixed' AND fix_status IS NOT NULL GROUP BY fix_status ORDER BY CASE fix_status WHEN 'met (observed)' THEN 1 WHEN 'met (declared, verified)' THEN 2 WHEN 'to verify' THEN 3 ELSE 4 END"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "filterable": true
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 30,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_A2VM}"
+      },
+      "id": 11
+    },
+    {
+      "type": "table",
+      "title": "Fixes missed or to verify",
+      "description": "The fixes of the time range that missed their deadline, or whose interval straddles it without a declared date to place them: the scans before and after, and the date declared in the ITSM.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_A2VM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT asset_name AS \"Asset\", cve AS \"CVE\", priority AS \"Priority\", fix_status AS \"Status\", deadline AS \"Deadline\", last_vulnerable AS \"Last seen vulnerable\", first_clean AS \"First clean scan\", declared_at AS \"Declared in the ITSM\" FROM a2vm.finding_closures WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND $__timeFilter(closed_at) AND outcome = 'fixed' AND fix_status IN ('missed', 'to verify') ORDER BY deadline, asset_name, cve LIMIT 1000"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "filterable": true
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 30,
+        "w": 16,
+        "h": 8
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_A2VM}"
+      },
+      "id": 12
     }
   ]
 }

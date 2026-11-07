@@ -86,6 +86,8 @@ class Dispatcher:
             log.warning("tenant=%s ticket %r not sent: %s", self.tenant, t.key, exc)
             return
         t.external = ext.to_dict()
+        if getattr(self.connector(t.target), "due_field", "") and t.due:
+            t.due_pushed = t.due  # written with the ticket (v0.22.2)
         t.state, t.error = "sent", ""
         t.created_at = t.created_at or at
         t.event(at, "sent", ref=ext.ref)
@@ -216,6 +218,8 @@ class Dispatcher:
             if self.rules.live and self.rules.resolve_when_fixed and t.external.get("ref"):
                 try:
                     status, view = self.connector(t.target).status(External(**t.external))
+                    if view == CLOSED:  # the team had resolved it: its date, now confirmed by the scan
+                        self._declared(t, at)
                     if view != CLOSED:
                         text = "A2VM: every vulnerability of this ticket is fixed, a scan confirmed."
                         self.connector(t.target).resolve(External(**t.external), text)
@@ -232,6 +236,10 @@ class Dispatcher:
             summary["errors"] += 1
             return
         t.external["status"] = status
+        if view == CLOSED:
+            self._declared(t, at)
+        elif view != GONE:
+            self._push_due(t, at, summary)
         if view == GONE:
             t.state = "lost"
             t.event(at, "lost", detail="the tool no longer knows this ticket")
@@ -252,6 +260,35 @@ class Dispatcher:
                     self._write(t, text, at, summary, "comment")
         elif view != CLOSED and t.state in ("sent", "claimed-fixed"):
             t.state = "in-progress" if status not in ("", "new") else t.state
+
+    def _declared(self, t: tk.Ticket, at: str) -> None:
+        """The date the team says it fixed (v0.22.2): kept as a declaration, which the reporting
+        database counts only when it lies between the last scan that still saw the flaw and the first
+        that no longer did (D11: a declaration alone never closes a finding)."""
+        read = getattr(self.connector(t.target), "declared_fix", None)
+        if read is None:
+            return
+        try:
+            when = read(External(**t.external))
+        except ConnectorError as exc:
+            t.error = str(exc)
+            return
+        if when and when != t.declared_fixed_at:
+            t.declared_fixed_at = when
+            t.event(at, "declared fixed", declared=when)
+
+    def _push_due(self, t: tk.Ticket, at: str, summary: dict[str, int]) -> None:
+        """A2VM's due date into the ticket's field, when the target has one and it changed (v0.22.2)."""
+        write = getattr(self.connector(t.target), "set_due", None)
+        if write is None or not t.due or t.due == t.due_pushed:
+            return
+        try:
+            if write(External(**t.external), t.due):
+                t.due_pushed = t.due
+                t.event(at, "due date written", due=t.due)
+        except ConnectorError as exc:
+            t.error = str(exc)
+            summary["errors"] += 1
 
     # -- requests of a person ---------------------------------------------------------------------
     def selection(self, query: dict[str, str]) -> dict[str, str]:

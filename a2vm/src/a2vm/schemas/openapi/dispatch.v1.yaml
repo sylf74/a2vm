@@ -44,6 +44,10 @@ paths:
         - $ref: "#/components/parameters/tenant"
         - {name: state, in: query, schema: {enum: [open, proposed, sent, in-progress, claimed-fixed, fixed, dropped, lost]}}
         - {name: asset, in: query, schema: {type: string}}
+        - {name: since, in: query, schema: {type: string, format: date}, description: "sent to the ITSM on or after this day (since v0.22.2)"}
+        - {name: until, in: query, schema: {type: string, format: date}, description: "sent on or before this day (since v0.22.2)"}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1}, description: "page size (since v0.22.2; default: all)"}
+        - {name: offset, in: query, schema: {type: integer, minimum: 0}}
       responses:
         "200":
           description: The tickets
@@ -55,6 +59,12 @@ paths:
                 properties:
                   mode: {enum: [dry-run, live]}
                   total: {type: integer}
+                  since: {type: string}
+                  until: {type: string}
+                  counts:
+                    type: object
+                    description: by state, by level, and how many have a reference in the ITSM (since v0.22.2)
+                  next_offset: {type: integer}
                   items: {type: array, items: {$ref: "#/components/schemas/TicketSummary"}}
         "400": {$ref: "#/components/responses/Problem"}
         "401": {$ref: "#/components/responses/Problem"}
@@ -72,6 +82,38 @@ paths:
         "200": {description: The ticket, content: {application/json: {schema: {type: object}}}}
         "401": {$ref: "#/components/responses/Problem"}
         "404": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/fixes:
+    get:
+      tags: [read]
+      operationId: listDeclaredFixes
+      summary: >-
+        The findings of the tickets the team declared fixed in the ITSM, with the date it gave (since
+        v0.22.2); a declaration, which the reporting database counts only when a scan confirms it
+      security:
+        - readToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+      responses:
+        "200":
+          description: The declared fixes
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [total, items]
+                properties:
+                  total: {type: integer}
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [finding, declared_at]
+                      properties:
+                        finding: {type: string}
+                        declared_at: {type: string}
+                        ref: {type: string}
+                        ticket: {type: string}
+        "401": {$ref: "#/components/responses/Problem"}
   /v1/tenants/{tenant}/requests:
     get:
       tags: [read]
@@ -154,6 +196,7 @@ components:
         findings: {type: integer}
         open_findings: {type: integer}
         updated_at: {type: string}
+        sent_at: {type: string, description: "when the ticket was created in the ITSM, \"\" not sent (since v0.22.2)"}
         error: {type: string}
     Problem:
       type: object

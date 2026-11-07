@@ -67,6 +67,23 @@ targets:
 A ticket already created keeps its impact and urgency; its findings, their priority and due date
 are updated at each run.
 
+Since v0.22.2 a target may name a date field of the ticket that receives A2VM's due date (the
+client's SLA, else BOD 26-04): written on create and whenever it changes. iTop has none by default:
+an extension adds it to `UserRequest` (for example `a2vm_due_date`, a date attribute):
+
+```yaml
+targets:
+  itsm:
+    type: itop
+    # ...
+    due_field: a2vm_due_date
+```
+
+When the team resolves a ticket in iTop, dispatch reads its `resolution_date` and keeps it as the
+date declared for its findings (`GET fixes`); the reporting database counts it for the respect of
+the SLA only when it lies between the last scan that still saw the flaw and the first that no longer
+did (`docs/sla.md` §4). A ticket closed while a scan still sees the flaw is reopened, as before.
+
 | Key | Value | Options |
 | --- | --- | --- |
 | `A2VM_DISPATCH_<TARGET>_PASSWORD` | Password of the account of a target of `dispatch.yaml`, `<TARGET>` its name in capitals, `-` as `_` (e.g. `A2VM_DISPATCH_ITSM_PASSWORD`) | Masked, protected |
@@ -114,7 +131,10 @@ fixed n, reopened n, errors n`. The service's first line gives its store, its mo
 levels of the automatic tickets and the targets of the requests.
 
 The tickets and the requests, with the read token (`dispatch-read-token` of the Secret
-`a2vm-tenant`), from a pod labelled `a2vm.io/dispatch-reader=true`:
+`a2vm-tenant`), from a pod labelled `a2vm.io/dispatch-reader=true`. Since v0.22.2 `tickets` also
+takes `since` and `until` (sent to the ITSM between two days), `limit` and `offset`, gives each
+ticket its `sent_at` and the list its `counts` (by state, by level, with an ITSM number); the
+analysts' chat asks it with `list_tickets`, through the tools' pod (labelled the same way):
 
 ```bash
 kubectl -n a2vm-lab run dispatch-reader --rm -i --restart=Never --labels=a2vm.io/dispatch-reader=true --image=curlimages/curl:8.11.1 --overrides='{"spec":{"volumes":[{"name":"s","secret":{"secretName":"a2vm-tenant","items":[{"key":"dispatch-read-token","path":"t"}]}}],"containers":[{"name":"c","image":"curlimages/curl:8.11.1","command":["sh","-c","curl -s -H \"Authorization: Bearer $(cat /s/t)\" http://a2vm-lab-dispatch:8080/v1/tenants/lab/tickets?state=open"],"volumeMounts":[{"name":"s","mountPath":"/s"}]}]}}'

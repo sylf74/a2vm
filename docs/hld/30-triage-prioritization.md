@@ -18,6 +18,7 @@ reporting database and the dashboards that read it show its decisions and nothin
 | Pillar 3 does | Pillar 3 does not |
 | --- | --- |
 | Consolidate observations into one inventory per tenant, each attribute with its source | Collect observations (pillar 2) or vulnerability records (pillar 1) |
+| Hold the components of each asset with their source and age, and the map of coverage per kind of asset (D20, planned v0.23.0) | Take the level of proof of an exposure for a decision: it is evidence, the SSVC tables decide |
 | Reconcile declared and observed assets, internal and external | Dispatch actions or follow remediation (pillar 4) |
 | Take one SSVC decision per finding (ACT, ATTEND or TRACK) with its BOD 26-04 timeline, reasons, review flags and rationale | Let AI decide (strategy D11) |
 | Sort the decisions into the client's priorities and give each its SLA due date (D19, v0.21.0) | Change a level for a priority: the client's rules sort, the SSVC decision and the policy decide |

@@ -4,7 +4,7 @@ A2VM (AI-Assisted Vulnerability Management) turns vulnerability intelligence, sc
 each client's asset context into one prioritised decision per finding (ACT / ATTEND / TRACK),
 explained, reviewed by an analyst, and restituted in reports and dashboards.
 
-Read first: `docs/hld/00-product-strategy.md` (goals, decisions D1–D19, contracts), then the
+Read first: `docs/hld/00-product-strategy.md` (goals, decisions D1–D20, contracts), then the
 chapter and the LLD of the pillar you touch (`docs/hld/`, `docs/lld/`). Operating guides are the
 other files of `docs/`; day-to-day operation: `docs/operations.md`.
 
