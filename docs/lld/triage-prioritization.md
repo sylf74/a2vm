@@ -966,7 +966,10 @@ findings outlive the runs kept.
 
 The decision (`GET decisions/{id}`) carries `lifecycle` (the finding's row); `GET findings/closed`
 lists the findings closed since a day, `GET findings/unverified` those gone unchecked; the chat's
-tools `list_closed_findings` and `list_unverified_findings` ask them. Connection:
+tools `list_closed_findings` and `list_unverified_findings` ask them. Since v0.22.2 both take `until`
+(the last day included) and `asset` (one or several, ids or names, comma-separated, looked up in the
+latest run), and answer `counts` computed by the database (`by_level`, `by_asset`): "how many
+remediations on web01 and db01 in October" is answered without the model counting. Connection:
 `A2VM_DB_DSN_FILE` (the cluster's secret `<db>-app`, key `uri`) and `A2VM_DB_CA` (its CA, key
 `ca.crt` only): `sslmode=verify-full`; the password is never printed (`describe()`).
 
@@ -989,6 +992,7 @@ server: an OpenAPI server whose operations a model calls. Code:
 | `what_changed` | `changes` | "What is new since yesterday", "why do I see this only today" (v0.15.2) |
 | `get_fix_plan` | `assets/{asset}/fixes` | "What do I apply on web01, in which order" (v0.15.2) |
 | `list_coverage` | `coverage` | "Which servers were never scanned", "what is not in the CMDB", "how well are we covered" (v0.19.0) |
+| `list_tickets` | the dispatch service: `tickets` | "How many tickets were sent to the ITSM in October, with their numbers": the tickets sent between two days (`since`, `until`), their ITSM number (`external.ref`), state, level and `sent_at`, with `total` and `counts` (by state, by level, with an ITSM number) computed by the service (v0.22.2; 503 without dispatch) |
 | `find_component` | `components` | "Which servers have openssl", "where is php 7 still installed": the assets that carry a package, vulnerable or not, from the packages listed on each host, with the counts computed by the service (assets with it, assets listed, hosts not listed, each version) (v0.22.2) |
 | `list_alerts`, `get_alert` | the watch service `via serve`: `alerts`, `alerts/{id}` | The watch's alerts and whether they were sent (v0.16.0, watch on Kubernetes; otherwise 503) |
 | `export_decisions` | `decisions` (pages), `decisions/{id}` | A Word, PowerPoint or CSV document of the decisions chosen by the filters of `search_decisions` (16.6) |

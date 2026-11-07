@@ -114,7 +114,10 @@ fixed n, reopened n, errors n`. The service's first line gives its store, its mo
 levels of the automatic tickets and the targets of the requests.
 
 The tickets and the requests, with the read token (`dispatch-read-token` of the Secret
-`a2vm-tenant`), from a pod labelled `a2vm.io/dispatch-reader=true`:
+`a2vm-tenant`), from a pod labelled `a2vm.io/dispatch-reader=true`. Since v0.22.2 `tickets` also
+takes `since` and `until` (sent to the ITSM between two days), `limit` and `offset`, gives each
+ticket its `sent_at` and the list its `counts` (by state, by level, with an ITSM number); the
+analysts' chat asks it with `list_tickets`, through the tools' pod (labelled the same way):
 
 ```bash
 kubectl -n a2vm-lab run dispatch-reader --rm -i --restart=Never --labels=a2vm.io/dispatch-reader=true --image=curlimages/curl:8.11.1 --overrides='{"spec":{"volumes":[{"name":"s","secret":{"secretName":"a2vm-tenant","items":[{"key":"dispatch-read-token","path":"t"}]}}],"containers":[{"name":"c","image":"curlimages/curl:8.11.1","command":["sh","-c","curl -s -H \"Authorization: Bearer $(cat /s/t)\" http://a2vm-lab-dispatch:8080/v1/tenants/lab/tickets?state=open"],"volumeMounts":[{"name":"s","mountPath":"/s"}]}]}}'

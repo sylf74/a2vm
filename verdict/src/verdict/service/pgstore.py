@@ -366,23 +366,70 @@ class PgRunStore:
         return self._finding(row) if row else None
 
     def findings(
-        self, tenant: str, state: str, since: dt.datetime, limit: int, offset: int
+        self,
+        tenant: str,
+        state: str,
+        since: dt.datetime,
+        limit: int,
+        offset: int,
+        until: dt.datetime | None = None,
+        assets: list[str] | None = None,
     ) -> tuple[int, list[dict[str, Any]]]:
         """Findings `closed` (fixed: absent once their asset was scanned again) or `unverified`
-        (absent, their asset not scanned again) since `since`, most recent first."""
+        (absent, their asset not scanned again) since `since` and before `until`, of `assets` when
+        given, most recent first."""
+        where, params = self._where(tenant, state, since, until, assets)
         column = {"closed": "closed_at", "unverified": "unverified_since"}[state]
-        where = f"tenant = %s AND {column} >= %s" + (" AND closed_at IS NULL" if state == "unverified" else "")
         with self.db.tx(tenant) as conn:
             total = conn.execute(
                 f"SELECT count(*) FROM verdict.findings WHERE {where}",  # noqa: S608 - fixed names
-                (tenant, since),
+                params,
             ).fetchone()[0]
             rows = conn.execute(
                 f"SELECT {self._COLUMNS} FROM verdict.findings WHERE {where} "  # noqa: S608
                 f"ORDER BY {column} DESC, finding LIMIT %s OFFSET %s",
-                (tenant, since, limit, offset),
+                (*params, limit, offset),
             ).fetchall()
         return total, [self._finding(r) for r in rows]
+
+    @staticmethod
+    def _where(
+        tenant: str, state: str, since: dt.datetime, until: dt.datetime | None, assets: list[str] | None
+    ) -> tuple[str, tuple]:
+        column = {"closed": "closed_at", "unverified": "unverified_since"}[state]
+        where = f"tenant = %s AND {column} >= %s" + (" AND closed_at IS NULL" if state == "unverified" else "")
+        params: list[Any] = [tenant, since]
+        if until is not None:
+            where += f" AND {column} < %s"
+            params.append(until)
+        if assets:
+            where += " AND asset = ANY(%s)"
+            params.append(list(assets))
+        return where, tuple(params)
+
+    def finding_counts(
+        self,
+        tenant: str,
+        state: str,
+        since: dt.datetime,
+        until: dt.datetime | None = None,
+        assets: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """The same findings counted by the database (v0.22.2): per asset and per level, so that the
+        chat never counts a list itself."""
+        where, params = self._where(tenant, state, since, until, assets)
+        with self.db.tx(tenant) as conn:
+            rows = conn.execute(
+                f"SELECT asset, level, count(*) FROM verdict.findings WHERE {where} "  # noqa: S608
+                "GROUP BY asset, level ORDER BY asset, level",
+                params,
+            ).fetchall()
+        by_asset: dict[str, dict[str, int]] = {}
+        by_level: dict[str, int] = {}
+        for asset, level, n in rows:
+            by_asset.setdefault(asset, {})[level] = n
+            by_level[level] = by_level.get(level, 0) + n
+        return {"by_level": by_level, "by_asset": by_asset}
 
     def sla_state(self, tenant: str) -> list[dict[str, Any]]:
         """What the next run needs to carry the SLA (v0.21.0): every finding not closed, its level, the

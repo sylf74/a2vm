@@ -41,6 +41,9 @@ spec:
         {{- include "a2vm-tenant.labels" . | nindent 8 }}
         app.kubernetes.io/component: tools
         a2vm.io/verdict-reader: "true"
+        {{- if .Values.dispatch.enabled }}
+        a2vm.io/dispatch-reader: "true"
+        {{- end }}
       annotations:
         checksum/digests: {{ $chat.toolsDigestsChecksum | quote }}
     spec:
@@ -81,6 +84,10 @@ spec:
             - --via-url={{ include "a2vm-tenant.viaUrl" . }}
             - --via-token-file=/secrets/via-read-token
             {{- end }}
+            {{- if .Values.dispatch.enabled }}
+            - --dispatch-url={{ include "a2vm-tenant.dispatchUrl" . }}
+            - --dispatch-token-file=/secrets/dispatch-read-token
+            {{- end }}
             - --port=8080
           ports:
             - name: http
@@ -118,6 +125,10 @@ spec:
               {{- if .Values.watch.enabled }}
               - key: via-read-token
                 path: via-read-token
+              {{- end }}
+              {{- if .Values.dispatch.enabled }}
+              - key: dispatch-read-token
+                path: dispatch-read-token
               {{- end }}
         - name: digests
           secret:
@@ -504,6 +515,14 @@ spec:
         - podSelector:
             matchLabels:
               {{- include "a2vm-tenant.selector" (dict "root" . "component" "via") | nindent 14 }}
+      ports:
+        - {port: 8080, protocol: TCP}
+    {{- end }}
+    {{- if .Values.dispatch.enabled }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "a2vm-tenant.selector" (dict "root" . "component" "dispatch") | nindent 14 }}
       ports:
         - {port: 8080, protocol: TCP}
     {{- end }}

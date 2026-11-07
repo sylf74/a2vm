@@ -126,6 +126,8 @@ def cmd_tools(args: argparse.Namespace) -> int:
         export_ttl=args.export_minutes * 60,
         via_url=args.via_url,
         via_token=_read_secret(args.via_token_file) if args.via_token_file else "",
+        dispatch_url=args.dispatch_url,
+        dispatch_token=_read_secret(args.dispatch_token_file) if args.dispatch_token_file else "",
     )
     print(
         f"{args.tenant}: tool server on {args.verdict_url}, "
@@ -186,6 +188,8 @@ def main(argv: list[str]) -> int:
     t.add_argument("--export-minutes", type=int, default=60, help="how long a download link stays valid")
     t.add_argument("--via-url", default="", help="watch service, for the alerts (watch on Kubernetes)")
     t.add_argument("--via-token-file", default="", help="read token of the watch service")
+    t.add_argument("--dispatch-url", default="", help="dispatch service, for the tickets (v0.22.2)")
+    t.add_argument("--dispatch-token-file", default="", help="read token of the dispatch service")
     t.add_argument("--host", default="0.0.0.0")  # noqa: S104 - in a pod
     t.add_argument("--port", type=int, default=8080)
     t.set_defaults(func=cmd_tools)

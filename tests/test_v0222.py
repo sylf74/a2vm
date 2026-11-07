@@ -164,3 +164,131 @@ def test_components_reach_the_asset_and_the_triage() -> None:
     assert entry["components"] == [{"name": "bash", "version": "5.2"}] and entry["components_seen"].startswith(
         "2026-11-07"
     )
+
+
+def test_closed_findings_by_period_and_assets_with_counts(tenant_db, settings, sources, profile, tmp_path):
+    import gzip
+    import json
+
+    from a2vm.db import Database
+    from a2vm.service import TokenSet, digest
+    from verdict.report import write_json
+    from verdict.service.index import row_id
+    from verdict.service.pgstore import MIGRATIONS, PgRunStore
+    from verdict.service.server import Service
+
+    from .test_pipeline import _run
+
+    publish, read = "publish-token-0123456789abcdef0123", "read-token-0123456789abcdef01234567"
+    path = tmp_path / "triage.json"
+    write_json(_run(settings, sources, profile), path)
+    doc = json.loads(path.read_text())
+    digests = tmp_path / "digests"
+    digests.write_text(f"publish {digest(publish)}\nread {digest(read)}\n")
+    db = Database(tenant_db, "verdict", MIGRATIONS)
+    db.init()
+    service = Service(doc["client"]["id"], TokenSet.load(digests, {"publish", "read"}), PgRunStore(db, keep=3))
+    tenant = service.tenant
+
+    def push(d, key):
+        service.push(tenant, publish, key, gzip.compress(json.dumps(d).encode()), True)
+
+    rescanned = [{**x, "scans": {k: "2100-01-01T00:00:00+00:00" for k in x["scans"]}} for x in doc["assets"]]
+    push({**doc, "generated_at": "2026-10-01T06:00:00+00:00"}, "k1")
+    rows = list(doc["rows"])
+    first, second = rows[0], next(r for r in rows[1:] if r["asset_id"] != rows[0]["asset_id"])
+    rows2 = [r for r in rows if r is not first]
+    push({**doc, "generated_at": "2026-10-10T06:00:00+00:00", "rows": rows2, "assets": rescanned}, "k2")
+    rows3 = [r for r in rows2 if r is not second]
+    push({**doc, "generated_at": "2026-11-03T06:00:00+00:00", "rows": rows3, "assets": rescanned}, "k3")
+
+    october = service.read(tenant, read, "findings/closed", {"since": "2026-10-01", "until": "2026-10-31"})
+    assert october["total"] == 1 and october["items"][0]["id"] == row_id(first)
+    assert october["until"] == "2026-10-31"
+    assert sum(october["counts"]["by_level"].values()) == 1
+    both = service.read(tenant, read, "findings/closed", {"since": "2026-09-01"})
+    assert both["total"] == 2 and sum(sum(v.values()) for v in both["counts"]["by_asset"].values()) == 2
+    name = second["asset_id"]
+    one = service.read(tenant, read, "findings/closed", {"since": "2026-09-01", "asset": name})
+    assert one["total"] == 1 and one["items"][0]["id"] == row_id(second)
+    import pytest
+
+    from a2vm.service import Problem
+
+    with pytest.raises(Problem, match="no such asset"):
+        service.read(tenant, read, "findings/closed", {"asset": "nowhere-host"})
+    db.close()
+
+
+def test_tickets_sent_over_a_period_with_their_itsm_number(tmp_path) -> None:
+
+    import pytest
+
+    from a2vm.service import Problem, TokenSet, digest
+    from dispatch.rules import Rules
+    from dispatch.service import Service
+    from dispatch.store import FileStore
+
+    from .test_v0200 import RULES, FakeDecisions, FakeTool, dec
+
+    a = "host:web01.lab.example"
+    tokens = TokenSet({"run": [digest("r" * 40)], "read": [digest("d" * 40)]})
+    tool = FakeTool()
+    decisions = FakeDecisions([dec(1, a, "ACT", ["openssl 3.0.15"]), dec(2, a, "ACT", ["bash 5.2"])])
+    store = FileStore(tmp_path, "lab")
+    svc = Service("lab", tokens, store, Rules.from_dict(RULES), lambda: decisions, connector_for=lambda name: tool)
+    assert svc.process("lab", "r" * 40)["sent"] == 2
+    tickets = store.tickets()
+    tickets[0].created_at = "2026-10-05T06:00:00+00:00"  # one sent in October, the other in November
+    tickets[1].created_at = "2026-11-02T06:00:00+00:00"
+    for t in tickets:
+        store.put(t)
+    october = svc.read("lab", "d" * 40, "tickets", {"since": "2026-10-01", "until": "2026-10-31"})
+    assert october["total"] == 1 and october["counts"]["with_itsm_ref"] == 1
+    assert october["items"][0]["sent_at"].startswith("2026-10-05")
+    assert october["items"][0]["external"]["ref"].startswith("UserRequest::")
+    both = svc.read("lab", "d" * 40, "tickets", {"since": "2026-10-01", "limit": "1"})
+    assert both["total"] == 2 and len(both["items"]) == 1 and both["next_offset"] == 1
+    assert both["items"][0]["sent_at"].startswith("2026-11-02")  # newest first
+    with pytest.raises(Problem, match="since"):
+        svc.read("lab", "d" * 40, "tickets", {"since": "October"})
+
+
+def test_the_chat_lists_the_tickets_through_dispatch() -> None:
+    import json
+
+    import httpx
+
+    from a2vm.service import TokenSet, digest
+    from verdict.service.tools import Tools
+
+    seen = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        seen.append(str(request.url))
+        if request.url.host == "dispatch.example":
+            body = {"mode": "live", "total": 1, "counts": {"by_state": {"sent": 1}}, "items": [
+                {"key": "host:web01 / openssl", "external": {"ref": "R-000042"}, "sent_at": "2026-10-05"}]}  # fmt: skip
+            return httpx.Response(200, json=body)
+        return httpx.Response(404, json={"detail": "no"})
+
+    chat = "c" * 40
+    tools = Tools(
+        "lab", TokenSet({"chat": [digest(chat)]}), "http://verdict.example", "v" * 40,
+        transport=httpx.MockTransport(answer), dispatch_url="http://dispatch.example", dispatch_token="t" * 40,
+    )  # fmt: skip
+    out = tools.call(chat, "/tickets", {"since": "2026-10-01"})
+    assert out["items"][0]["external"]["ref"] == "R-000042" and "dispatch" in out["source"]
+    assert "since=2026-10-01" in seen[0] and "limit=10" in seen[0]
+    assert json.dumps(out)
+
+
+def test_the_tools_pod_reads_dispatch_when_it_runs() -> None:
+    from pathlib import Path
+
+    chat = (Path(__file__).resolve().parents[1] / "deploy/charts/a2vm-tenant/templates/chat.yaml").read_text()
+    assert '--dispatch-url={{ include "a2vm-tenant.dispatchUrl" . }}' in chat
+    assert "--dispatch-token-file=/secrets/dispatch-read-token" in chat
+    assert chat.count("{{- if .Values.dispatch.enabled }}") >= 4  # label, args, secret item, egress
+    values = (Path(__file__).resolve().parents[1] / "deploy/charts/a2vm-tenant/values.yaml").read_text()
+    assert "list_tickets" in values and "find_component" in values and "never count a list yourself" in values

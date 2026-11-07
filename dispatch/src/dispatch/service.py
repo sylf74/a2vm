@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 import re
 import threading
+from collections import Counter
 from collections.abc import Callable
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler
@@ -25,7 +26,8 @@ from a2vm.service import JsonHandler, Problem, TokenSet
 from .connectors import make
 from .decisions import Decisions
 from .engine import Dispatcher, DispatchError
-from .page import Denied, RequestPage, _page
+from .page import Denied, RequestPage
+from .page import _page as _html_page
 from .rules import Rules
 from .store import TicketStore
 from .tickets import STATES, key_digest
@@ -91,7 +93,27 @@ class Service:
             items = self.store.tickets(open_only=state == "open", asset=query.get("asset") or None)
             if state and state != "open":
                 items = [t for t in items if t.state == state]
-            return {"mode": self.rules.mode, "total": len(items), "items": [_summary(t) for t in items]}
+            # v0.22.2: the tickets sent to the ITSM between two days (both included), newest first, with
+            # their counts computed here; `limit` and `offset` page them.
+            since, until = (_day(query, k) for k in ("since", "until"))
+            if since or until:
+                items = [t for t in items if t.created_at and since <= t.created_at[:10] <= (until or "9999")]
+                items.sort(key=lambda t: (t.created_at, t.key), reverse=True)
+            out: dict[str, Any] = {"mode": self.rules.mode, "total": len(items)}
+            if since:
+                out["since"] = since
+            if until:
+                out["until"] = until
+            out["counts"] = {
+                "by_state": dict(Counter(t.state for t in items)),
+                "by_level": dict(Counter(t.level for t in items)),
+                "with_itsm_ref": sum(1 for t in items if t.external.get("ref")),
+            }
+            limit, offset = _page(query, len(items))
+            out["items"] = [_summary(t) for t in items[offset : offset + limit]]
+            if offset + limit < len(items):
+                out["next_offset"] = offset + limit
+            return out
         if rest.startswith("tickets/"):
             ident = unquote(rest[len("tickets/") :])
             found = next((t for t in self.store.tickets() if key_digest(t.key) == ident or t.key == ident), None)
@@ -101,6 +123,24 @@ class Service:
         if rest == "requests":
             return {"items": self.store.requests(int(query.get("limit") or 50))}
         raise Problem(HTTPStatus.NOT_FOUND, "no such resource")
+
+
+def _day(query: dict[str, str], name: str) -> str:
+    value = (query.get(name) or "").strip()
+    if value and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+        raise Problem(HTTPStatus.BAD_REQUEST, f"{name}: a day YYYY-MM-DD")
+    return value
+
+
+def _page(query: dict[str, str], total: int) -> tuple[int, int]:
+    try:
+        limit = int(query.get("limit") or total or 1)
+        offset = int(query.get("offset") or 0)
+    except ValueError as exc:
+        raise Problem(HTTPStatus.BAD_REQUEST, "limit, offset: integers") from exc
+    if limit < 1 or offset < 0:
+        raise Problem(HTTPStatus.BAD_REQUEST, "limit: 1 or more, offset: 0 or more")
+    return limit, offset
 
 
 def _summary(t: Any) -> dict[str, Any]:
@@ -120,6 +160,7 @@ def _summary(t: Any) -> dict[str, Any]:
         "findings": len(t.findings),
         "open_findings": len(t.open_findings),
         "updated_at": t.updated_at,
+        "sent_at": t.created_at,  # v0.22.2: when the ticket was created in the ITSM ("" not sent)
         "error": t.error,
     }
 
@@ -183,15 +224,15 @@ def page_handler(service: Service, page: RequestPage) -> type[BaseHTTPRequestHan
                 self.send_header("Content-Length", "0")
                 return self.end_headers()
             if u.path != "/remediate":
-                return self._html(HTTPStatus.NOT_FOUND, _page("Not found", "<p>No such page.</p>"))
+                return self._html(HTTPStatus.NOT_FOUND, _html_page("Not found", "<p>No such page.</p>"))
             try:
                 self._html(HTTPStatus.OK, page.get(service.dispatcher(), self.headers, parse_qs(u.query)))
             except Denied as d:
-                self._html(d.status, _page("Remediation", f"<p class='err'>{d.message}</p>"))
+                self._html(d.status, _html_page("Remediation", f"<p class='err'>{d.message}</p>"))
 
         def do_POST(self) -> None:  # noqa: N802
             if urlsplit(self.path).path != "/remediate":
-                return self._html(HTTPStatus.NOT_FOUND, _page("Not found", "<p>No such page.</p>"))
+                return self._html(HTTPStatus.NOT_FOUND, _html_page("Not found", "<p>No such page.</p>"))
             try:
                 body = self.read_body(FORM_MAX).decode("utf-8", "replace")
                 form = parse_qs(body, keep_blank_values=True)
@@ -202,8 +243,8 @@ def page_handler(service: Service, page: RequestPage) -> type[BaseHTTPRequestHan
                 finally:
                     service.lock.release()
             except Denied as d:
-                self._html(d.status, _page("Remediation", f"<p class='err'>{d.message}</p>"))
+                self._html(d.status, _html_page("Remediation", f"<p class='err'>{d.message}</p>"))
             except Problem as p:
-                self._html(p.status, _page("Remediation", f"<p class='err'>{p.detail}</p>"))
+                self._html(p.status, _html_page("Remediation", f"<p class='err'>{p.detail}</p>"))
 
     return Handler
