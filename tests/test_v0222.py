@@ -431,3 +431,64 @@ def test_itop_due_field_and_resolution_date() -> None:
     assert c.declared_fix(ext) == "2026-11-11T16:30:00"
     plain = ItopConnector(Rules.from_dict(RULES).targets["itsm"], "secret", transport=httpx.MockTransport(handler))
     assert plain.set_due(ext, "2026-11-12") is False
+
+
+# -- radar: proposals of the LLM (v0.22.2) ---------------------------------------------------------------
+class _FakeLlm:
+    model = "fake-model"
+
+    def __init__(self, product=None, same=""):
+        self.product, self.same, self.calls = product or {"vendor": "", "product": ""}, same, []
+
+    def structured(self, system, user, name, schema):
+        self.calls.append(name)
+        if name == "radar_product":
+            return dict(self.product)
+        return {"event": self.same, "justification": "same flaw, French and English titles"}
+
+
+def test_the_llm_proposes_a_product_and_a_same_event_but_decides_nothing() -> None:
+    state: dict = {}
+    cfg = radar.RadarConfig(info=1)
+    first = _item("Exemple Gateway zero-day exploited in the wild", source="blog", summary="unauthenticated RCE")
+    radar.assess([first], {}, state, cfg, NOW)
+    second = _item("Vulnérabilité jour zéro dans Exemple Gateway", source="certfr", category="institutional")
+    found = radar.assess([second], {}, state, cfg, NOW + dt.timedelta(hours=1))
+    assert len(state["events"]) == 2  # the rules did not gather them (two languages)
+    new = next(e for e, _ in found if e["sources"][0]["source"] == "certfr")
+    old = next(e for e in state["events"].values() if e is not new)
+    score_before = new["score"]
+    llm = _FakeLlm({"vendor": "Exemple", "product": "Gateway"}, same=old["id"])
+    since = (NOW - dt.timedelta(hours=72)).isoformat(timespec="seconds")
+    new["alerts"] = 0
+    assert radar.propose([new], state, llm, cfg, since) == 2
+    assert new["proposals"]["product"] == {"vendor": "Exemple", "product": "Gateway", "model": "fake-model"}
+    assert new["proposals"]["same_as"]["event"] == old["id"]
+    assert new["score"] == score_before and new["products"] == [] and len(state["events"]) == 2
+
+
+def test_an_unknown_event_id_from_the_llm_is_dropped_and_calls_are_capped() -> None:
+    state: dict = {}
+    cfg = radar.RadarConfig(llm_calls=1)
+    a = _item("Exemple Gateway flaw", source="s1")
+    radar.assess([a], {}, state, cfg, NOW)
+    radar.assess([_item("Gateway Exemple advisory", ["CVE-2026-9"], source="s3")], {}, state, cfg, NOW)
+    events = list(state["events"].values())
+    llm = _FakeLlm(same="R-made-up")
+    since = (NOW - dt.timedelta(hours=72)).isoformat(timespec="seconds")
+    radar.propose(events, state, llm, cfg, since)
+    assert len(llm.calls) == 1  # the cap
+    assert all("same_as" not in (e.get("proposals") or {}) for e in events)
+
+
+def test_the_sheet_shows_the_proposals_to_check() -> None:
+    from via.alert.fiche import _radar_why
+
+    alert = SimpleNamespace(radar={
+        "why": "new", "score": 7, "cves": [], "markers": [], "sources": [],
+        "proposals": {"product": {"vendor": "Exemple", "product": "Gateway", "model": "m"},
+                      "same_as": {"event": "R20261107-0001", "why": "same flaw", "model": "m"}},
+    })  # fmt: skip
+    text = "\n".join(_radar_why(alert, "fr"))
+    assert "produit proposé par le LLM, à vérifier : Exemple Gateway" in text
+    assert "R20261107-0001" in text and "à vérifier" in text

@@ -52,6 +52,13 @@ flaw that three research sites report is `info` (1 + 4).
 Each passage logs the events followed and the best scores against the thresholds, so that a passage
 without alerts can be read: `radar: 12 events in 14 days, alert at 4 (urgent 7); best: 3 '…', …`.
 
+With the tenant's LLM (v0.22.2), the radar asks two proposals for the events about to be alerted, at
+most `llm_calls` per passage (12; `0`: none): the product a publication is about when it names no
+structured system and has no CVE record, and the open event it may be the same news as (a French and
+an English title, a zero-day before its CVE). They are proposals (D11): shown on the sheet "to check",
+with the event's id, for the team to judge; they gather nothing and change no score. Without an LLM
+the radar works the same.
+
 ## 2. The watch team's tenant `via`
 
 A tenant project like the others (`vulnops/clients/via`, namespace `a2vm-via`), on Kubernetes, with

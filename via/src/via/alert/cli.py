@@ -166,7 +166,7 @@ def cmd_watch(args: argparse.Namespace) -> int:
             (out / "index.json").write_text("[]", encoding="utf-8")
             return 0
         if radar.is_radar(profile):  # the watch team's radar (v0.22.0): events, whoever they concern
-            alerts = radar.alerts(items, profile, sources, state)
+            alerts = radar.alerts(items, profile, sources, state, llm=llm)
         else:
             matcher = DeclaredMatcher(settings, llm)
             inventory = _inventory(args.inventory, profile.id)

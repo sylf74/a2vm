@@ -414,7 +414,7 @@ pillar.
 
 | Pillar | Use cases | Status |
 | --- | --- | --- |
-| 1. Intelligence | CVE sheet prose; translation of the alerts; radar: product named by a publication and the event it belongs to, as proposals; components embedded by each appliance line, learnt from its vendor's advisories (D20) | Sheet prose and translation in place (v0.17.1); radar proposals planned (v0.22.2) |
+| 1. Intelligence | CVE sheet prose; translation of the alerts; radar: product named by a publication and the event it belongs to, as proposals; components embedded by each appliance line, learnt from its vendor's advisories (D20) | Sheet prose and translation in place (v0.17.1); radar proposals in place (v0.22.2), shown on the sheet, deciding nothing; embedded components planned (v0.23.0) |
 | 2. Detection | Product match proposal; names of the EDR's software inventory mapped to `purl` or CPE (D20) | Proposal only since v0.11.2; mapping planned (v0.23.0) |
 | 3. Triage & Prioritization | Missing SSVC inputs; rationale | In development |
 | 4. Dispatch & Capitalization | Ideas: remediation instructions or tickets, capitalisation summaries | Not started |
