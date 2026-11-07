@@ -379,7 +379,7 @@ def test_the_chart_runs_the_shared_service_for_the_watch_team_only():
     assert values["intel"]["url"] == "" and values["intel"]["serve"]["enabled"] is False
     intel = (charts / "templates" / "intel.yaml").read_text()
     assert "via intel-serve" in intel and "{{- if .Values.intel.serve.enabled }}" in intel
-    assert "values: [daily, watch, send]" in intel and "key: gti-api-key" in intel
+    assert "values: [daily, watch, send" in intel and "key: gti-api-key" in intel  # v0.23.2: and tools
     helpers = (charts / "templates" / "_helpers.tpl").read_text()
     for var in ("A2VM_INTEL_URL", "A2VM_INTEL_TOKEN_FILE", "A2VM_INTEL_RADAR_TOKEN_FILE", "A2VM_TEAMS_WEBHOOK_FILE"):
         assert var in helpers

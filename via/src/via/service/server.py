@@ -23,7 +23,7 @@ from typing import Any
 from urllib.parse import parse_qsl, unquote, urlsplit
 
 from a2vm.io import ExchangeError, validate_assets, validate_findings
-from a2vm.service import JsonHandler, Problem, TokenSet
+from a2vm.service import JsonHandler, Problem, TokenSet, moment
 from a2vm.service import serve as _serve
 
 from .store import ALERT_ID, FILE_NAME, INVENTORY_FILES, STATUSES, WatchStore
@@ -34,6 +34,17 @@ ROUTE = re.compile(r"^/v1/tenants/(?P<tenant>[a-z0-9][a-z0-9-]{0,62})/(?P<rest>.
 CLIENT = re.compile(r"^[a-z0-9][a-z0-9_-]{0,62}$")
 EVENTS = {"drafted", "analysts", "sent", "send-failed"}
 SHEET_MAX = 20000  # characters of a sheet given to a reader
+
+
+def _run_key(when: Any) -> str:
+    """A moment as the start of a passage's id (`20261107T081200Z`): ids sort by time."""
+    return when.strftime("%Y%m%dT%H%M%SZ")
+
+
+def drafted_at(run: str) -> str:
+    """When the passage that drafted an alert ran, from its id, ISO 8601 UTC (v0.23.2)."""
+    m = re.match(r"^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z", run or "")
+    return f"{m[1]}-{m[2]}-{m[3]}T{m[4]}:{m[5]}:{m[6]}+00:00" if m else ""
 
 
 class WatchService:
@@ -239,12 +250,18 @@ class WatchService:
             items = [a for a in items if query["cve"].upper() in [c.upper() for c in a.get("cves") or []]]
         if "level" in query:
             items = [a for a in items if a.get("level", "").lower() == query["level"].lower()]
+        # since, until (v0.23.2): a day, or a date and time; the moment of an alert is its passage's
         if "since" in query:
-            items = [a for a in items if a["run"] >= query["since"].replace("-", "")[:8]]
+            key = _run_key(moment(query["since"], "since"))
+            items = [a for a in items if a["run"][:16] >= key]
+        if "until" in query:
+            key = _run_key(moment(query["until"], "until", end=True))
+            items = [a for a in items if a["run"][:16] <= key]
         page = [
-            {k: a[k] for k in ("id", "level", "title", "cves", "status", "run", "prose") if k in a}
+            {**{k: a[k] for k in ("id", "level", "title", "cves", "status", "run", "prose") if k in a},
+             "drafted_at": drafted_at(a["run"])}
             for a in items[offset : offset + limit]
-        ]
+        ]  # fmt: skip
         out: dict[str, Any] = {"total": len(items), "offset": offset, "limit": limit, "items": page}
         if offset + limit < len(items):
             out["next_offset"] = offset + limit

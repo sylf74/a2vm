@@ -29,7 +29,7 @@ from typing import Any
 from urllib.parse import parse_qsl, urlsplit
 
 from a2vm.config import Settings
-from a2vm.service import JsonHandler, Problem, TokenSet
+from a2vm.service import JsonHandler, Problem, TokenSet, moment
 from a2vm.service import serve as _serve
 
 from .collect import collect_direct
@@ -171,9 +171,26 @@ class IntelService:
         kept = self.store.add_technologies([i for i in items if isinstance(i, dict)])
         return {"kept": kept}
 
-    def feed(self, token: str | None, since: str = "") -> dict[str, Any]:
+    def feed(self, token: str | None, since: str = "", query: dict[str, str] | None = None) -> dict[str, Any]:
+        """The items after a mark (`since`, the `next` of the last answer: a watch). Since v0.23.2 the
+        analysts' chat also asks a period and a kind: `since` and `until` a day or a date and time,
+        `kind` (radar, gti), `level`, `cve`; the mark stays the `at` of the last item."""
         self._require(token, "read")
+        query = query or {}
+        if since:  # a mark is an `at` (UTC): the same string back; a moment of the chat, made UTC
+            since = _iso(moment(since, "since"))
         items = self.store.feed(since)
+        if query.get("until"):
+            until = _iso(moment(query["until"], "until", end=True))
+            items = [i for i in items if i["at"] <= until]
+        if query.get("kind"):
+            if query["kind"] not in KINDS:
+                raise Problem(HTTPStatus.BAD_REQUEST, f"kind: {' or '.join(KINDS)}")
+            items = [i for i in items if i.get("kind") == query["kind"]]
+        if query.get("level"):
+            items = [i for i in items if i.get("level") == query["level"]]
+        if query.get("cve"):
+            items = [i for i in items if query["cve"].upper() in (i.get("cves") or [])]
         return {"items": items, "next": items[-1]["at"] if items else since}
 
     def publish(self, token: str | None, body: dict[str, Any]) -> dict[str, Any]:
@@ -280,8 +297,8 @@ def make_handler(service: IntelService) -> type[JsonHandler]:
             try:
                 if url.path != "/v1/feed":
                     raise Problem(HTTPStatus.NOT_FOUND, "no such route")
-                since = dict(parse_qsl(url.query)).get("since", "")
-                self.send_json(HTTPStatus.OK, service.feed(self.bearer(), since))
+                query = dict(parse_qsl(url.query))
+                self.send_json(HTTPStatus.OK, service.feed(self.bearer(), query.pop("since", ""), query))
             except Problem as p:
                 self.send_problem(p)
             except Exception:  # noqa: BLE001 - answer rather than drop the connection

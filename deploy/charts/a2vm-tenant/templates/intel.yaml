@@ -179,13 +179,13 @@ spec:
               kubernetes.io/metadata.name: {{ . | quote }}
           podSelector:
             matchExpressions:
-              - {key: app.kubernetes.io/component, operator: In, values: [daily, watch, send]}
+              - {key: app.kubernetes.io/component, operator: In, values: [daily, watch, send, tools]}
         {{- end }}
         {{- else }}
         - namespaceSelector: {}
           podSelector:
             matchExpressions:
-              - {key: app.kubernetes.io/component, operator: In, values: [daily, watch, send]}
+              - {key: app.kubernetes.io/component, operator: In, values: [daily, watch, send, tools]}
         {{- end }}
       ports:
         - {port: 8080, protocol: TCP}

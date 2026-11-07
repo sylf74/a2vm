@@ -74,7 +74,7 @@ test without the collector: `detect wazuh fetch --config wazuh.yaml --tenant lab
   connected is left out.
 - Wazuh is an inventory, not a scan: it does not count as a scan of the host in the coverage.
 - Linux packages (rpm, deb) are matched as soon as they are read. Windows and macOS software is
-  kept but matched only once the names are mapped to `purl` or CPE (v0.23.2).
+  kept but matched only once the names are mapped to `purl` or CPE (v0.23.3).
 
 ## 5. When the connector fails
 

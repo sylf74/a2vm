@@ -10,6 +10,7 @@ own copy until it moves here.
 
 from __future__ import annotations
 
+import datetime as dt
 import hashlib
 import hmac
 import json
@@ -20,9 +21,34 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 DIGEST = re.compile(r"^[0-9a-f]{64}$")
 PROBES = ("/healthz", "/readyz")
+
+
+def moment(value: str, name: str = "since", tz: str = "UTC", end: bool = False) -> dt.datetime:
+    """A day or a date and time of a query (v0.23.2), as an aware UTC moment: `2026-11-07`, the start
+    of that day in `tz` (its end with `end`, for an `until`); `2026-11-07T09:00`, that time in `tz`;
+    with an offset or Z, that moment. Anything else is a Problem (400) naming the parameter."""
+    text = str(value or "").strip()
+    try:
+        zone = ZoneInfo(tz)
+    except (ZoneInfoNotFoundError, ValueError) as exc:
+        raise Problem(HTTPStatus.BAD_REQUEST, f"unknown time zone {tz!r}") from exc
+    try:
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
+            day = dt.date.fromisoformat(text)
+            start = dt.datetime.combine(day + dt.timedelta(days=1) if end else day, dt.time(), zone)
+            return (start - dt.timedelta(microseconds=1) if end else start).astimezone(dt.UTC)
+        moment_ = dt.datetime.fromisoformat(text.replace("Z", "+00:00").replace(" ", "T"))
+    except ValueError as exc:
+        raise Problem(
+            HTTPStatus.BAD_REQUEST, f"{name}: a day YYYY-MM-DD or a date and time YYYY-MM-DDTHH:MM[+01:00]"
+        ) from exc
+    if moment_.tzinfo is None:
+        moment_ = moment_.replace(tzinfo=zone)
+    return moment_.astimezone(dt.UTC)
 
 
 def digest(token: str) -> str:

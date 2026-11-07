@@ -102,7 +102,11 @@ paths:
       security:
         - readToken: []
       parameters:
-        - {name: since, in: query, schema: {type: string}, description: "the `next` of the previous answer"}
+        - {name: since, in: query, schema: {type: string}, description: "the `next` of the previous answer; since v0.23.2 also a day or a date and time (UTC without an offset)"}
+        - {name: until, in: query, schema: {type: string}, description: "items up to this day (all of it) or moment (since v0.23.2)"}
+        - {name: kind, in: query, schema: {type: string, enum: [radar, gti]}, description: "only the items of this kind (since v0.23.2)"}
+        - {name: level, in: query, schema: {type: string}, description: "only the items of this level (since v0.23.2)"}
+        - {name: cve, in: query, schema: {type: string}, description: "only the items about this CVE (since v0.23.2)"}
       responses:
         "200":
           description: The items, oldest first
