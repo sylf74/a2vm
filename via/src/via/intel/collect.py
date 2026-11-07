@@ -16,6 +16,8 @@ from typing import Any
 from a2vm.models import REJECTED, VulnRecord
 
 from .gti import enrich
+from .packages import SOURCES as PACKAGE_SOURCES
+from .packages import parse as parse_packages
 from .record import parse_record
 from .remote import IntelClient, IntelError
 from .sources import SourceError, Sources
@@ -55,23 +57,26 @@ def _fetch(sources: Sources, cve_id: str) -> tuple[dict[str, Any] | None, Except
         return None, exc
 
 
-def collect(sources: Sources, cve_ids: list[str]) -> Collection:
+def collect(sources: Sources, cve_ids: list[str], packages: bool = False) -> Collection:
+    """The records of `cve_ids`; with `packages`, the package advisories of the distributions too
+    (the watch, to match the hosts' packages, D20)."""
+    kw = {"packages": True} if packages else {}
     if sources.settings.intel_url and not sources.fixtures and cve_ids:
         try:
-            return collect_shared(sources, cve_ids)
+            return collect_shared(sources, cve_ids, **kw)
         except IntelError as exc:
-            out = collect_direct(sources, cve_ids)
+            out = collect_direct(sources, cve_ids, **kw)
             out.notes.insert(0, f"intel: {exc}; records read from the sources directly")
             return out
-    return collect_direct(sources, cve_ids)
+    return collect_direct(sources, cve_ids, **kw)
 
 
-def collect_shared(sources: Sources, cve_ids: list[str], transport=None) -> Collection:  # noqa: ANN001
+def collect_shared(sources: Sources, cve_ids: list[str], transport=None, packages: bool = False) -> Collection:  # noqa: ANN001
     """The records from the shared intelligence service."""
     client = IntelClient.from_settings(sources.settings, transport)
     assert client is not None
     try:
-        records, errors, notes = client.records(cve_ids)
+        records, errors, notes = client.records(cve_ids, packages=packages)
     finally:
         client.close()
     out = Collection(requested=list(cve_ids), records=records, errors=errors, notes=notes)
@@ -79,7 +84,33 @@ def collect_shared(sources: Sources, cve_ids: list[str], transport=None) -> Coll
     return out
 
 
-def collect_direct(sources: Sources, cve_ids: list[str]) -> Collection:
+def add_packages(sources: Sources, records: list[VulnRecord]) -> list[str]:
+    """The package advisories of each record (D20), from the distributions configured; a source
+    that fails loses only its advisories, said in the notes."""
+    wanted = [s for s in sources.settings.packages_sources if s in PACKAGE_SOURCES]
+    if not wanted or not records:
+        return []
+    failures: dict[str, str] = {}
+
+    def one(record: VulnRecord) -> None:
+        found: list[dict[str, str]] = []
+        for source in wanted:
+            try:
+                found += parse_packages(source, sources.package_advisory(source, record.cve_id))
+            except (SourceError, ValueError, TypeError, KeyError, AttributeError) as exc:
+                failures.setdefault(source, f"{record.cve_id}: {exc}")
+        record.packages = found
+
+    workers = max(1, getattr(sources.settings, "fetch_workers", 1))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        list(pool.map(one, records))
+    with_any = sum(1 for r in records if r.packages)
+    notes = [f"packages: advisories of {', '.join(wanted)} for {with_any}/{len(records)} records"]
+    notes += [f"packages: {source} not read ({detail})" for source, detail in sorted(failures.items())]
+    return notes
+
+
+def collect_direct(sources: Sources, cve_ids: list[str], packages: bool = False) -> Collection:
     out = Collection(requested=list(cve_ids))
     kev = sources.kev()
     epss = sources.epss(cve_ids)
@@ -108,4 +139,6 @@ def collect_direct(sources: Sources, cve_ids: list[str]) -> Collection:
         out.records.append(record)
     if getattr(sources.settings, "gti_enabled", False):
         out.notes = enrich(sources, out.records)
+    if packages:
+        out.notes += add_packages(sources, out.records)
     return out

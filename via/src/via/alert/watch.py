@@ -17,6 +17,19 @@ minutes and labelled institutional, vendor or research:
 
 An item concerns the client when one of its CVEs matches a declared asset (same matching as the
 detection stage), or when a product it names matches a declared asset or the client's watchlist.
+Since v0.23.0 (D20) it also concerns the client when the packages listed on its hosts by the last
+daily run hold an affected version (the package advisories of the distributions, `a2vm.packages`):
+the alert names those hosts within minutes, with no scan. Each asset named carries a level of proof:
+
+  confirmed  a scan or an authenticated check of the last daily run sees the flaw
+  exposed    the inventory holds an affected version (packages listed, with their date), or a
+             version declared in the profile is in the affected range
+  possible   the product is there, its version against the record unknown: a package named like the
+             product on a distribution the advisories do not cover yet, a declared asset without a
+             version, a product named by the publication, a distribution still investigating
+
+The level is evidence for the analyst; it changes no decision (D4).
+
 The state file remembers what was already seen; the first run of each source only records its
 current state. A CVE already alerted in the last 14 days is not alerted again from another source,
 except when it becomes known as exploited (KEV).
@@ -35,6 +48,7 @@ from a2vm.config import Settings
 from a2vm.declared import DeclaredMatcher
 from a2vm.gti import ssvc_exploitation
 from a2vm.models import Asset, ClientProfile, DeclaredAsset, Finding, VulnRecord, exposure_value
+from a2vm.packages import INVESTIGATING, Exposure, covered, exposures, present
 from via.intel.collect import collect
 from via.intel.gti import RADAR_FILTER, discovered
 from via.intel.remote import IntelClient, IntelError
@@ -154,6 +168,14 @@ class Alert:
     detected: list[tuple[Asset, Finding]] = field(default_factory=list)  # from the last daily inventory
     inventory_as_of: str = ""
     radar: dict[str, Any] = field(default_factory=dict)  # the radar's event (v0.22.0), empty otherwise
+    # D20 (v0.23.0): hosts whose listed packages hold an affected version (level exposed), and hosts
+    # carrying a package named like the product, its version unknown against the record (possible).
+    exposed: list[tuple[Asset, Exposure]] = field(default_factory=list)
+    possible: list[tuple[Asset, str]] = field(default_factory=list)
+
+
+# Levels of proof of an asset named by an alert (D20), strongest first.
+CONFIRMED, EXPOSED, POSSIBLE = "confirmed", "exposed", "possible"
 
 
 # -- discovery --------------------------------------------------------------------------------
@@ -393,6 +415,34 @@ def _open(asset: Asset) -> bool:
     return exposure_value(asset.attributes["exposure"].value) == "open"
 
 
+def inventory_matches(
+    records: list[VulnRecord], inventory: Inventory, confirmed: set[tuple[str, str]]
+) -> tuple[list[tuple[Asset, Exposure]], list[tuple[Asset, str]]]:
+    """The hosts of the inventory exposed by their listed packages (D20), and those where the product
+    is possibly there; an asset already confirmed by a scan for the CVE is left to that proof."""
+    exposed: list[tuple[Asset, Exposure]] = []
+    possible: list[tuple[Asset, str]] = []
+    for record in records:
+        products = sorted({e.product for e in record.affected if e.product and e.product.lower() != "n/a"})
+        for asset in sorted(inventory.assets.values(), key=lambda a: a.id):
+            if not asset.components or (asset.id, record.cve_id) in confirmed:
+                continue
+            hits = exposures(record.cve_id, asset.components, record.packages, asset.os)
+            sure = [h for h in hits if h.state != INVESTIGATING]
+            if sure:
+                exposed += [(asset, h) for h in sure]
+                continue
+            if hits:  # the distribution has not decided yet
+                possible.append((asset, ", ".join(sorted({f"{h.component} {h.version}" for h in hits}))))
+                continue
+            if covered(asset.components, record.packages, asset.os):
+                continue  # the distribution says which versions are affected: none of these
+            named = sorted({f"{c['name']} {c['version']}" for p in products for c in present(p, asset.components)})
+            if named:
+                possible.append((asset, ", ".join(named)))
+    return exposed, possible
+
+
 def relevant(
     items: list[Item],
     profile: ClientProfile,
@@ -405,8 +455,9 @@ def relevant(
 ) -> list[Alert]:
     wanted = sorted({c for it in items for c in it.cves})
     records: dict[str, VulnRecord] = {}
+    listed = inventory is not None and any(a.components for a in inventory.assets.values())
     if wanted:
-        collection = collect(sources, wanted)
+        collection = collect(sources, wanted, packages=listed)
         records = {r.cve_id: r for r in collection.records}
         for note in collection.notes:
             print(note)
@@ -427,7 +478,12 @@ def relevant(
                     asset = inventory.assets.get(f.asset_ref)
                     if asset is not None:
                         detected.append((asset, f))
-        if not findings and not by_name and not detected:
+        exposed_by_packages: list[tuple[Asset, Exposure]] = []
+        possible: list[tuple[Asset, str]] = []
+        if listed:
+            confirmed = {(a.id, f.cve_id) for a, f in detected}
+            exposed_by_packages, possible = inventory_matches(recs, inventory, confirmed)
+        if not findings and not by_name and not detected and not exposed_by_packages and not possible:
             continue
         if it.origin == "cve":
             label = cna_label(recs, catalogue or [])
@@ -444,6 +500,7 @@ def relevant(
             reasons.append("cisa_poc")
         exposed = [f.asset_ref for f in findings if exposure(profile, assets.get(f.asset_ref)) == "open"]
         exposed += [a.id for a, _ in detected if "exposure" in a.attributes and _open(a)]
+        exposed += [a.id for a, _ in exposed_by_packages if "exposure" in a.attributes and _open(a)]
         if exposed and any(_critical(r) for r in recs):
             reasons.append("exposed_critical")
         level = "urgent" if reasons else "info"
@@ -462,6 +519,8 @@ def relevant(
                 reasons=reasons,
                 detected=detected,
                 inventory_as_of=inventory.as_of if inventory else "",
+                exposed=exposed_by_packages,
+                possible=possible,
             )
         )
     if state:

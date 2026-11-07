@@ -412,8 +412,35 @@ def concerned_rows(alert: Alert, cited_by: str, lang: str = "en") -> tuple[list[
                 "version_corrigee": ", ".join(fixed),
                 "responsable": owner.value if owner and owner.source != "default" else "",
                 "source": t(lang, "src.detected", sources=", ".join(sources)),
+                "preuve": t(lang, "proof.confirmed"),
             }
         )
+        seen.add(asset.id)
+    by_asset: dict[str, list[Any]] = {}
+    for asset, hit in alert.exposed:  # what the packages listed on the host hold (D20, v0.23.0)
+        by_asset.setdefault(asset.id, [asset]).append(hit)
+    for asset, *hits in by_asset.values():
+        if asset.id in seen:
+            continue
+        row, open_ = _host_row(asset, lang)
+        exposed |= open_
+        fixes = sorted({h.fixed for h in hits if h.fixed})
+        dates = sorted({h.seen[:10] for h in hits if h.seen})
+        row.update(
+            version_installee=", ".join(sorted({f"{h.component} {h.version}" for h in hits})),
+            version_corrigee=", ".join(fixes) if fixes else t(lang, "fix.none_yet"),
+            source=t(lang, "src.packages", sources=", ".join(sorted({h.source for h in hits})),
+                     date=dates[-1] if dates else "?"),
+            preuve=t(lang, "proof.exposed"),
+        )  # fmt: skip
+        rows.append(row)
+        seen.add(asset.id)
+    for asset, named in alert.possible:  # a package named like the product, its version unknown
+        if asset.id in seen:
+            continue
+        row, _ = _host_row(asset, lang)
+        row.update(version_installee=named, source=t(lang, "src.packages_possible"), preuve=t(lang, "proof.possible"))
+        rows.append(row)
         seen.add(asset.id)
     for f in alert.findings:  # declared assets matched by product
         if f"declared:{f.asset_ref}" in seen:
@@ -430,21 +457,45 @@ def concerned_rows(alert: Alert, cited_by: str, lang: str = "en") -> tuple[list[
                 "version_corrigee": "",
                 "responsable": (a.owner or "") if a else "",
                 "source": t(lang, "src.declared"),
+                "preuve": t(lang, "proof.exposed" if f.status == "affected" else "proof.possible"),
             }
         )
     empty = dict.fromkeys(("zone", "exposition", "version_installee", "version_corrigee", "responsable"), "")
     for m in alert.product_matches:
         if m.startswith("watchlist: "):
-            rows.append({"nom": m[11:], **empty, "source": t(lang, "src.watchlist"), "watchlist": "1"})
+            rows.append({"nom": m[11:], **empty, "source": t(lang, "src.watchlist"), "preuve": "", "watchlist": "1"})
         elif not any(f.asset_ref == m for f in alert.findings):
             a = alert.assets.get(m)
-            rows.append({"nom": a.description if a else m, **empty, "source": t(lang, "src.cited", source=cited_by)})
+            rows.append({"nom": a.description if a else m, **empty, "source": t(lang, "src.cited", source=cited_by),
+                         "preuve": t(lang, "proof.possible")})  # fmt: skip
     return rows, exposed
+
+
+def _host_row(asset: Any, lang: str) -> tuple[dict[str, str], bool]:
+    """The columns of an inventory host that do not depend on the proof: name, zone, exposure, owner."""
+    exp = asset.attributes.get("exposure")
+    value = exposure_value(exp.value) if exp else ""
+    how = t(lang, f"exp.{value}") if value in ("open", "controlled", "small") else value
+    if exp:
+        how += ", " + (t(lang, f"exps.{exp.source}") if f"exps.{exp.source}" in _EXPS else exp.source)
+    zone = asset.attributes.get("zone")
+    owner = asset.attributes.get("owner")
+    row = {
+        "nom": asset.name,
+        "zone": zone.value if zone else "",
+        "exposition": how,
+        "version_installee": "",
+        "version_corrigee": "",
+        "responsable": owner.value if owner and owner.source != "default" else "",
+        "source": "",
+        "preuve": "",
+    }
+    return row, value == "open"
 
 
 _EXPS = {f"exps.{k}" for k in ("external-scan", "declared", "rule", "default", "published")}
 _SRC = {f"src.{k}" for k in ("trivy", "dnf-updateinfo", "openvas", "external-scan", "inventory")}
-ROW_KEYS = ("nom", "zone", "exposition", "version_installee", "version_corrigee", "responsable", "source")
+ROW_KEYS = ("nom", "zone", "exposition", "version_installee", "version_corrigee", "responsable", "source", "preuve")
 
 
 def _concerned(alert: Alert, cited_by: str, lang: str = "en") -> tuple[list[str], bool, list[dict[str, str]]]:

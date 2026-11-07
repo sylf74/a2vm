@@ -60,6 +60,9 @@ class VulnRecord:
     cwe_names: dict[str, str] = field(default_factory=dict)  # CWE id -> name, from the record
     updated: str | None = None  # last update of the CVE record (dateUpdated, since v0.15.2)
     epss_date: str | None = None  # day of the EPSS score (since v0.15.2)
+    # Package advisories of the distributions (D20, since v0.23.0, via.intel.packages): {distro,
+    # name (source package), introduced, fixed, last_affected, state, advisory, url, source}.
+    packages: list[dict[str, str]] = field(default_factory=list)
 
     @property
     def in_kev(self) -> bool:
@@ -77,7 +80,8 @@ class VulnRecord:
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> VulnRecord:
-        d = dict(d)
+        # A field a newer version adds is left out rather than refused (fields are only added).
+        d = {k: v for k, v in d.items() if k in cls.__dataclass_fields__}
         d["cvss"] = [CvssMetric(**m) for m in d.get("cvss", [])]
         d["affected"] = [AffectedEntry(**a) for a in d.get("affected", [])]
         return cls(**d)
@@ -238,7 +242,8 @@ class AssetObservation:
     identifiers: dict[str, Any] = field(default_factory=dict)  # fqdn, hostname, ips[], image
     attributes: dict[str, str] = field(default_factory=dict)  # attributes seen by this source
     os: str | None = None
-    # Every package installed on the host (v0.22.2), vulnerable or not: {name, version, arch, type, purl}.
+    # Every package installed on the host (v0.22.2), vulnerable or not: {name, version, arch, type, purl},
+    # since v0.23.0 with source_package, distro and source (where it was seen: ssh).
     components: list[dict[str, str]] = field(default_factory=list)
 
 
@@ -271,7 +276,9 @@ class Asset:
     # When each source last observed the asset (v0.18.1): a scan that found nothing still says the
     # asset was looked at, so a finding gone from it was fixed rather than left unchecked.
     scans: dict[str, str] = field(default_factory=dict)
-    # Every package installed (v0.22.2): from the newest observation that listed them, and when.
+    # The components of the asset (D20): every package installed (v0.22.2). Since v0.23.0 each
+    # component carries its source and when that source last listed it (`seen`): the newest listing
+    # of each source, every source kept. `components_seen` is the newest of them.
     components: list[dict[str, str]] = field(default_factory=list)
     components_seen: str = ""
 

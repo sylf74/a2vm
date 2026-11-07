@@ -73,13 +73,19 @@ class IntelClient:
         except ValueError as exc:
             raise IntelError(f"shared intelligence service: {method} {path}: not JSON") from exc
 
-    def records(self, cve_ids: list[str]) -> tuple[list[VulnRecord], list[dict[str, str]], list[str]]:
-        """(records, errors, notes) for `cve_ids`, in batches."""
+    def records(
+        self, cve_ids: list[str], packages: bool = False
+    ) -> tuple[list[VulnRecord], list[dict[str, str]], list[str]]:
+        """(records, errors, notes) for `cve_ids`, in batches; with `packages`, the package advisories
+        of the distributions too (v0.23.0; a service of an older version leaves them out)."""
         records: list[VulnRecord] = []
         errors: list[dict[str, str]] = []
         notes: list[str] = []
         for i in range(0, len(cve_ids), BATCH):
-            data = self._call("POST", "/v1/records", json={"cves": cve_ids[i : i + BATCH]})
+            body: dict[str, Any] = {"cves": cve_ids[i : i + BATCH]}
+            if packages:
+                body["packages"] = True
+            data = self._call("POST", "/v1/records", json=body)
             try:
                 records += [VulnRecord.from_dict(r) for r in data["records"]]
             except (KeyError, TypeError) as exc:

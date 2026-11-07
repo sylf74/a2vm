@@ -158,7 +158,7 @@ class IntelService:
         with self.collect_lock:
             sources = self._sources()
             try:
-                out = collect_direct(sources, wanted)
+                out = collect_direct(sources, wanted, packages=body.get("packages") is True)
             finally:
                 sources.close()
         return {"records": [r.to_dict() for r in out.records], "errors": out.errors, "notes": out.notes}

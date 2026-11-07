@@ -73,16 +73,22 @@ The sheet lists the assets concerned in a table:
 | Exposition | Exposure and its source (external scan, declared, rule, assumed) |
 | Version installée / corrigée | Package and versions observed by the scanners |
 | Responsable | Owner, when declared or set by a rule |
-| Source | Detected (package scan, dnf updates, network scan, external scan), declared, watchlist, product cited by the publication |
+| Source | Detected (package scan, dnf updates, network scan, external scan), packages listed (source, date; v0.23.0), declared, watchlist, product cited by the publication |
+| Preuve (v0.23.0) | Level of proof: confirmed (a scan saw the flaw), exposed (an affected version is installed or declared), possible (the product is there, its version not decided) |
 
 Under the table: "Inventaire du JJ/MM/AAAA", the date of the inventory used. The job log says
 which inventory was read; older than 8 days it is flagged `WARN`, and without one (no daily run
 yet, artifacts expired after 30 days) the watch goes on with the declared assets only.
 `via watch --inventory none` disables it, `--inventory <dir>` reads a local copy.
 
-Limit: a detected host is named only for a CVE already in the last daily findings. A CVE
-published since the last daily run is matched against declared assets and the watchlist only,
-until the full package list of each host is collected.
+Since v0.23.0 (HLD D20) a CVE published since the last daily run is also matched against the
+packages listed on each host by that run: the watch reads the package advisories of the
+distributions for the CVE (Red Hat for RHEL, Rocky Linux and AlmaLinux; OSV for Debian and Ubuntu;
+only the CVE id leaves) and names the hosts that hold an affected version, level `exposed`, with the
+fixed version or "no fix yet". Before the distribution has published (a new CVE often comes first),
+a host with a package named like the product is `possible`. The job log says on how many hosts the
+packages are listed (`packages listed on N hosts`); a v0.22.2 collector does not give the source
+package of the libraries (`openssl-libs` of `openssl`): move the collectors to v0.23.0.
 
 ## Validation and sending (v0.11.3)
 
@@ -253,7 +259,8 @@ tenant, a button to the review page or the pipeline (`docs/radar.md` §5).
   artifacts of past jobs keep their copies until they expire). On Kubernetes it is kept by `via serve`.
 - Without on-call duty, alerts found at night wait for the first analyst in the morning: the gain
   is that they are drafted, matched and one click away when the analyst arrives.
-- Scanned hosts are used through the last daily findings only (see above): a brand-new CVE is not
-  matched against the packages installed on the hosts yet.
+- The packages of the hosts are those of the last daily run: a package installed or updated since
+  is seen at the next run. Other distributions than RHEL and its rebuilds, Debian and Ubuntu,
+  libraries loaded in memory, images, appliances and EDR inventories come with v0.23.1 to v0.23.3.
 - The CERT-FR JSON view is read defensively: a missing field degrades the sheet (fewer details),
   it does not stop the watch.

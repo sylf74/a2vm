@@ -26,6 +26,12 @@ sources:
   gti_cache_hours: 24
   gti_workers: 4
   gti_max_calls: 2000          # network lookups per run, CVEs not in KEV and most severe first
+  # Package advisories of the distributions (v0.23.0), read by CVE id only when the watch matches
+  # the hosts' packages: Red Hat (RHEL, Rocky Linux, AlmaLinux), OSV for Debian and Ubuntu.
+  packages_sources: [redhat, debian, ubuntu]
+  redhat_url: "https://access.redhat.com/hydra/rest/securitydata/cve/{cve_id}.json"
+  osv_url: "https://api.osv.dev/v1/vulns/{id}"
+  packages_cache_hours: 12
 
 llm:
   enabled: false                      # true once the inference server is reachable
