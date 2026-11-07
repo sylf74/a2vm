@@ -5,6 +5,50 @@ analyst and, under **Upgrade**, what a tenant must do when it moves to that tag 
 `A2VM_REF` in its `.gitlab-ci.yml`). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
 §11) and the LLDs. A release adds its entry here in the same merge request (CLAUDE.md, Releasing).
 
+## v0.23.0 — 2026-11-07
+
+First step of D20, the exposure from an inventory of components: the watch names the hosts whose
+packages hold an affected version within minutes of a publication, without waiting for a scan.
+
+- **Packages with their distribution** (pillar 2, `docs/scanning.md`): the SSH collection reads
+  `/etc/os-release` and gives each package its distribution (`distro`, e.g. `rocky-9.4`) and its
+  source package (`source_package`: `openssl` for `openssl-libs` or `libssl3`), in a `purl` with
+  namespace and distro.
+- **Components with their source and age** (pillar 3, LLD triage-prioritization §14.7): the asset
+  keeps, for each source of components, its newest listing, each component with its `source` and the
+  date it was seen (`seen`).
+- **Package advisories in the records** (pillar 1): Red Hat's security data (RHEL and its rebuilds,
+  Rocky Linux and AlmaLinux) and OSV (Debian, Ubuntu), read by CVE id only, become `packages` on each
+  record (`vulnops.records/1`, a field added). Read only when asked: by the watch when the last
+  inventory lists packages, by the shared intelligence service when a request carries `packages:
+  true` (`intel.v1.yaml`). Settings `sources.packages_sources`, `redhat_url`, `osv_url`,
+  `packages_cache_hours`.
+- **Watch: hosts named with a level of proof** (`docs/alerts.md`): each new record is matched
+  against the packages of the last daily inventory (`a2vm.packages`, rpm and dpkg version order).
+  Each asset of the alert sheet carries a level in a new column (Proof / Preuve): `confirmed` (a scan
+  saw the flaw), `exposed` (an affected version is installed, with the fix or "no fix yet" and the
+  date of the listing, or a declared version is in the range), `possible` (the product is there, its
+  version not decided: the distribution has not published or is investigating, a declared asset
+  without version, a product named by the publication). A host exposed and open to the internet makes
+  the alert urgent for a critical CVE. The level is evidence; the SSVC tables decide (D4).
+- The neutral Word templates have the column Proof; a client's own template may add the field
+  `{{ a.preuve }}` to its table of assets.
+- HLD: D20 in progress, the roadmap split into v0.23.0 (this base), v0.23.1 (appliances and network
+  devices, CSAF), v0.23.2 (libraries in memory, SBOMs), v0.23.3 (Wazuh, then SentinelOne) and later.
+
+**Upgrade**:
+
+1. The shared intelligence service first: move the tenant `via` to `v0.23.0` (`ref`, `A2VM_REF`) and
+   push. It must reach `access.redhat.com` and `api.osv.dev` (HTTPS, through the proxy if any). An
+   older service ignores the request for packages: the tenants' alerts then name only `possible`
+   hosts.
+2. Move `ref` and `A2VM_REF` of each client tenant to `v0.23.0` and push. No database schema change.
+3. The collectors: run the install script again with `--image …/detect:v0.23.0`, or change the tag
+   in the unit and pull the image (`docs/collectors.md` §2). Until then the packages have no
+   distribution nor source package: they are compared on the host's OS and the binary name, so a
+   library such as `openssl-libs` is not matched to `openssl`.
+4. A client's own Word template may add the column `{{ a.preuve }}`.
+
 ## v0.22.2 — 2026-11-07
 
 Consolidation: the respect of the SLA measured on when a fix happened, the radar's precision and
