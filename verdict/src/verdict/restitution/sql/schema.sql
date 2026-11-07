@@ -1,5 +1,5 @@
 -- SPDX-License-Identifier: LicenseRef-a2vm-proprietary
--- Reporting database of A2VM (schema a2vm, version 5): the reporting datasets of every run and
+-- Reporting database of A2VM (schema a2vm, version 6): the reporting datasets of every run and
 -- tenant, read by dashboarding and reporting tools. Idempotent: run again on every init; an
 -- upgrade only adds (columns, views, functions), so a database of an earlier version is kept.
 -- Objects are owned by the writer role (the A2VM jobs); readers get SELECT, limited to their
@@ -8,7 +8,7 @@
 CREATE SCHEMA IF NOT EXISTS a2vm;
 
 CREATE TABLE IF NOT EXISTS a2vm.schema_version (version integer PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now());
-INSERT INTO a2vm.schema_version (version) VALUES (1), (2), (3), (4), (5) ON CONFLICT DO NOTHING;
+INSERT INTO a2vm.schema_version (version) VALUES (1), (2), (3), (4), (5), (6) ON CONFLICT DO NOTHING;
 
 -- Which tenants a reading role may see; tenant '*' = all of them (the Grafana of the MSSP).
 CREATE TABLE IF NOT EXISTS a2vm.tenant_roles (
@@ -154,6 +154,17 @@ ALTER TABLE a2vm.runs
     ADD COLUMN IF NOT EXISTS sla_overdue      integer,
     ADD COLUMN IF NOT EXISTS sla_due_soon     integer,
     ADD COLUMN IF NOT EXISTS sla_unclassified integer;
+-- Version 6 (v0.22.2, D19): the date the team declared a finding fixed in the ITSM, read from the
+-- dispatch service at each publication; the latest per finding. A declaration only: finding_closures
+-- counts it when it lies between the last scan that still saw the flaw and the first that did not.
+CREATE TABLE IF NOT EXISTS a2vm.declared_fixes (
+    tenant       text NOT NULL,
+    finding_id   text NOT NULL,
+    declared_at  timestamptz NOT NULL,
+    ref          text,
+    published_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant, finding_id)
+);
 CREATE TABLE IF NOT EXISTS a2vm.sources (
     run_id           bigint NOT NULL REFERENCES a2vm.runs ON DELETE CASCADE,
     tenant           text NOT NULL,
@@ -245,9 +256,37 @@ CREATE OR REPLACE VIEW a2vm.finding_closures AS
            ) THEN 'fixed' ELSE 'unverified' END AS outcome,
            -- Version 5: the client's SLA, met when fixed on or before its SLA due date.
            nullif(d.priority, '') AS priority, d.priority_rank, d.sla_due,
-           CASE WHEN d.sla_due IS NULL THEN NULL ELSE p.generated_at::date <= d.sla_due END AS within_sla
+           CASE WHEN d.sla_due IS NULL THEN NULL ELSE p.generated_at::date <= d.sla_due END AS within_sla,
+           -- Version 6 (v0.22.2): when the fix happened, not when a run saw it. The fix lies between the
+           -- last observation of the flaw (last_vulnerable) and the first scan that no longer saw it
+           -- (first_clean). fix_status against the deadline (the SLA due date, else BOD 26-04): met
+           -- (observed) when first_clean is on or before it; missed when the flaw was still seen after
+           -- it; else, when the date declared in the ITSM lies in the interval, met (declared, verified)
+           -- if on or before it and missed if after; else to verify. NULL when not known to be fixed.
+           w.last_vulnerable, w.first_clean, f.declared_at,
+           coalesce(d.sla_due, d.due_date) AS deadline,
+           CASE
+               WHEN w.first_clean IS NULL OR coalesce(d.sla_due, d.due_date) IS NULL THEN NULL
+               WHEN w.first_clean::date <= coalesce(d.sla_due, d.due_date) THEN 'met (observed)'
+               WHEN w.last_vulnerable::date > coalesce(d.sla_due, d.due_date) THEN 'missed'
+               WHEN f.declared_at IS NOT NULL AND f.declared_at >= w.last_vulnerable
+                    AND f.declared_at <= w.first_clean THEN
+                   CASE WHEN f.declared_at::date <= coalesce(d.sla_due, d.due_date) THEN 'met (declared, verified)'
+                        ELSE 'missed' END
+               ELSE 'to verify'
+           END AS fix_status
     FROM a2vm.run_pairs p
     JOIN a2vm.decisions d ON d.run_id = p.previous_run_id
+    LEFT JOIN LATERAL (
+        SELECT (SELECT max(s.seen::timestamptz) FROM jsonb_each_text(coalesce(d.seen_by, '{}'::jsonb)) s (source, seen))
+                   AS last_vulnerable,
+               (SELECT min((a.scans ->> s.source)::timestamptz)
+                FROM a2vm.assets a
+                CROSS JOIN LATERAL jsonb_each_text(coalesce(d.seen_by, '{}'::jsonb)) s (source, seen)
+                WHERE a.run_id = p.run_id AND a.asset = d.asset AND a.scans ? s.source
+                  AND (a.scans ->> s.source)::timestamptz > s.seen::timestamptz) AS first_clean
+    ) w ON true
+    LEFT JOIN a2vm.declared_fixes f ON f.tenant = d.tenant AND f.finding_id = d.finding_id
     WHERE NOT EXISTS (SELECT 1 FROM a2vm.decisions c WHERE c.run_id = p.run_id AND c.finding_id = d.finding_id);
 ALTER VIEW a2vm.finding_closures SET (security_invoker = true);
 
@@ -281,7 +320,7 @@ ALTER VIEW a2vm.latest_coverage SET (security_invoker = true);
 DO $$
 DECLARE t text;
 BEGIN
-    FOREACH t IN ARRAY ARRAY['runs', 'decisions', 'assets', 'exposure_gaps', 'sources', 'coverage'] LOOP
+    FOREACH t IN ARRAY ARRAY['runs', 'decisions', 'assets', 'exposure_gaps', 'sources', 'coverage', 'declared_fixes'] LOOP
         EXECUTE format('ALTER TABLE a2vm.%I ENABLE ROW LEVEL SECURITY', t);
         EXECUTE format('DROP POLICY IF EXISTS tenant_read ON a2vm.%I', t);
         EXECUTE format(

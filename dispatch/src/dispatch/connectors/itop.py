@@ -12,6 +12,9 @@ be given to a Team (`team`), and are linked to the CMDB item of their asset when
   resolve  core/apply_stimulus ev_resolve (solution, resolution_code "software patch")
   reopen   core/apply_stimulus ev_reopen
   status   core/get: status (new, assigned, pending, escalated_tto, escalated_ttr, resolved, closed)
+  declared core/get: resolution_date, the day the team says it fixed (v0.22.2), verified by a scan
+  due      core/update of the field `due_field` (an extension's date field, v0.22.2): the due date
+           A2VM computed (the client's SLA, else BOD 26-04), on create and whenever it changes
 """
 
 from __future__ import annotations
@@ -49,6 +52,8 @@ class ItopConnector:
         self.priorities = {
             str(k): (str(v["impact"]), str(v["urgency"])) for k, v in (s.get("priorities") or {}).items()
         }
+        # The ticket's field that receives A2VM's due date (v0.22.2); "" (default): not pushed.
+        self.due_field = str(s.get("due_field") or "")
         self._password = password
         self.http = httpx.Client(
             timeout=httpx.Timeout(float(s.get("timeout_seconds", 60)), connect=10.0),
@@ -110,6 +115,8 @@ class ItopConnector:
             fields["team_id"] = {"name": self.team}
         if ticket.cmdb.get("key"):
             fields["functionalcis_list"] = [{"functionalci_id": int(ticket.cmdb["key"])}]
+        if self.due_field and ticket.due:
+            fields[self.due_field] = ticket.due
         data = self._call(
             {
                 "operation": "core/create",
@@ -136,6 +143,36 @@ class ItopConnector:
                 "fields": {"public_log": text},
             }
         )
+
+    def set_due(self, external: External, due: str) -> bool:
+        """Write A2VM's due date into the ticket's `due_field`; False when no field is set."""
+        if not self.due_field:
+            return False
+        self._call(
+            {
+                "operation": "core/update",
+                "comment": "A2VM",
+                "class": self.cls,
+                "key": int(self._key(external)),
+                "output_fields": "id",
+                "fields": {self.due_field: due},
+            }
+        )
+        return True
+
+    def declared_fix(self, external: External) -> str:
+        """The day the team resolved the ticket in iTop (resolution_date), "" when none."""
+        data = self._call(
+            {
+                "operation": "core/get",
+                "class": self.cls,
+                "key": int(self._key(external)),
+                "output_fields": "resolution_date",
+            }
+        )
+        objects = list((data.get("objects") or {}).values())
+        value = str((objects[0].get("fields") or {}).get("resolution_date") or "") if objects else ""
+        return value.replace(" ", "T") if value and not value.startswith("0000") else ""
 
     def _stimulus(self, external: External, stimulus: str, fields: dict[str, Any]) -> None:
         self._call(

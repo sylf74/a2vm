@@ -95,6 +95,10 @@ class Ticket:
     updated_at: str = ""
     history: list[dict[str, Any]] = field(default_factory=list)
     error: str = ""
+    # v0.22.2: the date the team resolved the ticket in the ITSM (a declaration, verified by a scan
+    # before it counts), and the due date last written into the ticket.
+    declared_fixed_at: str = ""
+    due_pushed: str = ""
 
     @property
     def open_findings(self) -> list[Finding]:

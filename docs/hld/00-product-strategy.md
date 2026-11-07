@@ -355,7 +355,7 @@ image with `a2vm` only.
 | Decision service | API | `verdict.v1.yaml` | Pillar 3 (`verdict serve`) | Daily run, tool server of the chat |
 | Watch service | API | `via.v1.yaml` | Pillar 1 (`via serve`) | Daily run, watch and send jobs, tool server of the chat |
 | Shared intelligence service (D17) | API | `intel.v1.yaml` | Pillar 1 (`via intel-serve`, namespace of the watch team) | Every tenant's daily run (records), watch (technologies, feed) and send; the watch team's sender (radar events) |
-| Dispatch service | API | `dispatch.v1.yaml` | Pillar 4 (`dispatch serve`, v0.20.0) | Daily run (step `dispatch`), tools |
+| Dispatch service | API | `dispatch.v1.yaml` | Pillar 4 (`dispatch serve`, v0.20.0) | Daily run (step `dispatch`; since v0.22.2 the step `publish` reads the declared fixes), tools (the tickets, v0.22.2) |
 | Dispatch rules | Exchange file (tenant project) | `dispatch.schema.json` | Tenant project | Pillar 4 |
 | Matching of declared assets | Library of `a2vm` | `a2vm.declared` | Owned by pillar 2 | Pillars 2 (declared inventory), 1 (watch) |
 | CISA SSVC tables, BOD 26-04 delay | Library of `a2vm` | `a2vm.ssvc` | Owned by pillar 3 | Pillars 3 (decision), 1 (watch's delay) |

@@ -44,6 +44,9 @@ class Connector(Protocol):
     def status(self, external: External) -> tuple[str, str]: ...  # (the tool's status, CLOSED|WORKING|GONE)
     def close(self) -> None: ...
 
+    # Optional (v0.22.2): `declared_fix(external) -> str`, the date the team says it fixed; and
+    # `set_due(external, due) -> bool`, A2VM's due date written into the ticket.
+
 
 def secret_file(directory: str | Path, name: str) -> str:
     path = Path(directory) / name

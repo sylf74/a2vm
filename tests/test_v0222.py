@@ -292,3 +292,142 @@ def test_the_tools_pod_reads_dispatch_when_it_runs() -> None:
     assert chat.count("{{- if .Values.dispatch.enabled }}") >= 4  # label, args, secret item, egress
     values = (Path(__file__).resolve().parents[1] / "deploy/charts/a2vm-tenant/values.yaml").read_text()
     assert "list_tickets" in values and "find_component" in values and "never count a list yourself" in values
+
+
+# -- respect of the SLA measured on when a fix happened (D19, v0.22.2) ---------------------------------
+from .test_restitution import ADMIN, needs_db, reporting_db  # noqa: E402, F401, F811 - the fixture
+
+
+@needs_db
+def test_fix_status_from_the_interval_and_the_declared_date(settings, sources, tmp_path, reporting_db):  # noqa: F811
+    import json
+
+    import psycopg
+
+    from verdict.reporting import build
+    from verdict.restitution import db
+    from verdict.restitution.cli import main
+
+    from .test_v0210 import _sla_run
+
+    rdb = reporting_db
+    run = _sla_run(settings, sources, tmp_path)
+    day1 = {"schema": "a2vm.reporting/1", **build(run, settings.policy)}
+    fixed = next(d for d in day1["decisions"] if d["priority"] == "P4")
+    other = next(d for d in day1["decisions"] if d["priority"] and d is not fixed and d["asset"] != fixed["asset"])
+    seen = {"inventory": "2026-11-02T06:00:00+00:00"}
+    for d in (fixed, other):
+        d["seen_by"] = seen
+    deadline = fixed.get("sla_due") or fixed["due_date"]
+    day2 = json.loads(json.dumps(day1))
+    day2["generated_at"] = "2026-11-07T09:00:00+00:00"
+    day2["decisions"] = [
+        d for d in day2["decisions"] if d["finding_id"] not in (fixed["finding_id"], other["finding_id"])
+    ]
+    for a in day2["assets"]:
+        if a["id"] == fixed["asset"]:
+            a["scans"] = {"inventory": "2100-01-01T00:00:00+00:00"}  # first clean scan long after the deadline
+        if a["id"] == other["asset"]:
+            a["scans"] = {"inventory": "2026-11-03T06:00:00+00:00"}  # the next day: on time
+    assert db.init(ADMIN, rdb["writer"]).startswith("schema a2vm version 6")
+    for i, d in enumerate((day1, day2)):
+        p = tmp_path / f"r{i}.json"
+        p.write_text(json.dumps(d))
+        assert main(["publish", str(p), "--dsn", rdb["as_writer"]]) == 0
+
+    def status(finding):
+        with psycopg.connect(rdb["as_writer"]) as conn:
+            return conn.execute(
+                "SELECT fix_status, last_vulnerable::date, first_clean::date FROM a2vm.finding_closures "
+                "WHERE finding_id = %s",
+                (finding,),
+            ).fetchone()
+
+    assert status(other["finding_id"])[0] == "met (observed)"
+    assert status(fixed["finding_id"])[0] == "to verify"
+    declared = [{"finding": fixed["finding_id"], "declared_at": f"{deadline}T08:00:00+00:00", "ref": "R-000042"}]
+    run2 = db.load(tmp_path / "r1.json")
+    db.publish(rdb["as_writer"], run2, declared)
+    assert status(fixed["finding_id"])[0] == "met (declared, verified)"
+    too_late = [{"finding": fixed["finding_id"], "declared_at": "2099-01-01T08:00:00+00:00"}]
+    db.publish(rdb["as_writer"], run2, too_late)
+    assert status(fixed["finding_id"])[0] == "missed"  # declared in the interval, after the deadline
+    outside = [{"finding": fixed["finding_id"], "declared_at": "2026-10-01T08:00:00+00:00"}]
+    db.publish(rdb["as_writer"], run2, outside)
+    assert status(fixed["finding_id"])[0] == "to verify"  # before the last scan that still saw it: not believed
+
+
+# -- dispatch: the declared date of a fix, the due date in the ticket (v0.22.2) ------------------------
+def test_dispatch_keeps_the_declared_date_and_writes_the_due_date(tmp_path) -> None:
+    from a2vm.service import TokenSet, digest
+    from dispatch.rules import Rules
+    from dispatch.service import Service
+
+    from .test_v0200 import RULES, FakeDecisions, FakeTool, dec, dispatcher
+
+    class Tool(FakeTool):
+        due_field = "a2vm_due_date"
+
+        def __init__(self):
+            super().__init__()
+            self.dues, self.declared = [], {}
+
+        def set_due(self, external, due):
+            self.dues.append((external.ref, due))
+            return True
+
+        def declared_fix(self, external):
+            return self.declared.get(external.ref, "")
+
+    a = "host:web01.lab.example"
+    tool = Tool()
+    d, _ = dispatcher(tmp_path, [dec(1, a, "ACT", ["openssl 3.0.15"], due="2026-11-20")], tool=tool)
+    assert d.process_run()["sent"] == 1
+    (t,) = d.store.tickets()
+    assert t.due_pushed == "2026-11-20" and tool.dues == []  # written with the ticket
+    d.decisions = FakeDecisions([dec(1, a, "ACT", ["openssl 3.0.15"], due="2026-11-12")], run="R2")
+    d.process_run()
+    assert tool.dues == [("UserRequest::1", "2026-11-12")]
+    d.process_run()
+    assert len(tool.dues) == 1  # unchanged: not written again
+    tool.statuses["1"] = "resolved"  # the team says it fixed, the scan still sees it
+    tool.declared["UserRequest::1"] = "2026-11-11T16:30:00"
+    d.process_run()
+    (t,) = d.store.tickets()
+    assert t.declared_fixed_at == "2026-11-11T16:30:00" and t.state in ("claimed-fixed", "in-progress")
+    tokens = TokenSet({"run": [digest("r" * 40)], "read": [digest("d" * 40)]})
+    svc = Service("lab", tokens, d.store, Rules.from_dict(RULES), lambda: d.decisions, connector_for=lambda n: tool)
+    fixes = svc.read("lab", "d" * 40, "fixes", {})
+    assert fixes["items"] == [
+        {"finding": "f1", "declared_at": "2026-11-11T16:30:00", "ref": "UserRequest::1", "ticket": t.key}
+    ]
+
+
+def test_itop_due_field_and_resolution_date() -> None:
+    import json
+
+    import httpx
+
+    from dispatch.connectors import External
+    from dispatch.connectors.itop import ItopConnector
+    from dispatch.rules import Rules
+
+    from .test_v0200 import RULES
+
+    seen = []
+
+    def handler(request):
+        payload = json.loads(dict(httpx.QueryParams(request.content.decode()))["json_data"])
+        seen.append(payload)
+        if payload["operation"] == "core/get":
+            fields = {"resolution_date": "2026-11-11 16:30:00"}
+            return httpx.Response(200, json={"code": 0, "objects": {"UserRequest::42": {"code": 0, "fields": fields}}})
+        return httpx.Response(200, json={"code": 0, "objects": {"x": {"code": 0, "key": "42", "fields": {"id": "42"}}}})
+
+    rules = {**RULES, "targets": {"itsm": {**RULES["targets"]["itsm"], "due_field": "a2vm_due_date"}}}
+    c = ItopConnector(Rules.from_dict(rules).targets["itsm"], "secret", transport=httpx.MockTransport(handler))
+    ext = External(ref="UserRequest::42")
+    assert c.set_due(ext, "2026-11-12") and seen[-1]["fields"] == {"a2vm_due_date": "2026-11-12"}
+    assert c.declared_fix(ext) == "2026-11-11T16:30:00"
+    plain = ItopConnector(Rules.from_dict(RULES).targets["itsm"], "secret", transport=httpx.MockTransport(handler))
+    assert plain.set_due(ext, "2026-11-12") is False

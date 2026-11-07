@@ -198,6 +198,8 @@ pillar 2, allowed to create and update user requests in the tenant's organisatio
 | resolve | `core/apply_stimulus` `ev_resolve`, `solution`, `resolution_code` "software patch" |
 | reopen | `core/apply_stimulus` `ev_reopen`, then a comment |
 | status | `core/get`: resolved, closed, rejected → closed; any other → working; no object → gone |
+| declared fix (v0.22.2, optional) | `core/get` `resolution_date` when the ticket is closed: kept on the ticket (`declared_fixed_at`) and given by `GET fixes` for its findings; a declaration, verified against the scans by the reporting database (SLA §4) |
+| due date (v0.22.2, optional) | `core/update` of the target's `due_field` (an extension's date field): on create, and whenever the ticket's due date changes (`due_pushed`) |
 
 ### 5.2 Planned
 
@@ -208,7 +210,7 @@ investigation", then the watch's alerts on an exploitation in the wild, with D17
 
 | Item | Value |
 | --- | --- |
-| API | `/v1/tenants/{tenant}/runs` (POST, role `run`), `tickets`, `tickets/{id}`, `requests` (GET, role `read`); contract `a2vm/src/a2vm/schemas/openapi/dispatch.v1.yaml` |
+| API | `/v1/tenants/{tenant}/runs` (POST, role `run`), `tickets` (since v0.22.2 with `since`, `until`, `limit`, `offset`, `sent_at` and `counts`), `tickets/{id}`, `requests`, `fixes` (v0.22.2: the findings the team declared fixed in the ITSM, with that date, read by the daily run's publication) (GET, role `read`); contract `a2vm/src/a2vm/schemas/openapi/dispatch.v1.yaml` |
 | Page | `/remediate` (GET, POST) on port 8081, behind oauth2-proxy (`<release>-<tenant>-dispatch-page`), as the review page of the alerts (`docs/sign-in.md`); only the proxy reaches the port |
 | Storage | The tenant's PostgreSQL, schema `dispatch` (`tickets`: key, state, target, asset, reference, document; `requests`), row-level security on the tenant; without it, files on the volume of the service |
 | Secrets | Mounted item by item: `verdict-read-token`, `dispatch-page-key`, and `dispatch-<target>` (`-ca`) of each target of `dispatch.yaml`; never the tenant's other secrets; read from files, never logged |

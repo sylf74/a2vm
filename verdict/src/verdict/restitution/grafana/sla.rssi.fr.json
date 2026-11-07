@@ -736,6 +736,94 @@
         "uid": "${DS_A2VM}"
       },
       "id": 10
+    },
+    {
+      "type": "table",
+      "title": "Corrections face au SLA, à leur date réelle",
+      "description": "Constats corrigés dans la période, face à leur échéance (SLA, sinon BOD 26-04), selon la date réelle de la correction : entre le dernier scan qui voyait encore la faille et le premier qui ne la voyait plus. Met (observed) : ce scan est dans les temps ; missed : la faille était encore vue après l'échéance ; met (declared, verified) : la date déclarée dans l'ITSM tombe dans cet intervalle et dans les temps (après : missed) ; to verify : aucun de ces cas.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_A2VM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT fix_status AS \"Statut\", count(*) AS \"Constats\" FROM a2vm.finding_closures WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND $__timeFilter(closed_at) AND outcome = 'fixed' AND fix_status IS NOT NULL GROUP BY fix_status ORDER BY CASE fix_status WHEN 'met (observed)' THEN 1 WHEN 'met (declared, verified)' THEN 2 WHEN 'to verify' THEN 3 ELSE 4 END"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "filterable": true
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 30,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_A2VM}"
+      },
+      "id": 11
+    },
+    {
+      "type": "table",
+      "title": "Corrections hors délai ou à vérifier",
+      "description": "Les corrections de la période hors délai, ou dont l'intervalle chevauche l'échéance sans date déclarée pour les situer : les scans avant et après, et la date déclarée dans l'ITSM.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_A2VM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT asset_name AS \"Actif\", cve AS \"CVE\", priority AS \"Priorité\", fix_status AS \"Statut\", deadline AS \"Échéance retenue\", last_vulnerable AS \"Vu vulnérable pour la dernière fois\", first_clean AS \"Premier scan sans la faille\", declared_at AS \"Déclaré dans l'ITSM\" FROM a2vm.finding_closures WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND $__timeFilter(closed_at) AND outcome = 'fixed' AND fix_status IN ('missed', 'to verify') ORDER BY deadline, asset_name, cve LIMIT 1000"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "filterable": true
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 30,
+        "w": 16,
+        "h": 8
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_A2VM}"
+      },
+      "id": 12
     }
   ]
 }

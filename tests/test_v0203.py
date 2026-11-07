@@ -45,7 +45,7 @@ def test_publish_goes_on_when_one_database_fails(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(db, "load", lambda path: {"run": {"tenant": {"id": "lab"}}, "generated_at": "2026-11-04"})
     monkeypatch.setattr(db, "targets", lambda: [("default", "a"), ("client", "b")])
 
-    def publish(conninfo, data):
+    def publish(conninfo, data, declared=None):
         if conninfo == "b":
             raise db.DatabaseError("unreachable")
         return 7, {"decisions": 3}

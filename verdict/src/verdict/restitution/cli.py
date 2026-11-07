@@ -43,10 +43,11 @@ def cmd_publish(args: argparse.Namespace) -> int:
             print(f"{path}: {exc}", file=sys.stderr)
             rc = max(rc, 2)
             continue
+        declared = _declared_fixes(args, data["run"]["tenant"]["id"])
         for name, conninfo in where:
             label = "" if len(where) == 1 else f" [{name}]"
             try:
-                run_id, counts = db.publish(conninfo, data)
+                run_id, counts = db.publish(conninfo, data, declared)
             except db.DatabaseError as exc:
                 print(f"ERROR{label} {exc}", file=sys.stderr)
                 rc = max(rc, 3)
@@ -111,6 +112,27 @@ def cmd_grafana(args: argparse.Namespace) -> int:
     return 0
 
 
+def _declared_fixes(args: argparse.Namespace, tenant: str) -> list[dict] | None:
+    """The fixes the team declared in the ITSM, from the dispatch service (v0.22.2); None when it is
+    not configured or cannot answer (said, the publication goes on)."""
+    if not getattr(args, "dispatch_url", "") or not getattr(args, "dispatch_token_file", ""):
+        return None
+    import httpx
+
+    try:
+        token = Path(args.dispatch_token_file).read_text(encoding="utf-8").strip()
+        r = httpx.get(
+            f"{args.dispatch_url.rstrip('/')}/v1/tenants/{tenant}/fixes",
+            headers={"Authorization": f"Bearer {token}", "User-Agent": "a2vm-publish"},
+            timeout=30.0,
+        )
+        r.raise_for_status()
+        return list(r.json().get("items") or [])
+    except (OSError, httpx.HTTPError, ValueError) as exc:
+        print(f"WARN declared fixes not read from the dispatch service: {exc}", file=sys.stderr)
+        return None
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="verdict", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -120,6 +142,8 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("publish", help="load reporting datasets into the reporting database")
     p.add_argument("datasets", nargs="+", help="reporting.json files (output/<tenant>/reporting.json)")
     p.add_argument("--dsn", help="connection string (default: A2VM_REPORTING_DSN)")
+    p.add_argument("--dispatch-url", default="", help="dispatch service, for the fixes declared in the ITSM (v0.22.2)")
+    p.add_argument("--dispatch-token-file", default="", help="read token of the dispatch service")
     p.set_defaults(func=cmd_publish)
 
     d = sub.add_parser("db", help="administration of the reporting database")

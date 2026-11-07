@@ -50,6 +50,7 @@
         "class": {"enum": ["UserRequest"]},
         "team": {"type": "string", "description": "optional: name of the iTop Team the tickets are assigned to"},
         "timeout_seconds": {"type": "number", "minimum": 1, "maximum": 600},
+        "due_field": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$", "description": "Field of the ticket (an extension's date field) that receives the due date A2VM computed, the client's SLA else BOD 26-04; written on create and whenever it changes (v0.22.2). Unset: not pushed."},
         "priorities": {
           "type": "object",
           "description": "optional (v0.21.0): priority of the client's SLA -> impact and urgency of iTop (impact 1 a department, 2 a service, 3 a person; urgency 1 critical .. 4 low); a priority not listed, or a decision without one, takes those of its level",

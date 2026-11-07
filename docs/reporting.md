@@ -14,7 +14,7 @@ Restitution is part of pillar 3 (`verdict.restitution`): it publishes the decisi
 reads nothing but the reporting dataset, and computes no rule of its own. Design: LLD
 triage-prioritization §13.
 
-## Tables (schema `a2vm`, version 5)
+## Tables (schema `a2vm`, version 6)
 
 | Table / view | Content |
 | --- | --- |
@@ -27,6 +27,7 @@ triage-prioritization §13.
 | `run_pairs`, `finding_closures`, `latest_asset_scans` (views, version 3) | Each run with the one before; each finding gone, fixed or unverified; the assets of the latest run with their last scan |
 | `coverage`, `coverage_facts`, `latest_coverage` (version 4) | The scan coverage of each host asset of a run against the CMDB: state, class, CMDB status, criticality, means expected and missing, scans, last scan (`docs/cmdb.md`) |
 | Priorities and SLA (version 5, v0.21.0) | `decisions`: `priority`, `priority_rank`, `sla_rule`, `sla_since`, `sla_due`, `sla_since_source` (`due_date` stays the BOD 26-04 due date); `runs`: `sla_overdue`, `sla_due_soon`, `sla_unclassified`; `decision_facts`: `priority`, `sla_due`, `sla_status` (`overdue`, `on-track`), `deadline`; `finding_closures`: `priority`, `sla_due`, `within_sla` (`docs/sla.md`) |
+| When a fix happened (version 6, v0.22.2) | `declared_fixes`: the date the team declared each finding fixed in the ITSM (from the dispatch service); `finding_closures`: `last_vulnerable`, `first_clean`, `declared_at`, `deadline`, `fix_status` (`met (observed)`, `met (declared, verified)`, `missed`, `to verify`, `docs/sla.md` §4) |
 | `tenant_roles` | Which tenants a reading role sees (`*` = all) |
 
 The writer role owns the tables. Reading roles get `SELECT` and see only their tenants (row-level
@@ -77,6 +78,16 @@ Run `verdict db init` once, as above, before the first daily run of v0.19.0: it 
 the configuration item of each asset, keeps every run and re-grants the reading roles. Until then
 `publish` stops with "schema version 3 … run `verdict db init`" (exit code 3, a warning). Then
 import the dashboard `coverage` (and its French version).
+
+### Upgrading to schema version 6 (v0.22.2)
+
+Run `verdict db init` once, before the first daily run of v0.22.2: it adds the table
+`declared_fixes` (the dates the team declared in the ITSM, read from the dispatch service) and the
+columns `last_vulnerable`, `first_clean`, `declared_at`, `deadline` and `fix_status` of the view
+`finding_closures` (when the fix happened, `docs/sla.md` §4), and re-grants the reading roles. Until
+then `publish` stops with "schema version 5 … run `verdict db init`" (exit code 3, a warning). Then
+import the dashboard `sla` again (two tables: the fixes against the SLA when they happened, those
+missed or to verify).
 
 ### Upgrading to schema version 5 (v0.21.0)
 

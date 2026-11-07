@@ -120,6 +120,16 @@ class Service:
             if found is None:
                 raise Problem(HTTPStatus.NOT_FOUND, "no such ticket")
             return {**found.to_dict(), "id": key_digest(found.key)}
+        if rest == "fixes":
+            # v0.22.2: the findings of the tickets the team declared fixed in the ITSM, with that date;
+            # the reporting database checks each against the scans.
+            items = [
+                {"finding": f.id, "declared_at": t.declared_fixed_at, "ref": t.external.get("ref", ""), "ticket": t.key}
+                for t in self.store.tickets()
+                if t.declared_fixed_at
+                for f in t.findings.values()
+            ]
+            return {"total": len(items), "items": items}
         if rest == "requests":
             return {"items": self.store.requests(int(query.get("limit") or 50))}
         raise Problem(HTTPStatus.NOT_FOUND, "no such resource")

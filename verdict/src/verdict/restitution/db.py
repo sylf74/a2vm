@@ -21,7 +21,7 @@ from typing import Any
 
 from a2vm.config import env
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 PEM = "-----BEGIN CERTIFICATE-----"
 
 
@@ -249,9 +249,13 @@ def _coverage_totals(coverage: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def publish(conninfo: str, data: dict[str, Any]) -> tuple[int, dict[str, int]]:
+def publish(
+    conninfo: str, data: dict[str, Any], declared: list[dict[str, Any]] | None = None
+) -> tuple[int, dict[str, int]]:
     """Load one reporting dataset; a run already loaded (same tenant and time) is replaced, so a
-    job run twice leaves one copy. Returns the run id and the rows written per table."""
+    job run twice leaves one copy. `declared`: the fixes the team declared in the ITSM, read from the
+    dispatch service (v0.22.2), the latest kept per finding. Returns the run id and the rows written
+    per table."""
     import psycopg
 
     row = run_row(data)
@@ -345,6 +349,19 @@ def publish(conninfo: str, data: dict[str, Any]) -> tuple[int, dict[str, int]]:
                         sources,
                     )
                     counts["sources"] = len(sources)
+                    fixes = [
+                        (tenant, x["finding"], x["declared_at"], x.get("ref") or None)
+                        for x in declared or []
+                        if x.get("finding") and x.get("declared_at")
+                    ]
+                    cur.executemany(
+                        "INSERT INTO a2vm.declared_fixes (tenant, finding_id, declared_at, ref) VALUES (%s, %s, %s, %s)"
+                        " ON CONFLICT (tenant, finding_id) DO UPDATE SET declared_at = EXCLUDED.declared_at,"
+                        " ref = EXCLUDED.ref, published_at = now()",
+                        fixes,
+                    )
+                    if declared is not None:
+                        counts["declared_fixes"] = len(fixes)
         except psycopg.Error as exc:
             raise DatabaseError(f"publish {tenant}: {exc}".strip()) from exc
     return run_id, counts
