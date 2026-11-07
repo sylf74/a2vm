@@ -144,6 +144,8 @@ kubectl -n $NS logs deploy/a2vm-lab-chat -c retention --tail=5
 | "Quels P1 sont en retard sur le SLA ?", "qu'est-ce qui tombe cette semaine pour le client ?" (v0.21.0) | `search_decisions` with `priority`, `sla_overdue`, `sla_due_before`, sorted by `priority` or `sla_due`; `get_run_summary` lists the priorities of the client's SLA (`docs/sla.md`) |
 | "Sommes-nous concernés par CVE-… ?" | `get_cve`: concerned assets, or the assets that have the product outside the vulnerable range, or none |
 | "Quelles alertes cette semaine ?", "celle-ci a-t-elle été envoyée ?" | `list_alerts`, `get_alert` (watch on Kubernetes, v0.16.0): alerts of the watch, their status (pending, sent, failed) and their sheet |
+| "Quelles alertes entre hier 18 h et ce matin 9 h ?" (v0.23.2) | `list_alerts` with `since` and `until`: a day, or a date and time in the tenant's time zone (`chat.timezone`, Europe/Paris); each alert says when it was drafted |
+| "Qu'a trouvé le radar depuis lundi ?", "CVE-… est-elle sur le radar ?" (v0.23.2) | `list_radar_events`: the radar's events the watch team validated, from the shared intelligence service, newest first, counted by level; an event is public news, `list_alerts` says what concerns the tenant. Needs `intel.url` (the tenant's read token of the shared service) |
 
 `what_changed` needs two runs in the decision service: the day after the first daily run with
 v0.14.0 or later. The dates appear for the runs made with v0.15.2 or later.

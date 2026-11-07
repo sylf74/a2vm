@@ -88,6 +88,11 @@ spec:
             - --dispatch-url={{ include "a2vm-tenant.dispatchUrl" . }}
             - --dispatch-token-file=/secrets/dispatch-read-token
             {{- end }}
+            {{- if .Values.intel.url }}
+            - --intel-url={{ .Values.intel.url }}
+            - --intel-token-file=/secrets/intel-token
+            {{- end }}
+            - --timezone={{ $chat.timezone | default "Europe/Paris" }}
             - --port=8080
           ports:
             - name: http
@@ -129,6 +134,10 @@ spec:
               {{- if .Values.dispatch.enabled }}
               - key: dispatch-read-token
                 path: dispatch-read-token
+              {{- end }}
+              {{- if .Values.intel.url }}
+              - key: intel-token
+                path: intel-token
               {{- end }}
         - name: digests
           secret:
@@ -523,6 +532,15 @@ spec:
         - podSelector:
             matchLabels:
               {{- include "a2vm-tenant.selector" (dict "root" . "component" "dispatch") | nindent 14 }}
+      ports:
+        - {port: 8080, protocol: TCP}
+    {{- end }}
+    {{- if .Values.intel.url }}
+    - to:   # the shared intelligence service, for the radar (v0.23.2), in the watch team's namespace
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: intel
       ports:
         - {port: 8080, protocol: TCP}
     {{- end }}

@@ -175,6 +175,8 @@ chat:
   # First admin, created at the first start (password: key chat-admin-password of secret.name);
   # the admin then creates the analysts' accounts, sign-up stays closed.
   adminEmail: admin@example.org
+  # Time zone of the days and times the analysts give the tools ("since 9:00"), v0.23.2.
+  timezone: Europe/Paris
   llm:
     # OpenAI-compatible endpoints serving the model, in order (several VMs: the chat spreads its
     # calls over them). deploy-k8s: A2VM_LLM_BASE_URL, comma-separated.

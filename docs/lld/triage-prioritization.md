@@ -52,6 +52,7 @@ repository is in this table of its pillar and in HLD §6.
 | Consumes | Detection files | Exchange file | `detection.schema.json`, `vulnops.detection/1` | detect | File of the run | Assets from the profile only |
 | Consumes | Vulnerability records | Exchange file | `vulnerability_records.schema.json`, `vulnops.records/1` | via (`via collect`) | File of the run | Refused (exit 2) |
 | Consumes | Watch service, for `list_alerts`, `get_alert` (§16) | API | `via.v1.yaml` | via (`via serve`) | Read token | The tools answer that the alerts are not available |
+| Consumes | Shared intelligence service, for `list_radar_events` (§16, v0.23.2) | API | `intel.v1.yaml` | via (`via intel-serve`, the watch team's namespace) | The tenant's read token (`intel-token`) | The tool answers that there is no radar (503) |
 | Consumes | Client profile | Exchange file (tenant project) | `client_profile.schema.json` | Tenant project | File of the project or ConfigMap | Refused (exit 2) |
 
 ## 2. Interfaces
@@ -1022,11 +1023,14 @@ server: an OpenAPI server whose operations a model calls. Code:
 | `list_coverage` | `coverage` | "Which servers were never scanned", "what is not in the CMDB", "how well are we covered" (v0.19.0) |
 | `list_tickets` | the dispatch service: `tickets` | "How many tickets were sent to the ITSM in October, with their numbers": the tickets sent between two days (`since`, `until`), their ITSM number (`external.ref`), state, level and `sent_at`, with `total` and `counts` (by state, by level, with an ITSM number) computed by the service (v0.22.2; 503 without dispatch) |
 | `find_component` | `components` | "Which servers have openssl", "where is php 7 still installed": the assets that carry a package, vulnerable or not, from the packages listed on each host, with the counts computed by the service (assets with it, assets listed, hosts not listed, each version) (v0.22.2) |
-| `list_alerts`, `get_alert` | the watch service `via serve`: `alerts`, `alerts/{id}` | The watch's alerts and whether they were sent (v0.16.0, watch on Kubernetes; otherwise 503) |
+| `list_alerts`, `get_alert` | the watch service `via serve`: `alerts`, `alerts/{id}` | The watch's alerts and whether they were sent (v0.16.0, watch on Kubernetes; otherwise 503); since v0.23.2 between two moments (`since`, `until`) and with when each was drafted (`drafted_at`) |
+| `list_radar_events` | the shared intelligence service: `GET /v1/feed?kind=radar` (v0.23.2) | "What did the radar find since yesterday 18:00": the events the watch team validated, newest first, with `total` and `counts` by level; filters `since`, `until`, `level`, `cve`; the tenant's read token of the shared service (`intel-token`); GTI's items are left out (they name the technologies the tenants watch). Without a shared service: 503 |
 | `export_decisions` | `decisions` (pages), `decisions/{id}` | A Word, PowerPoint or CSV document of the decisions chosen by the filters of `search_decisions` (16.6) |
 
 All are `GET`, take `run` (`latest` by default) and, for lists, `limit` (1 to 20, default 10) and
-`offset`. Path parameters arrive encoded (`host%3Aweb01`, the chat encodes them) and are decoded
+`offset`. A period (`since`, `until` of `list_alerts` and `list_radar_events`, v0.23.2) is a day or a
+date and time in the tenant's time zone (`--timezone`, chart `chat.timezone`, Europe/Paris), or with
+an offset; the tool server sends it on in UTC, a day alone covering all of it for `until`. Path parameters arrive encoded (`host%3Aweb01`, the chat encodes them) and are decoded
 before they are checked; a `..` is refused. The spec (`/openapi.json`) describes each for a model; it is served to the chat token
 only.
 

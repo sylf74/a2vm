@@ -5,6 +5,30 @@ analyst and, under **Upgrade**, what a tenant must do when it moves to that tag 
 `A2VM_REF` in its `.gitlab-ci.yml`). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
 §11) and the LLDs. A release adds its entry here in the same merge request (CLAUDE.md, Releasing).
 
+## v0.23.2 — 2026-11-07
+
+The analysts' chat asks a period and the radar. SentinelOne moves to v0.23.3, the appliances to
+v0.23.4, the libraries in memory and the SBOMs to v0.23.5.
+
+- **A period in the chat** (`docs/chat.md` §8): `list_alerts` takes `since` and `until`, each a day
+  or a date and time in the tenant's time zone (chart `chat.timezone`, Europe/Paris), sent to the
+  services in UTC; a day alone covers all of it. Each alert says when it was drafted (`drafted_at`).
+- **The radar in the chat**: `list_radar_events` gives the radar's events the watch team validated,
+  from the shared intelligence service, between two moments, by level or CVE, newest first, counted
+  by level by the tool server. GTI's items of the feed are left out (they name the technologies the
+  tenants watch), the radar's candidates stay with the watch team.
+- **Shared service**: `GET /v1/feed` also takes `until`, `kind`, `level`, `cve`, and `since` as a day
+  or a date and time (`intel.v1.yaml`); a watch's mark works as before. Its network policy lets the
+  tenants' tool servers in.
+- **Watch service**: `GET alerts` takes `until` and a date and time for `since` (`via.v1.yaml`).
+
+**Upgrade**:
+
+1. Move `ref` and `A2VM_REF` of the tenant `via` to `v0.23.2` first (the feed's filters and the
+   network policy of the shared service), then of the client tenants.
+2. Nothing else: the tool server reads the key `intel-token` of the tenant's Secret, already there
+   when `intel.url` is set (`A2VM_INTEL_URL`). A time zone other than Europe/Paris: `chat.timezone`.
+
 ## v0.23.1 — 2026-11-07
 
 D20, second step: Wazuh's software inventory as a source of components, before the appliances

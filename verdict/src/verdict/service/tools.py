@@ -26,7 +26,7 @@ from urllib.parse import parse_qsl, quote, unquote, urlsplit
 
 import httpx
 
-from a2vm.service import JsonHandler, Problem, TokenSet
+from a2vm.service import JsonHandler, Problem, TokenSet, moment
 from a2vm.service import serve as _serve
 
 from . import exports
@@ -47,6 +47,10 @@ URL = re.compile(r"\b(?:https?|ftp)://([^/\s)\]>\"']+)[^\s)\]>\"']*", re.IGNOREC
 ID = re.compile(r"^[A-Za-z0-9:@._/+-]{1,300}$")
 CVE = re.compile(r"^CVE-\d{4}-\d{4,}$", re.IGNORECASE)
 
+_WHEN = (
+    "Only those {what} this moment: a day YYYY-MM-DD, or a date and time YYYY-MM-DDTHH:MM in the tenant's "
+    "time zone (or with an offset, e.g. 2026-11-07T09:00+01:00)."
+)
 _RUN = {
     "name": "run",
     "in": "query",
@@ -345,10 +349,30 @@ OPERATIONS: list[tuple[str, str, str, list[dict[str, Any]], str]] = [
             ),
             _q("cve", "string", "Only the alerts about this CVE"),
             _q("level", "string", "Level of the alert, e.g. urgent, important, info"),
-            _q("since", "string", "Only the alerts drafted on or after this day, YYYY-MM-DD"),
+            _q("since", "string", _WHEN.format(what="drafted on or after")),
+            _q("until", "string", _WHEN.format(what="drafted on or before") + " A day alone includes all of it."),
             *_PAGE,
         ],
         "via:alerts",
+    ),
+    (
+        "/radar",
+        "list_radar_events",
+        "The radar of the watch team (v0.23.2): the major vulnerabilities the team found and validated, whoever "
+        "they concern (exploited, critical, zero-days before their CVE), from the shared intelligence service, "
+        "newest first: title, level (urgent, info), CVEs, products, summary, links, when the team validated it "
+        "(`at`); with `total` and `counts` by level computed by the service. Use it for 'what did the radar find "
+        "since yesterday 18:00', 'radar events between Monday and Wednesday', 'is CVE-... on the radar'. An "
+        "event is public news, not a match with this tenant's assets: list_alerts says what concerns the "
+        "tenant. Give the counts as returned, never count the items yourself.",
+        [
+            _q("since", "string", _WHEN.format(what="validated on or after")),
+            _q("until", "string", _WHEN.format(what="validated on or before") + " A day alone includes all of it."),
+            _q("level", "string", "urgent or info", enum=["urgent", "info"]),
+            _q("cve", "string", "Only the events about this CVE"),
+            *_PAGE,
+        ],
+        "intel:feed",
     ),
     (
         "/alerts/{alert}",
@@ -450,8 +474,22 @@ class Tools:
         via_token: str = "",
         dispatch_url: str = "",
         dispatch_token: str = "",
+        intel_url: str = "",
+        intel_token: str = "",
+        timezone: str = "UTC",
     ):
         self.tenant = tenant
+        self.timezone = timezone
+        self._intel = (
+            httpx.Client(
+                base_url=intel_url.rstrip("/"),
+                headers={"Authorization": f"Bearer {intel_token}", "User-Agent": "a2vm-tools"},
+                timeout=httpx.Timeout(30.0, connect=5.0),
+                transport=transport,
+            )
+            if intel_url and intel_token
+            else None
+        )
         self._dispatch = (
             httpx.Client(
                 base_url=dispatch_url.rstrip("/"),
@@ -524,6 +562,11 @@ class Tools:
                 return self.export(query)
             if upstream.startswith("dispatch:"):
                 return self._tickets(upstream[len("dispatch:") :], query)
+            for name in ("since", "until"):  # the tenant's time zone, sent on as UTC (v0.23.2)
+                if query.get(name) and upstream in ("via:alerts", "intel:feed"):
+                    query[name] = moment(query[name], name, self.timezone, end=name == "until").isoformat()
+            if upstream == "intel:feed":
+                return self._radar(query)
             if upstream.startswith("via:"):
                 return self._alerts(upstream[4:].format(**{k: quote(v, safe="") for k, v in ids.items()}), query)
             target = upstream.format(**{k: quote(v, safe=":@") for k, v in ids.items()})
@@ -563,6 +606,44 @@ class Tools:
             raise Problem(status, detail or f"dispatch service answered {r.status_code}")
         answer = copy.deepcopy(r.json())
         answer["source"] = "A2VM dispatch service: remediation tickets and their reference in the ITSM"
+        return fit(answer, self.max_chars)
+
+    def _radar(self, query: dict[str, str]) -> Any:
+        """The radar's validated events, from the shared intelligence service's feed (v0.23.2): only
+        the kind `radar` (GTI's items name the technologies the tenants watch: they stay with the
+        watches), newest first, a page and the counts."""
+        if self._intel is None:
+            raise Problem(HTTPStatus.SERVICE_UNAVAILABLE, "no shared intelligence service for this tenant: no radar")
+        params = {k: query[k] for k in ("since", "until", "level", "cve") if query.get(k)}
+        params["kind"] = "radar"
+        try:
+            r = self._intel.get("/v1/feed", params=params)
+        except httpx.HTTPError as exc:
+            raise Problem(HTTPStatus.BAD_GATEWAY, "the shared intelligence service cannot be reached") from exc
+        if r.status_code != 200:
+            try:
+                detail = r.json().get("detail", "")
+            except ValueError:
+                detail = ""
+            status = HTTPStatus(r.status_code) if r.status_code == 400 else HTTPStatus.BAD_GATEWAY
+            raise Problem(status, detail or f"shared intelligence service answered {r.status_code}")
+        items = [i for i in (r.json().get("items") or []) if i.get("kind") == "radar"][::-1]
+        try:
+            limit, offset = int(query.get("limit") or 10), int(query.get("offset") or 0)
+        except ValueError as exc:
+            raise Problem(HTTPStatus.BAD_REQUEST, "limit, offset: integers") from exc
+        counts: dict[str, int] = {}
+        for i in items:
+            counts[i.get("level", "info")] = counts.get(i.get("level", "info"), 0) + 1
+        keys = ("id", "at", "level", "title", "cves", "products", "summary", "links", "score")
+        page = [{k: i[k] for k in keys if k in i} for i in items[offset : offset + limit]]
+        answer: dict[str, Any] = {
+            "query": params, "timezone": self.timezone, "total": len(items), "counts": counts,
+            "offset": offset, "limit": limit, "items": page,
+        }  # fmt: skip
+        if offset + limit < len(items):
+            answer["next_offset"] = offset + limit
+        answer["source"] = "A2VM shared intelligence service: the radar events the watch team validated"
         return fit(answer, self.max_chars)
 
     def _alerts(self, target: str, query: dict[str, str]) -> Any:
@@ -681,6 +762,8 @@ class Tools:
         self._http.close()
         if self._via is not None:
             self._via.close()
+        if self._intel is not None:
+            self._intel.close()
 
 
 def make_handler(tools: Tools) -> type[JsonHandler]:
