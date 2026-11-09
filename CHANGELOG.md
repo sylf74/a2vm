@@ -5,6 +5,52 @@ analyst and, under **Upgrade**, what a tenant must do when it moves to that tag 
 `A2VM_REF` in its `.gitlab-ci.yml`). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
 §11) and the LLDs. A release adds its entry here in the same merge request (CLAUDE.md, Releasing).
 
+## v0.23.4 — 2026-11-09
+
+A corporate network and the chat. Everything here is optional: a tenant upgraded without a new
+variable runs as before.
+
+- **Relay of the public sources** (topology R, `docs/hld/proposals/intel-placement.md`, the brief now
+  kept in the repository): with `A2VM_RELAY_URL`, `A2VM_RELAY_HOSTS`, `A2VM_RELAY_TOKEN`, every
+  request to a host listed (records, deltaLog, KEV, EPSS, CERT-FR, the watch's feeds and the CSAF
+  documents found in them, package advisories) goes to `<relay>/<host>/<path>`, redirects included;
+  a request with credentials (GTI) never does. `deploy/relay/`: Terraform and cloud-init for a
+  small Scaleway instance with Caddy, one route per allowed host after the checks (addresses, token,
+  credentials refused, GET and HEAD only), no CONNECT. `via check-sources` shows the route of each
+  source; the watch and `via collect` log the relay.
+- **Outgoing proxy**: `A2VM_HTTPS_PROXY`, `A2VM_NO_PROXY`, `A2VM_PROXY_CA` (the proxy's certificate,
+  added to the system CAs, key `ca-bundle`) into the daily run, the watch's jobs and the shared
+  service (chart `proxy.*`, `relay.*`).
+- **`A2VM_INTEL_FALLBACK=false`**: a tenant whose shared service does not answer fails rather than
+  reading the sources itself.
+- **Another image registry** (Harbor): the job `images` pushes to `A2VM_PUSH_REGISTRY` /
+  `A2VM_PUSH_IMAGE` with a robot account (`A2VM_PUSH_USER`, `A2VM_PUSH_PASSWORD`), the base image
+  optionally through a mirror (`A2VM_PYTHON_IMAGE`); the tenants pull with `A2VM_IMAGE_REGISTRY`
+  and `A2VM_REGISTRY_*` as before (`docs/kubernetes.md`).
+- **Chat**: `list_new_cves` (the CVEs published or updated in a period, with when CVE.org published
+  each, CVSS, KEV, EPSS, and the tenant's alert about it, if any; the shared service's
+  `GET /v1/records/new`), `get_watch_status` (the watch's last passage and failing sources; the via
+  service's `GET status`), `list_applications` (the applications table, paged). The tools'
+  description tells the model to say when no tool covers a question, never to answer that nothing
+  exists; `list_radar_events` says it lists only what the team validated.
+  `tests/chat-questions.yaml`: 28 questions with the tool of each, checked by a test.
+- **Portal**: a portal without data shows "No data" instead of SQL errors (the filters are
+  `= ANY (ARRAY[…])`, valid when a variable has no option).
+- **Publication**: on Kubernetes, a reporting database that refuses 3 runs in a row
+  (`daily.publishFailures`) makes the daily job end failed, after the dispatch; before, a warning
+  only.
+- **Roadmap**: Cyberwatch in v0.23.5, appliances in v0.23.6, libraries in memory and SBOMs in v0.23.7.
+
+**Upgrade**:
+
+1. Move `ref` and `A2VM_REF` to `v0.23.4`: the tenant `via` first (the shared service answers the
+   new tool), then the others. No image of the collector, no schema.
+2. Portal on Kubernetes: `helm upgrade` of the chart `a2vm-portal` with its values to load the
+   dashboards; cloud02: `verdict grafana` as for any dashboard change (`docs/reporting.md`).
+3. A corporate network: deploy the relay (`deploy/relay/README.md`), set the relay's and the
+   proxy's variables, check with `via check-sources`.
+4. Harbor: the push variables in the code project, the pull variables in the tenants.
+
 ## v0.23.3 — 2026-11-09
 
 D20, third step: SentinelOne's applications, and the tenant's applications table that maps the
