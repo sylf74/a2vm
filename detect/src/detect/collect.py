@@ -153,26 +153,37 @@ def _source_package(kind: str, raw: str, name: str) -> str:
 
 
 def component(
-    name: str, version: str, arch: str, kind: str, src: str = "", distro: str = "", source: str = "ssh"
+    name: str,
+    version: str,
+    arch: str,
+    kind: str,
+    src: str = "",
+    distro: str = "",
+    source: str = "ssh",
+    vendor: str = "",
 ) -> dict[str, str]:
     """One package as a component of the common model: {name, version, arch, type, purl,
-    source_package, distro, source}. An rpm epoch 0 is left out of the version; the purl carries
-    the distribution's vendor as namespace (`pkg:rpm/rocky/...?distro=rocky-9.4`). Shared by the
-    SSH collection and the EDR connectors (Wazuh, v0.23.1)."""
+    source_package, distro, vendor, source}. An rpm epoch 0 is left out of the version; the purl
+    carries the distribution's vendor as namespace (`pkg:rpm/rocky/...?distro=rocky-9.4`). Shared by
+    the SSH collection and the EDR connectors (Wazuh, v0.23.1; SentinelOne, v0.23.3). An application
+    that is not a package of a distribution keeps its publisher (`vendor`, v0.23.3): the watch maps
+    it to a CPE through the applications table (`a2vm.applications`)."""
     if kind == "rpm" and version.startswith(("0:", "(none):")):
         version = version.split(":", 1)[1]
     epoch, _, bare = version.rpartition(":") if kind == "rpm" else ("", "", version)
-    vendor = distro.rsplit("-", 1)[0] if distro else ""
+    space = distro.rsplit("-", 1)[0] if distro else ""
     qualifiers = [f"arch={arch}"] if arch and arch != "(none)" else []
     qualifiers += [f"distro={distro}"] if distro else []
     qualifiers += [f"epoch={epoch}"] if epoch else []
-    namespace = f"{vendor}/" if vendor else ""
+    namespace = f"{space}/" if space else ""
     out = {"name": name, "version": version, "arch": arch, "type": kind}
     if kind in ("rpm", "deb"):
         out["purl"] = f"pkg:{kind}/{namespace}{name}@{bare}" + ("?" + "&".join(qualifiers) if qualifiers else "")
     out["source_package"] = _source_package(kind, src, name)
     if distro:
         out["distro"] = distro
+    if vendor and kind not in ("rpm", "deb"):
+        out["vendor"] = vendor
     out["source"] = source
     return out
 

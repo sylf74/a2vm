@@ -22,6 +22,7 @@ LIBRARIES = {
     "a2vm.ssvc": ("verdict", "via"),
     "a2vm.sla": ("verdict", "via"),
     "a2vm.packages": ("verdict", "via"),  # v0.23.0
+    "a2vm.applications": ("verdict", "via"),  # v0.23.3
 }
 
 

@@ -21,6 +21,8 @@ are kept there); for the page, the analysts' sign-in (`docs/sign-in.md`).
 
 1. **A Person the tickets come from**: Configuration management > Contacts > New Person, name
    `A2VM` (first name `A2VM`), organisation: the tenant's. It is the `caller` of `dispatch.yaml`.
+   A2VM looks for it in that organisation (`caller_organization` for another one); when two
+   persons of the organisation carry that name, give its e-mail as `caller` (v0.23.3).
 2. **Optionally a Team** the tickets are given to (e.g. `Linux`), in the same organisation: the
    `team` of `dispatch.yaml`.
 3. **An account for A2VM**, distinct from the read-only CMDB account (`docs/cmdb.md`): Administration
@@ -146,6 +148,7 @@ kubectl -n a2vm-lab run dispatch-reader --rm -i --restart=Never --labels=a2vm.io
 | --- | --- | --- |
 | `iTop refused: code 1: ... Invalid login` | Wrong account or password | The account and `A2VM_DISPATCH_<TARGET>_PASSWORD`, then `deploy-k8s` |
 | `iTop refused: code 100` (or 1) `... caller_id`, `org_id`, `team_id` | The Person, the organisation or the Team of `dispatch.yaml` does not exist in iTop under that name | The names in `dispatch.yaml` |
+| `iTop refused: code 100: Error: caller_id: Several items found (2)` | Two Persons carry the name of `caller` in the organisation (before v0.23.3: in any organisation) | Remove the duplicate in iTop, or give the Person's e-mail as `caller`; the tickets left `proposed` are sent by the next daily run, the requested ones too |
 | `iTop refused: ... ev_resolve` | iTop does not allow resolving a request in its current status (e.g. never assigned) | Nothing: the ticket is fixed in A2VM; the team closes it in iTop |
 | `iTop not reached` | Address, DNS, firewall, certificate | `A2VM_DISPATCH_<TARGET>_CA`, `A2VM_DISPATCH_EGRESS` |
 | `decision service answered 404` | No run pushed yet | The next daily run |

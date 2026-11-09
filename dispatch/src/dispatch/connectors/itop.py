@@ -46,6 +46,10 @@ class ItopConnector:
         self.user = str(s["user"])
         self.organization = str(s["organization"])
         self.caller = str(s["caller"])
+        # v0.23.3: the caller is looked for in one organisation (that of the tickets, else
+        # `caller_organization`), by its e-mail when `caller` holds an @: iTop refuses a name that
+        # several persons carry ("Several items found").
+        self.caller_organization = str(s.get("caller_organization") or self.organization)
         self.team = str(s.get("team") or "")
         self.cls = str(s.get("class") or "UserRequest")
         # Priority of the client's SLA -> (impact, urgency) (v0.21.0); else those of the level.
@@ -105,7 +109,7 @@ class ItopConnector:
         impact, urgency = self.priorities.get(ticket.priority) or PRIORITY.get(ticket.level, PRIORITY["TRACK"])
         fields: dict[str, Any] = {
             "org_id": {"name": self.organization},
-            "caller_id": {"name": self.caller},
+            "caller_id": self.caller_criteria(),
             "title": title,
             "description": text,
             "impact": impact,
@@ -131,6 +135,11 @@ class ItopConnector:
         status = str((obj.get("fields") or {}).get("status") or "new")
         ref = (obj.get("fields") or {}).get("ref") or ""
         return External(ref=f"{self.cls}::{key}", url=self._url(key), status=f"{status} {ref}".strip())
+
+    def caller_criteria(self) -> dict[str, str]:
+        """The iTop Person the tickets come from: its e-mail or its name, in its organisation."""
+        key = "email" if "@" in self.caller else "name"
+        return {key: self.caller, "org_name": self.caller_organization}
 
     def comment(self, external: External, text: str) -> None:
         self._call(

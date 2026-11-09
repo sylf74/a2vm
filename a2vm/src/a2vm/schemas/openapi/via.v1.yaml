@@ -124,6 +124,67 @@ paths:
         "202": {description: Added, content: {application/json: {schema: {type: object}}}}
         "401": {$ref: "#/components/responses/Problem"}
         "422": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/applications:
+    get:
+      tags: [read]
+      operationId: listApplications
+      summary: >-
+        The tenant's applications table (since v0.23.3, `a2vm.applications/1`): each application an
+        EDR lists on the hosts of the last inventory, its state (new, proposed, validated, rejected),
+        the CPE the LLM proposed and the one a validator decided, with the count of each state. Filled
+        when an inventory arrives; decided on the review page
+      security:
+        - readToken: []
+        - runToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+        - {name: state, in: query, schema: {type: string, enum: [new, proposed, validated, rejected]}}
+      responses:
+        "200":
+          description: The table
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  schema: {type: string, const: a2vm.applications/1}
+                  counts: {type: object, additionalProperties: {type: integer}}
+                  applications: {type: array, items: {type: object}}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/applications/proposals:
+    post:
+      tags: [jobs]
+      operationId: putApplicationProposals
+      summary: >-
+        The CPE the tenant's LLM proposes for applications still new (since v0.23.3); a row an
+        analyst decided is never changed
+      security:
+        - runToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [proposals]
+              properties:
+                proposals:
+                  type: array
+                  items:
+                    type: object
+                    required: [key, cpe]
+                    properties:
+                      key: {type: string}
+                      cpe: {type: string, description: "cpe:2.3:a:<vendor>:<product>, or empty: no product of CVE records"}
+                      justification: {type: string}
+                      by: {type: string}
+      responses:
+        "202": {description: Kept, content: {application/json: {schema: {type: object, properties: {proposed: {type: integer}}}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
   /v1/tenants/{tenant}/alerts:
     get:
       tags: [read]

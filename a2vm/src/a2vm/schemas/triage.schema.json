@@ -286,6 +286,10 @@
                 "purl": {
                   "type": "string"
                 },
+                "vendor": {
+                  "type": "string",
+                  "description": "The publisher of an application (SentinelOne, Windows agents of Wazuh), matched through the applications table (since v0.23.3)"
+                },
                 "source_package": {
                   "type": "string",
                   "description": "The source package it is built from (since v0.23.0)"

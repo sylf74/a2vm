@@ -17,6 +17,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from a2vm import applications as apps
 from a2vm.gitlab import GitLabError, download_artifacts
 from a2vm.io import ExchangeError, read_assets, read_findings
 from a2vm.models import Asset, Finding
@@ -30,6 +31,8 @@ class Inventory:
     assets: dict[str, Asset]
     findings_by_cve: dict[str, list[Finding]] = field(default_factory=dict)
     as_of: str = ""  # date of the most recent observation
+    # The tenant's applications table (v0.23.3): the CPE of each application of an EDR.
+    applications: dict[str, apps.Row] = field(default_factory=dict)
 
     def age_days(self, now: dt.datetime | None = None) -> float | None:
         if not self.as_of:
@@ -85,6 +88,10 @@ def describe(inv: Inventory) -> str:
     listed = sum(1 for a in inv.assets.values() if a.components)
     if listed:  # matched against the package advisories of each new record (D20, v0.23.0)
         note += f", packages listed on {listed} hosts"
+    if inv.applications:  # the applications of an EDR, through the table (v0.23.3)
+        valid = sum(r.state == apps.VALIDATED for r in inv.applications.values())
+        proposed = sum(r.state == apps.PROPOSED for r in inv.applications.values())
+        note += f", applications table {valid} validated, {proposed} to validate"
     if age is not None and age > MAX_AGE_DAYS:
         note += f" (WARN {age:.0f} days old)"
     return note

@@ -197,12 +197,12 @@ f1.box(
     [
         "SSH: Trivy, dnf updateinfo",
         "OpenVAS (Greenbone)",
-        "iTop (CMDB), Wazuh (EDR)",
+        "iTop (CMDB), Wazuh, SentinelOne",
         "systemd timers, spool",
     ],
     sub="detect agent",
 )
-f1.box(20, 656, 250, 78, "b-ext", "iTop CMDB, Wazuh", ["CMDB items, agents' packages", "read only"])
+f1.box(20, 656, 250, 78, "b-ext", "iTop CMDB, Wazuh, SentinelOne", ["CMDB items, agents' software", "read only"])
 f1.box(
     20,
     776,

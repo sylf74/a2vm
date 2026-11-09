@@ -9,8 +9,9 @@ analyst in with the tenant's identity provider (OIDC) and passes who it is: X-Fo
 X-Forwarded-User) and X-Forwarded-Groups. The NetworkPolicy lets only oauth2-proxy reach this port,
 so these headers are trusted here and nowhere else. Rights from the groups:
 
-  readers      read the alerts, their reference and their translations
-  validators   also enrich, choose the recipients, correct a translation, validate, dismiss
+  readers      read the alerts, their reference and their translations, and the applications table
+  validators   also enrich, choose the recipients, correct a translation, validate, dismiss; and
+               decide the CPE of each application of the table (v0.23.3: validate, correct, reject)
 
 Nothing is sent and nothing is translated from here: a request of translations and a validation are
 events of the journal; the sender (`via service send --validated`) translates (the tenant's LLM)
@@ -20,6 +21,7 @@ the alert (HMAC) and must come from the page's own origin.
 
 from __future__ import annotations
 
+import datetime as dt
 import hashlib
 import hmac
 import html
@@ -31,6 +33,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, quote, unquote, urlsplit
 
+from a2vm import applications as apps
 from via.alert import journal
 from via.alert.contacts import Contact, ContactsError, load_contacts
 from via.alert.fiche import markdown_html
@@ -271,8 +274,87 @@ class Review:
             '<meta name="viewport" content="width=device-width,initial-scale=1">'
             f"<title>{html.escape(title)}</title><style>{STYLE}</style></head><body>"
             f'<header><a href="/">A2VM alerts — {html.escape(self.tenant)}</a>'
-            f"<span>{html.escape(user)}</span></header><main>{body}</main></body></html>"
+            f'<span><a href="/applications">Applications</a> · {html.escape(user)}</span></header>'
+            f"<main>{body}</main></body></html>"
         )
+
+    # -- the applications table (v0.23.3) ----------------------------------------------------------
+    def decide_application(self, user: str, form: dict[str, list[str]], headers: Any) -> None:
+        """A validator's decision on one row: validate (the CPE typed, else the proposal), reject, reset."""
+        key = (form.get("key") or [""])[0]
+        self.check_form(headers, user, f"applications:{key}", form)
+        action = (form.get("action") or [""])[0]
+        cpe = (form.get("cpe") or [""])[0].strip()
+        note = (form.get("note") or [""])[0].strip()
+        at = dt.datetime.now(dt.UTC).isoformat(timespec="seconds")
+
+        def change(table: dict[str, apps.Row]) -> apps.Row:
+            return apps.decide(table, key, action, user, at, cpe=cpe, note=note)
+
+        try:
+            row = self.store.update_applications(self.tenant, change)
+        except KeyError as exc:
+            raise Denied(HTTPStatus.NOT_FOUND, "Unknown application (no longer in the table).") from exc
+        log.info("application tenant=%s key=%r %s by=%s cpe=%s", self.tenant, key, row.state, user, row.cpe)
+
+    def applications_page(self, user: str, validator: bool, state: str, error: str = "") -> str:
+        table = self.store.applications(self.tenant)
+        counts = {s: sum(r.state == s for r in table.values()) for s in apps.STATES}
+        rows = sorted(
+            (r for r in table.values() if state == "all" or r.state == state),
+            key=lambda r: (-r.hosts, r.key),
+        )
+        labels = {s: f"{s} ({counts.get(s, len(table))})" for s in (*apps.STATES, "all")}
+        nav = "".join(
+            f'<a href="/applications?state={s}">' + (f"<b>{label}</b>" if s == state else label) + "</a>"
+            for s, label in labels.items()
+        )
+        lines = []
+        for r in rows[:500]:
+            p = r.proposal or {}
+            why = html.escape(f"{p.get('justification', '')} — {p.get('by', '')}")
+            proposal = f"{html.escape(p.get('cpe') or 'no product')}<br><span class='note'>{why}</span>" if p else ""
+            decided = (
+                f"{html.escape(r.cpe or 'rejected')}<br><span class='note'>{html.escape(r.decided_by)}"
+                f" {html.escape(r.decided_at[:16])} {html.escape(r.note)}</span>"
+                if r.decided_by
+                else ""
+            )
+            form = ""
+            if validator:
+                tok = self.token(user, f"applications:{r.key}")
+                value = r.cpe or p.get("cpe", "") or ""
+                form = (
+                    f'<form method="post" action="/applications?state={quote(state)}">'
+                    f'<input type="hidden" name="token" value="{tok}">'
+                    f'<input type="hidden" name="key" value="{html.escape(r.key)}">'
+                    f'<input name="cpe" size="34" value="{html.escape(value)}" placeholder="cpe:2.3:a:vendor:product">'
+                    f'<input name="note" size="16" placeholder="note">'
+                    '<button name="action" value="validate" class="primary">Validate</button>'
+                    '<button name="action" value="reject">Not a product</button>'
+                    '<button name="action" value="reset">Reset</button></form>'
+                )
+            lines.append(
+                f"<tr><td>{html.escape(r.vendor)}</td><td>{html.escape(r.name)}</td><td>{r.hosts}</td>"
+                f"<td>{html.escape(', '.join(r.versions or []))}</td><td>{html.escape(', '.join(r.sources or []))}</td>"
+                f'<td><span class="badge {r.state}">{r.state}</span></td><td>{proposal}</td><td>{decided}</td>'
+                f"<td>{form}</td></tr>"
+            )
+        listing = (
+            '<table class="list"><tr><th>Publisher</th><th>Application</th><th>Hosts</th><th>Versions</th>'
+            "<th>Sources</th><th>State</th><th>Proposal</th><th>Decision</th><th></th></tr>"
+            + "".join(lines)
+            + "</table>"
+            if lines
+            else '<p class="note">No application in this state.</p>'
+        )
+        intro = (
+            '<p class="note">The applications the EDRs list on the hosts, and the CPE (vendor and product) of the '
+            "CVE records each one is. The LLM proposes, a validator decides: only a validated CPE names a host as "
+            "exposed; a proposal names it as possibly exposed, a rejected application is never matched.</p>"
+        )
+        err = f'<p class="error">{html.escape(error)}</p>' if error else ""
+        return self.page("Applications", f"<h2>Applications</h2>{intro}<nav>{nav}</nav>{err}<p></p>{listing}", user)
 
     def list_page(self, user: str, status: str) -> str:
         items = self.store.alerts(self.tenant)
@@ -468,6 +550,24 @@ def make_handler(review: Review) -> type[BaseHTTPRequestHandler]:
         def _denied(self, d: Denied, user: str = "") -> None:
             self._send(d.status, review.page("Access", f'<p class="error">{html.escape(d.message)}</p>', user))
 
+        def _post_application(self, user: str, validator: bool, state: str) -> None:
+            if not validator:
+                raise Denied(HTTPStatus.FORBIDDEN, "Action for the validators only.")
+            try:
+                length = int(self.headers.get("Content-Length", ""))
+            except ValueError as exc:
+                raise Denied(HTTPStatus.LENGTH_REQUIRED, "Form without a length.") from exc
+            if not 0 <= length <= 8192:
+                raise Denied(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "Form too long.")
+            form = parse_qs(self.rfile.read(length).decode("utf-8", "replace"), keep_blank_values=True)
+            state = state if state in (*apps.STATES, "all") else "proposed"
+            try:
+                review.decide_application(user, form, self.headers)
+            except ValueError as exc:
+                self._send(HTTPStatus.UNPROCESSABLE_ENTITY, review.applications_page(user, validator, state, str(exc)))
+                return
+            self._send(HTTPStatus.SEE_OTHER, location=f"/applications?state={quote(state)}")
+
         def _parts(self) -> tuple[list[str], dict[str, str]]:
             url = urlsplit(self.path)
             query = {k: v[0] for k, v in parse_qs(url.query).items()}
@@ -483,6 +583,11 @@ def make_handler(review: Review) -> type[BaseHTTPRequestHandler]:
                 parts, query = self._parts()
                 if not parts:
                     self._send(HTTPStatus.OK, review.list_page(user, query.get("status", "todo")))
+                elif parts == ["applications"]:
+                    state = query.get("state", "proposed")
+                    if state not in (*apps.STATES, "all"):
+                        raise Denied(HTTPStatus.NOT_FOUND, "Unknown state.")
+                    self._send(HTTPStatus.OK, review.applications_page(user, validator, state))
                 elif len(parts) == 2 and parts[0] == "alerts":
                     self._send(HTTPStatus.OK, review.alert_page(user, validator, review.alert(parts[1])))
                 elif len(parts) in (3, 5) and parts[0] == "alerts" and parts[-1] == "edit":
@@ -504,7 +609,10 @@ def make_handler(review: Review) -> type[BaseHTTPRequestHandler]:
             user = ""
             try:
                 user, validator = review.who(self.headers)
-                parts, _ = self._parts()
+                parts, query = self._parts()
+                if parts == ["applications"]:
+                    self._post_application(user, validator, query.get("state", "proposed"))
+                    return
                 translation = len(parts) == 5 and parts[2] == "translations" and parts[4] == "edit"
                 simple = len(parts) == 3 and parts[2] in ("edit", "prepare", "validate", "dismiss")
                 if parts[:1] != ["alerts"] or not (translation or simple):

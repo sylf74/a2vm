@@ -36,6 +36,12 @@ collector.yaml, on the collector's machine (secrets in files readable by the age
       user: a2vm-inventory
       password_file: /etc/a2vm/collector/wazuh-password
       ca_file: /etc/a2vm/collector/ca.pem
+    - name: s1
+      type: sentinelone                    # SentinelOne's application inventory, read only (v0.23.3)
+      url: https://console.example.org
+      api: agents                          # or installed-applications (Application Risk)
+      token_file: /etc/a2vm/collector/sentinelone-token
+      site_ids: ["1234567890"]             # optional: the sites of the tenant only
 
 `detect agent run` runs the connectors (or one, `--connector`) and pushes each detection; a
 system timer gives each connector its schedule (docs/collectors.md). A push that fails for a reason
@@ -66,6 +72,8 @@ from .intake.client import IntakeError, push
 from .intake.registry import ID
 from .openvas import load_openvas_file
 from .scanners import load_dnf_file, load_trivy_file, merge
+from .sentinelone import SentinelOneConfig, SentinelOneError
+from .sentinelone import fetch as fetch_sentinelone
 from .wazuh import WazuhConfig, WazuhError
 from .wazuh import fetch as fetch_wazuh
 
@@ -171,6 +179,27 @@ class WazuhConnector:
 
 
 @dataclass
+class SentinelOneConnector:
+    """SentinelOne's application inventory (read only): one detection of source `sentinelone`."""
+
+    name: str
+    config: SentinelOneConfig
+
+    def run(self, tenant: str, work: Path, log: Callable[[str], None] = print) -> tuple[list[Detection], list[str]]:
+        started = time.monotonic()
+        try:
+            detection = fetch_sentinelone(self.config, tenant, log=log)
+        except SentinelOneError as exc:
+            log(f"FAIL sentinelone [{self.config.url}]: {exc} ({time.monotonic() - started:.0f} s)")
+            return [], [f"{self.name}: {exc}"]
+        log(
+            f"ok   sentinelone [{self.config.url}]: {len(detection.observations)} agents "
+            f"({time.monotonic() - started:.0f} s)"
+        )
+        return [detection], []
+
+
+@dataclass
 class AgentConfig:
     collector: str
     tenant: str
@@ -226,12 +255,17 @@ def load_config(path: str | Path) -> AgentConfig:
                 connectors.append(WazuhConnector(name, WazuhConfig.from_dict(c, where)))
             except ValueError as exc:
                 raise AgentError(str(exc)) from exc
+        elif kind == "sentinelone":
+            try:
+                connectors.append(SentinelOneConnector(name, SentinelOneConfig.from_dict(c, where)))
+            except ValueError as exc:
+                raise AgentError(str(exc)) from exc
         elif kind == "file-import":
             if c.get("source") not in SOURCES_BY_SUFFIX or not c.get("folder"):
                 raise AgentError(f"{where}: `source` ({', '.join(SOURCES_BY_SUFFIX)}) and `folder` are required")
             connectors.append(FileImportConnector(name, c["source"], Path(c["folder"]), int(c.get("min_qod", 70))))
         else:
-            raise AgentError(f"{where}: unknown type {kind!r} (targets, file-import, itop, wazuh)")
+            raise AgentError(f"{where}: unknown type {kind!r} (targets, file-import, itop, wazuh, sentinelone)")
     if not connectors:
         raise AgentError(f"{path}: at least one connector is required")
     try:

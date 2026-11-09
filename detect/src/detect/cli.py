@@ -16,6 +16,7 @@
   cmdb       the tenant's CMDB: read it as a detection (fetch), or list the hosts scanned but not
              in it, as a CSV a person imports into the CMDB (export); A2VM never writes to it
   wazuh      Wazuh's software inventory, read as a detection of source wazuh (fetch, v0.23.1)
+  sentinelone  SentinelOne's application inventory, as a detection of source sentinelone (fetch, v0.23.3)
 
 Output: <out>/<client>/<source>.json (default work/detect).
 """
@@ -298,6 +299,21 @@ def cmd_wazuh(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_sentinelone(args: argparse.Namespace) -> int:
+    import yaml
+
+    from .sentinelone import SentinelOneConfig, SentinelOneError, fetch
+
+    try:
+        data = yaml.safe_load(Path(args.config).read_text(encoding="utf-8")) or {}
+        cfg = SentinelOneConfig.from_dict(data, args.config)
+        _write(args.out, fetch(cfg, args.tenant))
+    except (OSError, ValueError, yaml.YAMLError, SentinelOneError) as exc:
+        print(exc, file=sys.stderr)
+        return 2
+    return 0
+
+
 def cmd_cmdb(args: argparse.Namespace) -> int:
     import csv
     import json
@@ -435,6 +451,14 @@ def main(argv: list[str] | None = None) -> int:
     wf.add_argument("--tenant", required=True)
     wf.add_argument("--out", default="work/detect")
     wf.set_defaults(func=cmd_wazuh)
+
+    s1 = sub.add_parser("sentinelone", help="SentinelOne's application inventory: read it (fetch)")
+    s1_sub = s1.add_subparsers(dest="sentinelone_command", required=True)
+    sf = s1_sub.add_parser("fetch", help="read the inventory into a detection of source sentinelone")
+    sf.add_argument("--config", required=True, help="YAML with the settings of a sentinelone connector")
+    sf.add_argument("--tenant", required=True)
+    sf.add_argument("--out", default="work/detect")
+    sf.set_defaults(func=cmd_sentinelone)
 
     args = parser.parse_args(argv)
     return args.func(args)

@@ -25,6 +25,7 @@ import tempfile
 from pathlib import Path
 from urllib.parse import quote
 
+from a2vm import applications as apps
 from a2vm.config import describe_llm, env, load_settings
 from a2vm.declared import DeclaredMatcher
 from a2vm.llm import LlmClient
@@ -134,6 +135,47 @@ def _send_link(alert_id: str) -> str:
     )
 
 
+PROJECT_APPLICATIONS = Path("applications.yaml")  # the table of a tenant project in the GitLab mode
+
+
+def _applications(how: str | None) -> dict[str, apps.Row]:
+    """The tenant's applications table (v0.23.3): a JSON file the watch service gave (Kubernetes),
+    else `applications.yaml` of the tenant project (GitLab mode, validated by merge request)."""
+    import yaml
+
+    if how and how != "auto":
+        path = Path(how)
+        return apps.load_table(json.loads(path.read_text(encoding="utf-8"))) if path.exists() else {}
+    if PROJECT_APPLICATIONS.exists():
+        data = yaml.safe_load(PROJECT_APPLICATIONS.read_text(encoding="utf-8")) or {}
+        return apps.from_declarations(data.get("applications") or [])
+    return {}
+
+
+def propose_applications(inventory: Inventory, llm: LlmClient | None, out: str | None) -> str:
+    """The LLM's CPE for the applications of the inventory still new in the table, into a proposal
+    file for the watch service (Kubernetes mode), a few per passage (A2VM_APPLICATIONS_PER_PASSAGE,
+    default 40). Without an LLM, or in the GitLab mode (no service to keep them), only a count."""
+    found = apps.candidates(list(inventory.assets.values()))
+    table = inventory.applications
+    waiting = [
+        table.get(k) or apps.Row(k, v["vendor"], v["name"])
+        for k, v in sorted(found.items(), key=lambda kv: (-len(kv[1]["hosts"]), kv[0]))
+        if k not in table or table[k].state == apps.NEW
+    ]
+    if not waiting:
+        return ""
+    if not out:
+        return f"applications: {len(waiting)} without a CPE: add them to applications.yaml (docs/sentinelone.md)"
+    if llm is None:
+        return f"applications: {len(waiting)} without a CPE, waiting for an analyst (no LLM)"
+    limit = int(env("APPLICATIONS_PER_PASSAGE", "40") or 40)
+    proposals, error = apps.propose(llm, waiting[:limit], by=f"llm:{llm.model}")
+    Path(out).write_text(json.dumps({"proposals": proposals}, ensure_ascii=False), encoding="utf-8")
+    note = f"applications: {len(proposals)} CPE proposed by the LLM, {len(waiting) - len(proposals)} still without"
+    return note + (f" (LLM: {error})" if error else "")
+
+
 def cmd_watch(args: argparse.Namespace) -> int:
     settings = load_settings(args.settings)
     settings.sources.feed_cache_hours = min(settings.sources.feed_cache_hours, 0.1)
@@ -170,7 +212,13 @@ def cmd_watch(args: argparse.Namespace) -> int:
         else:
             matcher = DeclaredMatcher(settings, llm)
             inventory = _inventory(args.inventory, profile.id)
+            if inventory is not None:
+                inventory.applications = _applications(getattr(args, "applications", None))
             alerts = relevant(items, profile, sources, settings, matcher, state, catalogue, inventory)
+            if inventory is not None and not args.fixtures:
+                note = propose_applications(inventory, llm, getattr(args, "proposals", None))
+                if note:
+                    print(note)
             if not args.fixtures:
                 note = push_technologies(settings, profile, state)
                 if note:
@@ -568,6 +616,12 @@ def main(argv: list[str] | None = None) -> int:
         help="last daily inventory: auto (runner cache work/assets, else the artifacts of the project's last "
         "triage job), none, or a directory",
     )
+    w.add_argument(
+        "--applications",
+        default="auto",
+        help="the tenant's applications table (v0.23.3): a JSON file, or auto (applications.yaml of the project)",
+    )
+    w.add_argument("--proposals", help="where to write the LLM's proposals for the applications table (JSON)")
     w.set_defaults(func=cmd_watch)
     s = sub.add_parser("send", help="mail the alerts of a watch run to the client")
     s.add_argument("profile", help="client.yaml")

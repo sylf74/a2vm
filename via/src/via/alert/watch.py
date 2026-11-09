@@ -44,6 +44,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from a2vm import applications
 from a2vm.config import Settings
 from a2vm.declared import DeclaredMatcher
 from a2vm.gti import ssvc_exploitation
@@ -416,16 +417,29 @@ def _open(asset: Asset) -> bool:
 
 
 def inventory_matches(
-    records: list[VulnRecord], inventory: Inventory, confirmed: set[tuple[str, str]]
+    records: list[VulnRecord],
+    inventory: Inventory,
+    confirmed: set[tuple[str, str]],
+    table: dict[str, applications.Row] | None = None,
 ) -> tuple[list[tuple[Asset, Exposure]], list[tuple[Asset, str]]]:
     """The hosts of the inventory exposed by their listed packages (D20), and those where the product
-    is possibly there; an asset already confirmed by a scan for the CVE is left to that proof."""
+    is possibly there; an asset already confirmed by a scan for the CVE is left to that proof. The
+    applications of an EDR (v0.23.3) are matched through the tenant's applications table."""
     exposed: list[tuple[Asset, Exposure]] = []
     possible: list[tuple[Asset, str]] = []
     for record in records:
         products = sorted({e.product for e in record.affected if e.product and e.product.lower() != "n/a"})
         for asset in sorted(inventory.assets.values(), key=lambda a: a.id):
             if not asset.components or (asset.id, record.cve_id) in confirmed:
+                continue
+            app_hits = applications.matches(record, asset.components, table) if table else []
+            sure_apps = [h.exposure for h in app_hits if h.proof == "exposed"]
+            if sure_apps:
+                exposed += [(asset, h) for h in sure_apps]
+                continue
+            if app_hits:
+                named = {f"{h.exposure.component} {h.exposure.version} ({h.reason})" for h in app_hits}
+                possible.append((asset, ", ".join(sorted(named))))
                 continue
             hits = exposures(record.cve_id, asset.components, record.packages, asset.os)
             sure = [h for h in hits if h.state != INVESTIGATING]
@@ -482,7 +496,7 @@ def relevant(
         possible: list[tuple[Asset, str]] = []
         if listed:
             confirmed = {(a.id, f.cve_id) for a, f in detected}
-            exposed_by_packages, possible = inventory_matches(recs, inventory, confirmed)
+            exposed_by_packages, possible = inventory_matches(recs, inventory, confirmed, inventory.applications)
         if not findings and not by_name and not detected and not exposed_by_packages and not possible:
             continue
         if it.origin == "cve":

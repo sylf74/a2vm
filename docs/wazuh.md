@@ -73,8 +73,9 @@ test without the collector: `detect wazuh fetch --config wazuh.yaml --tenant lab
 - A disconnected agent keeps its last inventory, dated by its last keep-alive; an agent never
   connected is left out.
 - Wazuh is an inventory, not a scan: it does not count as a scan of the host in the coverage.
-- Linux packages (rpm, deb) are matched as soon as they are read. Windows and macOS software is
-  kept but matched only once the names are mapped to `purl` or CPE (v0.23.3).
+- Linux packages (rpm, deb) are matched as soon as they are read. Windows and macOS software keeps
+  its publisher (since v0.23.3) and is matched through the tenant's applications table, as the
+  applications of SentinelOne (`docs/sentinelone.md` §4).
 
 ## 5. When the connector fails
 
