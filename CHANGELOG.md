@@ -5,6 +5,51 @@ analyst and, under **Upgrade**, what a tenant must do when it moves to that tag 
 `A2VM_REF` in its `.gitlab-ci.yml`). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
 §11) and the LLDs. A release adds its entry here in the same merge request (CLAUDE.md, Releasing).
 
+## v0.23.3 — 2026-11-09
+
+D20, third step: SentinelOne's applications, and the tenant's applications table that maps the
+applications of the EDRs to the products of the CVE records. Dispatch: a fix for iTop callers
+whose name two persons carry, and the requested tickets left proposed.
+
+- **Connector `sentinelone` of the collector** (`docs/sentinelone.md`, LLD detection §3.7), read only:
+  an API token of a Viewer service user, GET requests only. `api: agents` (default, every console)
+  reads the applications agent by agent; `api: installed-applications` by pages of the Application
+  Risk inventory. One host per agent (name, FQDN when the domain is a DNS one, addresses, OS), every
+  application as a component of source `sentinelone` with its publisher. Not a scan. A test:
+  `detect sentinelone fetch`. Not verified on a real console yet: the first reading prints
+  `sentinelone: <n> agents, applications listed on <m> (agents)`.
+- **Wazuh**: the Windows and macOS packages keep their publisher (`vendor`), and are matched like
+  SentinelOne's applications.
+- **Applications table** (LLD intelligence §3.4): each inventory adds a row for each application the
+  watch service does not know (`mozilla|mozilla firefox` for every version and language of
+  Firefox); at each passage the tenant's LLM proposes the CPE of a few new rows (40,
+  `A2VM_APPLICATIONS_PER_PASSAGE`); on the review page, **Applications**, a validator validates the
+  proposal, types another CPE, marks the row as no product or resets it. The watch names a host
+  **exposed** when a validated application is in an affected range of a new record (with the fixed
+  version), **possible** when the record does not decide its version or the row is only proposed.
+  The LLM never changes a decided row. GitLab mode: `applications.yaml` of the tenant project.
+- **Watch service**: `GET applications`, `POST applications/proposals` (`via.v1.yaml`); with the
+  tenant's database, the table `via.applications` (migration 2, at start). Library
+  `a2vm.applications`, owned by pillar 3; `a2vm.packages` compares rpm and deb components only.
+- **Dispatch**: the iTop `caller` is looked for in the tickets' organisation (`caller_organization`
+  for another one), or by its e-mail when it holds an @: a name two persons carry is no longer
+  refused ("caller_id: Several items found"). A ticket a person asked for and left `proposed`
+  (asked in dry-run, or a failed sending) is sent again by the next live run, with the findings
+  still open, or dropped when none is; the page shows the last error of a proposed ticket.
+
+**Upgrade**:
+
+1. Move `ref` and `A2VM_REF` of the client tenants to `v0.23.3` (the tenant `via` may follow:
+   nothing of the shared service changes). The watch service creates its table at start.
+2. A collector that reads SentinelOne or Wazuh: its image to `detect:v0.23.3`
+   (`/etc/systemd/system/a2vm-collector@.service`), then `systemctl daemon-reload`.
+3. SentinelOne: the service user and its token (`docs/sentinelone.md` §2), the connector (§3), the
+   source `sentinelone` in the tenant's `collectors.yaml`.
+4. After the next daily run, the review page lists the applications; with the tenant's LLM the
+   proposals come within the next passages of the watch.
+5. iTop refusing `caller_id: Several items found`: remove the duplicate Person, or give its e-mail
+   as `caller`; the tickets left proposed go at the next daily run.
+
 ## v0.23.2 — 2026-11-07
 
 The analysts' chat asks a period and the radar. SentinelOne moves to v0.23.3, the appliances to
