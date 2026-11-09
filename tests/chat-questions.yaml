@@ -1,0 +1,33 @@
+# Questions the analysts' chat must answer (v0.23.4), each with the tool that answers it and the
+# parameters it should get. `why`: words of that tool's description that lead the model to it.
+# Checked by tests/test_v0234.py against the tool server's OpenAPI description; replayed by hand in
+# Open WebUI after each version. `missing`: no tool yet; the model must say so, not answer "none".
+questions:
+  - {q: "Quelles CVE ont été publiées depuis hier, avec leur heure de découverte ?", tool: list_new_cves, params: [since], why: published}
+  - {q: "Quelles nouvelles CVE critiques depuis lundi 9 h ?", tool: list_new_cves, params: [since, min_cvss], why: critical}
+  - {q: "Quelles CVE ont été ajoutées au KEV cette semaine ?", tool: list_new_cves, params: [since, kev], why: KEV}
+  - {q: "Quelles alertes entre hier 18 h et ce matin 9 h ?", tool: list_alerts, params: [since, until], why: alerts}
+  - {q: "Que dit l'alerte numéro 42 ?", tool: get_alert, params: [alert], why: sheet}
+  - {q: "Qu'a trouvé le radar depuis lundi ?", tool: list_radar_events, params: [since], why: radar}
+  - {q: "La CVE-2024-3094 est-elle sur le radar ?", tool: list_radar_events, params: [cve], why: radar}
+  - {q: "La veille tourne-t-elle ? Quelles sources sont en erreur ?", tool: get_watch_status, params: [], why: sources}
+  - {q: "Sommes-nous concernés par la CVE-2024-3094 ?", tool: get_cve, params: [cve], why: concerned}
+  - {q: "Quels actifs ont OpenSSL 3.0 ?", tool: find_component, params: [name, version], why: package}
+  - {q: "Quelles applications n'ont pas encore de CPE validé ?", tool: list_applications, params: [state], why: CPE}
+  - {q: "Où en sommes-nous ?", tool: get_run_summary, params: [], why: Overview}
+  - {q: "Quelles décisions ACT exposées sur Internet ?", tool: search_decisions, params: [level, exposure], why: filters}
+  - {q: "Quelles CVE du KEV avec un EPSS supérieur à 50 % ?", tool: search_decisions, params: [kev, min_epss], why: filters}
+  - {q: "Pourquoi la CVE-2024-3094 est-elle en ACT sur web01 ?", tool: get_decision, params: [id], why: why}
+  - {q: "Quelles décisions demandent une revue ?", tool: search_decisions, params: [needs_review], why: filters}
+  - {q: "Qu'est-ce qui passe en retard de SLA cette semaine ?", tool: search_decisions, params: [sla_due_before], why: filters}
+  - {q: "Que sait-on de web01 ?", tool: get_asset, params: [asset], why: asset}
+  - {q: "Quels actifs de la CMDB ne sont jamais scannés ?", tool: list_coverage, params: [state], why: CMDB}
+  - {q: "Qu'est-ce qui a changé depuis le run d'hier ?", tool: what_changed, params: [since], why: changed}
+  - {q: "Quelles vulnérabilités ont été corrigées en octobre ?", tool: list_closed_findings, params: [since, until], why: closed}
+  - {q: "Quelles corrections déclarées ne sont pas encore confirmées par un scan ?", tool: list_unverified_findings, params: [since], why: scan}
+  - {q: "Quels correctifs appliquer sur web01, dans quel ordre ?", tool: get_fix_plan, params: [asset], why: fix}
+  - {q: "Combien de tickets envoyés à iTop en octobre, avec leurs numéros ?", tool: list_tickets, params: [since, until], why: ITSM}
+  - {q: "Fais-moi un Word des ACT exposées", tool: export_decisions, params: [format, level, exposure], why: docx}
+  - {q: "Quand a tourné le dernier run ?", tool: list_runs, params: [], why: runs}
+  - {q: "Quels serveurs n'ont pas été vus depuis 30 jours ?", missing: "list_coverage has no filter on the last time seen"}
+  - {q: "Quel est le délai moyen de correction par priorité ?", missing: "the portal's dashboards, not the chat"}

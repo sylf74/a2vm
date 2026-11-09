@@ -309,7 +309,7 @@ def test_package_fixtures_hold_no_real_advisory_number() -> None:
 def test_release_and_d20_recorded() -> None:
     hld = (ROOT / "docs" / "hld" / "00-product-strategy.md").read_text(encoding="utf-8")
     assert re.search(r"^\| v0\.23\.0( \(current\))? \| D20, first step", hld, re.M)
-    for version in ("v0.23.1", "v0.23.3", "v0.23.4"):  # v0.23.2: the chat, inserted
+    for version in ("v0.23.1", "v0.23.3", "v0.23.5"):  # v0.23.2: the chat; v0.23.4: corporate network
         assert re.search(rf"^\| {re.escape(version)}( \((to confirm|current)\))? \| D20", hld, re.M), version
     assert "| D20 | **In progress: first step in v0.23.0" in hld
     assert "## v0.23.0 — " in (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")

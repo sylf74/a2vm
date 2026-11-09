@@ -145,7 +145,15 @@ kubectl -n $NS logs deploy/a2vm-lab-chat -c retention --tail=5
 | "Sommes-nous concernés par CVE-… ?" | `get_cve`: concerned assets, or the assets that have the product outside the vulnerable range, or none |
 | "Quelles alertes cette semaine ?", "celle-ci a-t-elle été envoyée ?" | `list_alerts`, `get_alert` (watch on Kubernetes, v0.16.0): alerts of the watch, their status (pending, sent, failed) and their sheet |
 | "Quelles alertes entre hier 18 h et ce matin 9 h ?" (v0.23.2) | `list_alerts` with `since` and `until`: a day, or a date and time in the tenant's time zone (`chat.timezone`, Europe/Paris); each alert says when it was drafted |
-| "Qu'a trouvé le radar depuis lundi ?", "CVE-… est-elle sur le radar ?" (v0.23.2) | `list_radar_events`: the radar's events the watch team validated, from the shared intelligence service, newest first, counted by level; an event is public news, `list_alerts` says what concerns the tenant. Needs `intel.url` (the tenant's read token of the shared service) |
+| "Qu'a trouvé le radar depuis lundi ?", "CVE-… est-elle sur le radar ?" (v0.23.2) | `list_radar_events`: the radar's events the watch team validated, from the shared intelligence service, newest first, counted by level; an event is public news, `list_alerts` says what concerns the tenant. Needs `intel.url` (the tenant's read token of the shared service). Only what the team validated: an empty answer is not "nothing was published" |
+| "Quelles CVE ont été publiées depuis hier, avec leur heure de découverte ?", "nouvelles CVE critiques depuis lundi", "ajoutées au KEV cette semaine" (v0.23.4) | `list_new_cves`: the CVEs published or updated in the period (about 30 days back), newest first, each with when CVE.org published it, CVSS, KEV, EPSS, products, and the alert the watch drafted for the tenant about it, if any. Needs `intel.url` |
+| "La veille tourne-t-elle ?", "quelles sources sont en erreur ?" (v0.23.4) | `get_watch_status`: the watch's last passage, the sources failing in a row, the alerts of the last 24 hours (watch on Kubernetes) |
+| "Quelles applications n'ont pas encore de CPE validé ?" (v0.23.4) | `list_applications`: the applications table (`docs/sentinelone.md` §4) by state, with the hosts of each |
+
+The questions the chat must answer, with the tool of each, are in `tests/chat-questions.yaml` (v0.23.4):
+a test checks them against the tools' description; replay them in Open WebUI after an upgrade. When
+no tool covers a question, the description of the tools tells the model to say so rather than answer
+that nothing exists.
 
 `what_changed` needs two runs in the decision service: the day after the first daily run with
 v0.14.0 or later. The dates appear for the runs made with v0.15.2 or later.

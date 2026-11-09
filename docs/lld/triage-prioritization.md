@@ -53,7 +53,7 @@ repository is in this table of its pillar and in HLD §6.
 | Consumes | Detection files | Exchange file | `detection.schema.json`, `vulnops.detection/1` | detect | File of the run | Assets from the profile only |
 | Consumes | Vulnerability records | Exchange file | `vulnerability_records.schema.json`, `vulnops.records/1` | via (`via collect`) | File of the run | Refused (exit 2) |
 | Consumes | Watch service, for `list_alerts`, `get_alert` (§16) | API | `via.v1.yaml` | via (`via serve`) | Read token | The tools answer that the alerts are not available |
-| Consumes | Shared intelligence service, for `list_radar_events` (§16, v0.23.2) | API | `intel.v1.yaml` | via (`via intel-serve`, the watch team's namespace) | The tenant's read token (`intel-token`) | The tool answers that there is no radar (503) |
+| Consumes | Shared intelligence service, for `list_radar_events` (§16, v0.23.2) and `list_new_cves` (v0.23.4) | API | `intel.v1.yaml` | via (`via intel-serve`, the watch team's namespace) | The tenant's read token (`intel-token`) | The tool answers that there is no radar (503) |
 | Consumes | Client profile | Exchange file (tenant project) | `client_profile.schema.json` | Tenant project | File of the project or ConfigMap | Refused (exit 2) |
 
 ## 2. Interfaces
@@ -677,7 +677,7 @@ verdict grafana dashboard [overview|assets|cves|remediation|coverage|sla] [--lan
 | --- | --- |
 | 0 | Done |
 | 2 | Bad input: no connection string, invalid string, dataset unreadable or not of schema `a2vm.reporting/1` |
-| 3 | Database unreachable, refused, or at an older schema version (the job is allowed to fail with 3: a warning, the next run publishes again) |
+| 3 | Database unreachable, refused, or at an older schema version (the job is allowed to fail with 3: a warning, the next run publishes again). On Kubernetes since v0.23.4, after `daily.publishFailures` runs in a row (3) the daily job ends failed, its last step saying so: a portal that never receives a run shows. The dashboards of a portal without data show no data instead of SQL errors (each filter is `= ANY (ARRAY[…])`, valid when a variable has no option) |
 
 Connection: `--dsn`, else `A2VM_REPORTING_DSN`, a libpq string (`host=… user=…`), a URI
 (`postgresql://user:password@host/db`, maskable by GitLab) or the path of a file holding one. With
@@ -1041,6 +1041,9 @@ server: an OpenAPI server whose operations a model calls. Code:
 | `find_component` | `components` | "Which servers have openssl", "where is php 7 still installed": the assets that carry a package, vulnerable or not, from the packages listed on each host, with the counts computed by the service (assets with it, assets listed, hosts not listed, each version) (v0.22.2) |
 | `list_alerts`, `get_alert` | the watch service `via serve`: `alerts`, `alerts/{id}` | The watch's alerts and whether they were sent (v0.16.0, watch on Kubernetes; otherwise 503); since v0.23.2 between two moments (`since`, `until`) and with when each was drafted (`drafted_at`) |
 | `list_radar_events` | the shared intelligence service: `GET /v1/feed?kind=radar` (v0.23.2) | "What did the radar find since yesterday 18:00": the events the watch team validated, newest first, with `total` and `counts` by level; filters `since`, `until`, `level`, `cve`; the tenant's read token of the shared service (`intel-token`); GTI's items are left out (they name the technologies the tenants watch). Without a shared service: 503 |
+| `list_new_cves` | the shared intelligence service: `GET /v1/records/new` (v0.23.4) | "Which CVEs were published since yesterday, with their time of discovery": the CVE records published or updated in a period (cvelistV5's deltaLog, about 30 days), newest first, each with `at` (when CVE.org published it), CVSS, KEV, EPSS, products, and `alert`: the id of the alert the watch drafted for the tenant about it (asked of the watch service), else null; filters `since`, `until` (the tenant's time zone), `change`, `kev`, `min_cvss`; `total`, `counts`, `oldest` computed by the service. Without a shared service: 503 |
+| `get_watch_status` | the watch service: `status` (v0.23.4) | "Is the watch running, which sources fail": the last passage, the sources failing in a row, the alerts of the last 24 hours |
+| `list_applications` | the watch service: `applications` (v0.23.4) | The applications table by state (`state`, `q`, a page), with `counts` |
 | `export_decisions` | `decisions` (pages), `decisions/{id}` | A Word, PowerPoint or CSV document of the decisions chosen by the filters of `search_decisions` (16.6) |
 
 All are `GET`, take `run` (`latest` by default) and, for lists, `limit` (1 to 20, default 10) and

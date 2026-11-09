@@ -261,7 +261,7 @@ tenant, a button to the review page or the pipeline (`docs/radar.md` §5).
   is that they are drafted, matched and one click away when the analyst arrives.
 - The packages of the hosts are those of the last daily run: a package installed or updated since
   is seen at the next run. Other distributions than RHEL and its rebuilds, Debian and Ubuntu,
-  libraries loaded in memory, images and appliances come with v0.23.4 and v0.23.5; Wazuh's
+  libraries loaded in memory, images and appliances come with v0.23.6 and v0.23.7; Cyberwatch with v0.23.5; Wazuh's
   inventory since v0.23.1 (`docs/wazuh.md`); SentinelOne and the Windows applications since
   v0.23.3, through the applications table a validator keeps on the review page
   (`docs/sentinelone.md` §4).

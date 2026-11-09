@@ -58,6 +58,50 @@ paths:
         "400": {$ref: "#/components/responses/Problem"}
         "401": {$ref: "#/components/responses/Problem"}
         "413": {$ref: "#/components/responses/Problem"}
+  /v1/records/new:
+    get:
+      operationId: listNewRecords
+      summary: >-
+        The CVE records published or updated in a period (since v0.23.4, the chat's list_new_cves),
+        from cvelistV5's deltaLog (about 30 days back): newest first, each with `at` (when CVE.org
+        published the change), its change, and its record in short (CVSS, KEV, EPSS, products, title);
+        `total`, `counts` and `oldest` computed by the service
+      security:
+        - readToken: []
+      parameters:
+        - {name: since, in: query, schema: {type: string}, description: "a day or a date and time, UTC"}
+        - {name: until, in: query, schema: {type: string}, description: "a day (all of it) or a date and time, UTC"}
+        - {name: change, in: query, schema: {type: string, enum: [new, updated]}}
+        - {name: kev, in: query, schema: {type: boolean}}
+        - {name: min_cvss, in: query, schema: {type: number, minimum: 0, maximum: 10}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 50, default: 20}}
+        - {name: offset, in: query, schema: {type: integer, minimum: 0, default: 0}}
+      responses:
+        "200":
+          description: A page of the period
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total: {type: integer}
+                  counts: {type: object, additionalProperties: {type: integer}}
+                  oldest: {type: string}
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [cve, change, at]
+                      properties:
+                        cve: {type: string}
+                        change: {enum: [new, updated]}
+                        at: {type: string}
+                        cvss: {type: [number, "null"]}
+                        kev: {type: boolean}
+                        epss: {type: [number, "null"]}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "502": {$ref: "#/components/responses/Problem"}
   /v1/technologies:
     post:
       tags: [tenants]

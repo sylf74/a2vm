@@ -388,7 +388,7 @@ def test_the_chart_runs_the_shared_service_for_the_watch_team_only():
         'put intel-token "${A2VM_INTEL_TOKEN:-}"' in pipeline
         and 'put teams-webhook "${A2VM_TEAMS_WEBHOOK:-}"' in pipeline
     )
-    assert "$DISPATCH $INTEL -f" in pipeline and "A2VM_INTEL_SERVE" in pipeline
+    assert "$DISPATCH $INTEL $OUT -f" in pipeline and "A2VM_INTEL_SERVE" in pipeline
 
 
 def test_the_catalogue_keeps_the_radar_sources_for_the_radar():

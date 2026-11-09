@@ -133,7 +133,20 @@ verdict publish /data/output/*/reporting.json $DECLARED || rc=$?
 {{- else }}
 verdict publish /data/output/*/reporting.json || rc=$?
 {{- end }}
-if [ "$rc" -eq 3 ]; then echo "WARN reporting database unreachable or refused: the next run publishes again"; exit 0; fi
+# A reporting database that refuses run after run (v0.23.4): the daily job ends failed, so that it shows.
+if [ "$rc" -eq 3 ]; then
+  n=$(( $(cat /data/.publish-failures 2>/dev/null || echo 0) + 1 )); echo "$n" > /data/.publish-failures
+  if [ "$n" -ge {{ .Values.daily.publishFailures }} ]; then
+    echo "ERROR a reporting database refused the last $n runs (the ERROR lines above name it): the daily job ends failed"
+    {{- if not .Values.dispatch.enabled }}
+    exit 1
+    {{- end }}
+  else
+    echo "WARN reporting database unreachable or refused ($n run(s) in a row): the next run publishes again"
+  fi
+  exit 0
+fi
+rm -f /data/.publish-failures
 exit "$rc"
 {{- end -}}
 
@@ -146,6 +159,9 @@ rc=0
 dispatch run --url {{ include "a2vm-tenant.dispatchUrl" . | quote }} --tenant {{ .Values.tenant | quote }} \
   --token-file /secrets/dispatch-run-token || rc=$?
 if [ "$rc" -ne 0 ]; then echo "WARN dispatch incomplete (exit $rc): the next run dispatches again"; fi
+if [ "$(cat /data/.publish-failures 2>/dev/null || echo 0)" -ge {{ .Values.daily.publishFailures }} ]; then
+  echo "ERROR a reporting database refused the last runs (see the step publish): the daily job ends failed"; exit 1
+fi
 {{- end -}}
 
 {{- define "a2vm-tenant.step.inventory" -}}

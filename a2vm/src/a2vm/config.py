@@ -57,6 +57,19 @@ class SourceSettings:
     redhat_url: str = REDHAT_URL
     osv_url: str = OSV_URL
     packages_cache_hours: float = 12
+    # The shared service unreachable: read the sources directly (default), or fail (v0.23.4: a tenant
+    # that must never reach the Internet).
+    intel_fallback: bool = True
+    # A relay of the public sources (v0.23.4, topology R): the requests to the hosts listed go to
+    # `<relay_url>/<host>/<path>` with the relay's token, never a request carrying credentials.
+    relay_url: str = ""
+    relay_hosts: list[str] = field(default_factory=list)
+    relay_token_file: str = ""
+
+    def relay_token(self) -> str:
+        if self.relay_token_file and Path(self.relay_token_file).is_file():
+            return Path(self.relay_token_file).read_text(encoding="utf-8").strip()
+        return env("RELAY_TOKEN")
 
     @property
     def gti_api_key(self) -> str | None:
@@ -111,6 +124,10 @@ _ENV_OVERRIDES = {
     "GTI_MAX_CALLS": ("sources", "gti_max_calls"),
     "INTEL_URL": ("sources", "intel_url"),
     "INTEL_TOKEN_FILE": ("sources", "intel_token_file"),
+    "INTEL_FALLBACK": ("sources", "intel_fallback"),
+    "RELAY_URL": ("sources", "relay_url"),
+    "RELAY_HOSTS": ("sources", "relay_hosts"),
+    "RELAY_TOKEN_FILE": ("sources", "relay_token_file"),
 }
 ENV_PREFIXES = ("A2VM_", "VULNOPS_", "VERDICT_")
 LEGACY_PREFIXES = ENV_PREFIXES[1:]  # read when the A2VM_ name is absent, with a warning (removed later)
@@ -142,6 +159,8 @@ def _coerce(current: Any, raw: str) -> Any:
         return float(raw)
     if isinstance(current, int):
         return int(raw)
+    if isinstance(current, list):  # comma- or space-separated (A2VM_RELAY_HOSTS)
+        return [x for x in re.split(r"[,;\s]+", raw) if x]
     return raw
 
 
@@ -194,6 +213,15 @@ def describe_intel(settings: Settings) -> str:
     has = (src.intel_token_file and Path(src.intel_token_file).is_file()) or env("INTEL_TOKEN")
     token = "set" if has else "NOT SET"
     return f"intel: shared service {src.intel_url}, token {token}"
+
+
+def describe_relay(settings: Settings) -> str:
+    """One log line on the relay of the public sources (v0.23.4), never its token."""
+    src = settings.sources
+    if not src.relay_url:
+        return "relay: none (the public sources directly)"
+    token = "set" if src.relay_token() else "NOT SET"
+    return f"relay: {src.relay_url} for {', '.join(src.relay_hosts) or 'no host'}, token {token}"
 
 
 def describe_gti(settings: Settings) -> str:

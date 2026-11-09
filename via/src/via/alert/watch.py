@@ -109,6 +109,7 @@ class State:
             "alerted": {c: d for c, d in self.alerted.items() if d >= cutoff},
             "failures": self.failures,
             "radar": self.radar,
+            "saved_at": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),  # v0.23.4: get_watch_status
         }
         self.path.write_text(json.dumps(data, indent=1), encoding="utf-8")
 

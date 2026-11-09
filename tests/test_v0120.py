@@ -35,7 +35,7 @@ def test_one_image_per_pillar_from_the_same_dockerfile():
     assert "USER 10001" in dockerfile  # the chart runs as this user
     job = yaml.safe_load((ROOT / ".gitlab-ci.yml").read_text())["images"]
     assert "for p in " + " ".join(PILLARS) + "; do" in "\n".join(job["script"])
-    assert all(rule["if"].startswith("$CI_REGISTRY && ") for rule in job["rules"])
+    assert all(rule["if"].startswith("($CI_REGISTRY || $A2VM_PUSH_REGISTRY) && ") for rule in job["rules"])
     for pillar in PILLARS:
         assert (ROOT / pillar / "pyproject.toml").exists()
 

@@ -99,30 +99,40 @@ release:
 # release; the tenant chart takes them from there. Built with Buildah on a dedicated build runner
 # (tag `build`): a project runner of this project only, protected (tags and protected branches),
 # shell executor on a VM without client data, Buildah rootless as the runner's user; no Docker
-# daemon, no privileged container (docs/kubernetes.md, "Build runner"). Runs only when the
-# instance has a container registry (CI_REGISTRY).
+# daemon, no privileged container (docs/kubernetes.md, "Build runner"). Runs when the instance has a
+# container registry (CI_REGISTRY), or (v0.23.4) when A2VM_PUSH_REGISTRY names another one (Harbor):
+# A2VM_PUSH_IMAGE is the path of the images there, A2VM_PUSH_USER and A2VM_PUSH_PASSWORD a robot
+# account allowed to push (masked, protected). A2VM_PYTHON_IMAGE: the base image through a mirror.
 images:
   stage: release
   tags: [build]
   needs:
     - {job: release, optional: true}
   rules:
-    - if: $CI_REGISTRY && $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
-    - if: $CI_REGISTRY && $CI_PIPELINE_SOURCE == "web"
+    - if: ($CI_REGISTRY || $A2VM_PUSH_REGISTRY) && $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
+    - if: ($CI_REGISTRY || $A2VM_PUSH_REGISTRY) && $CI_PIPELINE_SOURCE == "web"
       when: manual
   cache: []
   script:
     - buildah --version
-    - echo "$CI_REGISTRY_PASSWORD" | buildah login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+    - |
+      if [ -n "${A2VM_PUSH_REGISTRY:-}" ]; then
+        REG="$A2VM_PUSH_REGISTRY"; DEST="${A2VM_PUSH_IMAGE:?A2VM_PUSH_IMAGE is needed with A2VM_PUSH_REGISTRY}"
+        printf '%s' "${A2VM_PUSH_PASSWORD:?A2VM_PUSH_PASSWORD is needed}" | buildah login -u "${A2VM_PUSH_USER:?A2VM_PUSH_USER is needed}" --password-stdin "$REG"
+      else
+        REG="$CI_REGISTRY"; DEST="$CI_REGISTRY_IMAGE"
+        echo "$CI_REGISTRY_PASSWORD" | buildah login -u "$CI_REGISTRY_USER" --password-stdin "$REG"
+      fi
     - TAG="${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}"
+    - BASE=""; if [ -n "${A2VM_PYTHON_IMAGE:-}" ]; then BASE="--build-arg PYTHON_IMAGE=$A2VM_PYTHON_IMAGE"; fi
     - |
       for p in via detect verdict dispatch; do
-        buildah build --quiet --pull -f images/Dockerfile --build-arg PILLAR=$p -t "$CI_REGISTRY_IMAGE/$p:$TAG" .
-        buildah push "$CI_REGISTRY_IMAGE/$p:$TAG"
-        echo "image $CI_REGISTRY_IMAGE/$p:$TAG"
+        buildah build --quiet --pull -f images/Dockerfile --build-arg PILLAR=$p $BASE -t "$DEST/$p:$TAG" .
+        buildah push "$DEST/$p:$TAG"
+        echo "image $DEST/$p:$TAG"
       done
   after_script:
-    - buildah logout "$CI_REGISTRY" || true
+    - buildah logout --all || true
     - buildah rmi --prune > /dev/null 2>&1 || true
 
 # The documentation published where the other teams read it (docs/deployment.md, section 7):

@@ -3,9 +3,14 @@
 package advisories of the distributions (Red Hat, OSV; v0.23.0), Google Threat Intelligence
 (optional, licensed).
 
-All network access goes through one httpx client (it honours HTTPS_PROXY / SSL_CERT_FILE) and a
-small file cache, so a daily run does not refetch what it already has. With `fixtures_dir`, the
-sources read local files only (tests, air-gapped demos).
+All network access goes through one httpx client (it honours HTTPS_PROXY, NO_PROXY, SSL_CERT_FILE)
+and a small file cache, so a daily run does not refetch what it already has. With `fixtures_dir`,
+the sources read local files only (tests, air-gapped demos).
+
+With a relay of the sources (`relay_url`, `relay_hosts`, v0.23.4), every request to a host listed,
+redirects and URLs found in the data included (CSAF documents), goes to `<relay>/<host>/<path>`
+with the relay's token: one hook on the client, so no URL of a source is rewritten by hand. A
+request that carries credentials (GTI's key) never goes through the relay.
 """
 
 from __future__ import annotations
@@ -15,8 +20,10 @@ import hashlib
 import json
 import re
 import time
+from collections import Counter
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -27,6 +34,49 @@ CVE_ID = re.compile(r"^CVE-(\d{4})-(\d{4,})$")
 
 class SourceError(RuntimeError):
     pass
+
+
+RELAY_TOKEN_HEADER = "X-A2VM-Relay-Token"
+CREDENTIALS = ("authorization", "x-apikey", "proxy-authorization")
+
+
+class Relay:
+    """Sends the requests to the hosts listed through the relay of the sources (topology R)."""
+
+    def __init__(self, url: str, hosts: list[str], token: str):
+        self.url = url.rstrip("/")
+        self.base = urlsplit(self.url)
+        self.hosts = {h.strip().lower() for h in hosts if h.strip()}
+        self.token = token
+        self.routes: Counter[str] = Counter()  # "relay <host>" / "direct <host>" -> requests
+
+    @classmethod
+    def from_settings(cls, settings: SourceSettings) -> Relay | None:
+        if not settings.relay_url:
+            return None
+        if not settings.relay_url.startswith("https://"):
+            raise SourceError("relay_url must be an https URL")
+        return cls(settings.relay_url, settings.relay_hosts, settings.relay_token())
+
+    def rewrite(self, request: httpx.Request) -> None:
+        """An httpx request hook: run before each request, redirects included."""
+        host = (request.url.host or "").lower()
+        if host == (self.base.hostname or "").lower():
+            return  # already through the relay
+        credentials = any(h in request.headers for h in CREDENTIALS)
+        if request.url.scheme != "https" or host not in self.hosts or credentials:
+            self.routes[f"direct {host}"] += 1
+            return
+        path = request.url.raw_path.decode("ascii")
+        request.url = httpx.URL(f"{self.url}/{host}{path}")
+        request.headers["Host"] = self.base.netloc
+        if self.token:
+            request.headers[RELAY_TOKEN_HEADER] = self.token
+        self.routes[f"relay {host}"] += 1
+
+    def route_of(self, url: str) -> str:
+        host = (urlsplit(url).hostname or "").lower()
+        return "relay" if host in self.hosts and url.startswith("https://") else "direct"
 
 
 class SourceAuthError(SourceError):
@@ -50,11 +100,13 @@ class Sources:
         self.settings = settings
         self.fixtures = Path(fixtures_dir) if fixtures_dir else None
         self.cache = Path(settings.cache_dir)
+        self.relay = Relay.from_settings(settings)
         self._client = httpx.Client(
             timeout=settings.timeout_seconds,
             follow_redirects=True,
             transport=transport,
             headers={"User-Agent": "verdict/0.1"},
+            event_hooks={"request": [self.relay.rewrite]} if self.relay else None,
         )
         self._kev: dict[str, dict[str, Any]] | None = None
         self.gti_calls = 0  # network lookups made to GTI in this run (cache hits excluded)
@@ -145,6 +197,21 @@ class Sources:
                     if item["cveId"] not in ids:
                         ids.append(item["cveId"])
         return ids
+
+    def delta_entries(self, max_age_hours: float = 0.15) -> list[tuple[str, str, str]]:
+        """Every change of cvelistV5's deltaLog (about 30 days): (CVE id, new or updated, when
+        CVE.org published it, UTC ISO), newest first (v0.23.4: the chat's list_new_cves)."""
+        if self.fixtures:
+            log = self._fixture("deltaLog.json") or []
+        else:
+            log = self._get_json(self.settings.delta_log_url, max_age_hours) or []
+        out: list[tuple[str, str, str]] = []
+        for fetch in log:
+            when = dt.datetime.fromisoformat(fetch["fetchTime"].replace("Z", "+00:00")).astimezone(dt.UTC)
+            for kind in ("new", "updated"):
+                for item in fetch.get(kind, []):
+                    out.append((item["cveId"], kind, when.isoformat(timespec="seconds")))
+        return sorted(out, key=lambda e: e[2], reverse=True)
 
     # -- KEV --------------------------------------------------------------------------------
     def kev(self) -> dict[str, dict[str, Any]]:

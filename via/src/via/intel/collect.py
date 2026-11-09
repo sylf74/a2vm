@@ -65,6 +65,8 @@ def collect(sources: Sources, cve_ids: list[str], packages: bool = False) -> Col
         try:
             return collect_shared(sources, cve_ids, **kw)
         except IntelError as exc:
+            if not sources.settings.intel_fallback:  # v0.23.4: this tenant never reads the sources itself
+                raise SourceError(f"intel: {exc}; the sources are not read (intel_fallback false)") from exc
             out = collect_direct(sources, cve_ids, **kw)
             out.notes.insert(0, f"intel: {exc}; records read from the sources directly")
             return out

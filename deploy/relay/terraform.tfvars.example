@@ -1,0 +1,8 @@
+# Copy to terraform.tfvars (kept out of git) and set your own values.
+domain      = "relay.example.org"
+allowed_ips = ["203.0.113.10/32"] # the corporate egress addresses
+admin_ips   = ["203.0.113.10/32"] # who may SSH
+# hosts       = ["raw.githubusercontent.com", "www.cisa.gov"]   # default: the sources of A2VM
+# project_id    = "00000000-0000-0000-0000-000000000000"
+# ip_address    = "203.0.113.20"
+# instance_type = "STARDUST1-S"

@@ -210,6 +210,46 @@ if [ ! -s /secrets/via-run-token ]; then echo "No via-run-token: the watch servi
 {{ include "a2vm-tenant.envCommon" . }}
 {{- end -}}
 
+{{/* The way out to the Internet (v0.23.4): the corporate proxy (HTTPS_PROXY, NO_PROXY), a CA bundle
+(the system CAs and the proxy's, key ca-bundle of the tenant's Secret) and the relay of the public
+sources (topology R; its token: key relay-token). Nothing when unset. */}}
+{{- define "a2vm-tenant.outbound" -}}
+{{- $p := .Values.proxy | default dict -}}
+{{- $r := .Values.relay | default dict -}}
+{{- if $p.https }}
+{{- $no := concat (list ".svc" ".cluster.local" "localhost" "127.0.0.1") ($p.noProxy | default list) | uniq | join "," }}
+{{- range $var := list "HTTPS_PROXY" "https_proxy" "HTTP_PROXY" "http_proxy" }}
+- name: {{ $var }}
+  value: {{ $p.https | quote }}
+{{- end }}
+{{- range $var := list "NO_PROXY" "no_proxy" }}
+- name: {{ $var }}
+  value: {{ $no | quote }}
+{{- end }}
+{{- end }}
+{{- if and $p.ca $.Values.secret.name }}
+- name: SSL_CERT_FILE
+  value: /secrets/ca-bundle
+- name: REQUESTS_CA_BUNDLE
+  value: /secrets/ca-bundle
+{{- end }}
+{{- if $r.url }}
+- name: A2VM_RELAY_URL
+  value: {{ $r.url | quote }}
+- name: A2VM_RELAY_HOSTS
+  value: {{ join "," ($r.hosts | default list) | quote }}
+- name: A2VM_RELAY_TOKEN_FILE
+  value: /secrets/relay-token
+{{- end }}
+{{- end -}}
+
+{{/* Whether a pod without the tenant's Secret mounted needs it for the way out (the intel pod). */}}
+{{- define "a2vm-tenant.outboundSecrets" -}}
+{{- $p := .Values.proxy | default dict -}}
+{{- $r := .Values.relay | default dict -}}
+{{- if and .Values.secret.name (or $p.ca $r.url) }}true{{ end -}}
+{{- end -}}
+
 {{/* Environment shared by every container, without A2VM_CACHE_DIR: each caller sets it once, since a
 name given twice breaks the next "helm upgrade" that changes the list. */}}
 {{- define "a2vm-tenant.envCommon" -}}
@@ -217,6 +257,7 @@ name given twice breaks the next "helm upgrade" that changes the list. */}}
   value: {{ .Values.daily.since | quote }}
 - name: HOME
   value: /home/a2vm
+{{- include "a2vm-tenant.outbound" . }}
 {{- range $key, $value := .Values.env }}
 - name: {{ $key }}
   value: {{ $value | quote }}

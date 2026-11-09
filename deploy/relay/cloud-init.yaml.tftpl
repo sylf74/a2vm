@@ -1,0 +1,95 @@
+#cloud-config
+# A2VM relay of the public sources, first boot (Rocky Linux 10): Podman and Caddy (HTTPS, Let's
+# Encrypt). One route per allowed host: https://<domain>/<host>/<path> -> https://<host>/<path>.
+# Rendered by Terraform templatefile(): a doubled dollar sign is a shell variable, a single one a
+# Terraform value.
+package_update: true
+package_upgrade: true
+packages:
+  - podman
+  - openssl
+
+write_files:
+  - path: /opt/a2vm-relay/compose.yaml
+    permissions: "0644"
+    content: |
+      services:
+        caddy:
+          image: ${caddy_image}
+          restart: always
+          env_file: .env
+          ports:
+            - "443:443"
+          volumes:
+            - ./Caddyfile:/etc/caddy/Caddyfile:ro,Z
+            - caddy:/data
+      volumes:
+        caddy:
+
+  - path: /opt/a2vm-relay/Caddyfile
+    permissions: "0644"
+    content: |
+      {
+      	admin off
+      }
+      ${domain} {
+      	tls {
+      		issuer acme {
+      			disable_http_challenge
+      		}
+      	}
+      	log {
+      		output stdout
+      		format filter {
+      			fields {
+      				request>headers>X-A2vm-Relay-Token delete
+      			}
+      		}
+      	}
+      	# One route block: its directives run in the order written (Caddy would otherwise run
+      	# handle_path before respond), so every check comes before any upstream.
+      	route {
+      		@outside not remote_ip ${join(" ", allowed_ips)}
+      		respond @outside 403
+      		@notoken not header X-A2VM-Relay-Token {$RELAY_TOKEN}
+      		respond @notoken 401
+      		@credentials header Authorization *
+      		respond @credentials "credentials never go through the relay" 400
+      		@apikey header X-Apikey *
+      		respond @apikey "credentials never go through the relay" 400
+      		@write not method GET HEAD
+      		respond @write 405
+%{ for h in hosts ~}
+      		handle_path /${h}/* {
+      			request_header -X-A2VM-Relay-Token
+      			reverse_proxy https://${h} {
+      				header_up Host {upstream_hostport}
+      			}
+      		}
+%{ endfor ~}
+      		respond "host not allowed by the relay" 404
+      	}
+      }
+
+  - path: /opt/a2vm-relay/bootstrap.sh
+    permissions: "0700"
+    content: |
+      #!/bin/sh
+      set -eu
+      cd /opt/a2vm-relay
+      mkdir -p secrets
+      chmod 700 secrets
+      if [ ! -s secrets/relay-token ]; then
+        openssl rand -hex 32 > secrets/relay-token
+        chmod 600 secrets/relay-token
+      fi
+      printf 'RELAY_TOKEN=%s\n' "$$(cat secrets/relay-token)" > .env
+      chmod 600 .env
+      dnf -y install epel-release
+      dnf -y install podman-compose
+      systemctl enable --now podman-restart.service
+      podman-compose up -d
+      podman-compose ps
+
+runcmd:
+  - [/opt/a2vm-relay/bootstrap.sh]

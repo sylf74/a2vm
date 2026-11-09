@@ -129,6 +129,22 @@ Then, at their next deployment, every tenant:
 On a GitLab tenant (`A2VM_RUN_MODE: gitlab`), the same variables work if the runner reaches the
 service (an ingress of your choice).
 
+## 3a. A corporate network (v0.23.4)
+
+Behind a corporate proxy, the radar and the shared service would open a flow to about fifteen public
+sites. Two settings, both optional ([`hld/proposals/intel-placement.md`](hld/proposals/intel-placement.md)):
+
+- **The relay of the sources** (recommended): a small cloud instance (`deploy/relay/README.md`)
+  that reaches only the hosts listed; the tenants send it the requests to those hosts
+  (`A2VM_RELAY_URL`, `A2VM_RELAY_HOSTS`, `A2VM_RELAY_TOKEN`): one flow to one domain, declared to
+  the SOC. GTI and every authenticated API never go through it.
+- **The outgoing proxy**: `A2VM_HTTPS_PROXY`, `A2VM_NO_PROXY` (the LLM, the ITSM, internal hosts)
+  and `A2VM_PROXY_CA` (the certificate of its TLS inspection), for every pod that goes out, the
+  relay included when it is reached through the proxy.
+
+`via check-sources` shows the route of each source (`[relay www.cisa.gov]`, `[direct …]`). A
+tenant that must never reach the Internet itself sets `A2VM_INTEL_FALLBACK=false`.
+
 ## 4. GTI (optional, off by default)
 
 With `A2VM_GTI_ENABLED=true` and `GTI_API_KEY` in the project `via` (an Enterprise licence):
