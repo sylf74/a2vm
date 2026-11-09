@@ -9,7 +9,7 @@ import datetime as dt
 import sys
 from pathlib import Path
 
-from a2vm.config import describe_gti, describe_intel, load_settings
+from a2vm.config import describe_gti, describe_intel, describe_relay, load_settings
 from a2vm.io import detection_files, read_detection, write_records
 
 from .collect import collect, select_cve_ids
@@ -61,6 +61,7 @@ def main(argv: list[str] | None = None) -> int:
     settings = load_settings(args.settings)
     print(describe_gti(settings))
     print(describe_intel(settings))
+    print(describe_relay(settings))
     sources = Sources(settings.sources, fixtures_dir=args.fixtures)
     try:
         explicit = list(args.cve or []) + (read_cve_file(args.cve_file) if args.cve_file else [])

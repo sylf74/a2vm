@@ -13,7 +13,7 @@
 #
 #     include:
 #       - project: vulnops/a2vm
-#         ref: v0.23.3
+#         ref: v0.23.4
 #         file: templates/client-pipeline.yml
 #     variables:
 #       A2VM_REF: v0.19.0        # same version as the include
@@ -366,6 +366,12 @@ deploy-k8s:
       put intel-token "${A2VM_INTEL_TOKEN:-}"
       put intel-radar-token "$(cat "$N/intel-radar-token" 2>/dev/null)"
       put teams-webhook "${A2VM_TEAMS_WEBHOOK:-}"
+      put relay-token "${A2VM_RELAY_TOKEN:-}"
+      if [ -n "${A2VM_PROXY_CA:-}" ]; then
+        CAB="$(mktemp)"; cat /etc/ssl/certs/ca-certificates.crt > "$CAB"
+        if [ -f "$A2VM_PROXY_CA" ]; then cat "$A2VM_PROXY_CA" >> "$CAB"; else printf '%s\n' "$A2VM_PROXY_CA" >> "$CAB"; fi
+        put ca-bundle "$CAB"; rm -f "$CAB"
+      fi
       if [ -n "$DISPATCH" ]; then
         put dispatch-run-token "$(cat "$D/dispatch-run-token")"
         put dispatch-read-token "$(cat "$D/dispatch-read-token")"
@@ -403,6 +409,16 @@ deploy-k8s:
         if [ -n "$val" ]; then printf '  %s: "%s"\n' "$v" "$val" >> "$ENVF"; fi
       done
       printf '  A2VM_SERVER_URL: "%s"\n' "${A2VM_SERVER_URL:-$CI_SERVER_URL}" >> "$ENVF"
+    # The way out to the Internet (v0.23.4): the corporate proxy, the relay of the public sources.
+    - |
+      OUT=""
+      if [ -n "${A2VM_HTTPS_PROXY:-}" ]; then OUT="$OUT --set proxy.https=$A2VM_HTTPS_PROXY"; fi
+      if [ -n "${A2VM_NO_PROXY:-}" ]; then OUT="$OUT --set proxy.noProxy={$(echo "$A2VM_NO_PROXY" | tr ' ;' ',,')}"; fi
+      if [ -n "${A2VM_PROXY_CA:-}" ]; then OUT="$OUT --set proxy.ca=true"; fi
+      if [ -n "${A2VM_RELAY_URL:-}" ]; then
+        OUT="$OUT --set relay.url=$A2VM_RELAY_URL --set relay.hosts={$(echo "${A2VM_RELAY_HOSTS:-}" | tr ' ;' ',,')}"
+        if [ -z "${A2VM_RELAY_TOKEN:-}" ]; then echo "WARN A2VM_RELAY_URL without A2VM_RELAY_TOKEN: the relay will refuse the requests"; fi
+      fi
     - |
       FILES="--set-file files.profile=$A2VM_PROFILE"
       if [ -f "$A2VM_TARGETS" ]; then FILES="$FILES --set-file files.targets=$A2VM_TARGETS"; fi
@@ -414,7 +430,7 @@ deploy-k8s:
         --set secret.name=a2vm-tenant \
         --set daily.schedule="${A2VM_K8S_SCHEDULE:-45 5 * * *}" \
         --set daily.suspend="${A2VM_K8S_SUSPEND:-false}" \
-        $PULL $FILES $INTAKE $VERDICT $DATABASE $CHAT $WATCH $SIGNIN $DISPATCH $INTEL -f "$ENVF"
+        $PULL $FILES $INTAKE $VERDICT $DATABASE $CHAT $WATCH $SIGNIN $DISPATCH $INTEL $OUT -f "$ENVF"
       rm -rf "$I" "$V" "$C" "$W" "$O" "$D" "$N"
       kubectl -n "$NS" get cronjob,pvc
       if [ -n "$INTAKE" ]; then kubectl -n "$NS" get deployment,service,ingress -l app.kubernetes.io/component=detect; fi

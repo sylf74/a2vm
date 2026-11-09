@@ -139,8 +139,44 @@ class WatchService:
             raise Problem(HTTPStatus.BAD_REQUEST, f"state is one of {', '.join(apps.STATES)}")
         table = self.store.applications(tenant)
         counts = {s: sum(r.state == s for r in table.values()) for s in apps.STATES}
-        rows = [table[k].to_dict() for k in sorted(table) if not state or table[k].state == state]
-        return {"schema": "a2vm.applications/1", "counts": counts, "applications": rows}
+        text = query.get("q", "").lower()
+        rows = [
+            table[k].to_dict()
+            for k in sorted(table, key=lambda k: (-table[k].hosts, k))
+            if (not state or table[k].state == state) and (not text or text in k or text in table[k].name.lower())
+        ]
+        out: dict[str, Any] = {"schema": "a2vm.applications/1", "counts": counts, "total": len(rows)}
+        if "limit" in query or "offset" in query:  # a page (the chat's list_applications, v0.23.4)
+            try:
+                limit, offset = int(query.get("limit", 25)), int(query.get("offset", 0))
+            except ValueError as exc:
+                raise Problem(HTTPStatus.BAD_REQUEST, "limit and offset: integers") from exc
+            if offset + limit < len(rows):
+                out["next_offset"] = offset + limit
+            rows = rows[offset : offset + limit]
+        out["applications"] = rows
+        return out
+
+    def get_status(self, tenant: str, token: str | None) -> dict[str, Any]:
+        """The watch of the tenant (v0.23.4, the chat's get_watch_status): its last passage, the
+        sources failing in a row, the alerts of the last 24 hours."""
+        self._check(tenant, token, ("run", "read"))
+        raw = self.store.state(tenant)
+        if raw is None:
+            return {"tenant": tenant, "state": "the watch has not run yet"}
+        state = json.loads(raw)
+        failing = {k: v for k, v in (state.get("failures") or {}).items() if v}
+        day = (dt.datetime.now(dt.UTC) - dt.timedelta(hours=24)).strftime("%Y%m%dT%H%M")
+        recent = [a for a in self.store.alerts(tenant) if a.get("run", "")[:13] >= day[:13]]
+        return {
+            "tenant": tenant,
+            "last_passage": state.get("saved_at", ""),
+            "cve_delta_since": state.get("delta_since", ""),
+            "failing_sources": [{"source": k, "failed_passages_in_a_row": v} for k, v in sorted(failing.items())],
+            "alerts_last_24h": len(recent),
+            "note": "last_passage is empty before v0.23.4; a source fails once without a warning, the "
+            "profile's threshold decides when it is reported",
+        }
 
     def put_proposals(self, tenant: str, token: str | None, body: bytes, gzipped: bool) -> dict[str, Any]:
         """The LLM's proposals of the watch, for the rows still new."""
@@ -351,6 +387,8 @@ def make_handler(service: WatchService) -> type[JsonHandler]:
                     self.send_json(HTTPStatus.OK, service.list_alerts(tenant, token, query))
                 elif rest == "applications":
                     self.send_json(HTTPStatus.OK, service.get_applications(tenant, token, query))
+                elif rest == "status":
+                    self.send_json(HTTPStatus.OK, service.get_status(tenant, token))
                 elif len(parts) == 2 and parts[0] == "alerts":
                     self.send_json(HTTPStatus.OK, service.get_alert(tenant, token, unquote(parts[1])))
                 elif len(parts) == 4 and parts[0] == "alerts" and parts[2] == "translations":

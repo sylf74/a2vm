@@ -139,6 +139,9 @@ paths:
       parameters:
         - $ref: "#/components/parameters/tenant"
         - {name: state, in: query, schema: {type: string, enum: [new, proposed, validated, rejected]}}
+        - {name: q, in: query, schema: {type: string}, description: "part of the key or the name (since v0.23.4)"}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1}, description: "a page (since v0.23.4)"}
+        - {name: offset, in: query, schema: {type: integer, minimum: 0}}
       responses:
         "200":
           description: The table
@@ -151,6 +154,30 @@ paths:
                   counts: {type: object, additionalProperties: {type: integer}}
                   applications: {type: array, items: {type: object}}
         "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/status:
+    get:
+      tags: [read]
+      operationId: getWatchStatus
+      summary: >-
+        The watch of the tenant (since v0.23.4, the chat's get_watch_status): its last passage, the
+        sources failing in a row, the alerts drafted in the last 24 hours
+      security:
+        - readToken: []
+        - runToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+      responses:
+        "200":
+          description: The status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  last_passage: {type: string}
+                  failing_sources: {type: array, items: {type: object}}
+                  alerts_last_24h: {type: integer}
         "401": {$ref: "#/components/responses/Problem"}
   /v1/tenants/{tenant}/applications/proposals:
     post:

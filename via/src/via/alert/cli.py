@@ -22,11 +22,12 @@ import os
 import re
 import sys
 import tempfile
+from collections import Counter
 from pathlib import Path
 from urllib.parse import quote
 
 from a2vm import applications as apps
-from a2vm.config import describe_llm, env, load_settings
+from a2vm.config import describe_llm, describe_relay, env, load_settings
 from a2vm.declared import DeclaredMatcher
 from a2vm.llm import LlmClient
 from a2vm.profile import ProfileError, load_profile
@@ -187,6 +188,7 @@ def cmd_watch(args: argparse.Namespace) -> int:
         print(exc, file=sys.stderr)
         return 2
     print(describe_llm(settings))
+    print(describe_relay(settings))
     state = State.load(args.state)
     sheet_errors: list[str] = []  # errors of this run, not of a source: reported at once
     out = Path(args.out)
@@ -533,10 +535,12 @@ def cmd_check_sources(args: argparse.Namespace) -> int:
     settings = load_settings(args.settings)
     catalogue = load_catalogue(args.sources)
     sources = Sources(settings.sources, fixtures_dir=args.fixtures)
+    print(describe_relay(settings))
     bad = 0
     try:
         for src in catalogue:
             flag = "on " if src.enabled else "off"
+            before = Counter(sources.relay.routes) if sources.relay else Counter()
             try:
                 if src.kind == "certfr":
                     detail = f"{len(parse_feed(sources.certfr_feed(src.feed), src.feed))} publications"
@@ -566,6 +570,9 @@ def cmd_check_sources(args: argparse.Namespace) -> int:
                     detail = "GTI search, radar only" + ("" if settings.sources.gti_enabled else " (GTI disabled)")
                 else:
                     detail = "via cvelistV5" + (f" ({', '.join(src.vendors)})" if src.vendors else "")
+                if sources.relay:  # v0.23.4: which way each source went
+                    used = sources.relay.routes - before
+                    detail += " [" + (", ".join(sorted(used)) or "cache") + "]"
                 print(f"OK  {flag} {src.category:<13} {src.id:<18} {detail}")
             except Exception as exc:  # noqa: BLE001 - report every failure, whatever it is
                 bad += 1

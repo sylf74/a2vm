@@ -91,6 +91,23 @@ The token (`glrt-…`) shown when the runner is created is read from a file, not
 secret (`gitlab-runner list` prints it, `gitlab-runner verify` does not). A first
 check: *Run pipeline* on `main`, then ▶ on `images` builds the images tagged with the commit.
 
+### Another registry (Harbor, v0.23.4)
+
+Without a GitLab registry, or to keep the images in the company's Harbor, the same job pushes there.
+In Harbor: a project (`a2vm`), a robot account allowed to push to it, another allowed to pull. CI/CD
+variables of the code project, masked and protected:
+
+| Variable | Value |
+| --- | --- |
+| `A2VM_PUSH_REGISTRY` | `harbor.example.org` |
+| `A2VM_PUSH_IMAGE` | `harbor.example.org/a2vm` |
+| `A2VM_PUSH_USER`, `A2VM_PUSH_PASSWORD` | the push robot account |
+| `A2VM_PYTHON_IMAGE` | optional: the base image through Harbor's proxy cache, e.g. `harbor.example.org/dockerhub/library/python:3.12-slim` |
+
+The tenants then pull from Harbor: `A2VM_IMAGE_REGISTRY`, `A2VM_REGISTRY` and the pull robot account
+(§2). A Harbor project that refuses images above a vulnerability threshold may refuse a release:
+check that setting before the first deployment.
+
 ## 2. Per tenant
 
 CI/CD variables of the tenant project (or of a subgroup):
@@ -101,13 +118,17 @@ CI/CD variables of the tenant project (or of a subgroup):
 | `A2VM_K8S_NAMESPACE` | Optional, default `a2vm-<project name>` | Visible |
 | `A2VM_K8S_SCHEDULE` | Optional, cron in Europe/Paris, default `45 5 * * *` | Visible |
 | `A2VM_K8S_SUSPEND` | Optional, `true` keeps the daily CronJob suspended from one deployment to the next (the radar tenant, `docs/radar.md`), default `false` | Visible |
-| `A2VM_IMAGE_REGISTRY` | Optional, default `<registry>/<code project path>` | Visible |
+| `A2VM_IMAGE_REGISTRY` | Optional, default `<registry>/<code project path>`; another registry (Harbor, v0.23.4): `harbor.example.org/a2vm`, with `A2VM_REGISTRY`, `A2VM_REGISTRY_USER`, `A2VM_REGISTRY_PASSWORD` (a robot account allowed to pull) | Visible |
 | `A2VM_VERDICT_SERVICE` | Optional, `false` to deploy no decision service (default `true`, v0.14.0) | Visible |
 | `A2VM_RUN_MODE` | In the tenant's `.gitlab-ci.yml`: `gitlab` (default) or `kubernetes`, the daily run and the watch in the namespace only (§4) | — |
 | `A2VM_CHAT_HOST` | Optional: the analysts' chat on the decision service, at this host (v0.15.0, `chat.md`) | Visible |
 | `A2VM_DATABASE` | Optional, `true`: the tenant's PostgreSQL (CloudNativePG) for the watch, detection and decision services instead of their volumes (v0.18.0, §5) | Visible |
 | `A2VM_DISPATCH_HOST`, `A2VM_DISPATCH_<TARGET>_PASSWORD`, … | Optional: with `dispatch.yaml` in the project, the dispatch service of pillar 4, remediation tickets in the ITSM, and its page of the requests for remediation at this host (v0.20.0, `dispatch.md`) | — |
 | `A2VM_DATABASE_SIZE`, `A2VM_DATABASE_STORAGE_CLASS`, `A2VM_DATABASE_INSTANCES` | Optional: the database's volume (default `5Gi`, the cluster's default class) and its instances (default `1`, `3` for a standby) | Visible |
+| `A2VM_HTTPS_PROXY`, `A2VM_NO_PROXY` | Optional (v0.23.4): the corporate proxy for every pod that goes out (`HTTPS_PROXY`), and the hosts reached directly besides the cluster's services (the LLM, the ITSM), comma-separated | Visible |
+| `A2VM_PROXY_CA` | Optional (v0.23.4): the certificate of the proxy's TLS inspection (File): the job adds it to the system CAs, key `ca-bundle` | Visible |
+| `A2VM_RELAY_URL`, `A2VM_RELAY_HOSTS`, `A2VM_RELAY_TOKEN` | Optional (v0.23.4): the relay of the public sources (`deploy/relay/README.md`), its hosts comma-separated, its token | Token masked |
+| `A2VM_INTEL_FALLBACK` | Optional (v0.23.4), `false`: the shared service unreachable fails the run instead of reading the sources | Visible |
 
 The other variables are the pipeline's (`docs/deployment.md`): the job copies the secret ones
 (`A2VM_SSH_KEY`, `LLM_API_KEY`, `GTI_API_KEY`, `A2VM_GVM_USER`, `A2VM_GVM_PASSWORD`,

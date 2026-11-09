@@ -343,6 +343,17 @@ intel:
     networkPolicy:
       enabled: true
 
+# The way out to the Internet (v0.23.4, docs/hld/proposals/intel-placement.md). All empty: as before.
+proxy:
+  https: ""        # the corporate proxy, e.g. http://proxy.example.org:3128 (A2VM_HTTPS_PROXY)
+  noProxy: []      # added to .svc, .cluster.local, localhost: the LLM, the ITSM... (A2VM_NO_PROXY)
+  ca: false        # true: key ca-bundle of secret.name, the system CAs and the proxy's (A2VM_PROXY_CA)
+# The relay of the public sources (topology R): the hosts listed go through it; its token is the key
+# relay-token of secret.name (A2VM_RELAY_TOKEN). Empty url: the sources directly.
+relay:
+  url: ""          # e.g. https://relay.example.org (A2VM_RELAY_URL)
+  hosts: []        # e.g. [www.cisa.gov, raw.githubusercontent.com] (A2VM_RELAY_HOSTS)
+
 # Sign-in of the analysts with the tenant's identity provider (OIDC, v0.17.0; Keycloak first, any
 # provider with discovery): the chat (Open WebUI) and the review page of the alerts. Empty issuerUrl:
 # the chat keeps its local accounts. The client secret is the key oidc-client-secret of secret.name.
@@ -370,6 +381,8 @@ daily:
   activeDeadlineSeconds: 21600
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 3
+  # Runs in a row a reporting database refuses before the daily job ends failed (v0.23.4).
+  publishFailures: 3
 
 # Name of the Secret holding the tenant's secrets. Every key is optional:
 #   ssh-key         private key of the read-only scan account
@@ -379,6 +392,8 @@ daily:
 #   reporting-dsn   writer connection to the reporting database
 #   reporting-ca    certificate of the reporting database
 #   reporting-dsn-<name>, reporting-ca-<name>   another reporting database, of another portal (v0.20.3)
+#   relay-token     the relay of the public sources (v0.23.4)
+#   ca-bundle       the system CAs and the corporate proxy's (v0.23.4)
 #   gitlab-token    A2VM_GITLAB_TOKEN (external detection)
 #   gitlab-ca       CA of GitLab, for the GitLab API (external detection)
 #   detect-read-token   token of the daily run on the detection service (collect.mode intake)

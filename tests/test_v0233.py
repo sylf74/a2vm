@@ -475,4 +475,4 @@ def test_release_recorded() -> None:
     assert "## v0.23.3 — " in (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     assert (ROOT / "docs" / "sentinelone.md").exists()
     for f in ("a2vm", "via", "detect", "verdict", "dispatch"):
-        assert 'version = "0.23.3"' in (ROOT / f / "pyproject.toml").read_text(encoding="utf-8")
+        assert re.search(r'^version = "0\.(23\.[3-9]|2[4-9]\.\d+)"', (ROOT / f / "pyproject.toml").read_text(), re.M)

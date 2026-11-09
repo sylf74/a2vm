@@ -192,17 +192,22 @@ def trend(title: str, sql: str, desc: str) -> dict:
 # -- SQL shared by the per-asset and per-CVE dashboards -----------------------------------------
 TENANTS = "ARRAY[${tenant:sqlstring}]::text[]"
 FILTERS = (
-    "x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label IN (${kev:sqlstring}) "
-    "AND x.severity IN (${severity:sqlstring}) AND x.epss_band IN (${epss:sqlstring}) "
-    "AND x.product_type IN (${ptype:sqlstring})"
+    "x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label = ANY (ARRAY[${kev:sqlstring}]::text[]) "
+    "AND x.severity = ANY (ARRAY[${severity:sqlstring}]::text[]) "
+    "AND x.epss_band = ANY (ARRAY[${epss:sqlstring}]::text[]) "
+    "AND x.product_type = ANY (ARRAY[${ptype:sqlstring}]::text[])"
 )
 NO_COMPARE = "NULLIF('${compare}', '') IS NULL"
 
 
 def findings_cte(both: bool = True, level_filter: bool = True) -> str:
     """`snap` (ord 1 = compared snapshot, ord 2 = snapshot) and `f`, the filtered findings of each."""
-    snaps = "(1, NULLIF('${compare}', '')::date), (2, '${snapshot}'::date)" if both else "(2, '${snapshot}'::date)"
-    level = " AND x.level IN (${decision:sqlstring})" if level_filter else ""
+    snaps = (
+        "(1, NULLIF('${compare}', '')::date), (2, NULLIF('${snapshot}', '')::date)"
+        if both
+        else "(2, NULLIF('${snapshot}', '')::date)"
+    )
+    level = " AND x.level = ANY (ARRAY[${decision:sqlstring}]::text[])" if level_filter else ""
     return (
         f"WITH snap (ord, snap_day) AS (VALUES {snaps}),\n"
         "f AS (SELECT s.ord, s.snap_day, x.* FROM snap s\n"
@@ -220,7 +225,7 @@ CVE_CTE = (
     "  FROM f GROUP BY f.ord, f.cve),\n"
     "c AS (SELECT c0.*, (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] AS level,\n"
     "  (ARRAY['Critical', 'High', 'Medium', 'Low', 'Unknown'])[c0.sev_rank] AS severity\n"
-    "  FROM c0 WHERE (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] IN (${decision:sqlstring}))\n"
+    "  FROM c0 WHERE (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] = ANY (ARRAY[${decision:sqlstring}]::text[]))\n"
 )
 
 
@@ -242,7 +247,7 @@ def matrix_sql(cte: str, rows: str, key: str, kev_only: bool) -> str:
         cte + f'SELECT l.level AS "SSVC decision",\n  {cols}\n'
         "FROM (VALUES ('ACT', 1), ('ATTEND', 2), ('TRACK', 3)) l (level, o)\n"
         f"LEFT JOIN {rows} ON {rows}.level = l.level AND {rows}.ord = 2\n"
-        "WHERE l.level IN (${decision:sqlstring})\nGROUP BY l.level, l.o ORDER BY l.o"
+        "WHERE l.level = ANY (ARRAY[${decision:sqlstring}]::text[])\nGROUP BY l.level, l.o ORDER BY l.o"
     )
 
 
@@ -308,7 +313,7 @@ SNAPSHOT_VARS = [
     query_var(
         "compare",
         "Compared with",
-        "SELECT __text, __value FROM (" + SNAPSHOT_DAYS + "WHERE d < '${snapshot}'::date "
+        "SELECT __text, __value FROM (" + SNAPSHOT_DAYS + "WHERE d < NULLIF('${snapshot}', '')::date "
         "UNION ALL SELECT 'none', '') v ORDER BY __value = '', __value DESC",
         multi=False,
         all_=False,
@@ -491,7 +496,7 @@ def assets_dashboard() -> dict:
             "Exposures per decision, day after day",
             f"SELECT x.day::timestamptz AS time, {levels}\nFROM {day_runs()}\n"
             "JOIN a2vm.decision_facts x ON x.run_id = r.run_id\n"
-            f"WHERE {FILTERS} AND x.level IN (${{decision:sqlstring}})\nGROUP BY x.day ORDER BY 1",
+            f"WHERE {FILTERS} AND x.level = ANY (ARRAY[${{decision:sqlstring}}]::text[])\nGROUP BY x.day ORDER BY 1",
             "Each day: the findings of each client's latest run that day (dashboard time range).",
         ),
         0, 24, 12, 8,
@@ -627,7 +632,7 @@ def cves_dashboard() -> dict:
             f"  FROM {day_runs()}\n"
             "  JOIN a2vm.decision_facts x ON x.run_id = r.run_id\n"
             f"  WHERE {FILTERS} GROUP BY x.day, x.cve) x\n"
-            "WHERE x.cve_level IN (${decision:sqlstring})\nGROUP BY day ORDER BY 1",
+            "WHERE x.cve_level = ANY (ARRAY[${decision:sqlstring}]::text[])\nGROUP BY day ORDER BY 1",
             "Each day: the CVEs of each client's latest run that day (dashboard time range).",
         ),
         0, 24, 12, 8,
@@ -1214,7 +1219,7 @@ def coverage_dashboard() -> dict:
             "(SELECT string_agg(k, ', ' ORDER BY k) FROM jsonb_object_keys(coalesce(scans, '{}'::jsonb)) k "
             f"WHERE k NOT IN ({known})) AS \"Other means\", "
             "days_since_scan AS \"Days since scan\", owner AS \"Owner\" "
-            f"FROM {COVERAGE} WHERE {IN_TENANT} AND state IN (${{state:sqlstring}}) "
+            f"FROM {COVERAGE} WHERE {IN_TENANT} AND state = ANY (ARRAY[${{state:sqlstring}}]::text[]) "
             "ORDER BY state_rank, criticality, asset_name",
             "Every host of the latest run: its configuration item, its coverage, the means missing, and for "
             "each means of detection the date it last saw the asset.",

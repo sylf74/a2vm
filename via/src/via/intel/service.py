@@ -163,6 +163,62 @@ class IntelService:
                 sources.close()
         return {"records": [r.to_dict() for r in out.records], "errors": out.errors, "notes": out.notes}
 
+    def new_records(self, token: str | None, query: dict[str, str]) -> dict[str, Any]:
+        """The CVE records published or updated in a period (v0.23.4, the chat's list_new_cves), from
+        cvelistV5's deltaLog (about 30 days): `since`, `until` (moments, UTC), `change` (new, updated),
+        `kev`, `min_cvss`, a page (`limit` 1 to 50, `offset`). Each item of the page with its record
+        in short: CVSS, KEV, EPSS, title; `at` is when CVE.org published the change."""
+        self._require(token, "read")
+        try:
+            since = _iso(moment(query.get("since") or "", "since")) if query.get("since") else ""
+            until = _iso(moment(query["until"], "until", end=True)) if query.get("until") else ""
+            limit, offset = int(query.get("limit") or 20), int(query.get("offset") or 0)
+            min_cvss = float(query["min_cvss"]) if query.get("min_cvss") else None
+        except ValueError as exc:
+            raise Problem(HTTPStatus.BAD_REQUEST, f"since, until, limit, offset, min_cvss: {exc}") from exc
+        if not 1 <= limit <= 50 or offset < 0:
+            raise Problem(HTTPStatus.BAD_REQUEST, "limit: 1 to 50; offset: 0 or more")
+        change = query.get("change", "")
+        if change and change not in ("new", "updated"):
+            raise Problem(HTTPStatus.BAD_REQUEST, "change: new or updated")
+        with self.collect_lock:
+            sources = self._sources()
+            try:
+                try:
+                    entries = sources.delta_entries()
+                except SourceError as exc:
+                    raise Problem(HTTPStatus.BAD_GATEWAY, f"cvelistV5 not read: {exc}") from exc
+                seen: dict[str, tuple[str, str]] = {}
+                for cve, kind, at in entries:  # newest first: the latest change of each CVE
+                    if (since and at < since) or (until and at > until) or (change and kind != change):
+                        continue
+                    seen.setdefault(cve, (kind, at))
+                filtered = query.get("kev") == "true" or min_cvss is not None
+                ids = list(seen)
+                records: dict[str, Any] = {}
+                if filtered:  # every record of the period is needed to filter on it
+                    for start in range(0, len(ids), MAX_CVES):
+                        part = collect_direct(sources, ids[start : start + MAX_CVES])
+                        records.update({r.cve_id: r for r in part.records})
+                    ids = [c for c in ids if c in records and _keep(records[c], query.get("kev") == "true", min_cvss)]
+                page_ids = ids[offset : offset + limit]
+                missing = [c for c in page_ids if c not in records]
+                if missing:
+                    records.update({r.cve_id: r for r in collect_direct(sources, missing).records})
+            finally:
+                sources.close()
+        counts = {
+            "new": sum(1 for c in ids if seen[c][0] == "new"),
+            "updated": sum(1 for c in ids if seen[c][0] == "updated"),
+        }
+        items = [_brief(c, seen[c][0], seen[c][1], records.get(c)) for c in page_ids]
+        out: dict[str, Any] = {"total": len(ids), "counts": counts, "offset": offset, "limit": limit, "items": items}
+        if offset + limit < len(ids):
+            out["next_offset"] = offset + limit
+        if entries:
+            out["oldest"] = entries[-1][2]  # the deltaLog reaches back to this moment, no further
+        return out
+
     def technologies(self, token: str | None, body: dict[str, Any]) -> dict[str, Any]:
         self._require(token, "read")
         items = body.get("items") or []
@@ -267,6 +323,32 @@ class IntelService:
         return notes
 
 
+def _keep(record: Any, kev: bool, min_cvss: float | None) -> bool:
+    if kev and not record.in_kev:
+        return False
+    if min_cvss is not None:
+        best = record.best_cvss()
+        return bool(best and best.score is not None and best.score >= min_cvss)
+    return True
+
+
+def _brief(cve: str, change: str, at: str, record: Any) -> dict[str, Any]:
+    """One CVE of the period, in short: what an analyst asks first."""
+    out: dict[str, Any] = {"cve": cve, "change": change, "at": at}
+    if record is None:
+        out["note"] = "record not read"
+        return out
+    best = record.best_cvss()
+    out.update({
+        "published": record.published, "updated": record.updated,
+        "title": _clean(record.description, 300),
+        "cvss": best.score if best else None, "severity": (best.severity or "").lower() if best else "",
+        "kev": record.in_kev, "epss": record.epss,
+        "products": sorted({f"{a.vendor} {a.product}".strip() for a in record.affected if a.product})[:5],
+    })  # fmt: skip
+    return out
+
+
 def gti_item(view: dict[str, Any], tech: dict[str, str]) -> dict[str, Any]:
     """A feed item from a GTI vulnerability: its facts and the technology that matched; never its prose."""
     return {
@@ -295,9 +377,12 @@ def make_handler(service: IntelService) -> type[JsonHandler]:
                 self.send_json(HTTPStatus.OK, {"ready": True})
                 return
             try:
+                query = dict(parse_qsl(url.query))
+                if url.path == "/v1/records/new":  # v0.23.4
+                    self.send_json(HTTPStatus.OK, service.new_records(self.bearer(), query))
+                    return
                 if url.path != "/v1/feed":
                     raise Problem(HTTPStatus.NOT_FOUND, "no such route")
-                query = dict(parse_qsl(url.query))
                 self.send_json(HTTPStatus.OK, service.feed(self.bearer(), query.pop("since", ""), query))
             except Problem as p:
                 self.send_problem(p)
