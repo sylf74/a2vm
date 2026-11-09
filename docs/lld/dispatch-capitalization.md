@@ -88,8 +88,13 @@ the service to process the newest run of the decision service (`POST /v1/tenants
    `exclude_zones`, grouped into tickets. A new key is sent; a known key gets the findings it did
    not have, with a comment in the tool listing them; the levels and due dates of its findings are
    updated.
-2. **Follow-up** of every open ticket (§3.3), automatic or asked by a person.
-3. The step prints the summary (proposed, sent, updated, fixed, claimed fixed, reopened, errors)
+2. **Requested tickets left proposed** (v0.23.3), in live mode: a ticket a person asked for that
+   is still `proposed` (asked while the tenant was in dry-run, or its sending failed) is sent again,
+   with the findings the decision service still has open, up to date; with none left it is
+   `dropped` ("dropped before sending"). A ticket of the rules is sent again by step 1 when its
+   decisions still call for it.
+3. **Follow-up** of every open ticket (§3.3), automatic or asked by a person.
+4. The step prints the summary (proposed, sent, updated, fixed, claimed fixed, reopened, errors)
    and exits 3 (a warning) on an error: the next run tries again.
 
 Processing a run twice changes nothing (keys, findings by id). One run or request at a time per
@@ -157,7 +162,8 @@ targets:
     url: https://itop.lab.example
     user: a2vm-itsm        # its password: CI/CD variable A2VM_DISPATCH_ITSM_PASSWORD
     organization: Lab
-    caller: A2VM           # the iTop Person the tickets come from
+    caller: A2VM           # the iTop Person the tickets come from: its name, or its e-mail (an @)
+    caller_organization: IT   # optional (v0.23.3): the caller's organisation, else `organization`
     team: Linux            # optional: the iTop Team they are given to
     priorities:            # optional (v0.21.0): priority of the client's SLA -> impact, urgency
       P0: {impact: 1, urgency: 1}
@@ -193,7 +199,7 @@ pillar 2, allowed to create and update user requests in the tenant's organisatio
 
 | A2VM | iTop (`UserRequest`) |
 | --- | --- |
-| create | `core/create`: `org_id` (`organization`), `caller_id` (Person `caller`), `team_id` (`team`), `title`, `description` (HTML), `impact` and `urgency` from the priority of the client's SLA when `priorities` maps it (v0.21.0), else from the level (ACT 2/1, ATTEND 3/2, TRACK 3/3); a ticket already created keeps them, `functionalcis_list` (the CMDB item) |
+| create | `core/create`: `org_id` (`organization`), `caller_id` (the Person `caller`, by its name or, with an @, its e-mail, looked for in `caller_organization`, else `organization`: since v0.23.3, a name two persons carry is no longer refused as "Several items found"), `team_id` (`team`), `title`, `description` (HTML), `impact` and `urgency` from the priority of the client's SLA when `priorities` maps it (v0.21.0), else from the level (ACT 2/1, ATTEND 3/2, TRACK 3/3); a ticket already created keeps them, `functionalcis_list` (the CMDB item) |
 | comment | `core/update`: an entry in `public_log` |
 | resolve | `core/apply_stimulus` `ev_resolve`, `solution`, `resolution_code` "software patch" |
 | reopen | `core/apply_stimulus` `ev_reopen`, then a comment |
@@ -230,7 +236,7 @@ database (a column per decision) are planned.
 | Case | Behaviour |
 | --- | --- |
 | Decision service unreachable | `POST runs` answers 502, the step warns (exit 3), nothing changes |
-| A target unreachable or refusing | The ticket stays `proposed` with the error, the others go on, the step warns; next run |
+| A target unreachable or refusing | The ticket stays `proposed` with the error, shown on the page ("last try"), the others go on, the step warns; the next run sends it again (a requested one too, since v0.23.3) |
 | A newer run between the page and the confirmation | Nothing sent, the selection shown again |
 | The same key asked twice | The second updates the ticket the first created |
 | Ticket deleted in the tool | `lost`; sent again only if wanted again |

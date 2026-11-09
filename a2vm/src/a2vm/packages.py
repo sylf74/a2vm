@@ -28,6 +28,7 @@ FAMILIES = {"debian": "debian", "ubuntu": "ubuntu", **dict.fromkeys(RHEL_LIKE, "
 # States of a package advisory: fixed in a version, affected with no fix (yet), not decided, or said
 # not affected (kept so that the distribution counts as covered).
 FIXED, AFFECTED, INVESTIGATING, NOT_AFFECTED = "fixed", "affected", "investigating", "not_affected"
+PACKAGE_TYPES = ("rpm", "deb")  # the components matched here; the others go through the applications table
 
 
 # -- versions ---------------------------------------------------------------------------------------
@@ -145,7 +146,10 @@ def family(distro: str) -> str:
 
 
 def asset_family(component: dict[str, Any], os_name: str | None) -> str:
-    """The family of a component's distribution, else of the asset's OS (a v0.22.2 listing)."""
+    """The family of a component's distribution, else of the asset's OS (a v0.22.2 listing); none
+    for an application that is not a package of a distribution (v0.23.3: `a2vm.applications`)."""
+    if component.get("type", "rpm") not in PACKAGE_TYPES:
+        return ""
     return family(component.get("distro") or "") or family(os_name or "")
 
 

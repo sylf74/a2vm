@@ -11,9 +11,11 @@ After each run (`process_run`):
 On a request of a person (`preview`, then `confirm`): the decisions of the selection, grouped the
 same way, shown, then sent on confirmation, recorded with who asked.
 
-In dry-run nothing reaches a tool: the tickets stay `proposed`, and are sent by the first run in
-live mode. A2VM never takes the tool's word for a fix: only the decision service's closed findings
-(a scan confirmed) close a finding.
+In dry-run nothing reaches a tool: the tickets stay `proposed`. In live mode, each run sends again
+the tickets left `proposed`: those of the rules when their decisions still match them, and those a
+person asked for (v0.23.3), with the findings still open, dropped when none is left. A2VM never
+takes the tool's word for a fix: only the decision service's closed findings (a scan confirmed)
+close a finding.
 """
 
 from __future__ import annotations
@@ -112,7 +114,8 @@ class Dispatcher:
             run = self.decisions.latest_run()
             if run is None:
                 return {"run": None, "mode": self.rules.mode, **summary, "detail": "no run in the decision service"}
-            self._automatic(at, summary)
+            done = self._automatic(at, summary)
+            self._pending(at, summary, done)
             self._follow(at, summary)
         except DecisionsError as exc:
             raise DispatchError(str(exc)) from exc
@@ -130,10 +133,11 @@ class Dispatcher:
             if items:
                 t.cmdb = {k: items[0][k] for k in ("class", "key") if items[0].get(k)}
 
-    def _automatic(self, at: str, summary: dict[str, int]) -> None:
+    def _automatic(self, at: str, summary: dict[str, int]) -> set[str]:
+        """The tickets the rules send by themselves; the keys they touched."""
         levels = self.rules.automatic_levels
         if not levels:
-            return
+            return set()
         _, items = self.decisions.decisions({"level": ",".join(levels)})
         items = [d for d in items if self.rules.dispatchable(d.get("zone") or "")]
         wanted = tk.build(items, self.rules.ticket_target or "")
@@ -141,6 +145,33 @@ class Dispatcher:
         self._link_cmdb(wanted, known)
         for key, t in wanted.items():
             self._apply(known[key], t, at, summary)
+        return set(wanted)
+
+    def _pending(self, at: str, summary: dict[str, int], done: set[str]) -> None:
+        """Send again the tickets a person asked for and left `proposed` (asked in dry-run, or a send
+        that failed): with the findings the decision service still has open, dropped without any
+        (v0.23.3). The tickets of the rules are sent again by `_automatic` when still wanted."""
+        if not self.rules.live:
+            return
+        waiting = [t for t in self.store.tickets() if t.state == "proposed" and t.origin == "request"]
+        current: dict[str, dict[str, dict[str, Any]]] = {}
+        for t in waiting:
+            if t.key in done:
+                continue  # sent or tried by the rules in this run already
+            if t.asset not in current:
+                _, items = self.decisions.decisions({"asset": t.asset})
+                current[t.asset] = {d["id"]: d for d in items if self.rules.dispatchable(d.get("zone") or "")}
+            still = current[t.asset]
+            for fid in [fid for fid in t.findings if fid not in still]:
+                del t.findings[fid]
+            for fid, f in t.findings.items():
+                f.refresh(still[fid])
+            if not t.findings:
+                t.state, t.error = "dropped", ""
+                t.event(at, "dropped before sending: no finding open any more")
+            else:
+                self._send(t, at, summary)
+            self.store.put(t)
 
     def _apply(self, old: tk.Ticket | None, new: tk.Ticket, at: str, summary: dict[str, int]) -> tk.Ticket:
         """Send a new ticket, or bring a known one up to date with the findings of `new`."""
@@ -329,6 +360,7 @@ class Dispatcher:
                     "status": "new" if old is None or old.state in ("fixed", "dropped", "lost") else old.state,
                     "ref": (old.external.get("ref") if old else "") or "",
                     "url": (old.external.get("url") if old else "") or "",
+                    "error": (old.error if old and old.state == "proposed" else "") or "",
                 }
             )
         return {

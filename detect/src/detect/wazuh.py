@@ -237,7 +237,9 @@ def _package(p: dict[str, Any], distro: str) -> dict[str, str] | None:
     kind = str(p.get("type") or p.get("format") or "").strip().lower()
     arch = str(p.get("architecture") or "").strip()
     src = str(p.get("source") or "").strip()
-    return component(name, version, arch, kind, src, distro if kind in DISTRIBUTION_TYPES else "", SOURCE)
+    if kind not in DISTRIBUTION_TYPES:  # a Windows or macOS application: its publisher (v0.23.3)
+        return component(name, version, arch, kind, "", "", SOURCE, str(p.get("vendor") or "").strip())
+    return component(name, version, arch, kind, src, distro, SOURCE)
 
 
 def observation(agent: dict[str, Any], packages: list[dict[str, Any]], observed_at: str) -> AssetObservation | None:
@@ -313,7 +315,7 @@ def read_manager(client: WazuhClient) -> tuple[list[dict[str, Any]], dict[str, l
         if a.get("status") == "disconnected" and a.get("lastKeepAlive"):
             agent["seen"] = _iso(str(a["lastKeepAlive"]))
         agents.append(agent)
-        select_p = "name,version,architecture,format,source"
+        select_p = "name,version,architecture,format,source,vendor"
         packages[agent["id"]] = [
             {**p, "type": p.get("format")}
             for p in client.items(f"/syscollector/{agent['id']}/packages", {"select": select_p})

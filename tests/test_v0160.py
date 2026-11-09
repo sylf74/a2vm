@@ -256,6 +256,8 @@ def test_contract_names_the_calls_the_service_answers():
     assert set(spec["paths"]) == {
         "/v1/tenants/{tenant}/inventory",
         "/v1/tenants/{tenant}/inventory/{file}",
+        "/v1/tenants/{tenant}/applications",  # v0.23.3
+        "/v1/tenants/{tenant}/applications/proposals",
         "/v1/tenants/{tenant}/watch/state",
         "/v1/tenants/{tenant}/watch/runs",
         "/v1/tenants/{tenant}/events",

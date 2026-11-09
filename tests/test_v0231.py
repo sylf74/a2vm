@@ -236,6 +236,6 @@ def test_release_recorded() -> None:
 
     hld = (ROOT / "docs" / "hld" / "00-product-strategy.md").read_text(encoding="utf-8")
     assert re.search(r"^\| v0\.23\.1( \(current\))? \| D20: Wazuh", hld, re.M)
-    assert re.search(r"^\| v0\.23\.[2-9] \(to confirm\) \| D20: SentinelOne", hld, re.M)
+    assert re.search(r"^\| v0\.23\.[2-9]( \(to confirm\)| \(current\))? \| D20: SentinelOne", hld, re.M)
     assert "## v0.23.1 — " in (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     assert (ROOT / "docs" / "wazuh.md").exists()

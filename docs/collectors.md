@@ -171,11 +171,15 @@ connectors:
   #   user: a2vm-inventory
   #   password_file: /etc/a2vm/collector/wazuh-password
   #   ca_file: /etc/a2vm/collector/wazuh-ca.pem
+  # - name: lan-s1                         # SentinelOne's applications, read only (v0.23.3, docs/sentinelone.md)
+  #   type: sentinelone
+  #   url: https://console.lab.example
+  #   token_file: /etc/a2vm/collector/sentinelone-token
 ```
 
-A connector `itop` pushes the source `cmdb`, a connector `wazuh` the source `wazuh`: declare them
-in `collectors.yaml` with the collector's other sources (`sources: [trivy, dnf-updateinfo, openvas,
-cmdb, wazuh]`).
+A connector `itop` pushes the source `cmdb`, a connector `wazuh` the source `wazuh`, a connector
+`sentinelone` the source `sentinelone`: declare them in `collectors.yaml` with the collector's other
+sources (`sources: [trivy, dnf-updateinfo, openvas, cmdb, wazuh, sentinelone]`).
 
 The image, with the group deploy token of the cluster (`docs/kubernetes.md` §1), the password read
 from a file:

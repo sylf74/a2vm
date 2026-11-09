@@ -121,6 +121,8 @@ def cmd_watch(args: argparse.Namespace) -> int:
             if state is not None:
                 (work / "state.json").write_bytes(state)
             has_inventory = client.inventory(work / "inventory")
+            if has_inventory:  # the applications table (v0.23.3), read with the inventory
+                (work / "applications.json").write_text(json.dumps(client.applications()), encoding="utf-8")
             print(
                 f"{args.tenant}: state {'from the service' if state else 'none yet (baseline)'}, "
                 f"inventory {'from the last daily run' if has_inventory else 'none yet: declared assets only'}"
@@ -137,10 +139,17 @@ def cmd_watch(args: argparse.Namespace) -> int:
                     contacts=args.contacts,
                     journal=str(work / "events.jsonl"),
                     inventory=str(work / "inventory") if has_inventory else "none",
+                    applications=str(work / "applications.json"),
+                    proposals=str(work / "proposals.json"),
                 )
             )
             if code not in (0, 3):
                 return code
+            if (work / "proposals.json").exists():
+                proposals = json.loads((work / "proposals.json").read_text(encoding="utf-8"))["proposals"]
+                if proposals:
+                    kept = client.put_proposals(proposals)
+                    print(f"{args.tenant}: applications table: {kept['proposed']} proposal(s) to validate")
             new_state = json.loads((work / "state.json").read_text(encoding="utf-8"))
             out = client.put_run(new_state, _new_events(work / "events.jsonl"), work / "alerts")
             print(f"{args.tenant}: kept by the watch service: {out['alerts']} alert(s), {out['events']} event(s)")

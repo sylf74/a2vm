@@ -9,6 +9,7 @@
   via.events         the journal of the alerts, in order
   via.edits          the English reference as a validator enriched it
   via.translations   a translation of the reference and its metadata
+  via.applications   the applications table (v0.23.3): one row per application and the CPE it is
 
 A passage of the watch (state, journal events, files) is written in one transaction, so several
 replicas of the service never see half of one.
@@ -19,12 +20,14 @@ from __future__ import annotations
 import datetime as dt
 import json
 import secrets
+from collections.abc import Callable
 from typing import Any
 
+from a2vm import applications as apps
 from a2vm.db import Database, Migration, rls
 from via.alert import journal
 
-from .store import ALERT_ID, FILE_NAME, INVENTORY_FILES, LANG, RUN_ID, WatchStore, _now
+from .store import ALERT_ID, FILE_NAME, INVENTORY_FILES, LANG, RUN_ID, T, WatchStore, _now
 
 MIGRATIONS = [
     Migration(
@@ -86,6 +89,19 @@ CREATE TABLE via.translations (
             for t in ("state", "inventory", "inventory_meta", "runs", "files", "events", "edits", "translations")
         ),
     ),
+    Migration(
+        2,
+        """
+CREATE TABLE via.applications (
+    tenant text NOT NULL,
+    key text NOT NULL,
+    state text NOT NULL,
+    doc jsonb NOT NULL,
+    PRIMARY KEY (tenant, key)
+);
+"""
+        + rls("via.applications"),
+    ),
 ]
 
 
@@ -140,6 +156,31 @@ class PgWatchStore(WatchStore):
                 "SELECT meta FROM via.inventory_meta WHERE tenant = %s AND client = %s", (tenant, client)
             ).fetchone()
         return row[0] if row else None
+
+    # -- the applications table (v0.23.3) ----------------------------------------------------------
+    @staticmethod
+    def _rows(conn) -> dict[str, apps.Row]:  # noqa: ANN001 - a psycopg connection
+        return apps.load_table([r[0] for r in conn.execute("SELECT doc FROM via.applications ORDER BY key")])
+
+    def applications(self, tenant: str) -> dict[str, apps.Row]:
+        with self.db.tx(tenant) as conn:
+            return self._rows(conn)
+
+    def update_applications(self, tenant: str, change: Callable[[dict[str, apps.Row]], T]) -> T:
+        """One transaction, the table locked for the tenant (several replicas)."""
+        with self.db.tx(tenant) as conn:
+            conn.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (f"via.applications:{tenant}",))
+            table = self._rows(conn)
+            before = {k: json.dumps(r.to_dict(), sort_keys=True) for k, r in table.items()}
+            out = change(table)
+            changed = [r for k, r in table.items() if before.get(k) != json.dumps(r.to_dict(), sort_keys=True)]
+            with conn.cursor() as cur:
+                cur.executemany(
+                    "INSERT INTO via.applications (tenant, key, state, doc) VALUES (%s, %s, %s, %s) "
+                    "ON CONFLICT (tenant, key) DO UPDATE SET state = EXCLUDED.state, doc = EXCLUDED.doc",
+                    [(tenant, r.key, r.state, json.dumps(r.to_dict(), ensure_ascii=False)) for r in changed],
+                )
+        return out
 
     # -- watch runs ------------------------------------------------------------------------------
     @staticmethod

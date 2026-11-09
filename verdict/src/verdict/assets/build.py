@@ -21,7 +21,8 @@ Attributes (exposure, mission_prevalence, public_wellbeing_impact, owner), first
 The CMDB (source cmdb) is an inventory, not a scan: it joins assets like any host observation and
 gives them their configuration item (`identifiers.cmdb`), but it is not one of their `scans`.
 Wazuh (source wazuh, v0.23.1) likewise: the software inventory of its agents joins the hosts and
-gives them their components, beside those listed over SSH; it is not a scan either.
+gives them their components, beside those listed over SSH; it is not a scan either. SentinelOne
+(source sentinelone, v0.23.3) the same, with its applications.
 
 Exposure uses the SSVC values (open, controlled, small); a former value from a source is read in the
 new form. The optional zone label comes from a declaration or a rule only, and never defaults.
@@ -50,7 +51,8 @@ from a2vm.models import (
 EXTERNAL = "external-scan"
 CMDB = "cmdb"
 WAZUH = "wazuh"  # the software inventory of an EDR (v0.23.1): components, no finding
-NOT_SCANS = {CMDB, WAZUH}  # sources that list assets without scanning them
+SENTINELONE = "sentinelone"  # the application inventory of an EDR (v0.23.3): components, no finding
+NOT_SCANS = {CMDB, WAZUH, SENTINELONE}  # sources that list assets without scanning them
 
 WORST_CASE = {
     "exposure": "open",

@@ -75,6 +75,13 @@ class WatchClient:
             (base / name).write_bytes(data)
         return True
 
+    def applications(self) -> dict[str, Any]:
+        """The tenant's applications table (v0.23.3)."""
+        return self._call("GET", "/applications").json()
+
+    def put_proposals(self, proposals: list[dict[str, Any]]) -> dict[str, Any]:
+        return self._call("POST", "/applications/proposals", {"proposals": proposals}).json()
+
     def put_run(self, state: dict, events: list[dict], alerts_dir: Path | None) -> dict[str, Any]:
         files: dict[str, str] = {}
         if alerts_dir and (alerts_dir / "index.json").exists():

@@ -358,7 +358,11 @@ def test_itop_connector_maps_the_ticket():
     user, p = seen[0]
     assert user == "a2vm-itsm" and p["class"] == "UserRequest"
     f = p["fields"]
-    assert f["org_id"] == {"name": "Lab"} and f["caller_id"] == {"name": "A2VM"} and f["team_id"] == {"name": "Linux"}
+    assert (
+        f["org_id"] == {"name": "Lab"}
+        and f["caller_id"] == {"name": "A2VM", "org_name": "Lab"}
+        and f["team_id"] == {"name": "Linux"}
+    )
     assert (f["impact"], f["urgency"]) == ("2", "1") and f["functionalcis_list"] == [{"functionalci_id": 12}]
     assert c.status(ext) == ("resolved", CLOSED)
     c.comment(ext, "hello")

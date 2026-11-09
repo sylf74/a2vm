@@ -10,6 +10,8 @@
                                              metadata (source, reference hash, who edited it)
   <root>/<tenant>/alerts-log.jsonl           the journal of the alerts (drafted, analysts, edited,
                                              validated, dismissed, sent, send-failed)
+  <root>/<tenant>/applications.json          the applications table (v0.23.3, `a2vm.applications`):
+                                             each application of the inventory and the CPE it is
 
 One writer (the service), each file written to a temporary name then renamed. Runs older than
 `keep_days` are removed; the journal keeps its last lines (via.alert.journal). Since v0.18.0 the
@@ -26,9 +28,11 @@ import re
 import secrets
 import shutil
 import threading
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
+from a2vm import applications as apps
 from via.alert import journal
 
 RUN_ID = re.compile(r"^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{8}$")
@@ -47,6 +51,7 @@ STATUS_OF = {
     "send-failed": "failed",
 }
 LANG = re.compile(r"^[a-z]{2}$")
+T = TypeVar("T")
 EDIT_MAX = 100_000  # characters of a corrected sheet
 
 
@@ -107,6 +112,20 @@ class WatchStore:
     def inventory_meta(self, tenant: str, client: str) -> dict[str, Any] | None:
         path = self._t(tenant) / "inventory" / client / "meta.json"
         return json.loads(path.read_text()) if path.exists() else None
+
+    # -- the applications table (v0.23.3) ----------------------------------------------------------
+    def applications(self, tenant: str) -> dict[str, apps.Row]:
+        path = self._t(tenant) / "applications.json"
+        return apps.load_table(json.loads(path.read_text(encoding="utf-8"))) if path.exists() else {}
+
+    def update_applications(self, tenant: str, change: Callable[[dict[str, apps.Row]], T]) -> T:
+        """Read, change and write the table at once: `change` edits it in place and returns a result."""
+        with self._lock:
+            table = self.applications(tenant)
+            out = change(table)
+            data = json.dumps(apps.dump_table(table), ensure_ascii=False).encode()
+            _atomic(self._t(tenant) / "applications.json", data)
+        return out
 
     # -- watch runs ------------------------------------------------------------------------------
     def put_run(

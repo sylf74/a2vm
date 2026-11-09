@@ -27,7 +27,7 @@ from .engine import REQUEST_FILTERS, Dispatcher, DispatchError
 
 STATUS_TEXT = {
     "new": "new ticket",
-    "proposed": "proposed (dry run), not sent yet",
+    "proposed": "proposed, not sent yet",
     "sent": "already sent",
     "in-progress": "already sent, in progress",
     "claimed-fixed": "closed in the tool, still seen by the scans",
@@ -156,12 +156,13 @@ class RequestPage:
             sendable = t["status"] in ("new", "proposed")
             box = f"<input type='checkbox' name='key' value='{e(t['key'])}'{' checked' if sendable else ''}>"
             ref = f" <a href='{e(t['url'])}'>{e(t['ref'])}</a>" if t["url"] else (f" {e(t['ref'])}" if t["ref"] else "")
+            err = f" <span class='err'>last try: {e(t['error'])}</span>" if t.get("error") else ""
             cves = ", ".join(t["cves"][:12]) + (f" (+{len(t['cves']) - 12})" if len(t["cves"]) > 12 else "")
             rows.append(
                 f"<tr><td>{box}</td><td>{e(t['asset_name'])}</td><td>{e(t['fix'])}</td>"
                 f"<td>{e(t['level'])}{(' ' + e(t['priority'])) if t.get('priority') else ''}</td>"
                 f"<td>{e(t['due'] or '')}</td><td>{e(cves)}</td>"
-                f"<td>{e(STATUS_TEXT.get(t['status'], t['status']))}{ref}</td></tr>"
+                f"<td>{e(STATUS_TEXT.get(t['status'], t['status']))}{ref}{err}</td></tr>"
             )
         hidden = "".join(f"<input type='hidden' name='{e(k)}' value='{e(v)}'>" for k, v in filters.items())
         targets = "".join(

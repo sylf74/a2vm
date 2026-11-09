@@ -6,6 +6,8 @@ the service refuses another one. Roles:
   run    the tenant's own jobs: the daily run (inventory), the watch (state, runs), the sender
          (alerts, their files and corrected sheets, events)
   read   the analysts' tools: the alerts and their sheets, never the files to send nor the state
+The applications of each inventory go into the tenant's applications table (v0.23.3): the watch
+reads it and sends the LLM's proposals, a validator decides on the review page.
 Nothing is sent from here: the service keeps, the jobs act. The analysts' review page is served on a
 port of its own (`review.py`), behind oauth2-proxy.
 """
@@ -14,6 +16,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import datetime as dt
 import json
 import logging
 import re
@@ -22,6 +25,7 @@ from http import HTTPStatus
 from typing import Any
 from urllib.parse import parse_qsl, unquote, urlsplit
 
+from a2vm import applications as apps
 from a2vm.io import ExchangeError, validate_assets, validate_findings
 from a2vm.service import JsonHandler, Problem, TokenSet, moment
 from a2vm.service import serve as _serve
@@ -108,13 +112,47 @@ class WatchService:
             client,
             {"assets.json": json.dumps(doc["assets"]).encode(), "findings.json": json.dumps(doc["findings"]).encode()},
         )
+        found = apps.candidates(doc["assets"].get("assets", []))
+        at = dt.datetime.now(dt.UTC).isoformat(timespec="seconds")
+
+        def merge(table: dict[str, apps.Row]) -> tuple[int, int]:
+            return len(table), apps.merge(table, found, at)[1]
+
+        rows, added = self.store.update_applications(tenant, merge)
+        meta = {**meta, "applications": {"seen": len(found), "rows": rows + added, "new": added}}
         log.info(
-            "inventory tenant=%s assets=%d findings=%d",
+            "inventory tenant=%s assets=%d findings=%d applications=%d new=%d",
             tenant,
             len(doc["assets"].get("assets", [])),
             len(doc["findings"].get("findings", [])),
+            len(found),
+            added,
         )
         return meta
+
+    # -- the applications table (v0.23.3) --------------------------------------------------------
+    def get_applications(self, tenant: str, token: str | None, query: dict[str, str]) -> dict[str, Any]:
+        """The table, every state or one (`state`), with the count of each state."""
+        self._check(tenant, token, ("run", "read"))
+        state = query.get("state", "")
+        if state and state not in apps.STATES:
+            raise Problem(HTTPStatus.BAD_REQUEST, f"state is one of {', '.join(apps.STATES)}")
+        table = self.store.applications(tenant)
+        counts = {s: sum(r.state == s for r in table.values()) for s in apps.STATES}
+        rows = [table[k].to_dict() for k in sorted(table) if not state or table[k].state == state]
+        return {"schema": "a2vm.applications/1", "counts": counts, "applications": rows}
+
+    def put_proposals(self, tenant: str, token: str | None, body: bytes, gzipped: bool) -> dict[str, Any]:
+        """The LLM's proposals of the watch, for the rows still new."""
+        self._check(tenant, token, ("run",))
+        doc = self._json(body, gzipped)
+        proposals = doc.get("proposals") if isinstance(doc, dict) else None
+        if not isinstance(proposals, list) or not all(isinstance(p, dict) for p in proposals):
+            raise Problem(HTTPStatus.UNPROCESSABLE_ENTITY, "expected {proposals: [{key, cpe, justification, by}]}")
+        at = dt.datetime.now(dt.UTC).isoformat(timespec="seconds")
+        count = self.store.update_applications(tenant, lambda t: apps.apply_proposals(t, proposals, at))
+        log.info("applications tenant=%s proposals=%d kept=%d", tenant, len(proposals), count)
+        return {"proposed": count}
 
     def get_inventory(self, tenant: str, token: str | None, name: str) -> bytes:
         self._check(tenant, token, ("run",))
@@ -311,6 +349,8 @@ def make_handler(service: WatchService) -> type[JsonHandler]:
                     self._bytes(service.get_inventory(tenant, token, parts[1]), "application/json")
                 elif rest == "alerts":
                     self.send_json(HTTPStatus.OK, service.list_alerts(tenant, token, query))
+                elif rest == "applications":
+                    self.send_json(HTTPStatus.OK, service.get_applications(tenant, token, query))
                 elif len(parts) == 2 and parts[0] == "alerts":
                     self.send_json(HTTPStatus.OK, service.get_alert(tenant, token, unquote(parts[1])))
                 elif len(parts) == 4 and parts[0] == "alerts" and parts[2] == "translations":
@@ -343,6 +383,8 @@ def make_handler(service: WatchService) -> type[JsonHandler]:
                     out = service.put_run(tenant, token, body, gz)
                 elif rest == "events":
                     out = service.add_events(tenant, token, body, gz)
+                elif rest == "applications/proposals":
+                    out = service.put_proposals(tenant, token, body, gz)
                 elif rest.startswith("alerts/") and rest.endswith("/translations") and rest.count("/") == 2:
                     out = service.put_translation(tenant, token, unquote(rest.split("/")[1]), body, gz)
                 else:
