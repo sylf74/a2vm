@@ -13,7 +13,7 @@
 #
 #     include:
 #       - project: vulnops/a2vm
-#         ref: v0.23.4
+#         ref: v0.23.5
 #         file: templates/client-pipeline.yml
 #     variables:
 #       A2VM_REF: v0.19.0        # same version as the include
@@ -409,7 +409,7 @@ deploy-k8s:
         if [ -n "$val" ]; then printf '  %s: "%s"\n' "$v" "$val" >> "$ENVF"; fi
       done
       printf '  A2VM_SERVER_URL: "%s"\n' "${A2VM_SERVER_URL:-$CI_SERVER_URL}" >> "$ENVF"
-    # The way out to the Internet (v0.23.4): the corporate proxy, the relay of the public sources.
+    # The way out to the Internet (v0.23.5): the corporate proxy, the relay of the public sources.
     - |
       OUT=""
       if [ -n "${A2VM_HTTPS_PROXY:-}" ]; then OUT="$OUT --set proxy.https=$A2VM_HTTPS_PROXY"; fi

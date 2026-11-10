@@ -42,6 +42,11 @@ collector.yaml, on the collector's machine (secrets in files readable by the age
       api: agents                          # or installed-applications (Application Risk)
       token_file: /etc/a2vm/collector/sentinelone-token
       site_ids: ["1234567890"]             # optional: the sites of the tenant only
+    - name: cbw
+      type: cyberwatch                     # Cyberwatch's assets and open CVEs, read only (v0.23.5)
+      url: https://cyberwatch.example.org
+      access_key_file: /etc/a2vm/collector/cyberwatch-access-key
+      secret_key_file: /etc/a2vm/collector/cyberwatch-secret-key
 
 `detect agent run` runs the connectors (or one, `--connector`) and pushes each detection; a
 system timer gives each connector its schedule (docs/collectors.md). A push that fails for a reason
@@ -68,6 +73,8 @@ from a2vm.io import Detection, write_detection
 from .cmdb import CmdbError, ItopConfig
 from .cmdb import fetch as fetch_cmdb
 from .collect import collect, load_targets
+from .cyberwatch import CyberwatchConfig, CyberwatchError
+from .cyberwatch import fetch as fetch_cyberwatch
 from .intake.client import IntakeError, push
 from .intake.registry import ID
 from .openvas import load_openvas_file
@@ -200,6 +207,27 @@ class SentinelOneConnector:
 
 
 @dataclass
+class CyberwatchConnector:
+    """Cyberwatch's assets and open CVEs (read only): one detection of source `cyberwatch`, a scan."""
+
+    name: str
+    config: CyberwatchConfig
+
+    def run(self, tenant: str, work: Path, log: Callable[[str], None] = print) -> tuple[list[Detection], list[str]]:
+        started = time.monotonic()
+        try:
+            detection = fetch_cyberwatch(self.config, tenant, log=log)
+        except CyberwatchError as exc:
+            log(f"FAIL cyberwatch [{self.config.url}]: {exc} ({time.monotonic() - started:.0f} s)")
+            return [], [f"{self.name}: {exc}"]
+        log(
+            f"ok   cyberwatch [{self.config.url}]: {len(detection.observations)} assets, "
+            f"{len(detection.findings)} findings ({time.monotonic() - started:.0f} s)"
+        )
+        return [detection], []
+
+
+@dataclass
 class AgentConfig:
     collector: str
     tenant: str
@@ -255,6 +283,11 @@ def load_config(path: str | Path) -> AgentConfig:
                 connectors.append(WazuhConnector(name, WazuhConfig.from_dict(c, where)))
             except ValueError as exc:
                 raise AgentError(str(exc)) from exc
+        elif kind == "cyberwatch":
+            try:
+                connectors.append(CyberwatchConnector(name, CyberwatchConfig.from_dict(c, where)))
+            except ValueError as exc:
+                raise AgentError(str(exc)) from exc
         elif kind == "sentinelone":
             try:
                 connectors.append(SentinelOneConnector(name, SentinelOneConfig.from_dict(c, where)))
@@ -265,7 +298,9 @@ def load_config(path: str | Path) -> AgentConfig:
                 raise AgentError(f"{where}: `source` ({', '.join(SOURCES_BY_SUFFIX)}) and `folder` are required")
             connectors.append(FileImportConnector(name, c["source"], Path(c["folder"]), int(c.get("min_qod", 70))))
         else:
-            raise AgentError(f"{where}: unknown type {kind!r} (targets, file-import, itop, wazuh, sentinelone)")
+            raise AgentError(
+                f"{where}: unknown type {kind!r} (targets, file-import, itop, wazuh, sentinelone, cyberwatch)"
+            )
     if not connectors:
         raise AgentError(f"{path}: at least one connector is required")
     try:

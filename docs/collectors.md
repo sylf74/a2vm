@@ -171,6 +171,11 @@ connectors:
   #   user: a2vm-inventory
   #   password_file: /etc/a2vm/collector/wazuh-password
   #   ca_file: /etc/a2vm/collector/wazuh-ca.pem
+  # - name: lan-cbw                        # Cyberwatch's assets and open CVEs, read only (v0.23.5, docs/cyberwatch.md)
+  #   type: cyberwatch
+  #   url: https://cyberwatch.lab.example
+  #   access_key_file: /etc/a2vm/collector/cyberwatch-access-key
+  #   secret_key_file: /etc/a2vm/collector/cyberwatch-secret-key
   # - name: lan-s1                         # SentinelOne's applications, read only (v0.23.3, docs/sentinelone.md)
   #   type: sentinelone
   #   url: https://console.lab.example
@@ -178,8 +183,9 @@ connectors:
 ```
 
 A connector `itop` pushes the source `cmdb`, a connector `wazuh` the source `wazuh`, a connector
-`sentinelone` the source `sentinelone`: declare them in `collectors.yaml` with the collector's other
-sources (`sources: [trivy, dnf-updateinfo, openvas, cmdb, wazuh, sentinelone]`).
+`sentinelone` the source `sentinelone`, a connector `cyberwatch` the source `cyberwatch`: declare them in
+`collectors.yaml` with the collector's other sources (`sources: [trivy, dnf-updateinfo, openvas, cmdb,
+wazuh, sentinelone, cyberwatch]`).
 
 The image, with the group deploy token of the cluster (`docs/kubernetes.md` §1), the password read
 from a file:

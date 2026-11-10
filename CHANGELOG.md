@@ -5,6 +5,29 @@ analyst and, under **Upgrade**, what a tenant must do when it moves to that tag 
 `A2VM_REF` in its `.gitlab-ci.yml`). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
 §11) and the LLDs. A release adds its entry here in the same merge request (CLAUDE.md, Releasing).
 
+## v0.23.5 — 2026-11-10
+
+D20: Cyberwatch, read as a scanner.
+
+- **Connector `cyberwatch` of the collector** (`docs/cyberwatch.md`, LLD detection §3.8), read only:
+  the API keys of a Cyberwatch user (HTTP basic, API v3), GET requests only. The assets by pages,
+  then each asset's details. One host per asset (name, FQDN, addresses, OS, Cyberwatch groups); its
+  packages, else the current versions of its updates, as components of source `cyberwatch` (rpm and
+  deb against the distributions' advisories, the others through the applications table); one finding
+  per CVE still open on the asset (active, not fixed, not ignored in Cyberwatch), with the package,
+  the version found and the target version of the update, and Cyberwatch's level. It is a scan: the
+  asset counts as scanned. Options: `groups` (only some Cyberwatch groups), `include_ignored`, and
+  the API paths (`assets_path`, `asset_path`), which changed between versions of Cyberwatch. A test:
+  `detect cyberwatch fetch`. Not verified on a real master: the first reading prints
+  `cyberwatch: <n> assets, <m> open CVEs, components on <k>`.
+
+**Upgrade**:
+
+1. Move `ref` and `A2VM_REF` of the tenants to `v0.23.5`; nothing changes in the services.
+2. A collector that reads Cyberwatch: its image to `detect:v0.23.5`, then `systemctl daemon-reload`.
+3. Cyberwatch: the user and its API keys (`docs/cyberwatch.md` §1), the connector (§2), the source
+   `cyberwatch` in the tenant's `collectors.yaml`.
+
 ## v0.23.4 — 2026-11-09
 
 A corporate network and the chat. Everything here is optional: a tenant upgraded without a new
