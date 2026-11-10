@@ -47,6 +47,12 @@ collector.yaml, on the collector's machine (secrets in files readable by the age
       url: https://cyberwatch.example.org
       access_key_file: /etc/a2vm/collector/cyberwatch-access-key
       secret_key_file: /etc/a2vm/collector/cyberwatch-secret-key
+    - name: network
+      type: snmp                           # appliances and network devices: exact firmware, read only (v0.23.6)
+      targets: [192.0.2.1, 192.0.2.64/28]  # addresses, names or networks
+      user: a2vm-ro                        # SNMPv3 authPriv (version: 2c with community_file for old devices)
+      auth_password_file: /etc/a2vm/collector/snmp-auth
+      priv_password_file: /etc/a2vm/collector/snmp-priv
 
 `detect agent run` runs the connectors (or one, `--connector`) and pushes each detection; a
 system timer gives each connector its schedule (docs/collectors.md). A push that fails for a reason
@@ -81,6 +87,8 @@ from .openvas import load_openvas_file
 from .scanners import load_dnf_file, load_trivy_file, merge
 from .sentinelone import SentinelOneConfig, SentinelOneError
 from .sentinelone import fetch as fetch_sentinelone
+from .snmp import SnmpConfig, SnmpError
+from .snmp import fetch as fetch_snmp
 from .wazuh import WazuhConfig, WazuhError
 from .wazuh import fetch as fetch_wazuh
 
@@ -228,6 +236,24 @@ class CyberwatchConnector:
 
 
 @dataclass
+class SnmpConnector:
+    """Appliances and network devices by SNMP (read only): one detection of source `snmp`, their firmware."""
+
+    name: str
+    config: SnmpConfig
+
+    def run(self, tenant: str, work: Path, log: Callable[[str], None] = print) -> tuple[list[Detection], list[str]]:
+        started = time.monotonic()
+        try:
+            detection = fetch_snmp(self.config, tenant, log=log)
+        except SnmpError as exc:
+            log(f"FAIL snmp [{self.name}]: {exc} ({time.monotonic() - started:.0f} s)")
+            return [], [f"{self.name}: {exc}"]
+        log(f"ok   snmp [{self.name}]: {len(detection.observations)} devices ({time.monotonic() - started:.0f} s)")
+        return [detection], []
+
+
+@dataclass
 class AgentConfig:
     collector: str
     tenant: str
@@ -288,6 +314,11 @@ def load_config(path: str | Path) -> AgentConfig:
                 connectors.append(CyberwatchConnector(name, CyberwatchConfig.from_dict(c, where)))
             except ValueError as exc:
                 raise AgentError(str(exc)) from exc
+        elif kind == "snmp":
+            try:
+                connectors.append(SnmpConnector(name, SnmpConfig.from_dict(c, where)))
+            except ValueError as exc:
+                raise AgentError(str(exc)) from exc
         elif kind == "sentinelone":
             try:
                 connectors.append(SentinelOneConnector(name, SentinelOneConfig.from_dict(c, where)))
@@ -299,7 +330,7 @@ def load_config(path: str | Path) -> AgentConfig:
             connectors.append(FileImportConnector(name, c["source"], Path(c["folder"]), int(c.get("min_qod", 70))))
         else:
             raise AgentError(
-                f"{where}: unknown type {kind!r} (targets, file-import, itop, wazuh, sentinelone, cyberwatch)"
+                f"{where}: unknown type {kind!r} (targets, file-import, itop, wazuh, sentinelone, cyberwatch, snmp)"
             )
     if not connectors:
         raise AgentError(f"{path}: at least one connector is required")

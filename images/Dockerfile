@@ -28,7 +28,7 @@ COPY a2vm /src/a2vm
 COPY ${PILLAR} /src/${PILLAR}
 COPY config /opt/a2vm/config
 
-RUN extra=""; [ "$PILLAR" = detect ] && extra="[openvas]"; \
+RUN extra=""; [ "$PILLAR" = detect ] && extra="[openvas,snmp]"; \
     pip install --quiet /src/a2vm "/src/${PILLAR}${extra}" \
  && rm -rf /src \
  && useradd --uid 10001 --create-home --home-dir /home/a2vm --shell /usr/sbin/nologin a2vm

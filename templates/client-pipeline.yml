@@ -13,7 +13,7 @@
 #
 #     include:
 #       - project: vulnops/a2vm
-#         ref: v0.23.5
+#         ref: v0.23.6
 #         file: templates/client-pipeline.yml
 #     variables:
 #       A2VM_REF: v0.19.0        # same version as the include
@@ -102,7 +102,7 @@ stages: [validate, deploy, collect, via, detect, assets, triage, publish, watch,
     - BASE="${A2VM_SERVER_URL:-${VULNOPS_SERVER_URL:-${CI_SERVER_PROTOCOL}://${CI_SERVER_HOST}:${CI_SERVER_PORT}}}"
     - git -c advice.detachedHead=false clone -q --depth 1 --branch "$A2VM_REF"
         "${BASE%%://*}://gitlab-ci-token:${CI_JOB_TOKEN}@${BASE#*://}/${A2VM_PROJECT}.git" .a2vm
-    - pip install --quiet .a2vm/a2vm .a2vm/via ".a2vm/detect[openvas]" .a2vm/verdict
+    - pip install --quiet .a2vm/a2vm .a2vm/via ".a2vm/detect[openvas,snmp]" .a2vm/verdict
     - if [ -f settings.yaml ]; then export SETTINGS=settings.yaml; else export SETTINGS=.a2vm/config/settings.yaml; fi
     - echo "A2VM $A2VM_REF ($(git -C .a2vm rev-parse --short HEAD)), client $CI_PROJECT_PATH, mode ${A2VM_JOB:-${VULNOPS_JOB:-daily}}, settings $SETTINGS"
 
@@ -409,7 +409,7 @@ deploy-k8s:
         if [ -n "$val" ]; then printf '  %s: "%s"\n' "$v" "$val" >> "$ENVF"; fi
       done
       printf '  A2VM_SERVER_URL: "%s"\n' "${A2VM_SERVER_URL:-$CI_SERVER_URL}" >> "$ENVF"
-    # The way out to the Internet (v0.23.5): the corporate proxy, the relay of the public sources.
+    # The way out to the Internet (v0.23.4): the corporate proxy, the relay of the public sources.
     - |
       OUT=""
       if [ -n "${A2VM_HTTPS_PROXY:-}" ]; then OUT="$OUT --set proxy.https=$A2VM_HTTPS_PROXY"; fi

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "detect"
-version = "0.23.5"
+version = "0.23.6"
 description = "Pillar 2 (Vulnerability Detection): asset and vulnerability observations (inventory matching, scanner connectors)."
 requires-python = ">=3.11"
 license = {text = "LicenseRef-a2vm-proprietary"}
@@ -12,6 +12,7 @@ dependencies = ["a2vm", "defusedxml>=0.7"]
 
 [project.optional-dependencies]
 openvas = ["python-gvm>=26"]
+snmp = ["pysnmp>=7,<8"]  # the connector snmp (v0.23.6)
 
 [project.scripts]
 detect = "detect.cli:main"

@@ -426,12 +426,13 @@ def concerned_rows(alert: Alert, cited_by: str, lang: str = "en") -> tuple[list[
         exposed |= open_
         fixes = sorted({h.fixed for h in hits if h.fixed})
         dates = sorted({h.seen[:10] for h in hits if h.seen})
+        firmware = all(h.origin == "firmware" for h in hits)  # an appliance's firmware (v0.23.6)
         row.update(
             version_installee=", ".join(sorted({f"{h.component} {h.version}" for h in hits})),
             version_corrigee=", ".join(fixes) if fixes else t(lang, "fix.none_yet"),
-            source=t(lang, "src.packages", sources=", ".join(sorted({h.source for h in hits})),
-                     date=dates[-1] if dates else "?"),
-            preuve=t(lang, "proof.exposed"),
+            source=t(lang, "src.firmware" if firmware else "src.packages",
+                     sources=", ".join(sorted({h.source for h in hits})), date=dates[-1] if dates else "?"),
+            preuve=t(lang, "proof.embedded" if firmware else "proof.exposed"),
         )  # fmt: skip
         rows.append(row)
         seen.add(asset.id)

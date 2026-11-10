@@ -74,7 +74,7 @@ The sheet lists the assets concerned in a table:
 | Version installée / corrigée | Package and versions observed by the scanners |
 | Responsable | Owner, when declared or set by a rule |
 | Source | Detected (package scan, dnf updates, network scan, external scan), packages listed (source, date; v0.23.0), declared, watchlist, product cited by the publication |
-| Preuve (v0.23.0) | Level of proof: confirmed (a scan saw the flaw), exposed (an affected version is installed or declared), possible (the product is there, its version not decided) |
+| Preuve (v0.23.0) | Level of proof: confirmed (a scan saw the flaw), exposed (an affected version is installed or declared), embedded (the firmware of an appliance is in the affected range, v0.23.6, `docs/appliances.md`), possible (the product is there, its version not decided) |
 
 Under the table: "Inventaire du JJ/MM/AAAA", the date of the inventory used. The job log says
 which inventory was read; older than 8 days it is flagged `WARN`, and without one (no daily run
@@ -261,7 +261,8 @@ tenant, a button to the review page or the pipeline (`docs/radar.md` §5).
   is that they are drafted, matched and one click away when the analyst arrives.
 - The packages of the hosts are those of the last daily run: a package installed or updated since
   is seen at the next run. Other distributions than RHEL and its rebuilds, Debian and Ubuntu,
-  libraries loaded in memory, images and appliances come with v0.23.6 and v0.23.7; Cyberwatch's scans since v0.23.5 (`docs/cyberwatch.md`); Wazuh's
+  libraries loaded in memory and images come with v0.23.7; the appliances and network devices by
+  their firmware since v0.23.6 (`docs/appliances.md`); Cyberwatch's scans since v0.23.5 (`docs/cyberwatch.md`); Wazuh's
   inventory since v0.23.1 (`docs/wazuh.md`); SentinelOne and the Windows applications since
   v0.23.3, through the applications table a validator keeps on the review page
   (`docs/sentinelone.md` §4).

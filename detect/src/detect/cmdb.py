@@ -13,6 +13,10 @@ comes along (Server, VirtualMachine, NetworkDevice, PC, Printer, NAS, IoTDevice 
 `deploy/itop/a2vm-iot-device`...), less the classes without a network existence (racks,
 enclosures, power, farms). A Hypervisor linked to its Server is left out: the Server is that
 machine.
+
+A NetworkDevice with its brand and IOS version (`brand_name`, `model_name`, `iosversion_name`) also
+carries its firmware as a component (v0.23.6, `detect.firmware`): the watch matches it against the
+CVE records and the vendors' advisories, like the firmware an SNMP connector reads.
 """
 
 from __future__ import annotations
@@ -28,6 +32,8 @@ import httpx
 
 from a2vm.io import Detection, now
 from a2vm.models import AssetObservation
+
+from .firmware import from_cmdb
 
 SOURCE = "cmdb"
 DEFAULT_CLASSES = ("PhysicalDevice", "VirtualDevice")
@@ -195,6 +201,13 @@ def observation(cls: str, key: str, fields: dict[str, Any], observed_at: str) ->
         attributes["owner"] = owner
     os_name = " ".join(str(fields.get(k) or "") for k in ("osfamily_name", "osversion_name")).strip()
     description = str(fields.get("description") or "").strip() or f"{final} {name} (CMDB)"
+    firmware = None
+    if fields.get("iosversion_name"):  # a NetworkDevice: its firmware, when the CMDB knows it
+        firmware = from_cmdb(
+            str(fields.get("brand_name") or ""), str(fields.get("model_name") or ""), str(fields["iosversion_name"])
+        )
+        if firmware and not os_name:
+            os_name = f"{firmware.vendor} {firmware.product} {firmware.version}".strip()
     return AssetObservation(
         ref=f"{final}::{key}",
         kind="host",
@@ -205,6 +218,7 @@ def observation(cls: str, key: str, fields: dict[str, Any], observed_at: str) ->
         identifiers=identifiers,
         attributes=attributes,
         os=os_name or None,
+        components=[firmware.component(SOURCE)] if firmware else [],
     )
 
 

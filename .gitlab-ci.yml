@@ -54,6 +54,10 @@ test:
       alias: postgres
   variables:
     POSTGRES_PASSWORD: test-only
+    # The Kubernetes executor runs services in the job's pod: the client reaches
+    # PostgreSQL over the loopback, which initdb trusts by default, so every password
+    # is accepted and a rotation test cannot fail. Ask initdb for scram everywhere.
+    POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
     A2VM_TEST_DSN: "host=postgres dbname=postgres user=postgres password=test-only sslmode=disable"
   script:
     - *install
