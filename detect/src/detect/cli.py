@@ -17,6 +17,7 @@
              in it, as a CSV a person imports into the CMDB (export); A2VM never writes to it
   wazuh      Wazuh's software inventory, read as a detection of source wazuh (fetch, v0.23.1)
   sentinelone  SentinelOne's application inventory, as a detection of source sentinelone (fetch, v0.23.3)
+  cyberwatch   Cyberwatch's assets and open CVEs, as a detection of source cyberwatch (fetch, v0.23.5)
 
 Output: <out>/<client>/<source>.json (default work/detect).
 """
@@ -314,6 +315,21 @@ def cmd_sentinelone(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_cyberwatch(args: argparse.Namespace) -> int:
+    import yaml
+
+    from .cyberwatch import CyberwatchConfig, CyberwatchError, fetch
+
+    try:
+        data = yaml.safe_load(Path(args.config).read_text(encoding="utf-8")) or {}
+        cfg = CyberwatchConfig.from_dict(data, args.config)
+        _write(args.out, fetch(cfg, args.tenant))
+    except (OSError, ValueError, yaml.YAMLError, CyberwatchError) as exc:
+        print(exc, file=sys.stderr)
+        return 2
+    return 0
+
+
 def cmd_cmdb(args: argparse.Namespace) -> int:
     import csv
     import json
@@ -459,6 +475,14 @@ def main(argv: list[str] | None = None) -> int:
     sf.add_argument("--tenant", required=True)
     sf.add_argument("--out", default="work/detect")
     sf.set_defaults(func=cmd_sentinelone)
+
+    cw = sub.add_parser("cyberwatch", help="Cyberwatch's assets and open CVEs: read them (fetch)")
+    cw_sub = cw.add_subparsers(dest="cyberwatch_command", required=True)
+    cf = cw_sub.add_parser("fetch", help="read them into a detection of source cyberwatch")
+    cf.add_argument("--config", required=True, help="YAML with the settings of a cyberwatch connector")
+    cf.add_argument("--tenant", required=True)
+    cf.add_argument("--out", default="work/detect")
+    cf.set_defaults(func=cmd_cyberwatch)
 
     args = parser.parse_args(argv)
     return args.func(args)

@@ -253,7 +253,7 @@ def test_the_questions_the_chat_must_answer() -> None:
 def test_release_recorded() -> None:
     hld = (ROOT / "docs" / "hld" / "00-product-strategy.md").read_text(encoding="utf-8")
     assert re.search(r"^\| v0\.23\.4( \(current\))? \| A corporate network and the chat", hld, re.M)
-    assert re.search(r"^\| v0\.23\.5( \(to confirm\))? \| D20: Cyberwatch", hld, re.M)
+    assert re.search(r"^\| v0\.23\.5( \(to confirm\)| \(current\))? \| D20: Cyberwatch", hld, re.M)
     assert "## v0.23.4 — " in (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     assert (ROOT / "deploy" / "relay" / "README.md").exists()
     assert (ROOT / "docs" / "hld" / "proposals" / "intel-placement.md").exists()
