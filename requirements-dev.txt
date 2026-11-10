@@ -1,7 +1,7 @@
 # Editable install of the common contract and every pillar + test tooling (local development and CI).
 -e ./a2vm
 -e ./via
--e ./detect[openvas]   # python-gvm and lxml: the OpenVAS tests need them
+-e ./detect[openvas,snmp]   # python-gvm, lxml, pysnmp: the OpenVAS and SNMP tests need them
 -e ./verdict
 -e ./dispatch
 pytest>=8

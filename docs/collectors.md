@@ -176,6 +176,12 @@ connectors:
   #   url: https://cyberwatch.lab.example
   #   access_key_file: /etc/a2vm/collector/cyberwatch-access-key
   #   secret_key_file: /etc/a2vm/collector/cyberwatch-secret-key
+  # - name: lan-network                    # appliances and network devices by SNMP, read only (v0.23.6, docs/appliances.md)
+  #   type: snmp
+  #   targets: [192.0.2.1, 192.0.2.64/28]
+  #   user: a2vm-ro
+  #   auth_password_file: /etc/a2vm/collector/snmp-auth
+  #   priv_password_file: /etc/a2vm/collector/snmp-priv
   # - name: lan-s1                         # SentinelOne's applications, read only (v0.23.3, docs/sentinelone.md)
   #   type: sentinelone
   #   url: https://console.lab.example
@@ -183,9 +189,9 @@ connectors:
 ```
 
 A connector `itop` pushes the source `cmdb`, a connector `wazuh` the source `wazuh`, a connector
-`sentinelone` the source `sentinelone`, a connector `cyberwatch` the source `cyberwatch`: declare them in
-`collectors.yaml` with the collector's other sources (`sources: [trivy, dnf-updateinfo, openvas, cmdb,
-wazuh, sentinelone, cyberwatch]`).
+`sentinelone` the source `sentinelone`, a connector `cyberwatch` the source `cyberwatch`, a connector
+`snmp` the source `snmp`: declare them in `collectors.yaml` with the collector's other sources
+(`sources: [trivy, dnf-updateinfo, openvas, cmdb, wazuh, sentinelone, cyberwatch, snmp]`).
 
 The image, with the group deploy token of the cluster (`docs/kubernetes.md` §1), the password read
 from a file:

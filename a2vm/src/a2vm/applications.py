@@ -20,6 +20,18 @@ affected blocks of each new record whose vendor and product (or CPE) are those o
 The rows of a table never decide a level: they say which product an application is. The versions of
 the record and the SSVC tables decide (D4).
 
+The firmware of an appliance or a network device (v0.23.6, `detect.firmware`) carries its CPE when
+its family is known: no table then, the CPE is the product. Its level of proof is `embedded`: the
+version is the one the device reports (SNMP) or the CMDB records, not a package an SSH collection
+listed. The records name these products their own way (`Cisco IOS XE Software`, `Junos OS`), so a
+block matches by its CPE, else by its vendor and by its product less the vendor and `Software`. A
+vendor that lists its affected versions one by one (Cisco) says by that list which versions are
+affected: a firmware version not in it is not affected.
+
+  firmware with a CPE, version in an affected range or listed   embedded
+  firmware with a CPE, version not decided by the record          possible, "version not decided"
+  firmware without a CPE                                          through the table, embedded when validated
+
 Owned by pillar 3, which defines the components of an asset (as `a2vm.packages`); used by pillar 1
 (the watch, whose service keeps the table of the tenant). No LLM here except `propose`, whose answer
 is a proposal only.
@@ -29,7 +41,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from .llm import UNTRUSTED, LlmClient, LlmError
@@ -327,6 +339,67 @@ def _entries_of(cpe: str, record: VulnRecord) -> list[AffectedEntry]:
     return out
 
 
+def _firmware_entries(cpe: str, product: str, record: VulnRecord) -> list[AffectedEntry]:
+    """The affected blocks of a record that name a firmware: by a CPE, else by vendor and product,
+    the product less its vendor and `Software` (`Cisco IOS XE Software` -> `iosxe`)."""
+    parts = cpe_vendor_product(cpe)
+    if parts is None:
+        return []
+    vendor, cpe_product = parts
+    wanted = {cpe_product, norm(product)}
+    out = []
+    for e in record.affected:
+        if any(cpe_vendor_product(c) == parts for c in e.cpes):
+            out.append(e)
+            continue
+        ev = norm(e.vendor)
+        if not ev or not (ev.startswith(vendor) or vendor.startswith(ev)):
+            continue
+        name = norm(e.product)
+        for prefix in (ev, vendor):
+            name = name.removeprefix(prefix) if name != prefix else name
+        name = name.removesuffix("software") or name
+        if name in wanted:
+            out.append(e)
+    return out
+
+
+def _listed(entry: AffectedEntry) -> AffectedEntry:
+    """A CNA block that lists its affected versions one by one, without a default status: the vendor's
+    list, a version not in it is not affected (Cisco)."""
+    exact = all(v.get("lessThan") is None and v.get("lessThanOrEqual") is None for v in entry.versions)
+    if entry.source == "cna" and entry.versions and exact and not entry.default_status:
+        return replace(entry, default_status="unaffected")
+    return entry
+
+
+def firmware_matches(record: VulnRecord, components: list[dict[str, Any]]) -> list[Hit]:
+    """The firmware of a device concerned by a record, by its CPE (see the module)."""
+    out: list[Hit] = []
+    for c in components:
+        cpe = cpe_base(c.get("cpe", ""))
+        if c.get("type") != "firmware" or not cpe:
+            continue
+        entries = [_listed(e) for e in _firmware_entries(cpe, c.get("name", ""), record)]
+        if not entries:
+            continue
+        status = evaluate(c.get("version", ""), entries)
+        if status == "unaffected":
+            continue
+        fixed = _fixed(c.get("version", ""), entries) if status == "affected" else ""
+        exposure = Exposure(
+            cve=record.cve_id, component=f"{c.get('vendor', '')} {c['name']}".strip(), version=c.get("version", ""),
+            source_package=cpe, fixed=fixed,
+            state=("fixed" if fixed else "affected") if status == "affected" else "investigating",
+            advisory=cpe, url="", source=c.get("source", ""), seen=c.get("seen", ""), origin="firmware",
+        )  # fmt: skip
+        if status == "affected":
+            out.append(Hit(exposure, "embedded", ""))
+        else:
+            out.append(Hit(exposure, "possible", "version not decided"))
+    return out
+
+
 def _fixed(version: str, entries: list[AffectedEntry]) -> str:
     """The lowest upper bound of an affected range above the version, as the fixed version."""
     bounds = [
@@ -343,15 +416,16 @@ class Hit:
     """One application of a host in a record's affected range, or possibly there."""
 
     exposure: Exposure
-    proof: str  # exposed | possible
+    proof: str  # exposed | embedded (firmware, v0.23.6) | possible
     reason: str  # why possible: "version not decided", "mapping to validate"
 
 
 def matches(record: VulnRecord, components: list[dict[str, Any]], table: dict[str, Row]) -> list[Hit]:
-    """The applications of a host concerned by a record, through the table (see the module)."""
-    out: list[Hit] = []
+    """The applications of a host concerned by a record, through the table, and its firmware by its CPE
+    (see the module)."""
+    out: list[Hit] = firmware_matches(record, components)
     for c in components:
-        if not is_application(c):
+        if not is_application(c) or (c.get("type") == "firmware" and cpe_base(c.get("cpe", ""))):
             continue
         row = table.get(app_key(c.get("vendor", ""), c["name"]))
         cpe = row.product() if row else ""
@@ -373,7 +447,7 @@ def matches(record: VulnRecord, components: list[dict[str, Any]], table: dict[st
         if row.state == PROPOSED:
             out.append(Hit(exposure, "possible", "mapping to validate"))
         elif status == "affected":
-            out.append(Hit(exposure, "exposed", ""))
+            out.append(Hit(exposure, "embedded" if c.get("type") == "firmware" else "exposed", ""))
         else:
             out.append(Hit(exposure, "possible", "version not decided"))
     return out

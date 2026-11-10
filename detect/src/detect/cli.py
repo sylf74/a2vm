@@ -18,6 +18,7 @@
   wazuh      Wazuh's software inventory, read as a detection of source wazuh (fetch, v0.23.1)
   sentinelone  SentinelOne's application inventory, as a detection of source sentinelone (fetch, v0.23.3)
   cyberwatch   Cyberwatch's assets and open CVEs, as a detection of source cyberwatch (fetch, v0.23.5)
+  snmp         appliances and network devices by SNMP, their exact firmware (fetch, v0.23.6)
 
 Output: <out>/<client>/<source>.json (default work/detect).
 """
@@ -330,6 +331,21 @@ def cmd_cyberwatch(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_snmp(args: argparse.Namespace) -> int:
+    import yaml
+
+    from .snmp import SnmpConfig, SnmpError, fetch
+
+    try:
+        data = yaml.safe_load(Path(args.config).read_text(encoding="utf-8")) or {}
+        cfg = SnmpConfig.from_dict(data, args.config)
+        _write(args.out, fetch(cfg, args.tenant))
+    except (OSError, ValueError, yaml.YAMLError, SnmpError) as exc:
+        print(exc, file=sys.stderr)
+        return 2
+    return 0
+
+
 def cmd_cmdb(args: argparse.Namespace) -> int:
     import csv
     import json
@@ -483,6 +499,14 @@ def main(argv: list[str] | None = None) -> int:
     cf.add_argument("--tenant", required=True)
     cf.add_argument("--out", default="work/detect")
     cf.set_defaults(func=cmd_cyberwatch)
+
+    sn = sub.add_parser("snmp", help="appliances and network devices by SNMP: read their firmware (fetch)")
+    sn_sub = sn.add_subparsers(dest="snmp_command", required=True)
+    nf = sn_sub.add_parser("fetch", help="read the devices into a detection of source snmp")
+    nf.add_argument("--config", required=True, help="YAML with the settings of an snmp connector")
+    nf.add_argument("--tenant", required=True)
+    nf.add_argument("--out", default="work/detect")
+    nf.set_defaults(func=cmd_snmp)
 
     args = parser.parse_args(argv)
     return args.func(args)

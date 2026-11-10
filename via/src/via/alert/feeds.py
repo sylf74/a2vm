@@ -170,6 +170,93 @@ def _walk_products(branches: list[dict[str, Any]], vendor: str = "") -> list[dic
     return out
 
 
+VERS = re.compile(r"^vers:[^/]+/(.+)$")
+
+
+def _vers(text: str) -> list[dict[str, str]]:
+    """A `vers:` range of CSAF as CVE version items, each lower bound paired with the next upper one:
+    `vers:fortios/>=7.0.0|<=7.0.15|>=7.2.0|<=7.2.7` -> two items. Empty for what it cannot say
+    (an open lower bound `>`, a `!=`)."""
+    m = VERS.match(text.strip())
+    if not m:
+        return []
+    items: list[dict[str, str]] = []
+    low = "0"
+    for part in (x.strip() for x in m[1].split("|")):
+        if part.startswith(">="):
+            low = part[2:].strip()
+        elif part.startswith(("<=", "<")):
+            key, value = ("lessThanOrEqual", part[2:]) if part.startswith("<=") else ("lessThan", part[1:])
+            items.append({"version": low, "status": "affected", "versionType": "custom", key: value.strip()})
+            low = "0"
+        elif part.startswith((">", "!")):
+            return []
+        elif part == "*":
+            items.append({"version": "0", "status": "affected", "versionType": "custom", "lessThan": "*"})
+        elif part:
+            items.append({"version": part.lstrip("="), "status": "affected", "versionType": "custom"})
+    return items
+
+
+def _product_ids(branches: list[dict[str, Any]], vendor: str = "", product: str = "") -> dict[str, dict[str, Any]]:
+    """product_id -> {vendor, product, version | range, cpe} of a CSAF product tree."""
+    out: dict[str, dict[str, Any]] = {}
+    for b in branches or []:
+        cat, name = b.get("category"), str(b.get("name", ""))
+        v = name if cat == "vendor" else vendor
+        p = name if cat in ("product_name", "product_family") else product
+        full = b.get("product") or {}
+        pid = full.get("product_id")
+        if pid and cat in ("product_version", "product_version_range"):
+            helper = full.get("product_identification_helper") or {}
+            item = {"vendor": v, "product": p, "cpe": str(helper.get("cpe") or "")}
+            if cat == "product_version":
+                item["version"] = name
+            else:
+                item["ranges"] = _vers(name)
+            out[pid] = item
+        out.update(_product_ids(b.get("branches") or [], v, p))
+    return out
+
+
+def csaf_affected(doc: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+    """The vendor's product status per CVE (v0.23.6): one affected block per product, with the
+    versions known affected (exact or ranges) and those fixed or known not affected (exact)."""
+    ids = _product_ids((doc.get("product_tree") or {}).get("branches") or [])
+    out: dict[str, list[dict[str, Any]]] = {}
+    for v in doc.get("vulnerabilities") or []:
+        cve = v.get("cve") or ""
+        if not CVE_RE.fullmatch(cve):
+            continue
+        status = v.get("product_status") or {}
+        blocks: dict[tuple[str, str], dict[str, Any]] = {}
+        for key, state in (("known_affected", "affected"), ("first_affected", "affected"),
+                           ("fixed", "unaffected"), ("first_fixed", "unaffected"),
+                           ("known_not_affected", "unaffected")):  # fmt: skip
+            for pid in status.get(key) or []:
+                p = ids.get(pid)
+                if not p or not p["product"]:
+                    continue
+                block = blocks.setdefault(
+                    (p["vendor"], p["product"]),
+                    {"vendor": p["vendor"], "product": p["product"], "versions": [], "default_status": "",
+                     "cpes": [], "source": "cna"},
+                )  # fmt: skip
+                if p.get("cpe") and p["cpe"] not in block["cpes"]:
+                    block["cpes"].append(p["cpe"])
+                if "version" in p:
+                    items = [{"version": p["version"], "status": state, "versionType": "custom"}]
+                else:  # a range says which versions are affected, not which are fixed
+                    items = p.get("ranges") or [] if state == "affected" else []
+                for item in items:
+                    if item not in block["versions"]:
+                        block["versions"].append(item)
+        found = [b for b in blocks.values() if b["versions"]]
+        if found:
+            out[cve] = found
+    return out
+
+
 def parse_csaf(doc: dict[str, Any], url: str, source: Source) -> Publication:
     d = doc.get("document") or {}
     tracking = d.get("tracking") or {}
@@ -199,6 +286,7 @@ def parse_csaf(doc: dict[str, Any], url: str, source: Source) -> Publication:
         summary=_strip_html(" ".join(notes))[:2000],
         source=source.name,
         fixes=list(dict.fromkeys(fixes))[:10],
+        affected=csaf_affected(doc),
     )
     severity = ((d.get("aggregate_severity") or {}).get("text") or "").lower()
     if severity:

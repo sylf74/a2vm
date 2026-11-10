@@ -52,7 +52,8 @@ EXTERNAL = "external-scan"
 CMDB = "cmdb"
 WAZUH = "wazuh"  # the software inventory of an EDR (v0.23.1): components, no finding
 SENTINELONE = "sentinelone"  # the application inventory of an EDR (v0.23.3): components, no finding
-NOT_SCANS = {CMDB, WAZUH, SENTINELONE}  # sources that list assets without scanning them
+SNMP = "snmp"  # appliances and network devices (v0.23.6): their firmware, no finding
+NOT_SCANS = {CMDB, WAZUH, SENTINELONE, SNMP}  # sources that list assets without scanning them
 
 WORST_CASE = {
     "exposure": "open",

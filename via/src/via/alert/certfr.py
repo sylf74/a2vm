@@ -40,6 +40,9 @@ class Publication:
     vendor_advisories: list[dict[str, str]] = field(default_factory=list)  # title, url
     source: str = "CERT-FR"  # name of the source, as shown in the sheet
     fixes: list[str] = field(default_factory=list)  # corrective versions or updates, when the source gives them
+    # The vendor's product status per CVE, from a CSAF advisory (v0.23.6): {cve: [affected blocks as
+    # dicts of a2vm.models.AffectedEntry]}, merged into the records the watch matches the firmware with.
+    affected: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
 
 
 def parse_feed(xml_text: str, kind: str) -> list[FeedItem]:

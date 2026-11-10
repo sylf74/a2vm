@@ -24,6 +24,8 @@ the alert names those hosts within minutes, with no scan. Each asset named carri
   confirmed  a scan or an authenticated check of the last daily run sees the flaw
   exposed    the inventory holds an affected version (packages listed, with their date), or a
              version declared in the profile is in the affected range
+  embedded   the firmware of an appliance or a network device (SNMP, CMDB, v0.23.6) is in the
+             affected range of the record or of the vendor's CSAF advisory
   possible   the product is there, its version against the record unknown: a package named like the
              product on a distribution the advisories do not cover yet, a declared asset without a
              version, a product named by the publication, a distribution still investigating
@@ -37,6 +39,7 @@ except when it becomes known as exploited (KEV).
 
 from __future__ import annotations
 
+import dataclasses
 import datetime as dt
 import json
 import re
@@ -48,7 +51,8 @@ from a2vm import applications
 from a2vm.config import Settings
 from a2vm.declared import DeclaredMatcher
 from a2vm.gti import ssvc_exploitation
-from a2vm.models import Asset, ClientProfile, DeclaredAsset, Finding, VulnRecord, exposure_value
+from a2vm.matching import norm
+from a2vm.models import AffectedEntry, Asset, ClientProfile, DeclaredAsset, Finding, VulnRecord, exposure_value
 from a2vm.packages import INVESTIGATING, Exposure, covered, exposures, present
 from via.intel.collect import collect
 from via.intel.gti import RADAR_FILTER, discovered
@@ -177,7 +181,7 @@ class Alert:
 
 
 # Levels of proof of an asset named by an alert (D20), strongest first.
-CONFIRMED, EXPOSED, POSSIBLE = "confirmed", "exposed", "possible"
+CONFIRMED, EXPOSED, EMBEDDED, POSSIBLE = "confirmed", "exposed", "embedded", "possible"
 
 
 # -- discovery --------------------------------------------------------------------------------
@@ -425,7 +429,8 @@ def inventory_matches(
 ) -> tuple[list[tuple[Asset, Exposure]], list[tuple[Asset, str]]]:
     """The hosts of the inventory exposed by their listed packages (D20), and those where the product
     is possibly there; an asset already confirmed by a scan for the CVE is left to that proof. The
-    applications of an EDR (v0.23.3) are matched through the tenant's applications table."""
+    applications of an EDR (v0.23.3) are matched through the tenant's applications table, the firmware
+    of a device (v0.23.6) by its CPE."""
     exposed: list[tuple[Asset, Exposure]] = []
     possible: list[tuple[Asset, str]] = []
     for record in records:
@@ -433,8 +438,11 @@ def inventory_matches(
         for asset in sorted(inventory.assets.values(), key=lambda a: a.id):
             if not asset.components or (asset.id, record.cve_id) in confirmed:
                 continue
-            app_hits = applications.matches(record, asset.components, table) if table else []
-            sure_apps = [h.exposure for h in app_hits if h.proof == "exposed"]
+            if table:
+                app_hits = applications.matches(record, asset.components, table)
+            else:
+                app_hits = applications.firmware_matches(record, asset.components)
+            sure_apps = [h.exposure for h in app_hits if h.proof in (EXPOSED, EMBEDDED)]
             if sure_apps:
                 exposed += [(asset, h) for h in sure_apps]
                 continue
@@ -456,6 +464,22 @@ def inventory_matches(
             if named:
                 possible.append((asset, ", ".join(named)))
     return exposed, possible
+
+
+def with_vendor_status(record: VulnRecord, item: Item) -> VulnRecord:
+    """The record with the product status of the vendor's CSAF advisory that brings it (v0.23.6): the
+    affected versions of an appliance, often before the CVE record says them. The record is a copy: the
+    one the intelligence keeps is unchanged."""
+    pub = item.publication
+    blocks = pub.affected.get(record.cve_id) if pub is not None else None
+    if not blocks:
+        return record
+    entries = [AffectedEntry(**b) for b in blocks]
+    named = {(norm(e.vendor), norm(e.product)) for e in entries}
+    # The advisory is the vendor's statement for its products: it replaces the record's CNA blocks
+    # for the same products (often still without versions), the ADP blocks stay.
+    kept = [e for e in record.affected if e.source != "cna" or (norm(e.vendor), norm(e.product)) not in named]
+    return dataclasses.replace(record, affected=[*entries, *kept])
 
 
 def relevant(
@@ -480,7 +504,7 @@ def relevant(
     level_wanted = profile.alerts.get("level", "urgent")
     alerts = []
     for it in items:
-        recs = [records[c] for c in it.cves if c in records]
+        recs = [with_vendor_status(records[c], it) for c in it.cves if c in records]
         if state and it.origin != "kev" and it.cves and all(state.recently_alerted(c) for c in it.cves):
             continue  # already alerted from another source; KEV (now exploited) is the exception
         detection = scanner.scan(profile, recs) if recs else None
