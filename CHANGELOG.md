@@ -5,6 +5,43 @@ analyst and, under **Upgrade**, what a tenant must do when it moves to that tag 
 `A2VM_REF` in its `.gitlab-ci.yml`). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
 §11) and the LLDs. A release adds its entry here in the same merge request (CLAUDE.md, Releasing).
 
+## v0.23.6 — 2026-11-10
+
+D20: the appliances and network devices, by their firmware.
+
+- **Connector `snmp` of the collector** (`docs/appliances.md`, LLD detection §3.9), read only: SNMPv3
+  `authPriv` by default (SHA-2, AES), SNMPv2c for old devices; GET of sysDescr, sysObjectID, sysName
+  and, for Fortinet, Palo Alto Networks and MikroTik, their version object. Targets: addresses, names
+  or networks (4096 addresses at most), less `exclude`. One host per device that answers (address,
+  name from sysName, OS `<vendor> <product> <version>`), its firmware as a component of type
+  `firmware` with the CPE of its family: Cisco IOS, IOS XE, NX-OS and ASA, FortiOS, PAN-OS, Junos OS,
+  RouterOS, VyOS, ArubaOS-CX. Another family keeps its vendor and product and goes through the
+  applications table. Not a scan, no finding. A test: `detect snmp fetch`. New dependency `pysnmp`
+  (extra `snmp` of the detect package, in the image).
+- **The CMDB's NetworkDevice** gives its firmware too (brand, model, IOS version), the CPE only when
+  the family is certain.
+- **Level of proof embedded** (embarqué) in the watch: a firmware matched by its CPE, or by the
+  vendor and the product as the records write them (`Cisco IOS XE Software`), in an affected range;
+  possible while the record does not decide the version. A vendor that lists its affected versions
+  one by one (Cisco) says which are not. In the alert sheet: the firmware, the fixed version, the
+  source `firmware reported (snmp, <date>)`.
+- **The vendors' CSAF advisories**: their product status (versions known affected, exact or `vers:`
+  ranges; versions fixed) replaces the record's CNA block for the same product when the watch reads
+  the advisory. `cisco-csaf` stays disabled in the catalogue: enable it for Cisco's versions.
+- Schemas: a component may carry `cpe` (detection, assets, triage).
+- Not verified on real devices: the sysDescr of each family and the vendors' version objects; the
+  first reading prints `snmp: <n> targets, <m> devices, firmware known on <k>`.
+- CI: the test PostgreSQL asks for a password on the loopback too (`POSTGRES_INITDB_ARGS`), as the
+  work instance does.
+
+**Upgrade**:
+
+1. Move `ref` and `A2VM_REF` of the tenants to `v0.23.6`, and the watch to `via:v0.23.6`
+   (`helm upgrade` of the tenant chart) for the level embedded.
+2. A collector that reads SNMP: its image to `detect:v0.23.6`, then `systemctl daemon-reload`.
+3. SNMP: the read-only user on the devices and its passwords in files (`docs/appliances.md` §2), the
+   connector (§3), the source `snmp` in the tenant's `collectors.yaml`. The CMDB needs nothing.
+
 ## v0.23.5 — 2026-11-10
 
 D20: Cyberwatch, read as a scanner.
