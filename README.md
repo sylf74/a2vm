@@ -192,6 +192,7 @@ docs/gti.md                                Google Threat Intelligence connector
 docs/kubernetes.md                         daily run, detection and decision services on Kubernetes
 docs/collectors.md                         collectors near the networks and the detection service
 docs/chat.md                               analysts' conversational search (Open WebUI) in the tenant's namespace
+docs/chat-questions.md                     the questions to ask the chat, by theme (generated from tests/chat-questions.yaml)
 docs/llm.md                                choosing the tenant's LLM, its family and level of reasoning (v0.23.8)
 docs/sign-in.md                            analysts' sign-in (OIDC, Keycloak) and the review page of the alerts
 docs/sla.md                                priorities and SLA of a client, within the levels (v0.21.0)

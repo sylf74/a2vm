@@ -57,6 +57,10 @@
         "null"
       ]
     },
+    "a2vm_version": {
+      "type": "string",
+      "description": "The A2VM version that made the run (since v0.23.9)"
+    },
     "llm_usage": {
       "type": "object",
       "description": "What the LLM cost in this run (since v0.23.7): questions, from_cache, prompt_tokens, completion_tokens, seconds, thinking, family and reasoning (v0.23.8), stopped"

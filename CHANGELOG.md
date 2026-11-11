@@ -5,6 +5,34 @@ analyst and, under **Upgrade**, what a tenant must do when it moves to that tag 
 `A2VM_REF` in its `.gitlab-ci.yml`). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
 §11) and the LLDs. A release adds its entry here in the same merge request (CLAUDE.md, Releasing).
 
+## v0.23.9 — 2026-11-11
+
+The chat knows the platform.
+
+- **`get_platform_status`**: the version of each service of the tenant (decision, watch, detection,
+  the tool server), the version that made the latest daily run, when it ended, its LLM and what it
+  cost (`llm_usage`), the collectors late or refused. « Quelle version d'A2VM tourne ? », « le run
+  de ce matin est-il fini ? », « tout est-il à jour ? ».
+- **`list_collectors`**: each collector and source, its last push, the age of its data, late or
+  refused, the connector that pushed and the agent's version. « Quels collecteurs ? », « quand
+  OpenVAS a-t-il remonté ? », « quelle version sur le collecteur ? ».
+- The agent sends its version and the connector's name with each push (`X-A2VM-Agent`,
+  `X-A2VM-Connector`); the detection service keeps the last ones in memory and answers them on
+  `collectors` and the new `status`. The decision service has a `status` too; the watch's `status`
+  names its version; the run records `a2vm_version`.
+- The tool server reads the detection service when `intake.enabled` (the token `detect-read-token`
+  of the tenant's secret, already there for the daily run).
+- 7 questions added to `tests/chat-questions.yaml`, and **`docs/chat-questions.md`**: the questions
+  the analysts can ask, by theme, with the tool that answers each, generated from that file
+  (`python scripts/make_chat_guide.py --write`; the tests check it is up to date).
+- Roadmap: the libraries in memory and the SBOMs move to v0.23.10.
+
+**Upgrade**:
+
+1. Move `ref` and `A2VM_REF` of the tenants to `v0.23.9`.
+2. The collectors to `detect:v0.23.9`: the agent's version and the connector appear from their next
+   push (until then, the collector's pushes are listed without them).
+
 ## v0.23.8 — 2026-11-11
 
 The tenant chooses its LLM. A client may refuse a model of some origin: each family takes the

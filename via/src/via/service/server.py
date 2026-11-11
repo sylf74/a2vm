@@ -25,6 +25,7 @@ from http import HTTPStatus
 from typing import Any
 from urllib.parse import parse_qsl, unquote, urlsplit
 
+from a2vm import __version__
 from a2vm import applications as apps
 from a2vm.io import ExchangeError, validate_assets, validate_findings
 from a2vm.service import JsonHandler, Problem, TokenSet, moment
@@ -163,13 +164,14 @@ class WatchService:
         self._check(tenant, token, ("run", "read"))
         raw = self.store.state(tenant)
         if raw is None:
-            return {"tenant": tenant, "state": "the watch has not run yet"}
+            return {"tenant": tenant, "version": __version__, "state": "the watch has not run yet"}
         state = json.loads(raw)
         failing = {k: v for k, v in (state.get("failures") or {}).items() if v}
         day = (dt.datetime.now(dt.UTC) - dt.timedelta(hours=24)).strftime("%Y%m%dT%H%M")
         recent = [a for a in self.store.alerts(tenant) if a.get("run", "")[:13] >= day[:13]]
         return {
             "tenant": tenant,
+            "version": __version__,  # v0.23.9
             "last_passage": state.get("saved_at", ""),
             "cve_delta_since": state.get("delta_since", ""),
             "failing_sources": [{"source": k, "failed_passages_in_a_row": v} for k, v in sorted(failing.items())],

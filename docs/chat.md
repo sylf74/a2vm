@@ -3,7 +3,8 @@
 Since v0.15.0 the analysts of a tenant ask in plain language for a CVE, an asset or the decisions
 of a level, and get the answer from the tenant's latest run (HLD §8, LLD triage-prioritization
 §16). Everything runs in the tenant's namespace except the model, which stays on the tenant's
-approved LLM endpoints (one VM or several):
+approved LLM endpoints (one VM or several). The questions the analysts can ask, by theme:
+[`chat-questions.md`](chat-questions.md).
 
 ```mermaid
 flowchart LR
@@ -149,6 +150,8 @@ kubectl -n $NS logs deploy/a2vm-lab-chat -c retention --tail=5
 | "Quelles CVE ont été publiées depuis hier, avec leur heure de découverte ?", "nouvelles CVE critiques depuis lundi", "ajoutées au KEV cette semaine" (v0.23.4) | `list_new_cves`: the CVEs published or updated in the period (about 30 days back), newest first, each with when CVE.org published it, CVSS, KEV, EPSS, products, and the alert the watch drafted for the tenant about it, if any. Needs `intel.url` |
 | "La veille tourne-t-elle ?", "quelles sources sont en erreur ?" (v0.23.4) | `get_watch_status`: the watch's last passage, the sources failing in a row, the alerts of the last 24 hours (watch on Kubernetes) |
 | "Quelles applications n'ont pas encore de CPE validé ?" (v0.23.4) | `list_applications`: the applications table (`docs/sentinelone.md` §4) by state, with the hosts of each |
+| "Quelle version d'A2VM tourne ?", "le run de ce matin est-il fini, avec quel LLM ?" (v0.23.9) | `get_platform_status`: the version of each service and of the latest run, its LLM and what it cost, the collectors late or refused |
+| "Quels collecteurs ?", "quand OpenVAS a-t-il remonté ?", "quelle version sur le collecteur ?" (v0.23.9) | `list_collectors`: each collector and source, its last push, the age of its data, late or refused, the connector and the agent's version (needs `intake.enabled`) |
 
 The questions the chat must answer, with the tool of each, are in `tests/chat-questions.yaml` (v0.23.4):
 a test checks them against the tools' description; replay them in Open WebUI after an upgrade. When

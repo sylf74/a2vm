@@ -12,6 +12,7 @@ from typing import Any
 
 import httpx
 
+from a2vm import __version__
 from a2vm.io import Detection, ExchangeError, validate_detection, write_detection
 from a2vm.models import AssetObservation, Finding, NotAffected
 
@@ -23,6 +24,7 @@ class IntakeError(RuntimeError):
     pass
 
 
+AGENT_HEADER, CONNECTOR_HEADER = "X-A2VM-Agent", "X-A2VM-Connector"  # v0.23.9
 TIMEOUT = 600.0  # a large detection (100 MB and more) takes the service a minute or more to validate
 
 
@@ -58,9 +60,11 @@ def push(
     ca_file: str | None = None,
     transport: httpx.BaseTransport | None = None,
     timeout: float = TIMEOUT,
+    connector: str = "",
 ) -> dict[str, Any]:
     """Push one detection; the idempotency key is derived from the content, so a retry is harmless.
-    Raises IntakeError with `retry` set when trying again later may succeed."""
+    Raises IntakeError with `retry` set when trying again later may succeed. The agent's version and
+    the connector's name go with it (v0.23.9), for the chat's list of collectors."""
     body = json.dumps(document, ensure_ascii=False).encode("utf-8")
     key = f"{collector}:{document['source']}:{hashlib.sha256(body).hexdigest()[:32]}"
     try:
@@ -68,7 +72,13 @@ def push(
             r = c.post(
                 f"/v1/tenants/{tenant}/detections",
                 content=gzip.compress(body),
-                headers={"Content-Encoding": "gzip", "Content-Type": "application/json", "Idempotency-Key": key},
+                headers={
+                    "Content-Encoding": "gzip",
+                    "Content-Type": "application/json",
+                    "Idempotency-Key": key,
+                    AGENT_HEADER: __version__,
+                    **({CONNECTOR_HEADER: connector} if connector else {}),
+                },  # fmt: skip
             )
     except httpx.HTTPError as exc:
         err = IntakeError(f"detection service unreachable: {exc}")
