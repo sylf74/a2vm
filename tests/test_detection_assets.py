@@ -214,7 +214,8 @@ def test_assumed_attributes_flag_review(lab, settings, sources):
     d.findings[0].cve_id = "CVE-2024-3400"
     inv = build_inventory(lab, [d])
     [row] = Triage(settings).run(lab, {record.cve_id: record}, {a.id: a for a in inv.assets}, inv.findings).rows
-    assert row.publicly_exposed and row.needs_review
+    # KEV: ACT whatever the exposure, so the assumption is noted without a review (v0.23.7)
+    assert row.publicly_exposed and row.delivery_decision == "ACT" and not row.needs_review
     assert any(a.startswith("assumed exposure: open (worst case)") for a in row.assumptions)
     assert "Assumptions:" in row.rationale
 

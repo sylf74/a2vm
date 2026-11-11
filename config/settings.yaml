@@ -40,6 +40,9 @@ llm:
   api_key_env: "LLM_API_KEY"
   timeout_seconds: 180
   max_retries: 2
+  thinking: ""                        # off | on: a reasoning model's thinking (Qwen3, vLLM); "" sends nothing (v0.23.7)
+  cache_file: ""                      # the answers kept from one run to the next; /data/llm-cache.json on Kubernetes
+  cache_days: 30                      # an answer not used for this many days is forgotten
   tasks:
     ssvc_inputs: true          # Automatable / Technical Impact when no CISA ADP data and no CVSS
     match_adjudication: true   # confirm or reject fuzzy product matches
@@ -67,3 +70,6 @@ policy:
   unknown_inputs: conservative
   # Fuzzy product match when the LLM is disabled: review (keep, flagged) or drop.
   fuzzy_match_without_llm: review
+  # Rows that ask an analyst (v0.23.7): decisive, only when an uncertain input could change the
+  # decision; all, every row with an uncertain input (the reasons stay in the row either way).
+  review: decisive

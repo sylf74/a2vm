@@ -393,6 +393,16 @@ A row needs review when any of these holds, and each reason is listed in English
 Review does not change the decision: a flagged ACT stays ACT. The flag tells the analyst which
 input to confirm before the report goes to the client.
 
+Since v0.23.7 (policy `review: decisive`, the default) a row asks for a review only when its doubt
+could change its decision. The decision is computed again with every value the uncertain inputs
+could take: an exploitation without assessment or from a tagged reference (none, poc; active too
+when GTI reports it unconfirmed), Automatable and Technical Impact estimated (yes/no,
+partial/total), an assumed exposure (open or not), an assumed mission or well-being (low, medium,
+high). When every combination gives the same delivery decision, the reasons stay in
+`review_reasons` as notes and `needs_review` is false: a KEV on an exposed asset is ACT whatever the
+CVSS heuristic says. A reason carried by the finding itself (version not confirmed, a product
+matched by name) always asks. `review: all` keeps the rule of the earlier versions.
+
 ## 5. Exposure
 
 ### 5.1 Model
@@ -537,6 +547,14 @@ Order of rationale calls: ACT before ATTEND, then internet-exposed first, KEV fi
 first. Vendor text is passed inside `<untrusted>` tags; the model has no tools. Budget and circuit
 breaker: after `max_calls` calls or `max_consecutive_errors` errors in a row, the remaining rows
 keep the template and `rationale_source` says why. The run never fails because of the LLM.
+
+### 7.0 Cost of the LLM (v0.23.7)
+
+| Item | Design |
+| --- | --- |
+| Thinking | `llm.thinking` (`A2VM_LLM_THINKING`): `off` sends `chat_template_kwargs: {enable_thinking: false}` to vLLM, so a reasoning model (Qwen3) answers the JSON schema without the long reasoning before it; `on` asks for it; empty sends nothing (a server other than vLLM may refuse the field) |
+| Answers kept | `llm.cache_file` (`A2VM_LLM_CACHE_FILE`, `/data/llm-cache.json` on the working volume of the daily run on Kubernetes): the digest of the question (model, prompts, schema, thinking) gives the answer of an earlier run; an answer not used for `cache_days` (30) is forgotten. A fact that changes makes a new question: the EPSS of the rationale facts is rounded to 2 decimals so that its daily drift does not. A cached answer that no longer fits the schema is asked again; a file that cannot be read is an empty cache |
+| What it cost | `llm_usage` of the run (triage.json, the chat's `get_run_summary`, the job log `LLM: <n> questions, <m> from the cache, <p>+<c> tokens, <s> s, thinking <t>`): the questions of the triage, those answered by the cache, the tokens and the seconds the server took |
 
 ### 7.1 Several endpoints (v0.15.0)
 

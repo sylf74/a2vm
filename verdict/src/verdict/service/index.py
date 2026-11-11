@@ -262,6 +262,7 @@ class RunIndex:
             "run": self.run,
             "tenant": self.document["client"],
             "llm_model": self.document.get("llm_model"),
+            **({"llm_usage": self.document["llm_usage"]} if self.document.get("llm_usage") else {}),
             "cve_count": self.document["cve_count"],
             "findings": {lv: counts.get(lv, 0) for lv in LEVELS},
             "assets": len(set(self.by_asset) | set(self.inventory)),

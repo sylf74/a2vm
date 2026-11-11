@@ -8,6 +8,10 @@ not honour the schema raises LlmError and the pipeline falls back to determinist
 Several endpoints may serve the same model (`llm.base_url` as a list, v0.15.0): calls go to the
 current one; when it cannot be reached, times out or answers 429 or 5xx, the call moves to the next
 and later calls stay there. An answer that is not valid JSON is retried on the same endpoint.
+
+Since v0.23.7: `llm.thinking` turns a reasoning model's thinking off (or on) through vLLM's
+`chat_template_kwargs`; `llm.cache_file` keeps the answers from one run to the next (`cache.py`);
+`usage` counts the questions, the answers from the cache, the tokens and the seconds of a run.
 """
 
 from __future__ import annotations
@@ -15,12 +19,14 @@ from __future__ import annotations
 import json
 import logging
 import threading
+import time
 from typing import Any
 
 import httpx
 import jsonschema
 
 from ..config import LlmSettings
+from .cache import LlmCache, question_key
 
 log = logging.getLogger("a2vm.llm")
 
@@ -45,6 +51,21 @@ class LlmClient:
         self._client = httpx.Client(timeout=settings.timeout_seconds, headers=headers, transport=transport)
         self._current = 0
         self._lock = threading.Lock()
+        self.cache = LlmCache(settings.cache_file, settings.cache_days) if settings.cache_file else None
+        self.usage = {"questions": 0, "from_cache": 0, "prompt_tokens": 0, "completion_tokens": 0, "seconds": 0.0}
+
+    def _count(self, **values: float) -> None:
+        with self._lock:
+            for k, v in values.items():
+                self.usage[k] += v
+
+    def usage_summary(self) -> dict[str, Any]:
+        """What the LLM cost in this process: questions, answers from the cache, tokens, seconds."""
+        with self._lock:
+            out = dict(self.usage)
+        out["seconds"] = round(out["seconds"], 1)
+        out["thinking"] = self.settings.thinking or "default"
+        return out
 
     @property
     def model(self) -> str:
@@ -86,24 +107,51 @@ class LlmClient:
                 "json_schema": {"name": name, "schema": schema, "strict": True},
             },
         }
+        thinking = str(self.settings.thinking or "").strip().lower()
+        if thinking in ("off", "on", "false", "true"):
+            payload["chat_template_kwargs"] = {"enable_thinking": thinking in ("on", "true")}
+        self._count(questions=1)
+        key = question_key(payload) if self.cache else ""
+        if self.cache:
+            kept = self.cache.get(key)
+            if kept is not None:
+                try:
+                    jsonschema.validate(kept, schema)
+                    self._count(from_cache=1)
+                    return kept
+                except jsonschema.ValidationError:
+                    pass  # the schema changed since: ask again
         last_error: Exception | None = None
         for _ in range(self.settings.max_retries + 1):
+            started = time.monotonic()
             try:
                 resp = self._post(payload)
-                content = resp.json()["choices"][0]["message"]["content"]
+                body = resp.json()
+                used = body.get("usage") or {}
+                self._count(
+                    prompt_tokens=int(used.get("prompt_tokens") or 0),
+                    completion_tokens=int(used.get("completion_tokens") or 0),
+                    seconds=time.monotonic() - started,
+                )
+                content = body["choices"][0]["message"]["content"]
                 data = json.loads(content)
                 jsonschema.validate(data, schema)
+                if self.cache:
+                    self.cache.put(key, data)
                 return data
             except (
                 httpx.HTTPError,
                 KeyError,
                 IndexError,
                 TypeError,
-                json.JSONDecodeError,
+                ValueError,
+                AttributeError,
                 jsonschema.ValidationError,
             ) as exc:
                 last_error = exc
         raise LlmError(f"{name}: {last_error}")
 
     def close(self) -> None:
+        if self.cache:
+            self.cache.save()
         self._client.close()

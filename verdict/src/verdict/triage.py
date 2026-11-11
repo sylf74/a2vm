@@ -14,6 +14,13 @@ assets stage. Decision inputs and their precedence:
 An attribute that comes from a default assumption is named in the row and flags it for review.
 
 The SSVC tables and the policy make the decision; the LLM never does.
+
+Review (v0.23.7, policy `review: decisive`): a row asks an analyst only when its uncertain inputs
+could change its decision. The decision is computed again with every value such an input could
+take (an estimated automatable or technical impact, an exploitation without assessment, an assumed
+exposure, mission or well-being); when all give the same decision, the reasons stay in the row as
+notes and the row does not ask for a review. A doubt on the finding itself (version not confirmed,
+a product matched by name) always asks.
 """
 
 from __future__ import annotations
@@ -110,6 +117,7 @@ class Triage:
         self.llm_errors_in_row = 0
         self.llm_stopped: str | None = None  # why the LLM is no longer used in this run
         self._inputs: dict[str, CveInputs] = {}
+        self._decisions: dict[tuple, str] = {}
 
     # -- per-CVE inputs (shared by all clients) ---------------------------------------------
     def cve_inputs(self, record: VulnRecord, scanner_cvss: CvssMetric | None = None) -> CveInputs:
@@ -188,6 +196,7 @@ class Triage:
         errors: list[dict[str, str]] | None = None,
     ) -> TriageRun:
         self.llm_calls, self.llm_errors_in_row, self.llm_stopped = 0, 0, None  # budget per client run
+        before = self.llm.usage_summary() if self.llm else None
         run = TriageRun(
             client=profile,
             generated_at=now(),
@@ -219,6 +228,15 @@ class Triage:
         self._llm_rationales(run.rows)
         order = {"ACT": 0, "ATTEND": 1, "TRACK": 2}
         run.rows.sort(key=lambda r: (order[r.delivery_decision], -(r.epss or 0), r.cve_id, r.asset_id))
+        if self.llm and before is not None:
+            after = self.llm.usage_summary()
+            run.llm_usage = {
+                k: (round(after[k] - before[k], 1) if k == "seconds" else after[k] - before[k])
+                for k in ("questions", "from_cache", "prompt_tokens", "completion_tokens", "seconds")
+            }
+            run.llm_usage["thinking"] = after["thinking"]
+            if self.llm_stopped:
+                run.llm_usage["stopped"] = self.llm_stopped
         return run
 
     def _row(self, profile: ClientProfile, inputs: CveInputs, asset: Asset, finding: Finding) -> TriageRow:
@@ -248,6 +266,10 @@ class Triage:
             if attr.assumed
         ]
         review = list(inputs.review_reasons) + list(finding.review_reasons) + assumptions[:3]
+        if finding.review_reasons or self.policy.review == "all":
+            asks = bool(review)
+        else:
+            asks = bool(review) and self._decisive(inputs, record, exposure, mission, wellbeing, mwi, exposed)
         mission_source = "asset-profile" if {mission.source, wellbeing.source} <= {"declared"} else "asset-inventory"
         row = TriageRow(
             client_id=profile.id,
@@ -272,7 +294,7 @@ class Triage:
             bod_timeline=bod,
             delivery_decision=delivery,
             reasons=reasons,
-            needs_review=bool(review),
+            needs_review=asks,
             review_reasons=review,
             description=record.description,
             finding_id=finding.id,
@@ -295,6 +317,36 @@ class Triage:
         )
         row.rationale = template_rationale(row)
         return row
+
+    def _delivery(self, exploitation: str, automatable: str, impact: str, mwi: str, kev: bool, exposed: bool,
+                  epss: float | None) -> str:  # fmt: skip
+        key = (exploitation, automatable, impact, mwi, kev, exposed, epss)
+        if key not in self._decisions:
+            decision = ssvc.coordinator_decision(exploitation, automatable, impact, mwi)
+            bod = ssvc.bod_timeline(kev, exposed, automatable, impact)
+            self._decisions[key] = delivery_decision(decision, bod, epss, self.policy)[0]
+        return self._decisions[key]
+
+    def _decisive(self, inputs: CveInputs, record: VulnRecord, exposure, mission, wellbeing, mwi: str,
+                  exposed: bool) -> bool:  # fmt: skip
+        """True when a value the uncertain inputs could take gives another delivery decision."""
+        estimated = ("cvss-heuristic", "llm", "default")
+        exploitation = {inputs.exploitation.value}
+        if inputs.exploitation.source in ("default", "references"):
+            exploitation |= {"none", "poc"}
+        if gti_unconfirmed(record.gti):
+            exploitation.add("active")
+        automatable = {"yes", "no"} if inputs.automatable.source in estimated else {inputs.automatable.value}
+        impact = (
+            {"partial", "total"} if inputs.technical_impact.source in estimated else {inputs.technical_impact.value}
+        )
+        exposures = {True, False} if exposure.assumed else {exposed}
+        mwis = {"low", "medium", "high"} if (mission.assumed or wellbeing.assumed) else {mwi}
+        seen = {
+            self._delivery(e, a, t, m, record.in_kev, x, record.epss)
+            for e in exploitation for a in automatable for t in impact for m in mwis for x in exposures
+        }  # fmt: skip
+        return len(seen) > 1
 
     # -- LLM rationales: one per CVE and decision, most urgent first, in parallel -------------
     def _llm_rationales(self, rows: list[TriageRow]) -> None:

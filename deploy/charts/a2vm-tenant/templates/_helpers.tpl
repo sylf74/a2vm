@@ -313,6 +313,8 @@ name given twice breaks the next "helm upgrade" that changes the list. */}}
 {{- define "a2vm-tenant.settings" -}}
 SETTINGS=/opt/a2vm/config/settings.yaml
 if [ -f /config/settings.yaml ]; then SETTINGS=/config/settings.yaml; fi
+# The LLM's answers kept on the working volume from one run to the next (v0.23.7).
+export A2VM_LLM_CACHE_FILE="${A2VM_LLM_CACHE_FILE:-/data/llm-cache.json}"
 {{- end -}}
 
 {{/* The tenant's PostgreSQL cluster (CloudNativePG, v0.18.0): its name, and what a service needs to

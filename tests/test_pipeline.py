@@ -65,7 +65,8 @@ def test_deterministic_run(settings, sources, profile, tmp_path):
 
     hr = rows["CVE-2099-10001"]  # no ADP: CVSS heuristic, SSVC track, EPSS escalation
     assert (hr.ssvc_decision, hr.delivery_decision) == ("track", "ATTEND")
-    assert hr.automatable.source == "cvss-heuristic" and hr.needs_review
+    # an estimated input that cannot change the decision: noted, no review (v0.23.7)
+    assert hr.automatable.source == "cvss-heuristic" and hr.review_reasons and not hr.needs_review
 
     vpn = rows["CVE-2099-10002"]  # ADP poc/no/partial on an essential asset -> track* -> ATTEND
     assert (vpn.ssvc_decision, vpn.delivery_decision) == ("track*", "ATTEND")
