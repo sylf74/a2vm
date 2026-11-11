@@ -1,4 +1,4 @@
-# Questions the analysts' chat must answer (v0.23.4, the platform's since v0.23.9), each with the tool that answers it and the
+# Questions the analysts' chat must answer (v0.23.4, the platform's since v0.23.9, actions and journal since v0.23.10), each with the tool that answers it and the
 # parameters it should get. `why`: words of that tool's description that lead the model to it.
 # Checked by tests/test_v0234.py against the tool server's OpenAPI description; replayed by hand in
 # Open WebUI after each version. `missing`: no tool yet; the model must say so, not answer "none".
@@ -37,5 +37,15 @@ questions:
   - {q: "Quand le connecteur OpenVAS a-t-il remonté pour la dernière fois ?", tool: list_collectors, params: [source], why: last pushed}
   - {q: "Quelle version tourne sur le collecteur lan ?", tool: list_collectors, params: [collector], why: agent's version}
   - {q: "Un collecteur est-il muet ou en retard ?", tool: list_collectors, params: [], why: silent}
+  - {q: "Quand aura lieu le prochain scan ?", tool: list_collectors, params: [], why: next scans}
+  - {q: "Quand le prochain scan OpenVAS du collecteur lan ?", tool: list_collectors, params: [collector], why: next and last run}
+  - {q: "Quand les décisions seront-elles mises à jour ?", tool: get_platform_status, params: [], why: decisions will be updated}
+  - {q: "Lance une synchro CMDB", tool: request_connector_run, params: [collector, connector], why: synchro CMDB}
+  - {q: "Relance le scan OpenVAS du collecteur lan", tool: request_connector_run, params: [collector, connector], why: run one connector}
+  - {q: "Ma synchro CMDB est-elle terminée ?", tool: list_actions, params: [], why: CMDB sync}
+  - {q: "Quelles actions attendent une confirmation ?", tool: list_actions, params: [state], why: pending}
+  - {q: "Qui a lancé la synchro CMDB hier ?", tool: get_audit, params: [since, action], why: who launched}
+  - {q: "Qui a validé l'alerte 42 ?", tool: get_audit, params: [action], why: validated}
+  - {q: "Qu'a demandé ana@example.org au chat cette semaine ?", tool: get_audit, params: [actor, since], why: questions}
   - {q: "Quels serveurs n'ont pas été vus depuis 30 jours ?", missing: "list_coverage has no filter on the last time seen"}
   - {q: "Quel est le délai moyen de correction par priorité ?", missing: "the portal's dashboards, not the chat"}

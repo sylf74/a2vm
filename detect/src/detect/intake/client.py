@@ -91,6 +91,27 @@ def push(
     raise err
 
 
+def poll(
+    base_url: str,
+    tenant: str,
+    token: str,
+    body: dict[str, Any],
+    ca_file: str | None = None,
+    transport: httpx.BaseTransport | None = None,
+    timeout: float = 30.0,
+) -> dict[str, Any]:
+    """The collector's poll (v0.23.10): its timers and the outcome of its requests; the requests
+    confirmed for it in return."""
+    try:
+        with _client(base_url, token, ca_file, transport, timeout) as c:
+            r = c.post(f"/v1/tenants/{tenant}/poll", json=body, headers={AGENT_HEADER: __version__})
+    except httpx.HTTPError as exc:
+        raise IntakeError(f"detection service unreachable: {exc}") from exc
+    if r.status_code != 200:
+        raise IntakeError(f"poll refused ({r.status_code}): {_detail(r)}")
+    return r.json()
+
+
 @dataclass
 class FetchResult:
     written: list[Path] = field(default_factory=list)

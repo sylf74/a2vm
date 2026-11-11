@@ -116,6 +116,18 @@ def cmd_tools(args: argparse.Namespace) -> int:
         print(exc, file=sys.stderr)
         return 2
     read_token = _read_secret(args.read_token_file)
+    from a2vm.actions import open_actions
+    from a2vm.audit import open_audit
+    from a2vm.db import DatabaseError
+
+    try:  # the journal and the actions (v0.23.10): the tenant's database, else the log only
+        audit = open_audit("tools")
+        actions = open_actions() if audit.db is not None else None
+    except DatabaseError as exc:
+        print(f"journal: {exc}", file=sys.stderr)
+        return 2
+    print(f"{args.tenant}: journal {'in the database' if audit.db else 'in the log only'}, "
+          f"actions {'on' if actions else 'off (no database)'}", flush=True)  # fmt: skip
     tools = Tools(
         args.tenant,
         tokens,
@@ -132,6 +144,11 @@ def cmd_tools(args: argparse.Namespace) -> int:
         intel_token=_read_secret(args.intel_token_file) if args.intel_token_file else "",
         detect_url=args.detect_url,
         detect_token=_read_secret(args.detect_token_file) if args.detect_token_file else "",
+        audit=audit,
+        actions=actions,
+        review_url=args.review_url,
+        daily_schedule=args.daily_schedule,
+        daily_timezone=args.daily_timezone,
         timezone=args.timezone,
     )
     print(
@@ -198,6 +215,9 @@ def main(argv: list[str]) -> int:
     t.add_argument("--intel-url", default="", help="shared intelligence service, for the radar (v0.23.2)")
     t.add_argument("--intel-token-file", default="", help="the tenant's read token of the shared service")
     t.add_argument("--detect-url", default="", help="detection service, for the collectors (v0.23.9)")
+    t.add_argument("--review-url", default="", help="review page, where a validator confirms the actions (v0.23.10)")
+    t.add_argument("--daily-schedule", default="", help="the daily run's cron schedule (v0.23.10)")
+    t.add_argument("--daily-timezone", default="UTC", help="its time zone")
     t.add_argument("--detect-token-file", default="", help="read token of the detection service")
     t.add_argument("--timezone", default="Europe/Paris", help="time zone of the days and times the chat asks")
     t.add_argument("--host", default="0.0.0.0")  # noqa: S104 - in a pod

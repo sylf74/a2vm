@@ -1102,6 +1102,7 @@ variable of the chart is missing from this table.
 | Setting | Value | Why |
 | --- | --- | --- |
 | `ENABLE_PERSISTENT_CONFIG` | `false` | The environment wins over the database: what an admin changes in the admin panel is lost at the next start, the chart stays the reference (GitOps) |
+| `ENABLE_FORWARD_USER_INFO_HEADERS` | `true` | Open WebUI sends the user's name, id, e-mail and role (`X-OpenWebUI-User-*`) with each call to the tool server, which writes who asked in the audit journal (v0.23.10, §16.10). The tool server trusts these headers because only Open WebUI reaches it, with the chat token; without them an entry reads `chat (user not forwarded)` |
 | `ENABLE_SIGNUP` | `false` | No self-registration; accounts are made by the admin |
 | `DEFAULT_USER_ROLE` | `pending` | An account made another way waits for the admin's approval |
 | `WEBUI_ADMIN_EMAIL`, `WEBUI_ADMIN_NAME` | `chat.adminEmail`, `A2VM admin` | The first admin, made at the first start when no account exists; sign-up then stays closed. Password: `chat-admin-password` |
@@ -1239,6 +1240,40 @@ stops the container with an error (Open WebUI changed: checked again with a new 
 `tests/test_v0150.py`: tokens, pages and their size, bad calls, vendor text, the spec, the chart's
 settings of Open WebUI and the tables of 16.4 and 16.5, the values written by `deploy/chat/chat_values.py`,
 the deploy job; `tests/test_v0151.py`: assets by name, documents and their links, retention.
+
+### 16.10 Actions and the audit journal (v0.23.10)
+
+The chat may prepare an action, never run one: what it reads (records, advisories, tickets) is
+written by others and could ask for anything (prompt injection). Code: `a2vm/actions.py`,
+`a2vm/audit.py`, the tool server, the review page (`via/service/review.py`), the detection
+service's poll and `detect agent poll`.
+
+| Step | Who | Where | Journal (`action`) |
+| --- | --- | --- | --- |
+| « Lance une synchro CMDB »: `request_connector_run` (POST), collector and connector checked against `list_collectors` | The analyst, named by Open WebUI | Tool server -> `actions.requests`, state `proposed` | `chat:request_connector_run` |
+| Confirm or cancel, on the review page's `/actions` (validators, signed form) | A validator, signed in by OIDC | Review page -> `confirmed` or `cancelled` | `action:confirmed`, `action:cancelled` (or `refused`) |
+| Poll every 5 minutes: timers reported, confirmed requests taken | The collector (its token) | `POST /v1/tenants/{t}/poll` -> `taken` | `action:taken` |
+| The connector run, its outcome at the next poll call | The collector | `done` or `failed`, with what was pushed | `action:finished` |
+
+A request not confirmed within the hour, or confirmed and not taken within 24 hours, expires; the
+same request cannot be open twice. The list of actions is closed (`run-connector`). Actions need
+the tenant's database: the tool server, the review page and the detection service share
+`actions.requests` (row-level security). The poll is published by the intake's ingress beside the
+push (`/v1/tenants/{t}/poll`, exact path).
+
+The journal (`audit.entries` in the tenant's database, else `audit.jsonl` of a service with files,
+and always a log line `audit tenant=… actor=… action=…`) has one entry per tool call of the chat
+(`chat:<operation>`, its parameters, the HTTP status when refused), per step of an action, per
+validation on the review page (`alert:validated`, `alert:dismissed`, `alert:edited`,
+`alert:translation-edited`, `alert:recipients-chosen`, `application:validate|reject|reset`) and per
+push of a collector (`push`). An entry: when, who (`actor`, `actor_kind`: user, collector, token),
+the service, the action, its target and parameters (4,000 characters at most), the outcome. Kept
+365 days, pruned once a day. Read with `get_audit` (since, until, a part of the actor or the action).
+
+The next runs: the poll reports the collector's timers (`systemctl list-timers 'a2vm-collector@*'
+--all -o json`, written by the poll unit before the agent starts), shown by `list_collectors` per
+collector (`timers`: connector, next and last run); the tool server computes the daily run's next
+start from its CronJob schedule (`next_daily_run` of `get_platform_status`, `a2vm/schedule.py`).
 
 ## 17. Priorities and SLA of the client (v0.21.0, HLD D19)
 

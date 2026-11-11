@@ -5,6 +5,43 @@ analyst and, under **Upgrade**, what a tenant must do when it moves to that tag 
 `A2VM_REF` in its `.gitlab-ci.yml`). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
 §11) and the LLDs. A release adds its entry here in the same merge request (CLAUDE.md, Releasing).
 
+## v0.23.10 — 2026-11-11
+
+The chat acts, with a person's confirmation; it knows the next scans; and every action is in an
+audit journal imputable to an author.
+
+- **Actions**: « lance une synchro CMDB », « relance le scan OpenVAS » (`request_connector_run`).
+  The chat prepares a request, never runs it: a validator confirms or cancels it on the review page
+  (new page « Actions », signed in by OIDC); the collector takes it at its next poll, within five
+  minutes, runs the connector and says how it went (`list_actions`: proposed, confirmed, taken,
+  done, failed, cancelled, expired). A request not confirmed within the hour expires. One action
+  for now, `run-connector`. Actions need the tenant's database (LLD triage §16.10).
+- **The poll of the collectors**: `detect agent poll`, every 5 minutes by its own timer
+  (`a2vm-collector-poll.timer`), reports the connectors' timers and carries out the confirmed
+  requests. It only connects out (`POST /v1/tenants/<tenant>/poll`, published by the intake's
+  ingress beside the push). The install script writes its units; by hand: `docs/collectors.md`.
+- **The next scans**: `list_collectors` gives each connector's next and last run; « quand les
+  décisions seront-elles mises à jour ? »: `get_platform_status` gives the daily run's next start
+  (from its CronJob schedule).
+- **Audit journal** (`get_audit`): every tool call of the chat with who asked (Open WebUI forwards
+  the user: `ENABLE_FORWARD_USER_INFO_HEADERS`), every step of an action, every validation on the
+  review page (alerts edited, recipients chosen, validated or dismissed; applications), every push
+  of a collector. In the tenant's database (`audit.entries`, kept 365 days), else a file per
+  service, and always a log line.
+- The tool server reaches the tenant's database and the detection service (network policies); the
+  latter was missing in v0.23.9: `list_collectors` could not reach the service.
+- 11 questions added to `tests/chat-questions.yaml` and to `docs/chat-questions.md`.
+- Roadmap: the libraries in memory and the SBOMs move to v0.23.11.
+
+**Upgrade**:
+
+1. Move `ref` and `A2VM_REF` of the tenants to `v0.23.10` (`deploy-k8s`: the tool server gets the
+   database, the review page its « Actions »).
+2. Each collector: the image `detect:v0.23.10`, then the poll units (`docs/collectors.md`, *The
+   poll*), or the install script again.
+3. In Open WebUI, ask « Lance une synchro CMDB », confirm on the review page, then « Ma synchro CMDB
+   est-elle terminée ? » and « Qui a lancé la synchro CMDB ? ».
+
 ## v0.23.9 — 2026-11-11
 
 The chat knows the platform.

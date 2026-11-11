@@ -182,7 +182,9 @@ def test_the_tool_server_publishes_read_operations_only(tools):
     assert spec["openapi"].startswith("3.1")
     ops = [op for item in spec["paths"].values() for op in item.values()]
     assert {o["operationId"] for o in ops} == {o[1] for o in OPERATIONS}
-    assert all(m == "get" for item in spec["paths"].values() for m in item)
+    # Read only, except the request of an action a person must confirm (v0.23.10).
+    methods = {item[m]["operationId"]: m for item in spec["paths"].values() for m in item}
+    assert {op for op, m in methods.items() if m != "get"} == {"request_connector_run"}
     assert all(len(o["summary"]) > 40 for o in ops)  # described for a model
 
 

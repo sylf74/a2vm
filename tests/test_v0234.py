@@ -259,4 +259,5 @@ def test_release_recorded() -> None:
     assert (ROOT / "deploy" / "relay" / "README.md").exists()
     assert (ROOT / "docs" / "hld" / "proposals" / "intel-placement.md").exists()
     for f in ("a2vm", "via", "detect", "verdict", "dispatch"):
-        assert re.search(r'^version = "0\.(23\.[4-9]|2[4-9]\.\d+)"', (ROOT / f / "pyproject.toml").read_text(), re.M)
+        text = (ROOT / f / "pyproject.toml").read_text()
+        assert re.search(r'^version = "0\.(23\.([4-9]|[1-9]\d)|2[4-9]\.\d+)"', text, re.M)

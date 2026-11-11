@@ -126,7 +126,7 @@ sudo bash install-collector.sh --tenant lab --collector lab-lan \
 | Image | Pulled (login with the deploy token when given); the password file removed |
 | Socket | Its rights read; `--group-add` when "other" may not use it |
 | Configuration | Read by the agent inside the image: an error shows before the first run |
-| Units | `a2vm-collector@.service` and `.timer` (`--schedule`, default 07:30), one timer enabled per connector |
+| Units | `a2vm-collector@.service` and `.timer` (`--schedule`, default 07:30), one timer enabled per connector; `a2vm-collector-poll.service` and `.timer`, every 5 minutes (v0.23.10, *The poll* below) |
 
 It starts no scan: it ends with the commands of the first runs. Without `--openvas-hosts`, the
 collector does SSH scans only, and Docker is the only engine the script uses; with Podman, follow
@@ -248,6 +248,32 @@ journalctl -u a2vm-collector@lan.service -f
 Another schedule for one connector: `sudo systemctl edit a2vm-collector@trivy-drop.timer`. Host
 keys of the targets are accepted on first use and kept in `/var/lib/a2vm-ssh`. A new release:
 change the tag in the unit and pull the image.
+
+### The poll: actions and next runs (v0.23.10)
+
+Every 5 minutes `detect agent poll` tells the detection service when each connector runs next (the
+chat's « quand aura lieu le prochain scan ? ») and takes the actions a validator confirmed (« lance
+une synchro CMDB », LLD triage §16.10): it runs the connector at once and says how it went. Like the
+push, it only connects out (`POST /v1/tenants/<tenant>/poll`, published by the intake's ingress). The
+install script writes the units; by hand, copy the connector's service as the poll's:
+
+```bash
+sudo sed -e 's#detect agent run --config \(.*\)/collector.yaml --connector %i#detect agent poll --config \1/collector.yaml --timers /run/a2vm-collector/timers.json#' -e 's/connector %i/poll/' -e 's/a2vm-collector-%i/a2vm-collector-poll/' -e 's#^ExecStart=\(.*\)--user 10001:10001 #ExecStartPre=/bin/sh -c '"'"'mkdir -p /run/a2vm-collector \&\& systemctl list-timers "a2vm-collector@*" --all -o json > /run/a2vm-collector/timers.json'"'"'\nExecStart=\1--user 10001:10001 -v /run/a2vm-collector:/run/a2vm-collector:ro #' /etc/systemd/system/a2vm-collector@.service | sudo tee /etc/systemd/system/a2vm-collector-poll.service
+```
+
+```bash
+printf '[Unit]\nDescription=A2VM collector, poll every 5 minutes\n\n[Timer]\nOnBootSec=2min\nOnUnitActiveSec=5min\n\n[Install]\nWantedBy=timers.target\n' | sudo tee /etc/systemd/system/a2vm-collector-poll.timer
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now a2vm-collector-poll.timer
+sudo systemctl start a2vm-collector-poll.service
+journalctl -u a2vm-collector-poll.service -n 20 --no-pager
+```
+
+A poll with nothing to do prints nothing. A confirmed request shows as `request act-…: run the
+connector lan-cmdb`, then the connector's own lines.
 
 ### Two CAs
 

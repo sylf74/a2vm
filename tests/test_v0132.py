@@ -61,7 +61,7 @@ def test_units_and_checks_match_the_guide():
         "--user 10001:10001",
         "SuccessExitStatus=3",
         "Persistent=true",
-        "detect agent run --config %s/collector.yaml --connector %%i",
+        "detect agent run --config $C/collector.yaml --connector %i",  # v0.23.10: one unit() for run and poll
         "from detect.agent import load_config",
         "gmp: unix:///run/gvmd/gvmd.sock",
         "--group-add",

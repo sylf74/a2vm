@@ -58,7 +58,7 @@ spec:
   policyTypes: [Ingress]
   ingress:
     - from:
-        {{- range list "via" "detect" "verdict" "dispatch" }}
+        {{- range list "via" "detect" "verdict" "dispatch" "tools" }}
         - podSelector:
             matchLabels:
               {{- include "a2vm-tenant.selector" (dict "root" $ "component" .) | nindent 14 }}

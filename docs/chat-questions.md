@@ -5,8 +5,10 @@ then run `python scripts/make_chat_guide.py --write`. The test suite checks that
 a tool that exists, with parameters it takes, and that this page is up to date. Set-up of the chat:
 [`chat.md`](chat.md).
 
-The chat answers in the language of the question. It reads only: it never changes a decision, sends
-a ticket or validates an alert. It answers for one tenant, from the decision service (the daily
+The chat answers in the language of the question. It reads, and prepares the actions of the list
+below without running them: a validator confirms each on the review page (« Actions »). It never
+changes a decision, sends a ticket or validates an alert. Every question and every action is in the
+audit journal, with who asked. It answers for one tenant, from the decision service (the daily
 run), the watch, the detection service, the dispatch service and the shared intelligence service,
 whichever run for that tenant.
 
@@ -113,24 +115,47 @@ How to ask:
 
 - Fais-moi un Word des ACT exposées
 
+## Actions, confirmed by a person
+
+**`request_connector_run`**: prepares a request to run a connector now (a CMDB sync, a scan): a validator confirms it on the review page, the collector runs it within minutes; the chat never runs it itself.
+
+- Lance une synchro CMDB
+- Relance le scan OpenVAS du collecteur lan
+
+**`list_actions`**: the requests and their state: proposed, confirmed, taken, done, failed, cancelled, expired.
+
+- Ma synchro CMDB est-elle terminée ?
+- Quelles actions attendent une confirmation ?
+
+## Who did what
+
+**`get_audit`**: the audit journal: the chat's questions, the actions, the validations, with who and when.
+
+- Qui a lancé la synchro CMDB hier ?
+- Qui a validé l'alerte 42 ?
+- Qu'a demandé ana@example.org au chat cette semaine ?
+
 ## The platform itself
 
 **`list_runs`**: the daily runs kept, with their date and counts.
 
 - Quand a tourné le dernier run ?
 
-**`get_platform_status`**: the version of each service and of the latest run, its LLM and cost, collectors late.
+**`get_platform_status`**: the version of each service and of the latest run, its LLM and cost, the next daily run, collectors late.
 
 - Quelle version d'A2VM tourne sur mon tenant ?
 - Le run de ce matin est-il terminé, avec quel LLM, et combien a-t-il coûté ?
 - Tout est-il à jour ?
+- Quand les décisions seront-elles mises à jour ?
 
-**`list_collectors`**: each collector and source: last push, age, late or refused, connector, agent's version.
+**`list_collectors`**: each collector and source: last push, age, late or refused, connector, agent's version, and the next and last run of each connector (the next scans).
 
 - Quels collecteurs remontent des données ?
 - Quand le connecteur OpenVAS a-t-il remonté pour la dernière fois ?
 - Quelle version tourne sur le collecteur lan ?
 - Un collecteur est-il muet ou en retard ?
+- Quand aura lieu le prochain scan ?
+- Quand le prochain scan OpenVAS du collecteur lan ?
 
 ## Not answered yet
 
