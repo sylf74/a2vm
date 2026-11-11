@@ -22,6 +22,7 @@ from http import HTTPStatus
 from typing import Any
 from urllib.parse import parse_qsl, unquote, urlsplit
 
+from a2vm import __version__
 from a2vm.io import ExchangeError, validate_triage
 from a2vm.service import JsonHandler, Problem, TokenSet
 from a2vm.service import serve as _serve
@@ -202,6 +203,12 @@ class Service:
         self._reader(tenant, token)
         if rest == "runs":
             return {"items": [r.to_dict() for r in reversed(self.store.receipts(tenant))]}
+        if rest == "status":  # v0.23.9, the chat's get_platform_status
+            receipts = self.store.receipts(tenant)
+            return {
+                "service": "verdict", "version": __version__, "runs": len(receipts),
+                "latest_run": receipts[-1].to_dict() if receipts else None,
+            }  # fmt: skip
         if rest in ("findings/closed", "findings/unverified"):
             return self.closed(query, rest.split("/")[1])
         idx = self.index(query.pop("run", "latest"))

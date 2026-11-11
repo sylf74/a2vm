@@ -130,6 +130,8 @@ def cmd_tools(args: argparse.Namespace) -> int:
         dispatch_token=_read_secret(args.dispatch_token_file) if args.dispatch_token_file else "",
         intel_url=args.intel_url,
         intel_token=_read_secret(args.intel_token_file) if args.intel_token_file else "",
+        detect_url=args.detect_url,
+        detect_token=_read_secret(args.detect_token_file) if args.detect_token_file else "",
         timezone=args.timezone,
     )
     print(
@@ -195,6 +197,8 @@ def main(argv: list[str]) -> int:
     t.add_argument("--dispatch-token-file", default="", help="read token of the dispatch service")
     t.add_argument("--intel-url", default="", help="shared intelligence service, for the radar (v0.23.2)")
     t.add_argument("--intel-token-file", default="", help="the tenant's read token of the shared service")
+    t.add_argument("--detect-url", default="", help="detection service, for the collectors (v0.23.9)")
+    t.add_argument("--detect-token-file", default="", help="read token of the detection service")
     t.add_argument("--timezone", default="Europe/Paris", help="time zone of the days and times the chat asks")
     t.add_argument("--host", default="0.0.0.0")  # noqa: S104 - in a pod
     t.add_argument("--port", type=int, default=8080)

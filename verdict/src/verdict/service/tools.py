@@ -26,6 +26,7 @@ from urllib.parse import parse_qsl, quote, unquote, urlsplit
 
 import httpx
 
+from a2vm import __version__
 from a2vm.service import JsonHandler, Problem, TokenSet, moment
 from a2vm.service import serve as _serve
 
@@ -407,6 +408,31 @@ OPERATIONS: list[tuple[str, str, str, list[dict[str, Any]], str]] = [
         "via:status",
     ),
     (
+        "/platform",
+        "get_platform_status",
+        "The A2VM platform of this tenant (v0.23.9): the version of each service (decision, watch, "
+        "detection, this tool server), the version that made the latest daily run, when it ended, the LLM "
+        "it used and what it cost (questions, answers from the cache, tokens, seconds), and the collectors "
+        "late or in error. Use it for 'which version of A2VM runs', 'did today's run end', 'which LLM', "
+        "'is everything up to date'.",
+        [],
+        "platform",
+    ),
+    (
+        "/collectors",
+        "list_collectors",
+        "The collectors of this tenant (v0.23.9), from the detection service: for each collector and "
+        "source (openvas, trivy, cmdb, wazuh, snmp...) when it last pushed, how old its data is, whether "
+        "it is late (stale) or refused, the connector that pushed it and the agent's version. Use it for "
+        "'which collectors', 'when did the OpenVAS connector last report', 'which version runs on the "
+        "collector', 'is a collector silent'.",
+        [
+            _q("collector", "string", "One collector's id"),
+            _q("source", "string", "One source: openvas, trivy, dnf-updateinfo, cmdb, wazuh, snmp..."),
+        ],
+        "detect:status",
+    ),
+    (
         "/applications",
         "list_applications",
         "The applications table of this tenant (v0.23.3): each application the EDRs list on the hosts "
@@ -531,6 +557,8 @@ class Tools:
         intel_url: str = "",
         intel_token: str = "",
         timezone: str = "UTC",
+        detect_url: str = "",
+        detect_token: str = "",
     ):
         self.tenant = tenant
         self.timezone = timezone
@@ -562,6 +590,16 @@ class Tools:
                 transport=transport,
             )
             if via_url and via_token
+            else None
+        )
+        self._detect = (
+            httpx.Client(
+                base_url=detect_url.rstrip("/"),
+                headers={"Authorization": f"Bearer {detect_token}", "User-Agent": "a2vm-tools"},
+                timeout=httpx.Timeout(30.0, connect=5.0),
+                transport=transport,
+            )
+            if detect_url and detect_token
             else None
         )
         self.public_url = public_url.rstrip("/")
@@ -615,6 +653,10 @@ class Tools:
                 query["limit"] = "10"
             if upstream == "exports":
                 return self.export(query)
+            if upstream == "platform":
+                return self._platform()
+            if upstream == "detect:status":
+                return self._collectors(query)
             if upstream.startswith("dispatch:"):
                 return self._tickets(upstream[len("dispatch:") :], query)
             for name in ("since", "until"):  # the tenant's time zone, sent on as UTC (v0.23.2)
@@ -762,6 +804,84 @@ class Tools:
             "status": "A2VM watch service: the watch's last passage and its sources",
             "applications": "A2VM watch service: the applications table (validated by analysts)",
         }.get(target.split("?")[0], "A2VM watch service: alerts drafted by the watch and their journal")
+        return fit(answer, self.max_chars)
+
+    # -- the platform (v0.23.9) -----------------------------------------------------------------
+    @staticmethod
+    def _json(client: httpx.Client | None, path: str, what: str, params: dict[str, str] | None = None) -> Any:
+        """A service's answer, or a short reason why there is none (the platform's answer goes on)."""
+        if client is None:
+            return {"state": f"the {what} does not run for this tenant"}
+        try:
+            r = client.get(path, params=params)
+        except httpx.HTTPError:
+            return {"state": f"the {what} cannot be reached"}
+        if r.status_code != 200:
+            return {"state": f"the {what} answered {r.status_code}"}
+        try:
+            return r.json()
+        except ValueError:
+            return {"state": f"the {what} answered no JSON"}
+
+    def _detect_status(self) -> Any:
+        return self._json(self._detect, f"/v1/tenants/{self.tenant}/status", "detection service")
+
+    def _collectors(self, query: dict[str, str]) -> Any:
+        if self._detect is None:
+            raise Problem(HTTPStatus.SERVICE_UNAVAILABLE, "the detection service does not run for this tenant")
+        status = self._detect_status()
+        if "collectors" not in status:
+            raise Problem(HTTPStatus.BAD_GATEWAY, status.get("state", "the detection service cannot be reached"))
+        collector, source = (query.get("collector") or "").strip(), (query.get("source") or "").strip()
+        items = []
+        for c in status["collectors"]:
+            if collector and c.get("id") != collector:
+                continue
+            sources = [x for x in c.get("sources", []) if not source or x.get("source") == source]
+            if sources:
+                items.append({**c, "sources": sources})
+        answer = {
+            "detection_service_version": status.get("version", ""), "timezone": "UTC",
+            "total": len(items), "items": items,
+            "note": "age_hours: age of the data when last pushed; stale: older than the collector's max_age_hours; "
+            "agent_version and connector are known from the first push after the service started (v0.23.9 agents)",
+            "source": "A2VM detection service: the pushes of the collectors",
+        }  # fmt: skip
+        return fit(answer, self.max_chars)
+
+    def _platform(self) -> Any:
+        verdict = self._json(self._http, f"/v1/tenants/{self.tenant}/status", "decision service")
+        summary = self._json(self._http, f"/v1/tenants/{self.tenant}/summary", "decision service")
+        run = {
+            k: summary[k] for k in ("run_id", "generated_at", "a2vm_version", "llm_model", "llm_usage") if k in summary
+        }
+        via = self._json(self._via, f"/v1/tenants/{self.tenant}/status", "watch service")
+        detect = self._detect_status()
+        late = [
+            {"collector": c.get("id"), "source": x.get("source"), "age_hours": x.get("age_hours"),
+             "last_error": x.get("last_error", "")}
+            for c in detect.get("collectors", []) for x in c.get("sources", [])
+            if x.get("stale") or x.get("last_error")
+        ]  # fmt: skip
+        answer = {
+            "tenant": self.tenant,
+            "services": {
+                "tools": __version__,
+                "decision": verdict.get("version", verdict.get("state", "")),
+                "watch": via.get("version", via.get("state", "")),
+                "detection": detect.get("version", detect.get("state", "")),
+                "dispatch": "runs" if self._dispatch is not None else "does not run for this tenant",
+                "shared_intelligence": "used" if self._intel is not None else "not used",
+            },
+            "latest_run": run or summary.get("state", "no run yet"),
+            "runs_kept": verdict.get("runs"),
+            "watch_last_passage": via.get("last_passage", ""),
+            "collectors": len(detect.get("collectors", [])),
+            "collectors_late_or_refused": late,
+            "note": "the services of a tenant are upgraded together by deploy-k8s: different versions mean an "
+            "upgrade in progress or a pod that did not restart",
+            "source": "A2VM services of this tenant",
+        }
         return fit(answer, self.max_chars)
 
     # -- documents ------------------------------------------------------------------------------

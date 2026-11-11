@@ -218,7 +218,8 @@ def test_the_watch_status_and_the_applications_through_the_chat(tmp_path) -> Non
     digests = tmp_path / "digests"
     digests.write_text(f"read {digest(READ)}\n")
     svc = WatchService("lab", TokenSet.load(digests, {"run", "read"}), store)
-    assert svc.get_status("lab", READ) == {"tenant": "lab", "state": "the watch has not run yet"}
+    status = svc.get_status("lab", READ)
+    assert status["state"] == "the watch has not run yet" and status["version"]  # version since v0.23.9
     state = {"failures": {"cisco": 2, "kev": 0}, "saved_at": "2026-11-09T20:00:00+00:00", "delta_since": "x"}
     store.put_run("lab", json.dumps(state).encode(), [], {})
     status = svc.get_status("lab", READ)

@@ -9,6 +9,7 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 
+from a2vm import __version__
 from a2vm.io import TRIAGE, write_reporting
 from a2vm.models import TriageRow, TriageRun
 from a2vm.ssvc import BOD_EN
@@ -73,6 +74,7 @@ def write_json(run: TriageRun, path: Path) -> None:
         "generated_at": run.generated_at,
         "cve_count": run.cve_count,
         "llm_model": run.llm_model,
+        "a2vm_version": __version__,  # the version that made the run (v0.23.9)
         **({"llm_usage": run.llm_usage} if run.llm_usage else {}),
         "rows": [r.to_dict() for r in run.rows],
         "not_affected": [asdict(n) for n in run.not_affected],

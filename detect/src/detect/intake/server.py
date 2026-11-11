@@ -25,6 +25,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
+from a2vm import __version__
 from a2vm.io import ExchangeError, validate_detection
 
 from .registry import SOURCE, Collector, Registry
@@ -32,6 +33,7 @@ from .store import FileStore, Receipt, age_hours, parse_time
 
 log = logging.getLogger("detect.serve")
 FUTURE_TOLERANCE = dt.timedelta(minutes=10)
+SAFE = re.compile(r"^[A-Za-z0-9._+-]{1,64}$")  # an agent's version, a connector's name
 ROUTE = re.compile(r"^/v1/tenants/(?P<tenant>[a-z0-9][a-z0-9-]{0,62})/(?P<rest>.*)$")
 
 
@@ -52,6 +54,14 @@ class Service:
         # Last refusal per collector and source ("*" when the source is not known yet), cleared by an
         # accepted push of that source; in memory: a restart forgets them, the log keeps them.
         self.last_errors: dict[tuple[str, str], str] = {}
+        # The agent's version and the connector of the last push per collector and source (v0.23.9);
+        # in memory too: the next push after a restart tells them again.
+        self.agents: dict[tuple[str, str], dict[str, str]] = {}
+
+    def _seen(self, collector: str, source: str, agent: str, connector: str, now: dt.datetime) -> None:
+        clean = {k: v for k, v in (("agent_version", agent), ("connector", connector)) if v and SAFE.match(v)}
+        if clean:
+            self.agents[(collector, source)] = {**clean, "at": now.isoformat(timespec="seconds")}
 
     def _tenant(self, tenant: str) -> None:
         if tenant != self.registry.tenant:
@@ -65,6 +75,8 @@ class Service:
         body: bytes,
         gzipped: bool,
         now: dt.datetime | None = None,
+        agent: str = "",
+        connector: str = "",
     ) -> dict[str, Any]:
         now = now or dt.datetime.now(dt.UTC)
         self._tenant(tenant)
@@ -87,6 +99,7 @@ class Service:
                 known.source,
                 known.id,
             )
+            self._seen(collector.id, known.source, agent, connector, now)
             return known.to_dict()
         started = time.monotonic()
         state: dict[str, str] = {"source": "*"}
@@ -105,6 +118,7 @@ class Service:
             raise
         self.last_errors.pop((collector.id, receipt.source), None)
         self.last_errors.pop((collector.id, "*"), None)
+        self._seen(collector.id, receipt.source, agent, connector, now)
         log.info(
             "push tenant=%s collector=%s source=%s id=%s duplicate=%s received=%d bytes document=%d bytes seconds=%.1f",
             tenant,
@@ -200,12 +214,17 @@ class Service:
                     entry["last_received_at"] = r.received_at
                     entry["age_hours"] = age_hours(r.generated_at)
                 entry["stale"] = entry.get("age_hours", c.max_age_hours + 1) > c.max_age_hours
+                entry.update(self.agents.get((c.id, s), {}))
                 error = self.last_errors.get((c.id, s)) or self.last_errors.get((c.id, "*"))
                 if error:
                     entry["last_error"] = error
                 sources.append(entry)
             out.append({"id": c.id, "description": c.description, "sources": sources})
         return out
+
+    def status(self, tenant: str, token: str | None) -> dict[str, Any]:
+        """The service's version and the collectors with their last pushes (v0.23.9, the chat)."""
+        return {"service": "detect", "version": __version__, "collectors": self.collectors(tenant, token)}
 
 
 def make_handler(service: Service) -> type[BaseHTTPRequestHandler]:
@@ -258,6 +277,8 @@ def make_handler(service: Service) -> type[BaseHTTPRequestHandler]:
                     self._send(HTTPStatus.OK, service.latest(tenant, self._token(), source))
                 elif rest == "collectors":
                     self._send(HTTPStatus.OK, service.collectors(tenant, self._token()))
+                elif rest == "status":
+                    self._send(HTTPStatus.OK, service.status(tenant, self._token()))
                 elif rest.startswith("detections/") and rest.count("/") == 1:
                     self._send(HTTPStatus.OK, service.one(tenant, self._token(), rest.split("/", 1)[1]))
                 else:
@@ -283,7 +304,10 @@ def make_handler(service: Service) -> type[BaseHTTPRequestHandler]:
                     raise Problem(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, f"body larger than {service.max_bytes} bytes")
                 body = self.rfile.read(length)
                 gzipped = self.headers.get("Content-Encoding", "").lower() == "gzip"
-                receipt = service.push(tenant, self._token(), self.headers.get("Idempotency-Key"), body, gzipped)
+                receipt = service.push(
+                    tenant, self._token(), self.headers.get("Idempotency-Key"), body, gzipped,
+                    agent=self.headers.get("X-A2VM-Agent", ""), connector=self.headers.get("X-A2VM-Connector", ""),
+                )  # fmt: skip
                 self._send(HTTPStatus.ACCEPTED, receipt)
             except Problem as p:
                 self._problem(p)

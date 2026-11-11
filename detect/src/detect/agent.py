@@ -376,13 +376,15 @@ def _push_or_spool(
     report: RunReport,
     transport=None,
     spooled: bool = False,
+    connector: str = "",
 ) -> None:
     source = document["source"]
     spool_file = cfg.spool / f"{source}.json"
     try:
         receipt = push(
-            cfg.service, cfg.tenant, token, document, cfg.collector, cfg.ca_file, transport, cfg.timeout_seconds
-        )
+            cfg.service, cfg.tenant, token, document, cfg.collector, cfg.ca_file, transport, cfg.timeout_seconds,
+            connector=connector,
+        )  # fmt: skip
         report.pushed.append(f"{source} -> {receipt['id']}{' (already received)' if receipt.get('duplicate') else ''}")
         spool_file.unlink(missing_ok=True)
     except IntakeError as exc:
@@ -442,5 +444,6 @@ def run(
                 report.errors.append(f"{connector.name}: detection of client {d.client_id!r}, not pushed")
                 continue
             path = write_detection(cfg.work / "detect" / cfg.tenant / f"{d.source}.json", d)
-            _push_or_spool(cfg, token, json.loads(path.read_text(encoding="utf-8")), report, transport)
+            document = json.loads(path.read_text(encoding="utf-8"))
+            _push_or_spool(cfg, token, document, report, transport, connector=connector.name)
     return report

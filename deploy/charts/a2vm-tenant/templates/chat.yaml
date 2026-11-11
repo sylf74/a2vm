@@ -92,6 +92,10 @@ spec:
             - --intel-url={{ .Values.intel.url }}
             - --intel-token-file=/secrets/intel-token
             {{- end }}
+            {{- if .Values.intake.enabled }}
+            - --detect-url={{ include "a2vm-tenant.intakeUrl" . }}
+            - --detect-token-file=/secrets/detect-read-token
+            {{- end }}
             - --timezone={{ $chat.timezone | default "Europe/Paris" }}
             - --port=8080
           ports:
@@ -138,6 +142,10 @@ spec:
               {{- if .Values.intel.url }}
               - key: intel-token
                 path: intel-token
+              {{- end }}
+              {{- if .Values.intake.enabled }}
+              - key: detect-read-token
+                path: detect-read-token
               {{- end }}
         - name: digests
           secret:
