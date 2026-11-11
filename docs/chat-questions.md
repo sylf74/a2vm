@@ -138,3 +138,4 @@ How to ask:
 | --- | --- |
 | Quels serveurs n'ont pas été vus depuis 30 jours ? | list_coverage has no filter on the last time seen |
 | Quel est le délai moyen de correction par priorité ? | the portal's dashboards, not the chat |
+| Quand aura lieu le prochain scan ? | the schedules of the collectors and of the scanners are not known to A2VM yet (backlog) |

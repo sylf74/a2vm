@@ -39,3 +39,4 @@ questions:
   - {q: "Un collecteur est-il muet ou en retard ?", tool: list_collectors, params: [], why: silent}
   - {q: "Quels serveurs n'ont pas été vus depuis 30 jours ?", missing: "list_coverage has no filter on the last time seen"}
   - {q: "Quel est le délai moyen de correction par priorité ?", missing: "the portal's dashboards, not the chat"}
+  - {q: "Quand aura lieu le prochain scan ?", missing: "the schedules of the collectors and of the scanners are not known to A2VM yet (backlog)"}
