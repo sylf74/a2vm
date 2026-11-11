@@ -2,6 +2,7 @@
 # parameters it should get. `why`: words of that tool's description that lead the model to it.
 # Checked by tests/test_v0234.py against the tool server's OpenAPI description; replayed by hand in
 # Open WebUI after each version. `missing`: no tool yet; the model must say so, not answer "none".
+# docs/chat-questions.md is generated from this file: python scripts/make_chat_guide.py --write (v0.23.9).
 questions:
   - {q: "Quelles CVE ont été publiées depuis hier, avec leur heure de découverte ?", tool: list_new_cves, params: [since], why: published}
   - {q: "Quelles nouvelles CVE critiques depuis lundi 9 h ?", tool: list_new_cves, params: [since, min_cvss], why: critical}

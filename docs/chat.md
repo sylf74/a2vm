@@ -3,7 +3,8 @@
 Since v0.15.0 the analysts of a tenant ask in plain language for a CVE, an asset or the decisions
 of a level, and get the answer from the tenant's latest run (HLD §8, LLD triage-prioritization
 §16). Everything runs in the tenant's namespace except the model, which stays on the tenant's
-approved LLM endpoints (one VM or several):
+approved LLM endpoints (one VM or several). The questions the analysts can ask, by theme:
+[`chat-questions.md`](chat-questions.md).
 
 ```mermaid
 flowchart LR

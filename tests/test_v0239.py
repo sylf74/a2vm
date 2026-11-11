@@ -147,3 +147,23 @@ def test_wiring() -> None:
     assert "--detect-token-file=/secrets/detect-read-token" in chat and "key: detect-read-token" in chat
     schema = json.loads((ROOT / "a2vm" / "src" / "a2vm" / "schemas" / "triage.schema.json").read_text())
     assert "a2vm_version" in schema["properties"]
+
+
+def test_the_guide_of_the_questions_is_up_to_date() -> None:
+    import subprocess
+    import sys
+
+    script = ROOT / "scripts" / "make_chat_guide.py"
+    done = subprocess.run([sys.executable, str(script), "--check"], capture_output=True, text=True)
+    assert done.returncode == 0, done.stdout
+    guide = (ROOT / "docs" / "chat-questions.md").read_text(encoding="utf-8")
+    assert "Quelle version d'A2VM tourne sur mon tenant ?" in guide and "## Not answered yet" in guide
+    import runpy
+
+    import yaml
+
+    themes = runpy.run_path(str(script))["THEMES"]
+    described = {tool for _, tools in themes for tool in tools}
+    asked = {q["tool"] for q in yaml.safe_load((ROOT / "tests" / "chat-questions.yaml").read_text())["questions"]
+             if "tool" in q}  # fmt: skip
+    assert asked <= described, asked - described  # each tool asked has its line in the guide
