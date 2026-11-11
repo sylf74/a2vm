@@ -23,6 +23,10 @@ class Policy:
     epss_attend_threshold: float | None = 0.1
     unknown_inputs: str = "conservative"  # conservative | optimistic
     fuzzy_match_without_llm: str = "review"  # review | drop
+    # Which rows ask an analyst for a review (v0.23.7): `decisive`, only those whose uncertain inputs
+    # (an estimated SSVC input, an assumed exposure or mission) could change the decision; `all`,
+    # every row with an uncertain input (before v0.23.7). The reasons stay in the row either way.
+    review: str = "decisive"
 
     @classmethod
     def from_dict(cls, data: dict | None) -> Policy:
@@ -35,12 +39,15 @@ class Policy:
             epss_attend_threshold=esc.get("epss_attend_threshold", 0.1),
             unknown_inputs=data.get("unknown_inputs", "conservative"),
             fuzzy_match_without_llm=data.get("fuzzy_match_without_llm", "review"),
+            review=data.get("review", "decisive"),
         )
         for k, v in p.decision_mapping.items():
             if v not in LEVELS:
                 raise ValueError(f"policy.decision_mapping[{k!r}] must be one of {LEVELS}, got {v!r}")
         if p.unknown_inputs not in {"conservative", "optimistic"}:
             raise ValueError("policy.unknown_inputs must be 'conservative' or 'optimistic'")
+        if p.review not in {"decisive", "all"}:
+            raise ValueError("policy.review must be 'decisive' or 'all'")
         if p.fuzzy_match_without_llm not in {"review", "drop"}:
             raise ValueError("policy.fuzzy_match_without_llm must be 'review' or 'drop'")
         return p

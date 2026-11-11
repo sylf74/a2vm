@@ -3,5 +3,5 @@ name: a2vm-portal
 description: An A2VM portal on Kubernetes - the reporting database (CloudNativePG) and Grafana with the A2VM dashboards provisioned (HLD D13, v0.20.3)
 type: application
 # Same version as the packages: the release job checks it.
-version: 0.23.6
-appVersion: "0.23.6"
+version: 0.23.8
+appVersion: "0.23.8"

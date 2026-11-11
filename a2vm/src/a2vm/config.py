@@ -91,6 +91,19 @@ class LlmSettings:
     max_calls: int = 300  # LLM calls per client run; beyond, templates and defaults (flagged)
     max_consecutive_errors: int = 3  # then the LLM is considered down for the rest of the run
     parallel: int = 4  # concurrent LLM requests (vLLM batches them)
+    # A reasoning model's thinking (Qwen3, v0.23.7): "off" or "on" sends chat_template_kwargs
+    # enable_thinking to vLLM; "" sends nothing (other servers may refuse the field). Off, a
+    # structured answer comes without the long reasoning before it: many times faster.
+    thinking: str = ""
+    # The model's family and the level of reasoning asked (v0.23.8, a2vm/llm/families.py): family
+    # qwen3 | gemma | gpt-oss | mistral | generic, empty to find it from the model's name; reasoning
+    # off | low | medium | high, empty for the model's default (or `thinking` above).
+    family: str = ""
+    reasoning: str = ""
+    # Answers kept from one run to the next (v0.23.7): the same question (model, prompt, schema)
+    # is not asked again. A JSON file on a kept volume; "" keeps nothing.
+    cache_file: str = ""
+    cache_days: int = 30  # an answer not used for this many days is forgotten
 
     @property
     def api_key(self) -> str | None:
@@ -118,6 +131,10 @@ _ENV_OVERRIDES = {
     "LLM_BASE_URL": ("llm", "base_url"),
     "LLM_MODEL": ("llm", "model"),
     "LLM_MAX_CALLS": ("llm", "max_calls"),
+    "LLM_THINKING": ("llm", "thinking"),
+    "LLM_FAMILY": ("llm", "family"),
+    "LLM_REASONING": ("llm", "reasoning"),
+    "LLM_CACHE_FILE": ("llm", "cache_file"),
     "CACHE_DIR": ("sources", "cache_dir"),
     "CVE_RECORD_URL": ("sources", "cve_record_url"),
     "GTI_ENABLED": ("sources", "gti_enabled"),
@@ -202,7 +219,12 @@ def describe_llm(settings: Settings) -> str:
     if not llm.enabled:
         return "LLM: disabled"
     key = "set" if llm.api_key else "not set"
-    return f"LLM: enabled, base_url={', '.join(llm.base_urls)}, model={llm.model}, api key {key}"
+    from .llm.families import family_of, reasoning_of
+
+    level = reasoning_of(llm.reasoning, llm.thinking)
+    extra = f", family {family_of(llm.model, llm.family)}" + (f", reasoning {level}" if level else "")
+    extra += f", cache {llm.cache_file}" if llm.cache_file else ""
+    return f"LLM: enabled, base_url={', '.join(llm.base_urls)}, model={llm.model}, api key {key}{extra}"
 
 
 def describe_intel(settings: Settings) -> str:

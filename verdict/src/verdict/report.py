@@ -73,6 +73,7 @@ def write_json(run: TriageRun, path: Path) -> None:
         "generated_at": run.generated_at,
         "cve_count": run.cve_count,
         "llm_model": run.llm_model,
+        **({"llm_usage": run.llm_usage} if run.llm_usage else {}),
         "rows": [r.to_dict() for r in run.rows],
         "not_affected": [asdict(n) for n in run.not_affected],
         "errors": run.errors,

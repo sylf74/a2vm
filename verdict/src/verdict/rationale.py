@@ -73,7 +73,8 @@ def rationale_facts(row: TriageRow, affected_assets: list[str] | None = None) ->
         "automatable": row.automatable.value,
         "technical_impact": row.technical_impact.value,
         "mission_impact": MWI_EN[row.mission_wellbeing.value],
-        "epss": None if row.epss is None else round(row.epss, 3),
+        # 2 decimals: the daily drift of EPSS does not make a new question for the LLM (v0.23.7)
+        "epss": None if row.epss is None else round(row.epss, 2),
         "cvss": None if not row.cvss else {"score": row.cvss.score, "vector": row.cvss.vector},
         "cwe": row.cwes,
         "policy_reasons": row.reasons,

@@ -5,6 +5,58 @@ analyst and, under **Upgrade**, what a tenant must do when it moves to that tag 
 `A2VM_REF` in its `.gitlab-ci.yml`). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
 §11) and the LLDs. A release adds its entry here in the same merge request (CLAUDE.md, Releasing).
 
+## v0.23.8 — 2026-11-11
+
+The tenant chooses its LLM. A client may refuse a model of some origin: each family takes the
+level of reasoning its own way, and A2VM now sends it that way.
+
+- **`llm.family`** (`A2VM_LLM_FAMILY`): qwen3, gemma, gpt-oss, mistral or generic; empty, it is
+  found from the model's name (`openai/gpt-oss-20b` -> gpt-oss).
+- **`llm.reasoning`** (`A2VM_LLM_REASONING`): off, low, medium or high, sent as
+  `chat_template_kwargs.enable_thinking` for Qwen3 and Gemma 4, `reasoning_effort` for gpt-oss
+  (low at least) and Mistral Small 4 (none or high), nothing for the others. `A2VM_LLM_THINKING`
+  (v0.23.7) still works alone; `A2VM_LLM_REASONING` wins when both are set.
+- **`docs/llm.md`**: the settings, the models known to work (gpt-oss-20b on a 16 GiB GPU,
+  gpt-oss-120b, Mistral Small 4 and Gemma 4 on a DGX Spark), their vLLM flags for the chat's tools,
+  and how to change the model and check the result.
+- The job log and the run's `llm_usage` name the family and the level.
+- Roadmap: the libraries in memory and the SBOMs move to v0.23.9.
+
+**Upgrade**:
+
+1. Move `ref` and `A2VM_REF` of the tenants to `v0.23.8`.
+2. To change the model: `A2VM_LLM_MODEL` (and `A2VM_LLM_BASE_URL`), `A2VM_LLM_REASONING=off` on
+   the group or the tenant project, then push the tenant project (`docs/llm.md` §3).
+
+## v0.23.7 — 2026-11-11
+
+A lighter triage. In the lab the daily triage kept the GPU busy for about 3 hours, for decisions
+mostly TRACK and 15 000 rows asking for a review.
+
+- **Thinking off** (`llm.thinking`, CI/CD variable `A2VM_LLM_THINKING`): `off` asks vLLM to answer
+  without the reasoning a model such as Qwen3 writes before its JSON; `on` asks for it; empty sends
+  nothing, as before (other servers may refuse the field).
+- **Answers kept from one run to the next** (`llm.cache_file`, on Kubernetes `/data/llm-cache.json`
+  on the working volume, on by default): a question asked yesterday (same model, prompts, schema) is
+  not asked again; an answer not used for 30 days is forgotten. The EPSS of the rationale facts is
+  rounded to 2 decimals, so that its daily drift does not make a new question.
+- **Review where it matters** (policy `review: decisive`, the default): a row asks an analyst only
+  when the values its uncertain inputs could take (estimated automatable or technical impact,
+  exploitation without assessment, assumed exposure or mission) give another decision. The reasons
+  stay in the row as notes. `review: all` keeps the earlier rule.
+- **What the LLM cost**: `llm_usage` in the run (questions, answers from the cache, tokens, seconds,
+  thinking), in the chat's run summary and in the job log
+  (`LLM: <n> questions, <m> from the cache, …`). `docs/operations.md` §2 says how to read it.
+- Roadmap: the libraries in memory and the SBOMs move to v0.23.8.
+
+**Upgrade**:
+
+1. Move `ref` and `A2VM_REF` of the tenants to `v0.23.7`.
+2. A reasoning model served by vLLM (Qwen3): set `A2VM_LLM_THINKING` to `off` on the group (or the
+   tenant project), then push the tenant project so that `deploy-k8s` passes it to the cluster.
+3. The first run fills the cache; from the second, `from_cache` should be close to `questions`.
+   The number of rows to review drops: those left are the ones whose doubt changes the decision.
+
 ## v0.23.6 — 2026-11-10
 
 D20: the appliances and network devices, by their firmware.

@@ -447,3 +447,5 @@ class TriageRun:
     # Every asset of the run, with or without a finding (v0.18.1): who scanned it and when.
     assets: list[dict[str, Any]] = field(default_factory=list)
     sla: dict[str, Any] = field(default_factory=dict)  # the client's SLA in force and its history (v0.21.0)
+    # What the LLM cost in this run (v0.23.7): questions, answers from the cache, tokens, seconds.
+    llm_usage: dict[str, Any] = field(default_factory=dict)
