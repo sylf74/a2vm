@@ -167,10 +167,11 @@ print('SSH targets:', len(tf.targets), '; openvas:', tf.openvas.gmp if tf.openva
 "
 
 step "systemd units"
-{
+# unit DESCRIPTION NAME COMMAND [PRE]: a oneshot service that runs the agent in the image.
+unit() {
   cat <<EOF
 [Unit]
-Description=A2VM collector, connector %i
+Description=$1
 Wants=network-online.target docker.service
 After=network-online.target docker.service
 
@@ -178,13 +179,34 @@ After=network-online.target docker.service
 Type=oneshot
 SuccessExitStatus=3
 TimeoutStartSec=6h
-ExecStart=/usr/bin/docker run --rm --name a2vm-collector-%i --user 10001:10001 ${GROUP_ADD}\\
 EOF
+  [ -z "${4:-}" ] || printf 'ExecStartPre=%s\n' "$4"
+  printf 'ExecStart=/usr/bin/docker run --rm --name %s --user 10001:10001 %s\\\n' "$2" "$GROUP_ADD"
   [ -z "$ENV_FILE" ] || printf '%s\n' "$ENV_FILE"
   printf '  -v %s:%s:ro \\\n  -v /var/lib/a2vm:/var/lib/a2vm \\\n  -v /var/lib/a2vm-ssh:/home/a2vm/.ssh \\\n' "$C" "$C"
   [ -z "$SOCKET_MOUNT" ] || printf '%s\n' "$SOCKET_MOUNT"
-  printf '  %s \\\n  detect agent run --config %s/collector.yaml --connector %%i\n' "$IMAGE" "$C"
-} > /etc/systemd/system/a2vm-collector@.service
+  [ -z "${4:-}" ] || printf '  -v /run/a2vm-collector:/run/a2vm-collector:ro \\\n'
+  printf '  %s \\\n  %s\n' "$IMAGE" "$3"
+}
+unit "A2VM collector, connector %i" "a2vm-collector-%i" \
+  "detect agent run --config $C/collector.yaml --connector %i" > /etc/systemd/system/a2vm-collector@.service
+# The poll (v0.23.10): every 5 minutes, the timers of the connectors reported (the next scans) and
+# the actions a validator confirmed carried out. It only connects out, like the push.
+unit "A2VM collector, poll" "a2vm-collector-poll" \
+  "detect agent poll --config $C/collector.yaml --timers /run/a2vm-collector/timers.json" \
+  "/bin/sh -c 'mkdir -p /run/a2vm-collector && systemctl list-timers \"a2vm-collector@*\" --all -o json > /run/a2vm-collector/timers.json'" \
+  > /etc/systemd/system/a2vm-collector-poll.service
+cat > /etc/systemd/system/a2vm-collector-poll.timer <<EOF
+[Unit]
+Description=A2VM collector, poll every 5 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=timers.target
+EOF
 cat > /etc/systemd/system/a2vm-collector@.timer <<EOF
 [Unit]
 Description=A2VM collector, connector %i, daily
@@ -199,6 +221,7 @@ WantedBy=timers.target
 EOF
 systemctl daemon-reload
 for c in $CONNECTORS; do systemctl enable --now "a2vm-collector@$c.timer"; done
+systemctl enable --now a2vm-collector-poll.timer
 systemctl list-timers 'a2vm-collector@*' --no-pager
 
 echo

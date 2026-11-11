@@ -65,6 +65,15 @@ def cmd_serve(args: argparse.Namespace) -> int:
         print(exc, file=sys.stderr)
         return 2
     store = PgWatchStore(db, args.keep_days) if db else WatchStore(args.store, args.keep_days)
+    from a2vm.actions import open_actions
+    from a2vm.audit import open_audit
+
+    try:  # the journal and the actions (v0.23.10), in the tenant's database when there is one
+        audit = open_audit("via", None if db else args.store)
+        actions = open_actions() if db else None
+    except DatabaseError as exc:
+        print(f"journal: {exc}", file=sys.stderr)
+        return 2
     review_httpd = None
     if args.review_port:
         from a2vm.service import serve as plain_serve
@@ -82,6 +91,8 @@ def cmd_serve(args: argparse.Namespace) -> int:
                 args.review_url,
                 contacts=args.review_contacts,
                 profile=args.review_profile,
+                audit=audit,
+                actions=actions,
             )
         except (OSError, ValueError) as exc:
             print(f"review page: {exc}", file=sys.stderr)

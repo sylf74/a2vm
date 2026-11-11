@@ -96,8 +96,17 @@ spec:
             - --detect-url={{ include "a2vm-tenant.intakeUrl" . }}
             - --detect-token-file=/secrets/detect-read-token
             {{- end }}
+            {{- if and .Values.watch.enabled .Values.watch.review.enabled }}
+            - --review-url={{ printf "https://%s" .Values.watch.review.ingress.host }}
+            {{- end }}
+            - --daily-schedule={{ .Values.daily.schedule }}
+            - --daily-timezone={{ .Values.daily.timeZone | default "UTC" }}
             - --timezone={{ $chat.timezone | default "Europe/Paris" }}
             - --port=8080
+          {{- if .Values.database.enabled }}
+          env:   # the audit journal and the actions (v0.23.10)
+            {{- include "a2vm-tenant.dbEnv" . | nindent 12 }}
+          {{- end }}
           ports:
             - name: http
               containerPort: 8080
@@ -119,6 +128,7 @@ spec:
             - name: digests
               mountPath: /tools-secret
               readOnly: true
+            {{- include "a2vm-tenant.dbMounts" . | nindent 12 }}
           {{- with $chat.tools.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
@@ -151,6 +161,7 @@ spec:
           secret:
             secretName: {{ $chat.toolsDigestsSecret }}
             defaultMode: 0440
+        {{- include "a2vm-tenant.dbVolumes" . | nindent 8 }}
 ---
 apiVersion: v1
 kind: Service
@@ -265,6 +276,8 @@ spec:
             - {name: WEBUI_ADMIN_NAME, value: "A2VM admin"}
             # Configuration from these values only: what is changed in the admin panel does not stay.
             - {name: ENABLE_PERSISTENT_CONFIG, value: "false"}
+            # Who asks: the user's name, id, e-mail and role to the tool server, for the audit journal (v0.23.10).
+            - {name: ENABLE_FORWARD_USER_INFO_HEADERS, value: "true"}
             - {name: ENABLE_SIGNUP, value: "false"}
             - {name: DEFAULT_USER_ROLE, value: pending}
             - {name: JWT_EXPIRES_IN, value: {{ printf "%vh" $chat.sessionHours | quote }}}
@@ -542,6 +555,22 @@ spec:
               {{- include "a2vm-tenant.selector" (dict "root" . "component" "dispatch") | nindent 14 }}
       ports:
         - {port: 8080, protocol: TCP}
+    {{- end }}
+    {{- if .Values.intake.enabled }}
+    - to:   # the detection service, for the collectors (v0.23.9) and the actions (v0.23.10)
+        - podSelector:
+            matchLabels:
+              {{- include "a2vm-tenant.selector" (dict "root" . "component" "detect") | nindent 14 }}
+      ports:
+        - {port: 8080, protocol: TCP}
+    {{- end }}
+    {{- if .Values.database.enabled }}
+    - to:   # the tenant's database: the audit journal and the actions (v0.23.10)
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: {{ include "a2vm-tenant.dbName" . }}
+      ports:
+        - {port: 5432, protocol: TCP}
     {{- end }}
     {{- if .Values.intel.url }}
     - to:   # the shared intelligence service, for the radar (v0.23.2), in the watch team's namespace

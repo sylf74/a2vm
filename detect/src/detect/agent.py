@@ -64,8 +64,10 @@ to its targets and scanners, and to the service.
 
 from __future__ import annotations
 
+import datetime as dt
 import json
 import os
+import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -446,4 +448,82 @@ def run(
             path = write_detection(cfg.work / "detect" / cfg.tenant / f"{d.source}.json", d)
             document = json.loads(path.read_text(encoding="utf-8"))
             _push_or_spool(cfg, token, document, report, transport, connector=connector.name)
+    return report
+
+
+# -- the poll (v0.23.10) ---------------------------------------------------------------------------
+TIMER_UNIT = re.compile(r"^a2vm-collector@(?P<name>[A-Za-z0-9._-]{1,64})\.timer$")
+
+
+def _usec(value: Any) -> str:
+    """systemd's microseconds since the epoch (or a date it printed) as an ISO time, else ""."""
+    if isinstance(value, (int, float)) and value > 0:
+        return dt.datetime.fromtimestamp(value / 1_000_000, dt.UTC).isoformat(timespec="seconds")
+    if isinstance(value, str) and value.strip() and value.strip().lower() not in ("n/a", "-"):
+        return value.strip()[:40]
+    return ""
+
+
+def read_timers(path: str | Path | None) -> list[dict[str, str]]:
+    """The connectors' timers from `systemctl list-timers 'a2vm-collector@*' --all -o json`, written
+    on the host by the poll unit before the agent starts; [] when the file is missing or unreadable."""
+    if not path:
+        return []
+    try:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    out = []
+    for t in data if isinstance(data, list) else []:
+        m = TIMER_UNIT.match(str(t.get("unit", ""))) if isinstance(t, dict) else None
+        if m:
+            out.append({"connector": m["name"], "next_run": _usec(t.get("next")), "last_run": _usec(t.get("last"))})
+    return out
+
+
+def poll(
+    cfg: AgentConfig,
+    timers_file: str | Path | None = None,
+    transport=None,
+    log: Callable[[str], None] = print,
+    rounds: int = 3,
+) -> RunReport:
+    """Report the timers, take the requests confirmed for this collector, run them, say how they
+    went (`detect agent poll`, every few minutes by its own timer)."""
+    from .intake.client import poll as ask
+
+    report = RunReport()
+    token = cfg.token()
+    body: dict[str, Any] = {"timers": read_timers(timers_file)}
+    for _ in range(rounds):
+        try:
+            answer = ask(cfg.service, cfg.tenant, token, body, cfg.ca_file, transport, min(cfg.timeout_seconds, 60))
+        except IntakeError as exc:
+            report.errors.append(str(exc))
+            return report
+        requests = [r for r in answer.get("actions") or [] if isinstance(r, dict)]
+        if not requests:
+            return report
+        results = []
+        for r in requests:
+            name = str(r.get("connector", ""))
+            if r.get("action") != "run-connector" or name not in {c.name for c in cfg.connectors}:
+                results.append({"id": r.get("id"), "outcome": "failed",
+                                "detail": f"no connector named {name!r} on this collector"})  # fmt: skip
+                continue
+            log(f"request {r.get('id')}: run the connector {name}")
+            try:
+                ran = run(cfg, name, transport=transport, log=log)
+            except AgentError as exc:
+                results.append({"id": r.get("id"), "outcome": "failed", "detail": str(exc)[:500]})
+                continue
+            report.pushed.extend(ran.pushed)
+            report.spooled.extend(ran.spooled)
+            report.errors.extend(ran.errors)
+            ok = ran.status == 0
+            detail = f"pushed {', '.join(ran.pushed) or 'nothing'}" + (
+                f"; {'; '.join(ran.errors)[:400]}" if ran.errors else ""
+            )
+            results.append({"id": r.get("id"), "outcome": "done" if ok else "failed", "detail": detail[:900]})
+        body = {"results": results}
     return report

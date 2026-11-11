@@ -151,7 +151,9 @@ kubectl -n $NS logs deploy/a2vm-lab-chat -c retention --tail=5
 | "La veille tourne-t-elle ?", "quelles sources sont en erreur ?" (v0.23.4) | `get_watch_status`: the watch's last passage, the sources failing in a row, the alerts of the last 24 hours (watch on Kubernetes) |
 | "Quelles applications n'ont pas encore de CPE validé ?" (v0.23.4) | `list_applications`: the applications table (`docs/sentinelone.md` §4) by state, with the hosts of each |
 | "Quelle version d'A2VM tourne ?", "le run de ce matin est-il fini, avec quel LLM ?" (v0.23.9) | `get_platform_status`: the version of each service and of the latest run, its LLM and what it cost, the collectors late or refused |
-| "Quels collecteurs ?", "quand OpenVAS a-t-il remonté ?", "quelle version sur le collecteur ?" (v0.23.9) | `list_collectors`: each collector and source, its last push, the age of its data, late or refused, the connector and the agent's version (needs `intake.enabled`) |
+| "Quels collecteurs ?", "quand OpenVAS a-t-il remonté ?", "quelle version sur le collecteur ?" (v0.23.9) | `list_collectors`: each collector and source, its last push, the age of its data, late or refused, the connector and the agent's version (needs `intake.enabled`); since v0.23.10 the next and last run of each connector |
+| "Lance une synchro CMDB" (v0.23.10) | `request_connector_run`: a request a validator confirms on the review page (« Actions »), run by the collector at its next poll; `list_actions` tells when it is done (needs the tenant's database, LLD triage §16.10) |
+| "Qui a lancé la synchro ?", "qui a validé l'alerte 42 ?" (v0.23.10) | `get_audit`: the audit journal, with who did what, when, through which service |
 
 The questions the chat must answer, with the tool of each, are in `tests/chat-questions.yaml` (v0.23.4):
 a test checks them against the tools' description; replay them in Open WebUI after an upgrade. When

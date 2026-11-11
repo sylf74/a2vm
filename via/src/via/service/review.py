@@ -34,6 +34,8 @@ from typing import Any
 from urllib.parse import parse_qs, quote, unquote, urlsplit
 
 from a2vm import applications as apps
+from a2vm.actions import ActionError, ActionStore
+from a2vm.audit import AuditLog
 from via.alert import journal
 from via.alert.contacts import Contact, ContactsError, load_contacts
 from via.alert.fiche import markdown_html
@@ -128,6 +130,8 @@ class Review:
         public_url: str,
         contacts: str | Path | None = None,
         profile: str | Path | None = None,
+        audit: AuditLog | None = None,
+        actions: ActionStore | None = None,
     ):
         if len(key) < 32:
             raise ValueError("review key: 32 bytes at least")
@@ -138,6 +142,8 @@ class Review:
         self.key = key
         self.readers = readers
         self.validators = validators
+        self.audit = audit or AuditLog("via")
+        self.actions = actions  # v0.23.10: the requests the chat prepared, confirmed here
         self.contacts_path = Path(contacts) if contacts else None
         self.profile_path = Path(profile) if profile else None
         u = urlsplit(public_url)
@@ -225,6 +231,7 @@ class Review:
         text = self._check_text(a, text)
         self.store.put_edit(self.tenant, a["id"], text, self._event("edited", a, user))
         log.info("review tenant=%s alert=%s edited by=%s", self.tenant, a["id"], user)
+        self.audit.write(self.tenant, user, "user", "alert:edited", a["id"])
 
     def save_translation(self, a: dict[str, Any], user: str, lang: str, text: str) -> None:
         """A translation corrected (or written) by a validator, for the current reference."""
@@ -235,6 +242,7 @@ class Review:
         event = self._event("translation-edited", a, user, language=lang)
         self.store.put_translation(self.tenant, a["id"], lang, text, meta, event)
         log.info("review tenant=%s alert=%s translation %s edited by=%s", self.tenant, a["id"], lang, user)
+        self.audit.write(self.tenant, user, "user", "alert:translation-edited", a["id"], {"language": lang})
 
     def prepare(self, a: dict[str, Any], user: str, emails: list[str]) -> None:
         """The recipients chosen; the languages of the translations they need (English: none)."""
@@ -252,6 +260,8 @@ class Review:
         self.store.add_events(self.tenant, [event])
         log.info("review tenant=%s alert=%s recipients %d, languages %s by=%s", self.tenant, a["id"], len(chosen),
                  languages or "en", user)  # fmt: skip
+        self.audit.write(self.tenant, user, "user", "alert:recipients-chosen", a["id"],
+                         {"to": [c.email for c in chosen]})  # fmt: skip
 
     def act(self, a: dict[str, Any], user: str, action: str) -> None:
         if action == "validate":
@@ -266,6 +276,8 @@ class Review:
             event = self._event("dismissed", a, user)
         self.store.add_events(self.tenant, [event])
         log.info("review tenant=%s alert=%s %s by=%s", self.tenant, a["id"], event["event"], user)
+        self.audit.write(self.tenant, user, "user", f"alert:{event['event']}", a["id"],
+                         {"to": (a.get("request") or {}).get("to")} if action == "validate" else {})  # fmt: skip
 
     # -- pages ---------------------------------------------------------------------------------
     def page(self, title: str, body: str, user: str) -> str:
@@ -274,7 +286,8 @@ class Review:
             '<meta name="viewport" content="width=device-width,initial-scale=1">'
             f"<title>{html.escape(title)}</title><style>{STYLE}</style></head><body>"
             f'<header><a href="/">A2VM alerts — {html.escape(self.tenant)}</a>'
-            f'<span><a href="/applications">Applications</a> · {html.escape(user)}</span></header>'
+            f'<span><a href="/applications">Applications</a> · <a href="/actions">Actions</a> · '
+            f"{html.escape(user)}</span></header>"
             f"<main>{body}</main></body></html>"
         )
 
@@ -296,6 +309,7 @@ class Review:
         except KeyError as exc:
             raise Denied(HTTPStatus.NOT_FOUND, "Unknown application (no longer in the table).") from exc
         log.info("application tenant=%s key=%r %s by=%s cpe=%s", self.tenant, key, row.state, user, row.cpe)
+        self.audit.write(self.tenant, user, "user", f"application:{action}", key, {"cpe": row.cpe, "note": note})
 
     def applications_page(self, user: str, validator: bool, state: str, error: str = "") -> str:
         table = self.store.applications(self.tenant)
@@ -355,6 +369,61 @@ class Review:
         )
         err = f'<p class="error">{html.escape(error)}</p>' if error else ""
         return self.page("Applications", f"<h2>Applications</h2>{intro}<nav>{nav}</nav>{err}<p></p>{listing}", user)
+
+    # -- the actions the chat prepared (v0.23.10) --------------------------------------------------
+    def decide_action(self, user: str, form: dict[str, list[str]], headers: Any) -> None:
+        """A validator confirms or cancels a request the chat prepared; journaled with who."""
+        if self.actions is None:
+            raise Denied(HTTPStatus.SERVICE_UNAVAILABLE, "Actions need the tenant's database.")
+        rid = (form.get("id") or [""])[0]
+        self.check_form(headers, user, f"actions:{rid}", form)
+        decision = (form.get("decision") or [""])[0]
+        if decision not in ("confirm", "cancel"):
+            raise Denied(HTTPStatus.BAD_REQUEST, "Confirm or cancel.")
+        try:
+            r = self.actions.decide(self.tenant, rid, user, decision == "confirm")
+        except ActionError as exc:
+            self.audit.write(self.tenant, user, "user", f"action:{decision}", rid, outcome="refused", detail=str(exc))
+            raise ValueError(str(exc)) from exc
+        what = {"connector": r["connector"], "collector": r["collector"], "asked_by": r["asked_by"]}
+        self.audit.write(self.tenant, user, "user", f"action:{r['state']}", rid, what)
+
+    def actions_page(self, user: str, validator: bool, error: str = "") -> str:
+        intro = (
+            '<p class="note">The actions the chat prepared. The chat never runs an action itself: a validator '
+            "confirms it here, then the collector carries it out at its next poll (a few minutes). A request not "
+            "confirmed within the hour expires. Who asked, who confirmed and how it went are in the journal.</p>"
+        )
+        if self.actions is None:
+            return self.page("Actions", f"<h2>Actions</h2>{intro}<p class='error'>Actions need the tenant's "
+                             "database.</p>", user)  # fmt: skip
+        lines = []
+        for r in self.actions.list(self.tenant, limit=100):
+            form = ""
+            if validator and r["state"] == "proposed":
+                tok = self.token(user, f"actions:{r['id']}")
+                form = (
+                    '<form method="post" action="/actions">'
+                    f'<input type="hidden" name="token" value="{tok}">'
+                    f'<input type="hidden" name="id" value="{html.escape(r["id"])}">'
+                    '<button name="decision" value="confirm" class="primary">Confirm</button>'
+                    '<button name="decision" value="cancel">Cancel</button></form>'
+                )
+            decided = f"{html.escape(r['decided_by'])} {html.escape(r['decided_at'][:16])}" if r["decided_by"] else ""
+            lines.append(
+                f"<tr><td>{html.escape(r['id'])}</td><td>{html.escape(r['what'])}</td>"
+                f"<td>{html.escape(r['asked_by'])}<br><span class='note'>{html.escape(r['asked_at'][:16])}</span></td>"
+                f'<td><span class="badge {html.escape(r["state"])}">{html.escape(r["state"])}</span></td>'
+                f"<td>{decided}</td><td>{html.escape(r['detail'])}</td><td>{form}</td></tr>"
+            )
+        listing = (
+            '<table class="list"><tr><th>Request</th><th>Action</th><th>Asked by</th><th>State</th>'
+            "<th>Decided by</th><th>Outcome</th><th></th></tr>" + "".join(lines) + "</table>"
+            if lines
+            else '<p class="note">No request.</p>'
+        )
+        err = f'<p class="error">{html.escape(error)}</p>' if error else ""
+        return self.page("Actions", f"<h2>Actions</h2>{intro}{err}{listing}", user)
 
     def list_page(self, user: str, status: str) -> str:
         items = self.store.alerts(self.tenant)
@@ -568,6 +637,23 @@ def make_handler(review: Review) -> type[BaseHTTPRequestHandler]:
                 return
             self._send(HTTPStatus.SEE_OTHER, location=f"/applications?state={quote(state)}")
 
+        def _post_action(self, user: str, validator: bool) -> None:
+            if not validator:
+                raise Denied(HTTPStatus.FORBIDDEN, "Action for the validators only.")
+            try:
+                length = int(self.headers.get("Content-Length", ""))
+            except ValueError as exc:
+                raise Denied(HTTPStatus.LENGTH_REQUIRED, "Form without a length.") from exc
+            if not 0 <= length <= 4096:
+                raise Denied(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "Form too long.")
+            form = parse_qs(self.rfile.read(length).decode("utf-8", "replace"), keep_blank_values=True)
+            try:
+                review.decide_action(user, form, self.headers)
+            except ValueError as exc:
+                self._send(HTTPStatus.CONFLICT, review.actions_page(user, validator, str(exc)))
+                return
+            self._send(HTTPStatus.SEE_OTHER, location="/actions")
+
         def _parts(self) -> tuple[list[str], dict[str, str]]:
             url = urlsplit(self.path)
             query = {k: v[0] for k, v in parse_qs(url.query).items()}
@@ -583,6 +669,8 @@ def make_handler(review: Review) -> type[BaseHTTPRequestHandler]:
                 parts, query = self._parts()
                 if not parts:
                     self._send(HTTPStatus.OK, review.list_page(user, query.get("status", "todo")))
+                elif parts == ["actions"]:
+                    self._send(HTTPStatus.OK, review.actions_page(user, validator))
                 elif parts == ["applications"]:
                     state = query.get("state", "proposed")
                     if state not in (*apps.STATES, "all"):
@@ -612,6 +700,9 @@ def make_handler(review: Review) -> type[BaseHTTPRequestHandler]:
                 parts, query = self._parts()
                 if parts == ["applications"]:
                     self._post_application(user, validator, query.get("state", "proposed"))
+                    return
+                if parts == ["actions"]:
+                    self._post_action(user, validator)
                     return
                 translation = len(parts) == 5 and parts[2] == "translations" and parts[4] == "edit"
                 simple = len(parts) == 3 and parts[2] in ("edit", "prepare", "validate", "dismiss")

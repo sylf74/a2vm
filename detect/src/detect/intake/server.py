@@ -26,6 +26,8 @@ from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 from a2vm import __version__
+from a2vm.actions import ActionStore
+from a2vm.audit import AuditLog
 from a2vm.io import ExchangeError, validate_detection
 
 from .registry import SOURCE, Collector, Registry
@@ -47,10 +49,21 @@ class Problem(Exception):
 class Service:
     """The service's logic, free of HTTP (tested directly)."""
 
-    def __init__(self, registry: Registry, store: FileStore, max_bytes: int = 200 * 1024 * 1024):
+    def __init__(
+        self,
+        registry: Registry,
+        store: FileStore,
+        max_bytes: int = 200 * 1024 * 1024,
+        audit: AuditLog | None = None,
+        actions: ActionStore | None = None,
+    ):
         self.registry = registry
         self.store = store
         self.max_bytes = max_bytes
+        self.audit = audit or AuditLog("detect")
+        self.actions = actions  # v0.23.10: the requests the collectors carry out (with the database)
+        # The timers of each collector's connectors, as its last poll reported them (v0.23.10).
+        self.schedules: dict[str, dict[str, Any]] = {}
         # Last refusal per collector and source ("*" when the source is not known yet), cleared by an
         # accepted push of that source; in memory: a restart forgets them, the log keeps them.
         self.last_errors: dict[tuple[str, str], str] = {}
@@ -119,6 +132,8 @@ class Service:
         self.last_errors.pop((collector.id, receipt.source), None)
         self.last_errors.pop((collector.id, "*"), None)
         self._seen(collector.id, receipt.source, agent, connector, now)
+        self.audit.write(tenant, collector.id, "collector", "push", receipt.source,
+                         {"connector": connector, "id": receipt.id, "agent": agent}, at=now)  # fmt: skip
         log.info(
             "push tenant=%s collector=%s source=%s id=%s duplicate=%s received=%d bytes document=%d bytes seconds=%.1f",
             tenant,
@@ -219,8 +234,45 @@ class Service:
                 if error:
                     entry["last_error"] = error
                 sources.append(entry)
-            out.append({"id": c.id, "description": c.description, "sources": sources})
+            entry = {"id": c.id, "description": c.description, "sources": sources}
+            if c.id in self.schedules:  # v0.23.10: the next run of each connector
+                entry["timers"] = self.schedules[c.id]["timers"]
+                entry["timers_reported_at"] = self.schedules[c.id]["reported_at"]
+            out.append(entry)
         return out
+
+    def poll(self, tenant: str, token: str | None, body: dict[str, Any], now: dt.datetime | None = None) -> dict:
+        """A collector's poll (v0.23.10): it reports the timers of its connectors and the outcome of
+        the requests it carried out, and takes the requests confirmed for it."""
+        now = now or dt.datetime.now(dt.UTC)
+        self._tenant(tenant)
+        collector = self.registry.collector_for(token)
+        if collector is None:
+            raise Problem(HTTPStatus.UNAUTHORIZED, "missing or unknown collector token")
+        if collector.tenant != tenant:
+            raise Problem(HTTPStatus.FORBIDDEN, "collector not declared for this tenant")
+        timers = []
+        for t in (body.get("timers") or [])[:100]:
+            if isinstance(t, dict) and SAFE.match(str(t.get("connector", ""))):
+                timers.append({k: str(t.get(k) or "")[:40] for k in ("connector", "next_run", "last_run")})
+        if timers or "timers" in body:
+            self.schedules[collector.id] = {"timers": timers, "reported_at": now.isoformat(timespec="seconds")}
+        if self.actions is None:
+            return {"actions": [], "note": "no actions without the tenant's database"}
+        for r in (body.get("results") or [])[:50]:
+            if not isinstance(r, dict):
+                continue
+            ok = r.get("outcome") == "done"
+            done = self.actions.finish(tenant, collector.id, str(r.get("id", "")), ok, str(r.get("detail", "")), now)
+            if done:
+                outcome = "done" if ok else "failed"
+                self.audit.write(tenant, collector.id, "collector", "action:finished", done["id"],
+                                 {"connector": done["connector"]}, outcome, done["detail"], now)  # fmt: skip
+        taken = self.actions.take(tenant, collector.id, now)
+        for t in taken:
+            self.audit.write(tenant, collector.id, "collector", "action:taken", t["id"], {"connector": t["connector"]},
+                             at=now)  # fmt: skip
+        return {"actions": [{"id": t["id"], "action": t["action"], "connector": t["connector"]} for t in taken]}
 
     def status(self, tenant: str, token: str | None) -> dict[str, Any]:
         """The service's version and the collectors with their last pushes (v0.23.9, the chat)."""
@@ -289,9 +341,27 @@ def make_handler(service: Service) -> type[BaseHTTPRequestHandler]:
                 log.exception("GET %s failed", path)
                 self._problem(Problem(HTTPStatus.INTERNAL_SERVER_ERROR, "internal error"))
 
+        def _json_body(self) -> dict[str, Any]:
+            try:
+                length = int(self.headers.get("Content-Length", ""))
+            except ValueError as exc:
+                raise Problem(HTTPStatus.LENGTH_REQUIRED, "Content-Length required") from exc
+            if not 0 <= length <= 65536:
+                raise Problem(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "poll body of 64 KiB at most")
+            try:
+                body = json.loads(self.rfile.read(length) or b"{}")
+            except ValueError as exc:
+                raise Problem(HTTPStatus.BAD_REQUEST, "poll body: JSON expected") from exc
+            if not isinstance(body, dict):
+                raise Problem(HTTPStatus.BAD_REQUEST, "poll body: a JSON object expected")
+            return body
+
         def do_POST(self) -> None:  # noqa: N802 - http.server API
             try:
                 tenant, rest, _ = self._route()
+                if rest == "poll":  # v0.23.10
+                    self._send(HTTPStatus.OK, service.poll(tenant, self._token(), self._json_body()))
+                    return
                 if rest != "detections":
                     raise Problem(HTTPStatus.NOT_FOUND, "no such route")
                 try:

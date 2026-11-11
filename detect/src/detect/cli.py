@@ -160,7 +160,16 @@ def cmd_serve(args: argparse.Namespace) -> int:
         f"({', '.join(registry.collectors) or 'none'}), read token {readers}, store {store.describe()}",
         flush=True,
     )
-    service = Service(registry, store, args.max_mb * 1024 * 1024)
+    from a2vm.actions import open_actions
+    from a2vm.audit import open_audit
+
+    try:
+        audit = open_audit("detect", None if db else args.store)
+        actions = open_actions() if db else None
+    except DatabaseError as exc:
+        print(f"journal: {exc}", file=sys.stderr)
+        return 2
+    service = Service(registry, store, args.max_mb * 1024 * 1024, audit=audit, actions=actions)
     httpd = serve(service, args.host, args.port)
     try:
         httpd.serve_forever()
@@ -188,6 +197,23 @@ def cmd_agent(args: argparse.Namespace) -> int:
     for line in report.errors:
         print(f"  ERROR {line}", file=sys.stderr)
     return report.status
+
+
+def cmd_agent_poll(args: argparse.Namespace) -> int:
+    from .agent import AgentError, load_config, poll
+
+    try:
+        cfg = load_config(args.config)
+        prefix = f"{cfg.tenant} [{cfg.collector}]"
+        report = poll(cfg, args.timers, log=lambda line: print(f"{prefix} {line}", flush=True))
+    except AgentError as exc:
+        print(exc, file=sys.stderr)
+        return 2
+    for line in report.pushed:
+        print(f"{cfg.tenant} [{cfg.collector}]: pushed {line}")
+    for line in report.errors:
+        print(f"  ERROR {line}", file=sys.stderr)
+    return 1 if report.errors and not report.pushed else 0
 
 
 def cmd_collectors(args: argparse.Namespace) -> int:
@@ -444,6 +470,10 @@ def main(argv: list[str] | None = None) -> int:
     ar.add_argument("--config", default="/etc/a2vm/collector/collector.yaml")
     ar.add_argument("--connector", help="only this connector")
     ar.set_defaults(func=cmd_agent)
+    ap = ag_sub.add_parser("poll", help="report the timers, run the requests confirmed for this collector (v0.23.10)")
+    ap.add_argument("--config", default="/etc/a2vm/collector/collector.yaml")
+    ap.add_argument("--timers", default="", help="systemctl list-timers 'a2vm-collector@*' --all -o json, as a file")
+    ap.set_defaults(func=cmd_agent_poll)
 
     f = sub.add_parser("fetch", help="the latest detections of the tenant from the detection service")
     f.add_argument("--url", required=True, help="detection service, e.g. http://a2vm-homelab-detect:8080")

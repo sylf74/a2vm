@@ -51,10 +51,20 @@ THEMES = [
     ("Documents to send", {
         "export_decisions": "a Word, PowerPoint or CSV document of decisions, to download",
     }),
+    ("Actions, confirmed by a person", {
+        "request_connector_run": "prepares a request to run a connector now (a CMDB sync, a scan): a validator "
+        "confirms it on the review page, the collector runs it within minutes; the chat never runs it itself",
+        "list_actions": "the requests and their state: proposed, confirmed, taken, done, failed, cancelled, expired",
+    }),
+    ("Who did what", {
+        "get_audit": "the audit journal: the chat's questions, the actions, the validations, with who and when",
+    }),
     ("The platform itself", {
         "list_runs": "the daily runs kept, with their date and counts",
-        "get_platform_status": "the version of each service and of the latest run, its LLM and cost, collectors late",
-        "list_collectors": "each collector and source: last push, age, late or refused, connector, agent's version",
+        "get_platform_status": "the version of each service and of the latest run, its LLM and cost, the next "
+        "daily run, collectors late",
+        "list_collectors": "each collector and source: last push, age, late or refused, connector, agent's version, "
+        "and the next and last run of each connector (the next scans)",
     }),
 ]  # fmt: skip
 
@@ -65,8 +75,10 @@ then run `python scripts/make_chat_guide.py --write`. The test suite checks that
 a tool that exists, with parameters it takes, and that this page is up to date. Set-up of the chat:
 [`chat.md`](chat.md).
 
-The chat answers in the language of the question. It reads only: it never changes a decision, sends
-a ticket or validates an alert. It answers for one tenant, from the decision service (the daily
+The chat answers in the language of the question. It reads, and prepares the actions of the list
+below without running them: a validator confirms each on the review page (« Actions »). It never
+changes a decision, sends a ticket or validates an alert. Every question and every action is in the
+audit journal, with who asked. It answers for one tenant, from the decision service (the daily
 run), the watch, the detection service, the dispatch service and the shared intelligence service,
 whichever run for that tenant.
 

@@ -230,8 +230,15 @@ spec:
     - host: {{ $ing.host | quote }}
       http:
         paths:
-          # The push only: the read calls are not published.
+          # The push and the poll (v0.23.10) only: the read calls are not published.
           - path: {{ printf "/v1/tenants/%s/detections" .Values.tenant | quote }}
+            pathType: Exact
+            backend:
+              service:
+                name: {{ $name }}-detect
+                port:
+                  name: http
+          - path: {{ printf "/v1/tenants/%s/poll" .Values.tenant | quote }}
             pathType: Exact
             backend:
               service:
@@ -261,6 +268,9 @@ spec:
         - podSelector:
             matchLabels:
               {{- include "a2vm-tenant.selector" (dict "root" . "component" "daily") | nindent 14 }}
+        - podSelector:   # the chat's tool server: collectors and actions (v0.23.9, v0.23.10)
+            matchLabels:
+              {{- include "a2vm-tenant.selector" (dict "root" . "component" "tools") | nindent 14 }}
       ports:
         - port: 8080
           protocol: TCP
