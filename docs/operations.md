@@ -105,16 +105,16 @@ The triage step ends with one line per tenant, then the LLM's cost:
 
 ```text
 lab: ACT=12 ATTEND=310 TRACK=26865 review=40 errors=0 ignored=0 llm_calls=120 llm_fallbacks=0 -> /data/output/lab
-  LLM: 120 questions, 104 from the cache, 3200+900 tokens, 41.0 s, thinking off
+  LLM: 120 questions, 104 from the cache, 3200+900 tokens, 41.0 s, gpt-oss, reasoning off
 ```
 
 The same figures are in the chat (« Où en sommes-nous ? », `llm_usage`). What to look at:
 
 | Seen | Meaning | Action |
 | --- | --- | --- |
-| Hours of GPU, few new decisions (« Qu'est-ce qui a changé depuis le run d'hier ? ») | The LLM is asked again what it already answered | `A2VM_LLM_THINKING=off` for a reasoning model (Qwen3), on the group; the cache is on by default on Kubernetes (`/data/llm-cache.json`) |
+| Hours of GPU, few new decisions (« Qu'est-ce qui a changé depuis le run d'hier ? ») | The LLM is asked again what it already answered | `A2VM_LLM_REASONING=off` on the group (`docs/llm.md`); the cache is on by default on Kubernetes (`/data/llm-cache.json`) |
 | `from_cache` close to `questions` from the second run | The cache works: only the new or changed CVEs cost | — |
-| Thousands of completion tokens per question | The model reasons before answering | `A2VM_LLM_THINKING=off` |
+| Thousands of completion tokens per question | The model reasons before answering | `A2VM_LLM_REASONING=off` (`docs/llm.md`) |
 | `review` in the thousands | Rows asking an analyst whose doubt changes nothing | `policy.review: decisive` (the default since v0.23.7) |
 
 ### The watch and its alerts

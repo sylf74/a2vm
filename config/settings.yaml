@@ -40,7 +40,9 @@ llm:
   api_key_env: "LLM_API_KEY"
   timeout_seconds: 180
   max_retries: 2
-  thinking: ""                        # off | on: a reasoning model's thinking (Qwen3, vLLM); "" sends nothing (v0.23.7)
+  thinking: ""                        # off | on: Qwen3's thinking (v0.23.7); reasoning below is the general setting
+  family: ""                          # qwen3 | gemma | gpt-oss | mistral | generic; "" from the model's name (v0.23.8)
+  reasoning: ""                       # off | low | medium | high, as the family takes it; "" the model's default (docs/llm.md)
   cache_file: ""                      # the answers kept from one run to the next; /data/llm-cache.json on Kubernetes
   cache_days: 30                      # an answer not used for this many days is forgotten
   tasks:

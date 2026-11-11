@@ -42,7 +42,7 @@ def test_thinking_and_cache_from_the_environment(monkeypatch, tmp_path) -> None:
     s = load_settings(ROOT / "config" / "settings.yaml")
     assert (s.llm.thinking, s.llm.cache_file, s.llm.cache_days) == ("off", str(tmp_path / "c.json"), 30)
     s.llm.enabled = True
-    assert describe_llm(s).endswith(f", thinking off, cache {tmp_path / 'c.json'}")
+    assert describe_llm(s).endswith(f", family gpt-oss, reasoning off, cache {tmp_path / 'c.json'}")
     assert Policy.from_dict(s.policy).review == "decisive"
     with pytest.raises(ValueError, match="policy.review"):
         Policy.from_dict({"review": "some"})

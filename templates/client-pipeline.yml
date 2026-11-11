@@ -51,6 +51,7 @@
 #   timeout (Settings > CI/CD > General pipelines) above the targets' timeout_minutes (default 240).
 #   A2VM_LLM_ENABLED, A2VM_LLM_BASE_URL, A2VM_LLM_MODEL, LLM_API_KEY   (usually set on the group)
 #   A2VM_LLM_THINKING   off: a reasoning model (Qwen3) answers without thinking first, many times faster (v0.23.7)
+#   A2VM_LLM_FAMILY, A2VM_LLM_REASONING   the model's family and the level of reasoning (v0.23.8, docs/llm.md)
 #   A2VM_SMTP_HOST, A2VM_SMTP_PORT, A2VM_SMTP_TLS, A2VM_SMTP_USER, A2VM_SMTP_PASSWORD,
 #   A2VM_MAIL_FROM, A2VM_ANALYST_TO   (watch mode, usually set on the group)
 #
@@ -404,7 +405,8 @@ deploy-k8s:
     - |
       ENVF="$(mktemp)"; echo "env:" > "$ENVF"
       for v in A2VM_LLM_ENABLED A2VM_LLM_BASE_URL A2VM_LLM_MODEL A2VM_GTI_ENABLED A2VM_EXTERNAL_PROJECT \
-          A2VM_LLM_THINKING A2VM_MAIL_FROM A2VM_MAIL_TRANSPORT A2VM_SMTP_HOST A2VM_SMTP_PORT A2VM_SMTP_TLS A2VM_SMTP_USER \
+          A2VM_LLM_THINKING A2VM_LLM_FAMILY A2VM_LLM_REASONING \
+          A2VM_MAIL_FROM A2VM_MAIL_TRANSPORT A2VM_SMTP_HOST A2VM_SMTP_PORT A2VM_SMTP_TLS A2VM_SMTP_USER \
           A2VM_GRAPH_TENANT_ID A2VM_GRAPH_CLIENT_ID A2VM_GRAPH_SENDER A2VM_ANALYST_TO A2VM_SOURCE_FAILURES; do
         eval "val=\"\${$v:-}\""
         if [ -n "$val" ]; then printf '  %s: "%s"\n' "$v" "$val" >> "$ENVF"; fi

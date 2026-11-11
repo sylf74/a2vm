@@ -234,7 +234,7 @@ class Triage:
                 k: (round(after[k] - before[k], 1) if k == "seconds" else after[k] - before[k])
                 for k in ("questions", "from_cache", "prompt_tokens", "completion_tokens", "seconds")
             }
-            run.llm_usage["thinking"] = after["thinking"]
+            run.llm_usage.update({k: after[k] for k in ("thinking", "family", "reasoning")})
             if self.llm_stopped:
                 run.llm_usage["stopped"] = self.llm_stopped
         return run

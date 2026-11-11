@@ -134,7 +134,8 @@ def main(argv: list[str] | None = None) -> int:
                 u = run.llm_usage
                 print(
                     f"  LLM: {u['questions']} questions, {u['from_cache']} from the cache, "
-                    f"{u['prompt_tokens']}+{u['completion_tokens']} tokens, {u['seconds']} s, thinking {u['thinking']}"
+                    f"{u['prompt_tokens']}+{u['completion_tokens']} tokens, {u['seconds']} s, "
+                    f"{u['family']}, reasoning {u['reasoning']}"
                 )
             if triage.llm_stopped:
                 print(f"  LLM not used for the rest of the run: {triage.llm_stopped}", file=sys.stderr)

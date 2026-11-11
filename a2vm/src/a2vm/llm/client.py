@@ -10,7 +10,8 @@ current one; when it cannot be reached, times out or answers 429 or 5xx, the cal
 and later calls stay there. An answer that is not valid JSON is retried on the same endpoint.
 
 Since v0.23.7: `llm.thinking` turns a reasoning model's thinking off (or on) through vLLM's
-`chat_template_kwargs`; `llm.cache_file` keeps the answers from one run to the next (`cache.py`);
+`chat_template_kwargs`, and since v0.23.8 `llm.reasoning` sets the level of reasoning the way the
+model's family takes it (`families.py`); `llm.cache_file` keeps the answers from one run to the next (`cache.py`);
 `usage` counts the questions, the answers from the cache, the tokens and the seconds of a run.
 """
 
@@ -27,6 +28,7 @@ import jsonschema
 
 from ..config import LlmSettings
 from .cache import LlmCache, question_key
+from .families import family_of, reasoning_of, request_fields
 
 log = logging.getLogger("a2vm.llm")
 
@@ -52,6 +54,14 @@ class LlmClient:
         self._current = 0
         self._lock = threading.Lock()
         self.cache = LlmCache(settings.cache_file, settings.cache_days) if settings.cache_file else None
+        self.family = family_of(settings.model, settings.family)
+        self.reasoning = reasoning_of(settings.reasoning, settings.thinking)
+        # `thinking` alone (v0.23.7): Qwen3's switch, sent as then whatever the model
+        self._fields = (
+            request_fields("qwen3", self.reasoning)
+            if settings.thinking and not settings.reasoning
+            else request_fields(self.family, self.reasoning)
+        )
         self.usage = {"questions": 0, "from_cache": 0, "prompt_tokens": 0, "completion_tokens": 0, "seconds": 0.0}
 
     def _count(self, **values: float) -> None:
@@ -65,6 +75,8 @@ class LlmClient:
             out = dict(self.usage)
         out["seconds"] = round(out["seconds"], 1)
         out["thinking"] = self.settings.thinking or "default"
+        out["family"] = self.family
+        out["reasoning"] = self.reasoning or "default"
         return out
 
     @property
@@ -107,9 +119,7 @@ class LlmClient:
                 "json_schema": {"name": name, "schema": schema, "strict": True},
             },
         }
-        thinking = str(self.settings.thinking or "").strip().lower()
-        if thinking in ("off", "on", "false", "true"):
-            payload["chat_template_kwargs"] = {"enable_thinking": thinking in ("on", "true")}
+        payload.update(self._fields)
         self._count(questions=1)
         key = question_key(payload) if self.cache else ""
         if self.cache:
