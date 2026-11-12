@@ -5,6 +5,28 @@ analyst and, under **Upgrade**, what a tenant must do when it moves to that tag 
 `A2VM_REF` in its `.gitlab-ci.yml`). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
 §11) and the LLDs. A release adds its entry here in the same merge request (CLAUDE.md, Releasing).
 
+## v0.23.16 — 2026-11-12
+
+Fix: `deploy-k8s` failed on the Secret `a2vm-tenant` of a tenant with a proxy CA once v0.23.14 and
+v0.23.15 added their keys (`metadata.annotations: Too long: must have at most 262144 bytes`).
+
+- A client-side `kubectl apply` copies the whole object into the annotation
+  `kubectl.kubernetes.io/last-applied-configuration`, limited to 256 KiB. With `A2VM_PROXY_CA`, the
+  key `ca-bundle` holds the system's CAs and the proxy's (about 180 KB, 241 KB in base64 in the
+  annotation); the certificates of an LLM behind mutual TLS and the keys of the development
+  identity provider went over the limit.
+- `deploy-k8s` now creates or replaces its Secrets (`upsert`: the manifest in a file of mode 600,
+  `kubectl create` the first time, `kubectl replace` after), never applies them. The keys are the
+  same: the job already rewrote all of them, keeping those it makes once. The first `replace` drops
+  the annotation of earlier deployments. Every Secret of the job (`a2vm-tenant`, `a2vm-intake`,
+  `a2vm-verdict`, `a2vm-chat`, `a2vm-via`, `a2vm-dispatch`, `a2vm-intel`, `a2vm-registry`) and the
+  alerts' template go the same way; a test keeps `apply` away from them.
+- Found, fixed and tested on Kubernetes 1.31 by the integration of v0.23.15. Later: the Secret could
+  keep the proxy's CA only, each pod assembling the system's at start as the chat does.
+
+**Upgrade**: move `ref` and `A2VM_REF` of the tenants to `v0.23.16`. Nothing to set; a tenant whose
+`deploy-k8s` failed in v0.23.14 or v0.23.15 goes through at the next one.
+
 ## v0.23.15 — 2026-11-12
 
 A development identity provider, for a platform whose company gives A2VM no OIDC client: the chat,
