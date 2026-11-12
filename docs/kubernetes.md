@@ -128,6 +128,7 @@ CI/CD variables of the tenant project (or of a subgroup):
 | `A2VM_HTTPS_PROXY`, `A2VM_NO_PROXY` | Optional (v0.23.4): the corporate proxy for every pod that goes out (`HTTPS_PROXY`), and the hosts reached directly besides the cluster's services (the LLM, the ITSM), comma-separated | Visible |
 | `A2VM_PROXY_CA` | Optional (v0.23.4): the certificate of the proxy's TLS inspection (File): the job adds it to the system CAs, key `ca-bundle` | Visible |
 | `A2VM_RELAY_URL`, `A2VM_RELAY_HOSTS`, `A2VM_RELAY_TOKEN` | Optional (v0.23.4): the relay of the public sources (`deploy/relay/README.md`), its hosts comma-separated, its token | Token masked |
+| `A2VM_OSV_MODE` | Optional (v0.23.12): `offline` (default: the libraries matched against a copy of OSV, from the shared service or OSV's archives, none sent out), `api` (each library sent to api.osv.dev), `off` | With a relay: `osv-vulnerabilities.storage.googleapis.com` in its hosts |
 | `A2VM_INTEL_FALLBACK` | Optional (v0.23.4), `false`: the shared service unreachable fails the run instead of reading the sources | Visible |
 
 The other variables are the pipeline's (`docs/deployment.md`): the job copies the secret ones

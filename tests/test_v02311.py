@@ -9,6 +9,7 @@ The chat forwards the user to the tools and the LLM only when the tenant wants i
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 
 import httpx
@@ -281,10 +282,10 @@ def test_detect_osv_reads_the_work_directory_and_warns_offline(tmp_path, monkeyp
     write_detection(work / "lab" / "sbom.json", read(SbomConfig(str(tmp_path / "sbom")), "lab", log=lambda _: None))
     real = osv_module.Osv
     monkeypatch.setattr(osv_module, "Osv", lambda cache=None: real(cache, transport=_osv_transport()))
-    assert main(["osv", "--detect", str(work), "--cache", str(tmp_path / "cache")]) == 0
+    assert main(["osv", "--mode", "api", "--detect", str(work), "--cache", str(tmp_path / "cache")]) == 0
     assert read_detection(work / "lab" / "osv.json").findings[0].cve_id == "CVE-2099-0101"
     monkeypatch.setattr(osv_module, "Osv", lambda cache=None: real(cache, transport=_osv_transport(fail=True)))
-    assert main(["osv", "--detect", str(work)]) == 3  # a warning: the run goes on
+    assert main(["osv", "--mode", "api", "--detect", str(work)]) == 3  # a warning: the run goes on
     monkeypatch.setenv("A2VM_OSV_ENABLED", "false")
     assert main(["osv", "--detect", str(work)]) == 0
 
@@ -330,5 +331,9 @@ def test_deploy_k8s_sets_it() -> None:
 
 def test_release_recorded() -> None:
     assert "## v0.23.11 — " in (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    assert "v0.23.11 (current)" in (ROOT / "docs/hld/00-product-strategy.md").read_text(encoding="utf-8")
-    assert "version: 0.23.11" in (ROOT / "deploy/charts/a2vm-tenant/Chart.yaml").read_text()
+    assert "| v0.23.11 " in (ROOT / "docs/hld/00-product-strategy.md").read_text(encoding="utf-8")
+    assert re.search(
+        r"^version: 0\.(23\.(1[1-9]|[2-9]\d)|2[4-9]\.\d+)$",
+        (ROOT / "deploy/charts/a2vm-tenant/Chart.yaml").read_text(),
+        re.M,
+    )

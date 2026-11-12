@@ -217,37 +217,82 @@ def cmd_agent_poll(args: argparse.Namespace) -> int:
 
 
 def cmd_osv(args: argparse.Namespace) -> int:
-    """The libraries of the detections against OSV (v0.23.11): 0 done, 3 OSV unreachable (a warning)."""
+    """The libraries of the detections against OSV (v0.23.11; modes v0.23.12): 0 done, 3 a warning
+    (OSV or the shared service unreachable: the index kept is used, or nothing for that ecosystem)."""
     import json
     import os
+    import tempfile
 
-    from .osv import Osv, OsvError, match
+    from a2vm.config import env
 
+    from .osv import MODES, IndexSource, Osv, OsvError, ecosystems_of, match, match_offline
+
+    mode = (args.mode or os.environ.get("A2VM_OSV_MODE", "") or "offline").strip().lower()
     if os.environ.get("A2VM_OSV_ENABLED", "true").strip().lower() in ("false", "0", "no", "off"):
-        print("osv: disabled (A2VM_OSV_ENABLED)")
+        mode = "off"
+    if mode not in MODES:
+        print(f"osv: mode {mode!r}: {', '.join(MODES)}", file=sys.stderr)
+        return 2
+    if mode == "off":
+        print("osv: off (A2VM_OSV_MODE)")
         return 0
-    status = 0
-    osv = Osv(args.cache or None)
-    try:
-        for tenant_dir in sorted(p for p in Path(args.detect).iterdir() if p.is_dir()):
-            docs = []
-            for f in sorted(tenant_dir.glob("*.json")):
-                if f.name == "osv.json":
-                    continue
-                try:
-                    docs.append(json.loads(f.read_text(encoding="utf-8")))
-                except (OSError, ValueError) as exc:
-                    print(f"osv: {f} unreadable: {exc}", file=sys.stderr)
-            try:
-                d = match(docs, tenant_dir.name, osv)
-            except OsvError as exc:
-                print(f"osv [{tenant_dir.name}]: {exc}", file=sys.stderr)
-                status = 3
+    tenants = []
+    for tenant_dir in sorted(p for p in Path(args.detect).iterdir() if p.is_dir()):
+        docs = []
+        for f in sorted(tenant_dir.glob("*.json")):
+            if f.name == "osv.json":
                 continue
+            try:
+                docs.append(json.loads(f.read_text(encoding="utf-8")))
+            except (OSError, ValueError) as exc:
+                print(f"osv: {f} unreadable: {exc}", file=sys.stderr)
+        tenants.append((tenant_dir.name, docs))
+        (Path(args.out or args.detect) / tenant_dir.name / "osv.json").unlink(missing_ok=True)  # not yesterday's
+    status = 0
+    cache = args.cache or tempfile.mkdtemp(prefix="osv-")
+    if mode == "api":
+        print("osv: mode api, the libraries are sent to api.osv.dev")
+        osv = Osv(cache)
+        try:
+            for tenant, docs in tenants:
+                try:
+                    d = match(docs, tenant, osv)
+                except OsvError as exc:
+                    print(f"osv [{tenant}]: {exc}", file=sys.stderr)
+                    status = 3
+                    continue
+                if d.observations or d.findings:
+                    _write(args.out or args.detect, d)
+        finally:
+            osv.close()
+        return status
+    intel_url = os.environ.get("A2VM_INTEL_URL", "").strip()
+    token = ""
+    if intel_url:
+        token_file = os.environ.get("A2VM_INTEL_TOKEN_FILE", "")
+        try:
+            token = Path(token_file).read_text(encoding="utf-8").strip() if token_file else env("INTEL_TOKEN").strip()
+        except OSError as exc:
+            print(f"osv: token of the shared service: {exc}", file=sys.stderr)
+    source = IndexSource(cache, intel_url, token)
+    try:
+        wanted = sorted({e for _, docs in tenants for e in ecosystems_of(docs)})
+        indexes = {}
+        for eco in wanted:
+            index = source.get(eco)
+            if index is not None:
+                indexes[eco] = index
+                print(f"osv: {eco} index of {index.get('built') or 'unknown date'}, {index.get('kept', 0)} records")
+        print(f"osv: mode offline, indexes from {source.where()}: {', '.join(indexes) or 'none'}")
+        for w in source.warnings:
+            print(f"osv: WARN {w}", file=sys.stderr)
+            status = 3
+        for tenant, docs in tenants:
+            d = match_offline(docs, tenant, indexes)
             if d.observations or d.findings:
                 _write(args.out or args.detect, d)
     finally:
-        osv.close()
+        source.close()
     return status
 
 
@@ -582,7 +627,8 @@ def main(argv: list[str] | None = None) -> int:
     ov = sub.add_parser("osv", help="the libraries of the detections against OSV, findings of source osv (v0.23.11)")
     ov.add_argument("--detect", required=True, help="directory of the detections, <dir>/<tenant>/<source>.json")
     ov.add_argument("--out", default="", help="where to write osv.json (default: the same directory)")
-    ov.add_argument("--cache", default="", help="directory keeping OSV's vulnerability details")
+    ov.add_argument("--cache", default="", help="directory keeping the indexes of OSV (offline) or its details (api)")
+    ov.add_argument("--mode", default="", help="offline (default), api or off; else A2VM_OSV_MODE (v0.23.12)")
     ov.set_defaults(func=cmd_osv)
 
     sb = sub.add_parser("sbom", help="SBOM files (CycloneDX, SPDX) as libraries of assets (read, v0.23.11)")

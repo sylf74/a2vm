@@ -33,7 +33,7 @@ variable "hosts" {
   type        = list(string)
   default = [
     "raw.githubusercontent.com", "www.cisa.gov", "api.first.org", "www.cert.ssi.gouv.fr", "cveawg.mitre.org",
-    "access.redhat.com", "api.osv.dev", "ubuntu.com", "msrc.microsoft.com", "api.msrc.microsoft.com",
+    "access.redhat.com", "api.osv.dev", "osv-vulnerabilities.storage.googleapis.com", "ubuntu.com", "msrc.microsoft.com", "api.msrc.microsoft.com",
     "sec.cloudapps.cisco.com", "www.cisco.com", "www.fortiguard.com", "security.paloaltonetworks.com",
     "support.hpe.com", "cert-portal.siemens.com", "wid.cert-bund.de", "cert.europa.eu", "www.jpcert.or.jp",
     "www.zerodayinitiative.com", "seclists.org", "www.rapid7.com", "www.horizon3.ai", "labs.watchtowr.com",

@@ -337,6 +337,9 @@ intel:
     digestsSecret: ""
     digestsChecksum: ""
     gtiEveryHours: 6    # GTI enabled (env A2VM_GTI_ENABLED, key gti-api-key): search the technologies watched
+    # The copy of OSV the tenants match their libraries against (v0.23.12): OSV's archive of each
+    # language ecosystem (storage.googleapis.com) read again this often, when it changed. 0: never.
+    osvEveryHours: 6
     # Namespaces whose daily run, watch and sender may call it; empty: every namespace of the cluster.
     allowNamespaces: []
     storage:

@@ -54,6 +54,10 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument(
         "--gti-every-hours", type=float, default=6, help="GTI enabled: search the technologies watched this often"
     )
+    s.add_argument(
+        "--osv-every-hours", type=float, default=6,
+        help="rebuild the copy of OSV the tenants read this often (v0.23.12); 0: never",
+    )  # fmt: skip
     args = parser.parse_args(argv)
     if args.command == "intel-serve":
         return serve(args)
@@ -120,6 +124,16 @@ def serve(args: argparse.Namespace) -> int:
 
     if settings.sources.gti_enabled:
         threading.Thread(target=search_loop, daemon=True).start()
+
+    def osv_loop() -> None:  # v0.23.12: the copy of OSV the tenants match their libraries against
+        wait, stop = 10.0, threading.Event()
+        while not stop.wait(wait):
+            for line in service.sync_osv():
+                print(f"intel: {line}", flush=True)
+            wait = args.osv_every_hours * 3600
+
+    if args.osv_every_hours > 0:
+        threading.Thread(target=osv_loop, daemon=True).start()
     httpd = http_serve(service, args.host, args.port)
     try:
         httpd.serve_forever()
