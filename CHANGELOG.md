@@ -5,6 +5,38 @@ analyst and, under **Upgrade**, what a tenant must do when it moves to that tag 
 `A2VM_REF` in its `.gitlab-ci.yml`). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
 §11) and the LLDs. A release adds its entry here in the same merge request (CLAUDE.md, Releasing).
 
+## v0.23.12 — 2026-11-12
+
+No library of a tenant leaves it for OSV any more: the libraries are matched at home, against a copy
+of OSV.
+
+- **`A2VM_OSV_MODE=offline`, the default**: the daily run matches the libraries (images, SBOMs)
+  against an index of OSV per language ecosystem (PyPI, npm, Maven, Go, crates.io, RubyGems, NuGet,
+  Packagist): the records with a CVE, the versions affected and the ranges (`a2vm.osvdb`). In
+  v0.23.11 every `purl@version` went to api.osv.dev: the inventory of the tenant, at Google.
+- **The shared intelligence service builds the indexes** from OSV's public archives every 6 hours
+  (`intel.serve.osvEveryHours`), only when an archive changed, and serves them to every tenant
+  (`GET /v1/osv/<ecosystem>`, 304 when unchanged). It learns nothing of the tenants' libraries: all
+  read every index. A tenant without the shared service reads the archives itself
+  (osv-vulnerabilities.storage.googleapis.com). Yesterday's index serves when the source cannot be
+  reached (a warning, exit 3).
+- `A2VM_OSV_MODE=api` keeps the behaviour of v0.23.11, for a test or a tenant that accepts it in
+  writing; the pages of an answer are now followed (a package with many vulnerabilities lost some).
+  `off`, or `A2VM_OSV_ENABLED=false`: nothing.
+- The relay of the sources lists `osv-vulnerabilities.storage.googleapis.com` (`deploy/relay`).
+- Not checked against the real archives from here (no access): the shared service's log gives, at
+  its first build, one line per ecosystem, `osv <ecosystem>: <n> records, <m> with a CVE`.
+
+**Upgrade**:
+
+1. The watch team's release (tenant via) first, to `v0.23.12`: the shared service builds the
+   indexes ten seconds after it starts (a few minutes: npm's archive is the largest). Its volume
+   (`intel.serve.storage.size`, 1Gi) holds the archive being read: 2Gi if the log says no space
+   left. With a relay: add `osv-vulnerabilities.storage.googleapis.com` to `A2VM_RELAY_HOSTS` and
+   to the relay's `hosts`, then `terraform apply`.
+2. The other tenants to `v0.23.12`. Nothing to set: `offline` is the default. A tenant that had
+   `A2VM_OSV_ENABLED=false` for confidentiality can remove it.
+
 ## v0.23.11 — 2026-11-12
 
 The libraries of the images and of the SBOMs are checked every day against OSV; a library updated

@@ -56,7 +56,7 @@ if [ -n "${A2VM_EXTERNAL_PROJECT:-}" ]; then
   step detect external /config/client.yaml --project "$A2VM_EXTERNAL_PROJECT" --out /data/work/detect
 fi
 if [ "$failed" -ne 0 ]; then exit "$failed"; fi
-# v0.23.11: the libraries of the images and the SBOMs against OSV (A2VM_OSV_ENABLED=false: skipped).
+# v0.23.11: the libraries of the images and the SBOMs against OSV (A2VM_OSV_MODE: offline, api, off).
 step detect osv --detect /data/work/detect --cache /data/osv-cache
 if [ "$partial" -eq 1 ]; then echo "WARN collection incomplete: going on with what was collected"; fi
 {{- end -}}
