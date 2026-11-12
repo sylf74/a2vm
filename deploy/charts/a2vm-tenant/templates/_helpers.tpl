@@ -52,7 +52,7 @@ app.kubernetes.io/component: {{ .component }}
 {{/* What the chat calls for its model: the endpoint itself, or the gateway when there are several. */}}
 {{- define "a2vm-tenant.chatLlmUrl" -}}
 {{- $eps := .Values.chat.llm.endpoints -}}
-{{- if gt (len $eps) 1 -}}
+{{- if or (gt (len $eps) 1) .Values.chat.llm.clientCert -}}
 {{- printf "http://%s-llm:8080%s" (include "a2vm-tenant.name" .) (urlParse (first $eps)).path | trimSuffix "/" -}}
 {{- else -}}
 {{- first $eps | trimSuffix "/" -}}
@@ -161,7 +161,14 @@ if [ ! -s /secrets/via-run-token ]; then echo "No via-run-token: the watch servi
 {{- if not .Values.secret.name -}}
 {{- fail "chat.enabled needs secret.name (keys chat-secret-key, chat-admin-password, chat-tools-token, verdict-read-token)" -}}
 {{- end -}}
-{{- if gt (len .Values.chat.llm.endpoints) 1 -}}
+{{- if .Values.chat.llm.clientCert -}}
+{{- if ne (len .Values.chat.llm.endpoints) 1 -}}
+{{- fail "chat.llm.clientCert: one endpoint only (put several behind one https load balancer)" -}}
+{{- end -}}
+{{- if ne (urlParse (first .Values.chat.llm.endpoints)).scheme "https" -}}
+{{- fail "chat.llm.clientCert: the endpoint must be https" -}}
+{{- end -}}
+{{- else if gt (len .Values.chat.llm.endpoints) 1 -}}
 {{- $first := urlParse (first .Values.chat.llm.endpoints) -}}
 {{- range .Values.chat.llm.endpoints -}}
 {{- $u := urlParse . -}}
@@ -273,6 +280,16 @@ name given twice breaks the next "helm upgrade" that changes the list. */}}
 {{- if .Values.secret.name }}
 - name: A2VM_TEAMS_WEBHOOK_FILE
   value: /secrets/teams-webhook
+{{- end }}
+{{- if .Values.secret.name }}
+# An LLM behind mutual TLS (v0.23.14): keys llm-client-cert, llm-client-key and llm-ca of the
+# Secret; a key absent, its file is missing and the client does without.
+- name: A2VM_LLM_CLIENT_CERT_FILE
+  value: /secrets/llm-client-cert
+- name: A2VM_LLM_CLIENT_KEY_FILE
+  value: /secrets/llm-client-key
+- name: A2VM_LLM_CA_FILE
+  value: /secrets/llm-ca
 {{- end }}
 {{- if .Values.secret.name }}
 {{- range $var, $key := dict "LLM_API_KEY" "llm-api-key" "GTI_API_KEY" "gti-api-key" "A2VM_GVM_USER" "gvm-user" "A2VM_GVM_PASSWORD" "gvm-password" "A2VM_REPORTING_DSN" "reporting-dsn" "A2VM_GITLAB_TOKEN" "gitlab-token" "A2VM_SMTP_PASSWORD" "smtp-password" "A2VM_GRAPH_CLIENT_SECRET" "graph-client-secret" }}

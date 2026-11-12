@@ -89,3 +89,33 @@ in its network. With a SaaS LLM, the provider receives the analysts' e-mails.
 With `false`, Open WebUI sends no user header: the journal reads `chat (user not forwarded)` for the
 chat's calls. The validations on the review page keep their author (OIDC).
 
+## 5. An LLM behind mutual TLS (v0.23.14)
+
+A reverse proxy in front of the model may ask every client for a certificate
+(`400 No required SSL certificate was sent` without one). A2VM then presents a certificate of its
+own: a service certificate (usage `clientAuth`) from a CA the reverse proxy accepts, never a
+person's.
+
+| CI/CD variable (`deploy-k8s`) | Secret key | What |
+| --- | --- | --- |
+| `A2VM_LLM_CLIENT_CERT` (File) | `llm-client-cert` | the client certificate, PEM, with its intermediate CAs after it |
+| `A2VM_LLM_CLIENT_KEY` (File, protected) | `llm-client-key` | its private key, PEM, without a passphrase |
+| `A2VM_LLM_CA` (File) | `llm-ca` | the CA chain of the endpoint's server certificate (the company's CA) |
+
+- **The triage** (daily run) reads them as files (`A2VM_LLM_CLIENT_CERT_FILE`,
+  `A2VM_LLM_CLIENT_KEY_FILE`, `A2VM_LLM_CA_FILE`, set by the chart to `/secrets/…`). A key absent
+  from the Secret: no certificate. In a GitLab pipeline without Kubernetes, the same three
+  variables, of type File, name the files.
+- **The chat**: Open WebUI cannot present a client certificate. With `A2VM_LLM_CLIENT_CERT` set,
+  `deploy-k8s` sets `chat.llm.clientCert`: Open WebUI calls the LLM gateway of the namespace
+  (`<tenant>-llm`, nginx), which presents the certificate, checks the endpoint's against `llm-ca`
+  and passes the API key on. One `https` endpoint.
+- The endpoint is often inside the company: its host in `A2VM_NO_PROXY` (the daily run would else
+  go through the corporate proxy, which does not carry the client certificate to it).
+
+Check the certificate from a machine of the cluster's network before deploying:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' --cert client.crt --key client.key --cacert ca.pem -H "Authorization: Bearer $LLM_API_KEY" https://llm.example.org/v1/models
+```
+

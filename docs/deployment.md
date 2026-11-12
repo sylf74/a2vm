@@ -48,6 +48,7 @@ detection files in `work/detect` carry what the later stages use.
 | `A2VM_LLM_BASE_URL` | `http://192.0.2.103:8000/v1`; several endpoints of the same model, comma-separated (v0.15.0, `docs/chat.md` §5) | Visible, not protected |
 | `A2VM_LLM_MODEL` | `qwen3-14b` | Visible, not protected |
 | `LLM_API_KEY` | (only if the server requires one) | Masked, protected |
+| `A2VM_LLM_CLIENT_CERT_FILE`, `A2VM_LLM_CLIENT_KEY_FILE`, `A2VM_LLM_CA_FILE` | (only behind mutual TLS, v0.23.14) type File: the client certificate, its key, the endpoint's CA (`docs/llm.md` §5) | Protected |
 
 In another GitLab layout (the code project elsewhere than `vulnops/a2vm`, runners with other tags),
 set on the same group:

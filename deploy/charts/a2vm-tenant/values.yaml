@@ -189,6 +189,11 @@ chat:
     model: ""           # deploy-k8s: A2VM_LLM_MODEL
     # Where the endpoints are, for the NetworkPolicy: one {cidr, port} per endpoint.
     egress: []
+    # The endpoint is behind mutual TLS (v0.23.14): Open WebUI cannot present a certificate, so the
+    # chat calls the gateway below, which does (keys llm-client-cert, llm-client-key and llm-ca,
+    # the CA of the endpoint's certificate, in the Secret). One https endpoint. deploy-k8s: set when
+    # A2VM_LLM_CLIENT_CERT is.
+    clientCert: false
     # With several endpoints, the chat calls them through a gateway in the namespace (nginx): round
     # robin, an endpoint that fails is left out for `failSeconds` and the request goes to the next.
     # The endpoints then share their scheme (http) and path (e.g. /v1).
@@ -395,6 +400,8 @@ daily:
 # Name of the Secret holding the tenant's secrets. Every key is optional:
 #   ssh-key         private key of the read-only scan account
 #   llm-api-key     LLM_API_KEY
+#   llm-client-cert, llm-client-key, llm-ca   an LLM behind mutual TLS: client certificate, its key, the
+#                   CA of the endpoint (A2VM_LLM_CLIENT_CERT, A2VM_LLM_CLIENT_KEY, A2VM_LLM_CA; v0.23.14)
 #   gti-api-key     GTI_API_KEY
 #   gvm-user, gvm-password   OpenVAS (GMP) account
 #   reporting-dsn   writer connection to the reporting database
