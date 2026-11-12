@@ -167,6 +167,17 @@ deploy-k8s:
     - if [ -n "${A2VM_K8S_CA:-}" ]; then kubectl config set-cluster gitlab --certificate-authority="$A2VM_K8S_CA"; fi
     - NS="${A2VM_K8S_NAMESPACE:-a2vm-$(echo "$CI_PROJECT_NAME" | tr 'A-Z_' 'a-z-')}"
     - kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f -
+    # Secrets and generated ConfigMaps are created or replaced, never `kubectl apply`d (v0.23.16): a
+    # client-side apply copies the whole object into the annotation last-applied-configuration,
+    # limited to 256 KiB, which a Secret with the CA bundle and a few certificates exceeds.
+    # `replace` also drops the annotation that earlier deployments left. The manifest is a file of
+    # this job's temporary directory, mode 600.
+    - |
+      upsert() {
+        f="$(mktemp)"; cat > "$f"
+        if kubectl -n "$NS" get -f "$f" >/dev/null 2>&1; then kubectl -n "$NS" replace -f "$f"; else kubectl -n "$NS" create -f "$f"; fi
+        rc=$?; rm -f "$f"; return $rc
+      }
     # Detection service (HLD D15 step 2), when the project declares its collectors: the digests of
     # their tokens (A2VM_COLLECTOR_TOKEN_<ID>) in the Secret a2vm-intake, the read token of the
     # daily run kept from one deployment to the next; no token is printed (docs/collectors.md).
@@ -178,7 +189,7 @@ deploy-k8s:
           | base64 -d > "$I/deployed-read-token" 2>/dev/null || true
         python3 .a2vm/deploy/intake/intake_secrets.py "$A2VM_COLLECTORS" --out "$I" --read-token "$I/deployed-read-token"
         rm -f "$I/deployed-read-token"
-        kubectl -n "$NS" create secret generic a2vm-intake --from-file=digests="$I/digests" --dry-run=client -o yaml | kubectl apply -f -
+        kubectl -n "$NS" create secret generic a2vm-intake --from-file=digests="$I/digests" --dry-run=client -o yaml | upsert
         READ_TOKEN="$I/detect-read-token"
         INTAKE="--set intake.enabled=true --set-file intake.collectors=$A2VM_COLLECTORS --set intake.digestsSecret=a2vm-intake"
         INTAKE="$INTAKE --set intake.digestsChecksum=$(sha256sum "$I/digests" | cut -d' ' -f1) --set collect.mode=${A2VM_COLLECT_MODE:-intake}"
@@ -209,7 +220,7 @@ deploy-k8s:
         done
         printf 'publish %s\nread %s\n' "$(sha256sum < "$V/verdict-publish-token" | cut -d' ' -f1)" \
           "$(sha256sum < "$V/verdict-read-token" | cut -d' ' -f1)" > "$V/digests"
-        kubectl -n "$NS" create secret generic a2vm-verdict --from-file=digests="$V/digests" --dry-run=client -o yaml | kubectl apply -f -
+        kubectl -n "$NS" create secret generic a2vm-verdict --from-file=digests="$V/digests" --dry-run=client -o yaml | upsert
         VERDICT="--set verdict.enabled=true --set verdict.digestsSecret=a2vm-verdict"
         VERDICT="$VERDICT --set verdict.digestsChecksum=$(sha256sum "$V/digests" | cut -d' ' -f1)"
       else
@@ -243,7 +254,7 @@ deploy-k8s:
           if [ "$(wc -c < "$C/$k")" -lt 32 ]; then od -An -tx1 -N32 /dev/urandom | tr -d ' \n' > "$C/$k"; fi
         done
         printf 'chat %s\n' "$(sha256sum < "$C/chat-tools-token" | cut -d' ' -f1)" > "$C/digests"
-        kubectl -n "$NS" create secret generic a2vm-chat --from-file=digests="$C/digests" --dry-run=client -o yaml | kubectl apply -f -
+        kubectl -n "$NS" create secret generic a2vm-chat --from-file=digests="$C/digests" --dry-run=client -o yaml | upsert
         python3 .a2vm/deploy/chat/chat_values.py "$C/values.json"
         CHAT="--set chat.toolsDigestsSecret=a2vm-chat --set chat.toolsDigestsChecksum=$(sha256sum "$C/digests" | cut -d' ' -f1) -f $C/values.json"
       elif [ -n "${A2VM_CHAT_HOST:-}" ]; then
@@ -262,13 +273,13 @@ deploy-k8s:
         done
         printf 'run %s\nread %s\n' "$(sha256sum < "$W/via-run-token" | cut -d' ' -f1)" \
           "$(sha256sum < "$W/via-read-token" | cut -d' ' -f1)" > "$W/digests"
-        kubectl -n "$NS" create secret generic a2vm-via --from-file=digests="$W/digests" --dry-run=client -o yaml | kubectl apply -f -
+        kubectl -n "$NS" create secret generic a2vm-via --from-file=digests="$W/digests" --dry-run=client -o yaml | upsert
         WATCH="--set watch.enabled=true --set watch.digestsSecret=a2vm-via"
         WATCH="$WATCH --set watch.digestsChecksum=$(sha256sum "$W/digests" | cut -d' ' -f1)"
         WATCH="$WATCH --set watch.sendPipelineUrl=$CI_PROJECT_URL/-/pipelines/new --set watch.sendRef=$CI_DEFAULT_BRANCH"
         TPL=""; for t in templates/alert*.docx; do if [ -f "$t" ]; then TPL="$TPL --from-file=$(basename "$t")=$t"; fi; done
         if [ -n "$TPL" ]; then
-          kubectl -n "$NS" create configmap a2vm-alert-template $TPL --dry-run=client -o yaml | kubectl apply -f -
+          kubectl -n "$NS" create configmap a2vm-alert-template $TPL --dry-run=client -o yaml | upsert
           WATCH="$WATCH --set watch.alertTemplate=a2vm-alert-template"
         fi
         if [ -f contacts.yaml ]; then WATCH="$WATCH --set-file files.contacts=contacts.yaml"; fi
@@ -291,7 +302,7 @@ deploy-k8s:
         done
         printf 'run %s\nread %s\n' "$(sha256sum < "$D/dispatch-run-token" | cut -d' ' -f1)" \
           "$(sha256sum < "$D/dispatch-read-token" | cut -d' ' -f1)" > "$D/digests"
-        kubectl -n "$NS" create secret generic a2vm-dispatch --from-file=digests="$D/digests" --dry-run=client -o yaml | kubectl apply -f -
+        kubectl -n "$NS" create secret generic a2vm-dispatch --from-file=digests="$D/digests" --dry-run=client -o yaml | upsert
         DISPATCH="--set-file files.dispatch=dispatch.yaml --set dispatch.digestsSecret=a2vm-dispatch"
         DISPATCH="$DISPATCH --set dispatch.digestsChecksum=$(sha256sum "$D/digests" | cut -d' ' -f1) -f $D/values.json"
       elif [ -f dispatch.yaml ]; then
@@ -312,7 +323,7 @@ deploy-k8s:
         printf 'read %s\nradar %s\n' "$(printf '%s' "$A2VM_INTEL_TOKEN" | sha256sum | cut -d' ' -f1)" \
           "$(sha256sum < "$N/intel-radar-token" | cut -d' ' -f1)" > "$N/digests"
         if [ -f "${A2VM_INTEL_DIGESTS:-}" ]; then grep -E '^read [0-9a-f]{64}$' "$A2VM_INTEL_DIGESTS" >> "$N/digests" || true; fi
-        kubectl -n "$NS" create secret generic a2vm-intel --from-file=digests="$N/digests" --dry-run=client -o yaml | kubectl apply -f -
+        kubectl -n "$NS" create secret generic a2vm-intel --from-file=digests="$N/digests" --dry-run=client -o yaml | upsert
         INTEL="$INTEL --set intel.serve.enabled=true --set intel.serve.digestsSecret=a2vm-intel"
         INTEL="$INTEL --set intel.serve.digestsChecksum=$(sha256sum "$N/digests" | cut -d' ' -f1)"
         echo "A2VM_INTEL_SERVE=true: the shared intelligence service runs in $NS ($(grep -c '^read ' "$N/digests") read token(s))"
@@ -421,7 +432,7 @@ deploy-k8s:
         put oidc-cookie-secret "$(cat "$O/oidc-cookie-secret" 2>/dev/null)"
         put review-key "$(cat "$O/review-key" 2>/dev/null)"
       fi
-      kubectl -n "$NS" create secret generic a2vm-tenant --from-file="$S" --dry-run=client -o yaml | kubectl apply -f -
+      kubectl -n "$NS" create secret generic a2vm-tenant --from-file="$S" --dry-run=client -o yaml | upsert
       echo "secret a2vm-tenant: $(ls "$S" | tr '\n' ' ')"
       rm -rf "$S"
     # A private registry: a deploy token with read_registry (A2VM_REGISTRY_USER, A2VM_REGISTRY_PASSWORD).
@@ -429,7 +440,7 @@ deploy-k8s:
       PULL=""
       if [ -n "${A2VM_REGISTRY_USER:-}" ] && [ -n "${A2VM_REGISTRY_PASSWORD:-}" ]; then
         kubectl -n "$NS" create secret docker-registry a2vm-registry --docker-server="${A2VM_REGISTRY:-$CI_REGISTRY}" \
-          --docker-username="$A2VM_REGISTRY_USER" --docker-password="$A2VM_REGISTRY_PASSWORD" --dry-run=client -o yaml | kubectl apply -f -
+          --docker-username="$A2VM_REGISTRY_USER" --docker-password="$A2VM_REGISTRY_PASSWORD" --dry-run=client -o yaml | upsert
         PULL="--set image.pullSecret=a2vm-registry"
       fi
     # Non-secret settings handed to the run.
