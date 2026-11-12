@@ -5,6 +5,34 @@ analyst and, under **Upgrade**, what a tenant must do when it moves to that tag 
 `A2VM_REF` in its `.gitlab-ci.yml`). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
 §11) and the LLDs. A release adds its entry here in the same merge request (CLAUDE.md, Releasing).
 
+## v0.23.17 — 2026-11-12
+
+A Cyberwatch master behind a reverse proxy that asks for a client certificate; the TLS of every
+HTTP client of A2VM in one place. Brought by the integration, tested there on a real master.
+
+- **Client certificate**: the `cyberwatch` connector takes `cert_file` and `key_file` (both or
+  none), presented to the reverse proxy in front of the master. Without them, a 403 now names this
+  case too. `docs/cyberwatch.md` §1 shows how to recognise it (`openssl s_client`, « Acceptable
+  client certificate CA names »).
+- **The bug behind it**: httpx 0.28 does not send `cert=(cert, key)` when `verify` is a path: the
+  certificate never left with a private CA, and the proxy answered 403 to everything; the tests
+  through a mock transport could not see it. `a2vm.tls.verify(ca_file, cert_file, key_file)` now
+  builds the SSL context of every HTTP client (Cyberwatch, CMDB, Wazuh, SentinelOne, the detection
+  and decision services' clients, iTop, GitLab); `ca_file` still trusts that CA alone. A test against
+  a real TLS server that requires a certificate, and a test that keeps `cert=` and paths in
+  `verify` out of the code.
+- **A master shared between perimeters**: `groups` is required, said in `docs/cyberwatch.md` §2;
+  without it, the journal warns when the assets are in more than one Cyberwatch group. A push over
+  the 200 MiB of the detection service (a master read whole: 123 MB for 442 assets on a real one)
+  is refused with its size, its counts and `groups` named.
+
+**Upgrade**:
+
+1. Move `ref` and `A2VM_REF` of the tenants to `v0.23.17`.
+2. The collectors to `detect:v0.23.17`. A master behind a reverse proxy that asks for a client
+   certificate: `cert_file` and `key_file` in the connector, the files owned by 10001, the key in
+   0600 (`docs/cyberwatch.md` §1). A master shared with other perimeters: `groups`.
+
 ## v0.23.16 — 2026-11-12
 
 Fix: `deploy-k8s` failed on the Secret `a2vm-tenant` of a tenant with a proxy CA once v0.23.14 and

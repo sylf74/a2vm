@@ -32,6 +32,7 @@ from typing import Any
 
 import httpx
 
+from a2vm import tls
 from a2vm.io import Detection, now
 from a2vm.models import AssetObservation
 
@@ -126,8 +127,7 @@ class SentinelOneClient:
         sleep: Callable[[float], None] = time.sleep,
     ):
         self.cfg = cfg
-        verify: Any = cfg.ca_file or True
-        self.http = httpx.Client(timeout=cfg.timeout_seconds, verify=verify, transport=transport)
+        self.http = httpx.Client(timeout=cfg.timeout_seconds, verify=tls.verify(cfg.ca_file), transport=transport)
         self._sleep = sleep
         self._headers: dict[str, str] = {}
 

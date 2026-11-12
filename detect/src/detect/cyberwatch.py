@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import ipaddress
 import re
+import ssl
 import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
@@ -26,6 +27,7 @@ from typing import Any
 
 import httpx
 
+from a2vm import tls
 from a2vm.io import Detection, now
 from a2vm.models import AssetObservation, Finding, FindingObservation, Match
 
@@ -50,6 +52,10 @@ class CyberwatchConfig:
     access_key_file: str
     secret_key_file: str
     ca_file: str | None = None
+    # A master behind a reverse proxy that asks for a client certificate (v0.23.17): PEM files,
+    # both or none, readable by the collector (10001), the key in 0600.
+    cert_file: str | None = None
+    key_file: str | None = None
     timeout_seconds: float = 120.0
     page_size: int = 100
     assets_path: str = "/api/v3/vulnerabilities/servers"
@@ -73,6 +79,8 @@ class CyberwatchConfig:
         for key in ("assets_path", "asset_path"):
             if key in data and not str(data[key]).startswith("/api/"):
                 raise ValueError(f"{where}: `{key}` is a path of the API, starting with /api/")
+        if bool(data.get("cert_file")) != bool(data.get("key_file")):
+            raise ValueError(f"{where}: `cert_file` and `key_file` go together (the client certificate and its key)")
         if "asset_path" in data and "{id}" not in str(data["asset_path"]):
             raise ValueError(f"{where}: `asset_path` holds {{id}}")
         return cls(
@@ -80,6 +88,8 @@ class CyberwatchConfig:
             access_key_file=str(data["access_key_file"]),
             secret_key_file=str(data["secret_key_file"]),
             ca_file=data.get("ca_file"),
+            cert_file=data.get("cert_file"),
+            key_file=data.get("key_file"),
             timeout_seconds=float(data.get("timeout_seconds", 120)),
             page_size=size,
             assets_path=str(data.get("assets_path") or cls.assets_path),
@@ -112,7 +122,10 @@ class CyberwatchClient:
         sleep: Callable[[float], None] = time.sleep,
     ):
         self.cfg = cfg
-        verify: Any = cfg.ca_file or True
+        try:
+            verify = tls.verify(cfg.ca_file, cfg.cert_file, cfg.key_file)
+        except (OSError, ssl.SSLError, ValueError) as exc:
+            raise CyberwatchError(f"TLS settings (ca_file, cert_file, key_file): {exc}") from exc
         self.http = httpx.Client(timeout=cfg.timeout_seconds, verify=verify, transport=transport)
         self._sleep = sleep
         self._auth: tuple[str, str] | None = None
@@ -137,8 +150,14 @@ class CyberwatchClient:
                 continue
             break
         if r.status_code in (401, 403):
+            proxy = (
+                ""
+                if self.cfg.cert_file
+                else "; or a reverse proxy in front of the master asking for a client certificate (cert_file, key_file)"
+            )
             raise CyberwatchError(
-                f"Cyberwatch refused the API keys ({r.status_code}): wrong keys, or a user without access to the assets"
+                f"Cyberwatch refused the API keys ({r.status_code}): wrong keys, or a user without access to the "
+                f"assets{proxy}"
             )
         if r.status_code == 404:
             raise CyberwatchError(f"Cyberwatch has no {path}: check assets_path and asset_path for this version")
@@ -312,6 +331,12 @@ def fetch(
     finally:
         if own:
             client.close()
+    if cfg.groups is None:
+        seen = {g for o in observations for g in o.attributes.get("cyberwatch_groups", "").split(", ") if g}
+        if len(seen) > 1:  # v0.23.17: a master shared between perimeters gives the others' assets too
+            log(f"WARN cyberwatch: no `groups` in the connector and the assets are in {len(seen)} groups "
+                f"({', '.join(sorted(seen)[:5])}{', ...' if len(seen) > 5 else ''}): on a master shared between "
+                "perimeters, set `groups` or the tenant gets the assets and CVEs of the others")  # fmt: skip
     log(f"cyberwatch: {len(observations)} assets, {len(findings)} open CVEs, components on "
         f"{sum(1 for o in observations if o.components)}")  # fmt: skip
     return Detection(tenant, SOURCE, sorted(observations, key=lambda o: o.ref), findings, skipped=skipped)

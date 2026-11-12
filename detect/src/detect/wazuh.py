@@ -32,6 +32,7 @@ from typing import Any
 
 import httpx
 
+from a2vm import tls
 from a2vm.io import Detection, now
 from a2vm.models import AssetObservation
 
@@ -109,8 +110,7 @@ class WazuhClient:
 
     def __init__(self, cfg: WazuhConfig, transport: httpx.BaseTransport | None = None):
         self.cfg = cfg
-        verify: Any = cfg.ca_file or True
-        self.http = httpx.Client(timeout=cfg.timeout_seconds, verify=verify, transport=transport)
+        self.http = httpx.Client(timeout=cfg.timeout_seconds, verify=tls.verify(cfg.ca_file), transport=transport)
         self._token = ""
 
     def close(self) -> None:

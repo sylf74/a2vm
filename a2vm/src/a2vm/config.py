@@ -130,16 +130,20 @@ class LlmSettings:
 
     def tls(self) -> dict[str, Any]:
         """The httpx arguments for the endpoint's TLS: `cert` and `verify`, those that apply."""
-        out: dict[str, Any] = {}
         cert, key = _present(self.client_cert_file), _present(self.client_key_file)
-        if cert and key:
-            out["cert"] = (cert, key)
-        elif cert or key:
+        if bool(cert) != bool(key):
             raise ValueError("llm: a client certificate needs both its certificate and its key")
         ca = _present(self.ca_file)
-        if ca:
-            out["verify"] = ssl_context(ca)
-        return out
+        if not cert and not ca:
+            return {}
+        from .tls import default_context
+
+        # The system's CAs and the endpoint's; the client certificate in the same context (v0.23.17:
+        # never `cert=` beside `verify`, a2vm.tls).
+        ctx = ssl_context(ca) if ca else default_context()
+        if cert:
+            ctx.load_cert_chain(cert, key)
+        return {"verify": ctx}
 
     @property
     def api_key(self) -> str | None:

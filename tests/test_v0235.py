@@ -118,7 +118,8 @@ def test_every_asset_with_its_components_and_open_cves(tmp_path) -> None:
     assert pc.components[0]["vendor"] == "Mozilla" and pc.components[0]["type"] == "win"  # through the table
     assert all(m == "GET" for m, _, _ in master.calls)
     assert [q.get("page") for _, p, q in master.calls if p.endswith("/servers")] == ["1", "2"]
-    assert lines == ["cyberwatch: 2 assets, 2 open CVEs, components on 2"]
+    assert lines[-1] == "cyberwatch: 2 assets, 2 open CVEs, components on 2"
+    assert lines[0].startswith("WARN cyberwatch: no `groups`")  # two groups, no filter (v0.23.17)
 
 
 def test_groups_and_ignored_cves(tmp_path) -> None:
