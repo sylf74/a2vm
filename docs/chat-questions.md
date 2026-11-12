@@ -80,6 +80,7 @@ How to ask:
 **`get_asset`**: one asset, its context and its decisions.
 
 - Que sait-on de web01 ?
+- D'où vient l'exposition de l'image vllm/vllm-openai:latest ?
 
 ## What changed, what was fixed, what to do
 

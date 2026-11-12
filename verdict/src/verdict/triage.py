@@ -46,6 +46,7 @@ from a2vm.models import (
     TriageRow,
     TriageRun,
     VulnRecord,
+    attribute_origin,
     exposure_source,
     exposure_value,
 )
@@ -97,6 +98,13 @@ def run_asset(asset: Asset) -> dict[str, Any]:
         "exposure": exposure_value(exposure.value),
         "exposure_source": exposure_source(exposure),
         "zone": zone.value if zone else "",
+        # Where each attribute comes from (v0.23.13): cmdb (CI), rule, host (inherited), default
+        "origins": {
+            name: attribute_origin(a)
+            for name in ("owner", "exposure", "mission_prevalence", "public_wellbeing_impact", "zone")
+            if (a := asset.attributes.get(name)) is not None
+        },
+        **({"runs_on": asset.identifiers["runs_on"]} if asset.identifiers.get("runs_on") else {}),
         "os": asset.os,
         "ips": list(asset.identifiers.get("ips") or []),
         "cmdb": [dict(item) for item in asset.identifiers.get("cmdb") or []],

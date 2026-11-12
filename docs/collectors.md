@@ -191,6 +191,7 @@ connectors:
   #   directory: /var/lib/a2vm/import/sbom
   #   assets:                              # optional: else the SBOM's subject, as an image
   #     - {file: billing.cdx.json, kind: host, name: app01.lab.example}
+  #     - {file: shop.cdx.json, kind: image, name: registry.lab.example/shop:2.1, host: web01.lab.example}
 ```
 
 A connector `itop` pushes the source `cmdb`, a connector `wazuh` the source `wazuh`, a connector

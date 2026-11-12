@@ -105,7 +105,8 @@ class SbomConfig:
     """Settings of an `sbom` connector: the SBOM files of a directory, one asset per file.
 
     `assets` names the asset of a file (`{file: app.cdx.json, kind: image, name: registry/app:1.4}`
-    or `{file: web.spdx.json, kind: host, name: web01}`); a file not named there takes the subject
+    or `{file: web.spdx.json, kind: host, name: web01}`; an image may name its `host`, v0.23.13, whose
+    owner, exposure and zone it inherits); a file not named there takes the subject
     the SBOM gives (CycloneDX `metadata.component.name`, SPDX `name`), as an image (an artifact)."""
 
     directory: str
@@ -155,7 +156,9 @@ def read(cfg: SbomConfig, tenant: str, log=print) -> Detection:  # noqa: ANN001
         observations.append(AssetObservation(
             ref=f"{kind}:{name}", kind=kind,
             source=SOURCE, observed_at=observed_at, name=name, description=f"SBOM {fmt} ({path.name})",
-            identifiers=identifiers, attributes={"sbom_file": path.name, "sbom_format": fmt}, os=None,
+            identifiers=identifiers, os=None,
+            attributes={"sbom_file": path.name, "sbom_format": fmt,
+                        **({"runs_on": str(entry["host"]).lower()} if kind == "image" and entry.get("host") else {})},
             components=libs,
         ))  # fmt: skip
     libraries = sum(len(o.components) for o in observations)

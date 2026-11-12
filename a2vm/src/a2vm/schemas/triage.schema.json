@@ -237,6 +237,17 @@
           "zone": {
             "type": "string"
           },
+          "origins": {
+            "type": "object",
+            "description": "Where each attribute comes from: its source and note, e.g. 'cmdb (CI-42)', 'host (poc-llm01, cmdb)', 'default (worst case)' (since v0.23.13)",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "runs_on": {
+            "type": "string",
+            "description": "An image: the id of the host asset it was scanned on, whose attributes it inherits (since v0.23.13)"
+          },
           "os": {
             "type": [
               "string",

@@ -68,7 +68,7 @@
       }
     },
     "rules": {
-      "description": "Attribute rules for discovered hosts, applied in order; for each attribute the first matching rule wins.",
+      "description": "Attribute rules for discovered hosts and images (since v0.23.13), applied in order; for each attribute the first matching rule wins.",
       "type": "array",
       "items": {
         "type": "object",
@@ -92,6 +92,10 @@
           "ip": {
             "type": "string",
             "description": "CIDR, e.g. '198.51.100.0/24'."
+          },
+          "image": {
+            "type": "string",
+            "description": "Glob on the image reference, e.g. 'vllm/*' (since v0.23.13). Alone: an image has no host name, FQDN or address."
           },
           "set": {
             "type": "object",
