@@ -25,6 +25,9 @@ flowchart LR
 Keycloak is described here; any provider with OIDC discovery and a groups claim works the same way.
 Nothing in A2VM depends on Keycloak.
 
+A platform for development whose company gives no client: a development provider in the
+namespace, made by `deploy-k8s` (`A2VM_DEV_IDP_HOST`, v0.23.15, `docs/dev-idp.md`).
+
 ## 1. Keycloak: the client of the tenant
 
 In the realm linked to the directory (Active Directory through *User federation*):

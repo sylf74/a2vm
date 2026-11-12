@@ -370,6 +370,27 @@ relay:
 # Sign-in of the analysts with the tenant's identity provider (OIDC, v0.17.0; Keycloak first, any
 # provider with discovery): the chat (Open WebUI) and the review page of the alerts. Empty issuerUrl:
 # the chat keeps its local accounts. The client secret is the key oidc-client-secret of secret.name.
+# A development identity provider (v0.23.15, docs/dev-idp.md): a Keycloak in the namespace for a
+# tenant whose company gives A2VM no client, never for production. deploy-k8s sets it from
+# A2VM_DEV_IDP_HOST and A2VM_DEV_IDP_USERS (deploy/chat/dev_idp_values.py) and derives oidc below.
+devIdp:
+  enabled: false
+  host: ""
+  image: quay.io/keycloak/keycloak:26.4
+  users: 0              # accounts in the realm, each its key dev-idp-password-<n> in the Secret
+  realm: {}             # the realm imported at the first start (dev_idp_values.py)
+  storage:
+    size: 1Gi
+    storageClass: ""    # empty: the cluster's default
+  ingress:
+    controller: nginx
+    className: ""
+    clusterIssuer: ""
+    tlsSecret: ""       # empty: <release>-idp-dev-tls (made by cert-manager with clusterIssuer)
+  resources:
+    requests: {cpu: 100m, memory: 512Mi}
+    limits: {memory: 1536Mi}
+
 oidc:
   issuerUrl: ""         # e.g. https://auth.example.org/realms/a2vm
   clientId: ""
@@ -403,6 +424,8 @@ daily:
 #   llm-client-cert, llm-client-key   an LLM behind mutual TLS: the client certificate and its key
 #                   (A2VM_LLM_CLIENT_CERT, A2VM_LLM_CLIENT_KEY; v0.23.14)
 #   llm-ca          the CA of the LLM endpoint's certificate (A2VM_LLM_CA; v0.23.14)
+#   dev-idp-admin-password, dev-idp-client-secret   the development identity provider (v0.23.15):
+#                   its admin's password, its client's secret; dev-idp-password-<n>: each account's first one
 #   gti-api-key     GTI_API_KEY
 #   gvm-user, gvm-password   OpenVAS (GMP) account
 #   reporting-dsn   writer connection to the reporting database
