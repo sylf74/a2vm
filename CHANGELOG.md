@@ -5,6 +5,39 @@ analyst and, under **Upgrade**, what a tenant must do when it moves to that tag 
 `A2VM_REF` in its `.gitlab-ci.yml`). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
 §11) and the LLDs. A release adds its entry here in the same merge request (CLAUDE.md, Releasing).
 
+## v0.23.11 — 2026-11-12
+
+The libraries of the images and of the SBOMs are checked every day against OSV; a library updated
+on disk but still in memory says a restart is needed; the tenant chooses whether the chat forwards
+the user.
+
+- **Images**: Trivy lists every library it finds in an image (`--list-all-pkgs`); the image's
+  observation keeps them (`type: library`, with their `purl`) and the image's digest.
+- **SBOMs**: a connector `sbom` of the collector reads the CycloneDX and SPDX files (JSON) of a
+  directory, one asset per file (`docs/collectors.md`); by hand `detect sbom read --config`.
+- **OSV**: `detect osv`, every daily run after the collection, asks OSV (api.osv.dev, through the
+  proxy) which vulnerabilities concern each library; those with a CVE become findings of source
+  `osv`, decided like any finding. The hosts are not touched again. OSV unreachable: a warning, the
+  run goes on. `A2VM_OSV_ENABLED=false` skips it (LLD detection §3.10).
+- **In memory**: after the packages of a host, the collector reads `/proc/<pid>/maps` over SSH; a
+  shared library deleted on disk and still mapped by a process is a component `in-memory` with its
+  processes (`812 nginx`). The log says `WARN <host> [loaded]: … restart needed`. Without root, only
+  the processes of the SSH user are read.
+- **Forwarded user**: `chat.forwardUserInfo` (`A2VM_CHAT_FORWARD_USER_INFO`, default `true`) sets
+  `ENABLE_FORWARD_USER_INFO_HEADERS`. These headers go to the LLM endpoints too: `false` for a SaaS
+  LLM; the journal then reads « chat (user not forwarded) » (`docs/llm.md` §4).
+- Roadmap: the image's scan skipped when its digest is unchanged, every loaded library tied to its
+  package, and the levels of proof of the libraries move to « Later (D20) ».
+
+**Upgrade**:
+
+1. Move `ref` and `A2VM_REF` of the tenants to `v0.23.11`. The daily run reaches api.osv.dev
+   (HTTPS, through the proxy): else set `A2VM_OSV_ENABLED=false`.
+2. A tenant whose LLM is a SaaS: `A2VM_CHAT_FORWARD_USER_INFO=false`, then `deploy-k8s`.
+3. The collectors to `detect:v0.23.11`: the images' libraries and the libraries in memory appear
+   from their next run. An `sbom` connector, if wanted: `collector.yaml` and `sbom` in the
+   collector's `sources` (`collectors.yaml`).
+
 ## v0.23.10 — 2026-11-11
 
 The chat acts, with a person's confirmation; it knows the next scans; and every action is in an

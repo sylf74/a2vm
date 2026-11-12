@@ -326,3 +326,9 @@ def test_deploy_k8s_sets_it() -> None:
     assert mod.values({**env, "A2VM_CHAT_FORWARD_USER_INFO": "false"})["chat"]["forwardUserInfo"] is False
     with pytest.raises(ValueError):
         mod.values({**env, "A2VM_CHAT_FORWARD_USER_INFO": "maybe"})
+
+
+def test_release_recorded() -> None:
+    assert "## v0.23.11 — " in (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert "v0.23.11 (current)" in (ROOT / "docs/hld/00-product-strategy.md").read_text(encoding="utf-8")
+    assert "version: 0.23.11" in (ROOT / "deploy/charts/a2vm-tenant/Chart.yaml").read_text()
