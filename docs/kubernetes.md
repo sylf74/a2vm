@@ -144,6 +144,14 @@ Then move the tenant's `.gitlab-ci.yml` to `v0.16.0` (both `ref` and `A2VM_REF`)
 pipeline runs `validate`, then `deploy-k8s`, which ends with the CronJob and its volume. Each
 later push to the default branch redeploys (new profile, new targets, new version).
 
+The Secrets (`a2vm-tenant`, `a2vm-intake`, `a2vm-verdict`, `a2vm-chat`, `a2vm-via`,
+`a2vm-dispatch`, `a2vm-intel`, `a2vm-registry`) and the alerts' template are created, then replaced
+at each deployment, never `kubectl apply`d (v0.23.16): a client-side apply copies the whole object
+into the annotation `kubectl.kubernetes.io/last-applied-configuration`, limited to 256 KiB, and
+`a2vm-tenant` with the proxy's CA bundle and the certificates of an LLM behind mutual TLS went over
+it (`metadata.annotations: Too long: must have at most 262144 bytes`). The first `replace` also
+drops the annotation of earlier deployments.
+
 ## 3. Run, follow, compare
 
 From a workstation with access to the cluster:

@@ -133,7 +133,8 @@ def _run_block(tmp_path: Path, **env) -> str:
     store = tmp_path / "store"
     store.mkdir(exist_ok=True)
     keep = 'for k in verdict-publish-token verdict-read-token; do cp "$V/$k" "$STORE/$k" 2>/dev/null || true; done'
-    script = f'{_verdict_block()}\n{keep}\necho "VERDICT=$VERDICT"\n'
+    # upsert (v0.23.16) is defined by an earlier step of the job: create or replace, here a no-op
+    script = f'upsert() {{ cat > /dev/null; }}\n{_verdict_block()}\n{keep}\necho "VERDICT=$VERDICT"\n'
     full = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}", "STORE": str(store), "NS": "a2vm-lab", **env}
     out = subprocess.run(["sh", "-ec", script], env=full, capture_output=True, text=True, check=True)
     return out.stdout + out.stderr
