@@ -142,7 +142,7 @@ def plan(tf: TargetsFile) -> list[tuple[HostTarget, str, str, Target]]:
         if t.method == "trivy":
             jobs.append((t, "trivy", TRIVY_HOST, host_target))
             for image in t.images:
-                img = Target(name=image, kind="image", image=image)
+                img = Target(name=image, kind="image", image=image, host=t.host.lower())
                 jobs.append((t, "trivy", f"{TRIVY_IMAGE} {shlex.quote(image)}", img))
         else:
             jobs.append((t, "dnf-updateinfo", DNF, host_target))

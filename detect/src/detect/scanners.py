@@ -35,6 +35,7 @@ class Target:
     fqdn: str | None = None
     ips: list[str] = field(default_factory=list)
     image: str | None = None
+    host: str | None = None  # an image: the host it was scanned on (v0.23.13, its attributes inherited)
 
     @property
     def ref(self) -> str:
@@ -116,7 +117,7 @@ class _Builder:
             name=t.name.split(".")[0] if t.kind == "host" else t.name,
             description="",
             identifiers=t.identifiers(),
-            attributes={},
+            attributes={"runs_on": t.host} if t.kind == "image" and t.host else {},
             os=os_name,
         )
         return Detection(

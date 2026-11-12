@@ -142,7 +142,45 @@ def _rule_matches(rule: AttributeRule, ids: dict) -> bool:
     if rule.ip:
         net = ipaddress.ip_network(rule.ip, strict=False)
         checks.append(any(ipaddress.ip_address(ip) in net for ip in ids.get("ips", [])))
+    if rule.image:  # v0.23.13
+        checks.append(any(fnmatch.fnmatch(i.lower(), rule.image.lower()) for i in ids.get("images", [])))
     return bool(checks) and all(checks)
+
+
+def _host_lookup(assets: list[Asset]) -> dict[str, Asset]:
+    """The host assets by every name they answer to: FQDN, short name, host name, address."""
+    out: dict[str, Asset] = {}
+    for a in assets:
+        if a.kind != "host":
+            continue
+        ids = a.identifiers
+        for n in [*ids.get("fqdns", []), *ids.get("hostnames", []), *ids.get("ips", []), a.name]:
+            n = str(n).lower()
+            out.setdefault(n, a)
+            if not n.replace(".", "").isdigit():  # not the first byte of an address
+                out.setdefault(n.split(".")[0], a)
+    return out
+
+
+def inherit_from_host(image: Asset, group: list[AssetObservation], hosts: dict[str, Asset]) -> None:
+    """An image takes from the host it runs on (v0.23.13) what nothing says of the image itself: an
+    attribute assumed by default, a zone. A container lives in the exposure of its machine: the
+    host's owner, exposure, mission and zone, from its CMDB entry or a rule, with the host named as
+    the origin (`host`, note `poc-llm01, cmdb`). What the image's own rule, CMDB entry or the external
+    scan says comes first."""
+    runs_on = next((str(o.attributes["runs_on"]).lower() for o in group if o.attributes.get("runs_on")), "")
+    host = (hosts.get(runs_on) or hosts.get(runs_on.split(".")[0])) if runs_on else None
+    if host is None:
+        return
+    image.identifiers["runs_on"] = host.id
+    for name in ATTRIBUTES:
+        mine, theirs = image.attributes.get(name), host.attributes.get(name)
+        if theirs is None or theirs.source == "default" or (mine is not None and mine.source != "default"):
+            continue
+        image.attributes[name] = Attribute(theirs.value, "host", f"{host.name}, {theirs.source}")
+    zone = host.attributes.get("zone")
+    if zone is not None and "zone" not in image.attributes:
+        image.attributes["zone"] = Attribute(zone.value, "host", f"{host.name}, {zone.source}")
 
 
 def _merge_identifiers(group: list[AssetObservation]) -> dict:
@@ -330,6 +368,7 @@ def build_inventory(profile: ClientProfile, detections: list[Detection]) -> Inve
 
     inv = Inventory(profile.id)
     asset_of: dict[tuple[str, str], Asset] = {}  # (source, observation ref) -> asset
+    images: list[tuple[Asset, list[AssetObservation]]] = []
     for root, members in groups.items():
         group = [observations[i] for i in members]
         # The internal observations name the asset; an external one only adds reachability.
@@ -378,8 +417,13 @@ def build_inventory(profile: ClientProfile, detections: list[Detection]) -> Inve
         if gap:
             inv.exposure_gaps.append(gap)
         inv.assets.append(asset)
+        if kind == "image":
+            images.append((asset, group))
         for o in group:
             asset_of[(o.source, o.ref)] = asset
+    hosts = _host_lookup(inv.assets)
+    for image, group in images:
+        inherit_from_host(image, group, hosts)
     inv.assets.sort(key=lambda a: a.id)
 
     merged: dict[tuple[str, str], Finding] = {}

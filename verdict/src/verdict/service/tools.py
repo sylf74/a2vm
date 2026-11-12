@@ -166,7 +166,9 @@ OPERATIONS: list[tuple[str, str, str, list[dict[str, Any]], str]] = [
         "/assets",
         "list_assets",
         "Assets of the tenant with their counts of decisions per level, most ACT first; an asset scanned "
-        "without any finding is listed too, with zero counts and its scans (source and date of the last scan).",
+        "without any finding is listed too, with zero counts and its scans (source and date of the last scan). "
+        "origins says where owner, exposure and zone come from (cmdb, rule, host: inherited from the host an "
+        "image runs on, named in runs_on; default: assumed, the worst case).",
         [
             _q("q", "string", "Part of the asset id or name"),
             _q("exposure", "string", "open, controlled or small", enum=["open", "controlled", "small"]),
@@ -178,7 +180,8 @@ OPERATIONS: list[tuple[str, str, str, list[dict[str, Any]], str]] = [
     (
         "/assets/{asset}",
         "get_asset",
-        "One asset (owner, zone, exposure and its source) and its decisions, most urgent first, paged.",
+        "One asset (owner, zone, exposure, where each comes from in origins, the host of an image in runs_on) "
+        "and its decisions, most urgent first, paged.",
         [
             _p("asset", "The asset: its id from list_assets (host:web01.example.org), its host name or short name"),
             *_PAGE,

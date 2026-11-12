@@ -215,6 +215,10 @@ class RunIndex:
             "counts": {lv: counts.get(lv, 0) for lv in LEVELS},
         }
         if known:
+            if known.get("origins"):
+                card["origins"] = known["origins"]  # where owner, exposure, zone come from (v0.23.13)
+            if known.get("runs_on"):
+                card["runs_on"] = known["runs_on"]  # an image: the host it runs on (v0.23.13)
             card["scans"] = known.get("scans") or {}
             card["last_seen"] = known.get("last_seen", "")
             if known.get("cmdb"):

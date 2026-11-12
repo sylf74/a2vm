@@ -442,6 +442,27 @@ An external scan only proves reachability: it can set `open`, never lower a valu
 external scan does not reach keeps its declared value; absence from a scan is not evidence (source
 filtering, scan window, host down).
 
+Images (v0.23.13). An image is scanned on a host (`images:` of a `method: trivy` target, or an
+SBOM's `host`): its observation says where (`runs_on`). A container lives in the exposure of its
+machine, so `verdict.assets.build.inherit_from_host` gives the image what nothing says of the image
+itself: each of owner, exposure, mission and well-being that would be `assumed`, and the zone, from
+the host, when the host does not assume it either. Source `host`, note `<host>, <its source>`
+(`gpu01, cmdb`); the triage shows « héritée de l'hôte ». The order for an image:
+
+`external-scan` > `declared` > `cmdb` of the image > `rule` on the image > `<scanner>` > `host` > `assumed`.
+
+A rule names images by a glob on their reference, alone (an image has no host name, FQDN or
+address):
+
+```yaml
+rules:
+  - {image: vllm/*, set: {owner: ml-platform}, description: vLLM images}
+```
+
+Every asset of the triage document says where each attribute comes from (`origins`: `cmdb
+(CI-42)`, `rule (vLLM images)`, `host (gpu01, cmdb)`, `default (worst case)`) and an image the host
+it runs on (`runs_on`); the chat's `list_assets` and `get_asset` give both.
+
 ### 5.3 External detection and published endpoints (v0.11.2)
 
 The external scan runs in the client's `<client>-external` project, collection only (DAT,

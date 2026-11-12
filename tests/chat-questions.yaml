@@ -22,6 +22,7 @@ questions:
   - {q: "Quelles décisions demandent une revue ?", tool: search_decisions, params: [needs_review], why: filters}
   - {q: "Qu'est-ce qui passe en retard de SLA cette semaine ?", tool: search_decisions, params: [sla_due_before], why: filters}
   - {q: "Que sait-on de web01 ?", tool: get_asset, params: [asset], why: asset}
+  - {q: "D'où vient l'exposition de l'image vllm/vllm-openai:latest ?", tool: get_asset, params: [asset], why: origins}
   - {q: "Quels actifs de la CMDB ne sont jamais scannés ?", tool: list_coverage, params: [state], why: CMDB}
   - {q: "Qu'est-ce qui a changé depuis le run d'hier ?", tool: what_changed, params: [since], why: changed}
   - {q: "Quelles vulnérabilités ont été corrigées en octobre ?", tool: list_closed_findings, params: [since, until], why: closed}

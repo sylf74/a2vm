@@ -120,12 +120,14 @@ class DeclaredAsset:
 
 @dataclass
 class AttributeRule:
-    """Set asset attributes for hosts matching a hostname/FQDN glob or an address range."""
+    """Set asset attributes for hosts matching a hostname/FQDN glob or an address range, or for
+    images matching an image glob (v0.23.13)."""
 
     set: dict[str, str]
     hostname: str | None = None
     fqdn: str | None = None
     ip: str | None = None  # CIDR
+    image: str | None = None  # glob on the image reference, e.g. 'vllm/*' (v0.23.13)
     description: str = ""
 
 
@@ -227,6 +229,12 @@ def exposure_value(value: str) -> str:
 def exposure_source(attribute: Attribute) -> str:
     """Where an asset's exposure comes from, as shown in reports: assumed when it is a default."""
     return "assumed" if attribute.source == "default" else attribute.source
+
+
+def attribute_origin(attribute: Attribute) -> str:
+    """Where an attribute comes from, in a few words (v0.23.13): `cmdb (CI-42)`, `host
+    (poc-llm01, cmdb)`, `default (worst case)`."""
+    return f"{attribute.source} ({attribute.note})" if attribute.note else attribute.source
 
 
 @dataclass

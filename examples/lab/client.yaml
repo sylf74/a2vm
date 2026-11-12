@@ -42,6 +42,9 @@ alerts:
   watchlist: ["Microsoft Exchange Server"]
 
 rules:
+  # An image takes the owner, exposure and zone of the host it is scanned on (v0.23.13); a rule
+  # gives it its own: a glob on the image reference, alone.
+  # - {image: "registry.lab.example/shop/*", set: {owner: shop-team}, description: the shop's images}
   - description: reverse proxy published on the Internet (443)
     hostname: edge01
     set: {exposure: open, mission_prevalence: essential, public_wellbeing_impact: minimal, owner: lab-admin}
