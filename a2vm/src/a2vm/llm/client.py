@@ -50,7 +50,10 @@ class LlmClient:
         headers = {"Content-Type": "application/json"}
         if settings.api_key:
             headers["Authorization"] = f"Bearer {settings.api_key}"
-        self._client = httpx.Client(timeout=settings.timeout_seconds, headers=headers, transport=transport)
+        # A client certificate and the endpoint's CA, behind mutual TLS (v0.23.14)
+        self._client = httpx.Client(
+            timeout=settings.timeout_seconds, headers=headers, transport=transport, **settings.tls()
+        )
         self._current = 0
         self._lock = threading.Lock()
         self.cache = LlmCache(settings.cache_file, settings.cache_days) if settings.cache_file else None

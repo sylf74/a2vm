@@ -13,7 +13,7 @@
 #
 #     include:
 #       - project: vulnops/a2vm
-#         ref: v0.23.13
+#         ref: v0.23.14
 #         file: templates/client-pipeline.yml
 #     variables:
 #       A2VM_REF: v0.19.0        # same version as the include
@@ -343,6 +343,9 @@ deploy-k8s:
       }
       put ssh-key "${A2VM_SSH_KEY:-}"
       put llm-api-key "${LLM_API_KEY:-}"
+      put llm-client-cert "${A2VM_LLM_CLIENT_CERT:-}"
+      put llm-client-key "${A2VM_LLM_CLIENT_KEY:-}"
+      put llm-ca "${A2VM_LLM_CA:-}"
       put gti-api-key "${GTI_API_KEY:-}"
       put gvm-user "${A2VM_GVM_USER:-}"
       put gvm-password "${A2VM_GVM_PASSWORD:-}"

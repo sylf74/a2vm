@@ -9,6 +9,8 @@ NetworkPolicy. Endpoints given by name are resolved here, in the job, to their a
     A2VM_CHAT_HOST                  host of the chat (required to deploy it)
     A2VM_LLM_BASE_URL, A2VM_LLM_MODEL   the tenant's approved endpoints (comma-separated) and model
     A2VM_CHAT_LLM_EGRESS            optional: `cidr:port,...`, instead of resolving the endpoints
+    A2VM_LLM_CLIENT_CERT            optional: the endpoint is behind mutual TLS, the chat goes through
+                                    the gateway that presents this certificate (v0.23.14)
     A2VM_CHAT_ALLOW                 optional: the analysts' networks (CIDR, comma-separated)
     A2VM_CHAT_ADMIN_EMAIL           optional: login of the first admin
     A2VM_CHAT_RETENTION_DAYS        optional: chats unchanged for longer are deleted (default 30, 0: kept)
@@ -82,6 +84,7 @@ def values(env: dict[str, str]) -> dict:
             "endpoints": endpoints,
             "model": model,
             "egress": egress_of(endpoints, env.get("A2VM_CHAT_LLM_EGRESS", "")),
+            "clientCert": bool(env.get("A2VM_LLM_CLIENT_CERT", "").strip()),
         },
         "ingress": ingress,
     }

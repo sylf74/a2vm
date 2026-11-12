@@ -1186,7 +1186,7 @@ others (scan key, reporting DSN). Its NetworkPolicy (§16.3) is the last line: e
 here cannot reach anything but the tool server, the LLM endpoint or the gateway, the identity
 provider (`oidc.egress`) and the DNS.
 
-### 16.5 LLM gateway of the chat (several endpoints)
+### 16.5 LLM gateway of the chat (several endpoints, mutual TLS)
 
 Open WebUI 0.12 uses, for a model, the first connection that serves it: two endpoints serving the
 same model give no spreading and no failover. With several endpoints the chart therefore puts a
@@ -1207,6 +1207,19 @@ no gateway: Open WebUI connects to it.
 | `location <path>/` only, else 404 | e.g. `/v1/` | Nothing but the OpenAI API path is passed |
 | `log_format` | method, path, status, endpoint, time | Which VM answered, never a header (the key) or a body (client data) |
 | `server_tokens` | `off` | No version in answers |
+| `proxy_ssl_certificate`, `proxy_ssl_certificate_key` | keys `llm-client-cert`, `llm-client-key` (with `chat.llm.clientCert`, v0.23.14) | The client certificate the endpoint's reverse proxy asks for |
+| `proxy_ssl_verify`, `proxy_ssl_trusted_certificate`, `proxy_ssl_verify_depth` | `on`, key `llm-ca`, `4` | The endpoint is the one expected before the API key is sent |
+| `proxy_ssl_server_name`, `proxy_ssl_name` | `on`, the endpoint's host name | SNI: the reverse proxy picks the right site and certificate |
+| `proxy_ssl_session_reuse` | `on` | One TLS handshake for many questions |
+
+Mutual TLS (v0.23.14). An endpoint behind a reverse proxy that asks for a client certificate:
+Open WebUI cannot present one, so with `chat.llm.clientCert` the chart puts the gateway in front
+of the single `https` endpoint, and the gateway presents it. `proxy_pass https://llm`,
+`proxy_ssl_certificate` and `proxy_ssl_certificate_key` (keys `llm-client-cert`,
+`llm-client-key` of the Secret, mounted 0440 for the gateway's group), `proxy_ssl_verify on`
+against `llm-ca`, `proxy_ssl_server_name on` with the endpoint's host name, and that host as
+`Host`. The API key goes through in Open WebUI's `Authorization` header. The triage presents the
+same certificate itself (`LlmSettings.tls()`, `docs/llm.md` §5).
 
 Constraints, checked by the chart: the endpoints share their path, and are reached over http (the
 gateway sets no TLS name per endpoint; https endpoints go behind one load balancer given as the

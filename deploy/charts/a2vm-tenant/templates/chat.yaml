@@ -19,7 +19,7 @@ oidc.admins the local admin keeps the login form.
 {{- $prompt := replace "{tenant}" .Values.tenant $chat.systemPrompt }}
 {{- $grants := list (dict "principal_type" "user" "principal_id" "*" "permission" "read") }}
 {{- $connection := dict "type" "openapi" "url" (include "a2vm-tenant.toolsUrl" .) "spec_type" "url" "path" "openapi.json" "auth_type" "bearer" "key" "__A2VM_TOOLS_TOKEN__" "config" (dict "enable" true "access_grants" $grants) "info" (dict "id" "a2vm" "name" "A2VM" "description" (printf "Vulnerability decisions of tenant %s (read only)" .Values.tenant)) }}
-{{- $gateway := gt (len $chat.llm.endpoints) 1 }}
+{{- $gateway := or (gt (len $chat.llm.endpoints) 1) $chat.llm.clientCert }}
 {{- $configs := dict "0" (dict "enable" true "model_ids" (list $chat.llm.model)) }}
 {{- $tls := $ing.tlsSecret | default (ternary (printf "%s-chat-tls" $name) "" (ne $ing.clusterIssuer "")) }}
 {{- $o := .Values.oidc }}
@@ -710,7 +710,7 @@ data:
       upstream llm {
         {{- range $chat.llm.endpoints }}
         {{- $u := urlParse . }}
-        server {{ if contains ":" $u.host }}{{ $u.host }}{{ else }}{{ $u.host }}:80{{ end }} max_fails=1 fail_timeout={{ $gw.failSeconds }}s;
+        server {{ if contains ":" $u.host }}{{ $u.host }}{{ else }}{{ $u.host }}:{{ if eq $u.scheme "https" }}443{{ else }}80{{ end }}{{ end }} max_fails=1 fail_timeout={{ $gw.failSeconds }}s;
         {{- end }}
         keepalive 16;
       }
@@ -719,7 +719,24 @@ data:
         client_max_body_size 8m;
         location = /healthz { access_log off; return 200 "ok\n"; }
         location {{ (urlParse (first $chat.llm.endpoints)).path | trimSuffix "/" }}/ {
+          {{- if $chat.llm.clientCert }}
+          {{- $h := (urlParse (first $chat.llm.endpoints)).host }}
+          {{- $hostname := regexReplaceAll ":[0-9]+$" $h "" }}
+          # Mutual TLS (v0.23.14): the gateway presents the tenant's client certificate and checks
+          # the endpoint's against the CA of the Secret.
+          proxy_pass https://llm;
+          proxy_set_header Host {{ $h }};
+          proxy_ssl_server_name on;
+          proxy_ssl_name {{ $hostname }};
+          proxy_ssl_certificate /etc/a2vm-tls/llm-client-cert;
+          proxy_ssl_certificate_key /etc/a2vm-tls/llm-client-key;
+          proxy_ssl_trusted_certificate /etc/a2vm-tls/llm-ca;
+          proxy_ssl_verify on;
+          proxy_ssl_verify_depth 4;
+          proxy_ssl_session_reuse on;
+          {{- else }}
           proxy_pass http://llm;
+          {{- end }}
           proxy_http_version 1.1;
           proxy_set_header Connection "";
           proxy_buffering off;
@@ -753,7 +770,7 @@ spec:
         {{- include "a2vm-tenant.labels" . | nindent 8 }}
         app.kubernetes.io/component: llm
       annotations:
-        checksum/endpoints: {{ toJson $chat.llm.endpoints | sha256sum | quote }}
+        checksum/endpoints: {{ toJson (list $chat.llm.endpoints $chat.llm.clientCert) | sha256sum | quote }}
     spec:
       automountServiceAccountToken: false
       enableServiceLinks: false
@@ -761,6 +778,7 @@ spec:
         runAsNonRoot: true
         runAsUser: 101
         runAsGroup: 101
+        fsGroup: 101          # reads the client certificate's key (0440), v0.23.14
         seccompProfile:
           type: RuntimeDefault
       {{- with .Values.nodeSelector }}
@@ -796,6 +814,11 @@ spec:
               readOnly: true
             - name: tmp
               mountPath: /tmp
+            {{- if $chat.llm.clientCert }}
+            - name: tls
+              mountPath: /etc/a2vm-tls
+              readOnly: true
+            {{- end }}
           {{- with $gw.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
@@ -806,6 +829,16 @@ spec:
             name: {{ $name }}-llm
         - name: tmp
           emptyDir: {}
+        {{- if $chat.llm.clientCert }}
+        - name: tls
+          secret:
+            secretName: {{ .Values.secret.name }}
+            defaultMode: 0440
+            items:
+              - {key: llm-client-cert, path: llm-client-cert}
+              - {key: llm-client-key, path: llm-client-key}
+              - {key: llm-ca, path: llm-ca}
+        {{- end }}
 ---
 apiVersion: v1
 kind: Service

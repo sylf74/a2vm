@@ -76,6 +76,23 @@ class SourceSettings:
         return os.environ.get(self.gti_api_key_env) or None
 
 
+def _present(path: str) -> str:
+    """The path when it names a file with something in it, else ""."""
+    try:
+        return path if path and os.path.getsize(path) > 0 else ""
+    except OSError:
+        return ""
+
+
+def ssl_context(ca_file: str):  # noqa: ANN201
+    """A context that trusts the system's CAs and those of `ca_file`."""
+    import ssl
+
+    ctx = ssl.create_default_context()
+    ctx.load_verify_locations(cafile=ca_file)
+    return ctx
+
+
 @dataclass
 class LlmSettings:
     enabled: bool = False
@@ -104,6 +121,25 @@ class LlmSettings:
     # is not asked again. A JSON file on a kept volume; "" keeps nothing.
     cache_file: str = ""
     cache_days: int = 30  # an answer not used for this many days is forgotten
+    # A client certificate for an endpoint behind mutual TLS (v0.23.14): PEM files, both or none; a
+    # path to a missing or empty file counts as none (the tenant's Secret has the keys or not). And
+    # the CA that signs the endpoint's certificate, when it is not in the system's ("" for those).
+    client_cert_file: str = ""
+    client_key_file: str = ""
+    ca_file: str = ""
+
+    def tls(self) -> dict[str, Any]:
+        """The httpx arguments for the endpoint's TLS: `cert` and `verify`, those that apply."""
+        out: dict[str, Any] = {}
+        cert, key = _present(self.client_cert_file), _present(self.client_key_file)
+        if cert and key:
+            out["cert"] = (cert, key)
+        elif cert or key:
+            raise ValueError("llm: a client certificate needs both its certificate and its key")
+        ca = _present(self.ca_file)
+        if ca:
+            out["verify"] = ssl_context(ca)
+        return out
 
     @property
     def api_key(self) -> str | None:
@@ -135,6 +171,9 @@ _ENV_OVERRIDES = {
     "LLM_FAMILY": ("llm", "family"),
     "LLM_REASONING": ("llm", "reasoning"),
     "LLM_CACHE_FILE": ("llm", "cache_file"),
+    "LLM_CLIENT_CERT_FILE": ("llm", "client_cert_file"),
+    "LLM_CLIENT_KEY_FILE": ("llm", "client_key_file"),
+    "LLM_CA_FILE": ("llm", "ca_file"),
     "CACHE_DIR": ("sources", "cache_dir"),
     "CVE_RECORD_URL": ("sources", "cve_record_url"),
     "GTI_ENABLED": ("sources", "gti_enabled"),

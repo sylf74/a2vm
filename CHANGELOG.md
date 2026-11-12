@@ -5,6 +5,33 @@ analyst and, under **Upgrade**, what a tenant must do when it moves to that tag 
 `A2VM_REF` in its `.gitlab-ci.yml`). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
 §11) and the LLDs. A release adds its entry here in the same merge request (CLAUDE.md, Releasing).
 
+## v0.23.14 — 2026-11-12
+
+A2VM reaches an LLM behind mutual TLS: a reverse proxy in front of a shared model that asks each
+client for a certificate (`400 No required SSL certificate was sent`).
+
+- **The triage** presents the tenant's client certificate and checks the endpoint's against the
+  CA given: `A2VM_LLM_CLIENT_CERT_FILE`, `A2VM_LLM_CLIENT_KEY_FILE`, `A2VM_LLM_CA_FILE`, set by the
+  chart to the keys `llm-client-cert`, `llm-client-key` and `llm-ca` of the tenant's Secret. A key
+  absent: no certificate, as before.
+- **The chat**: Open WebUI cannot present a certificate. With `chat.llm.clientCert` it calls the
+  LLM gateway of the namespace (nginx), which presents it, checks the endpoint's certificate and
+  passes the API key on. One `https` endpoint.
+- `deploy-k8s` copies the CI/CD variables `A2VM_LLM_CLIENT_CERT`, `A2VM_LLM_CLIENT_KEY`,
+  `A2VM_LLM_CA` (type File) into the Secret and sets `chat.llm.clientCert` when the first is there.
+- Tested against a server that requires a certificate of a test CA: the triage's client and the
+  gateway's nginx directives present it, a wrong CA is refused before any key is sent.
+- `docs/llm.md` §5, LLD triage §16.5.
+
+**Upgrade**:
+
+1. Move `ref` and `A2VM_REF` of the tenants to `v0.23.14`. Nothing changes without the variables.
+2. A tenant whose LLM asks for a client certificate: a service certificate (`clientAuth`) from a CA
+   the reverse proxy accepts, never a person's. CI/CD variables of type File
+   `A2VM_LLM_CLIENT_CERT` (certificate and its intermediate CAs), `A2VM_LLM_CLIENT_KEY` (protected),
+   `A2VM_LLM_CA` (the CA of the endpoint's server certificate); the endpoint's host in
+   `A2VM_NO_PROXY` when it is inside the company; then `deploy-k8s`.
+
 ## v0.23.13 — 2026-11-12
 
 An image lives in the exposure of its host: its decisions no longer rest on the worst case.
