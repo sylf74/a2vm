@@ -400,8 +400,9 @@ daily:
 # Name of the Secret holding the tenant's secrets. Every key is optional:
 #   ssh-key         private key of the read-only scan account
 #   llm-api-key     LLM_API_KEY
-#   llm-client-cert, llm-client-key, llm-ca   an LLM behind mutual TLS: client certificate, its key, the
-#                   CA of the endpoint (A2VM_LLM_CLIENT_CERT, A2VM_LLM_CLIENT_KEY, A2VM_LLM_CA; v0.23.14)
+#   llm-client-cert, llm-client-key   an LLM behind mutual TLS: the client certificate and its key
+#                   (A2VM_LLM_CLIENT_CERT, A2VM_LLM_CLIENT_KEY; v0.23.14)
+#   llm-ca          the CA of the LLM endpoint's certificate (A2VM_LLM_CA; v0.23.14)
 #   gti-api-key     GTI_API_KEY
 #   gvm-user, gvm-password   OpenVAS (GMP) account
 #   reporting-dsn   writer connection to the reporting database

@@ -1207,6 +1207,10 @@ no gateway: Open WebUI connects to it.
 | `location <path>/` only, else 404 | e.g. `/v1/` | Nothing but the OpenAI API path is passed |
 | `log_format` | method, path, status, endpoint, time | Which VM answered, never a header (the key) or a body (client data) |
 | `server_tokens` | `off` | No version in answers |
+| `proxy_ssl_certificate`, `proxy_ssl_certificate_key` | keys `llm-client-cert`, `llm-client-key` (with `chat.llm.clientCert`, v0.23.14) | The client certificate the endpoint's reverse proxy asks for |
+| `proxy_ssl_verify`, `proxy_ssl_trusted_certificate`, `proxy_ssl_verify_depth` | `on`, key `llm-ca`, `4` | The endpoint is the one expected before the API key is sent |
+| `proxy_ssl_server_name`, `proxy_ssl_name` | `on`, the endpoint's host name | SNI: the reverse proxy picks the right site and certificate |
+| `proxy_ssl_session_reuse` | `on` | One TLS handshake for many questions |
 
 Mutual TLS (v0.23.14). An endpoint behind a reverse proxy that asks for a client certificate:
 Open WebUI cannot present one, so with `chat.llm.clientCert` the chart puts the gateway in front
