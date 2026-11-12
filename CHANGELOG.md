@@ -5,6 +5,36 @@ analyst and, under **Upgrade**, what a tenant must do when it moves to that tag 
 `A2VM_REF` in its `.gitlab-ci.yml`). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
 §11) and the LLDs. A release adds its entry here in the same merge request (CLAUDE.md, Releasing).
 
+## v0.23.15 — 2026-11-12
+
+A development identity provider, for a platform whose company gives A2VM no OIDC client: the chat,
+the review page and the confirmation of the actions work there too. Off unless asked.
+
+- **`A2VM_DEV_IDP_HOST`**: `deploy-k8s` runs a Keycloak in the tenant's namespace, published by the
+  chat's ingress, with the realm `a2vm-dev` imported at its first start: the client
+  `a2vm-<tenant>` (redirect URIs of the chat, the review page and the remediation page, PKCE, a
+  `groups` claim), the groups `a2vm-readers`, `a2vm-validators`, `a2vm-admins`, and the accounts
+  of **`A2VM_DEV_IDP_USERS`** (`e-mail:group`), each with a temporary password to change at the
+  first sign-in.
+- The sign-in is derived from it (`A2VM_OIDC_*`), as with the company's provider. Its admin's
+  password, its client's secret and the first passwords are made once and kept in the Secret
+  `a2vm-tenant`, never printed.
+- **Never for production**: local accounts, a sign-in page that says DEVELOPMENT, a warning at each
+  deployment, the admin console unpublished. With `A2VM_OIDC_ISSUER` set it is ignored: the
+  company's provider wins.
+- The realm was imported into Keycloak 26.4 while writing this version: the client's secret from
+  the environment, PKCE, the groups claim, verified e-mails, temporary passwords.
+- `docs/dev-idp.md`.
+
+**Upgrade**:
+
+1. Move `ref` and `A2VM_REF` of the tenants to `v0.23.15`. Nothing changes without
+   `A2VM_DEV_IDP_HOST`.
+2. A tenant on a development platform without a company client: `A2VM_DEV_IDP_HOST`, a host the
+   ingress controller serves, and `A2VM_DEV_IDP_USERS`; `A2VM_ALERTS_HOST` for the review page;
+   `A2VM_OIDC_CA` when the ingress certificates come from a private CA; then `deploy-k8s`, and each
+   account's first password from the Secret (`docs/dev-idp.md` §3).
+
 ## v0.23.14 — 2026-11-12
 
 A2VM reaches an LLM behind mutual TLS: a reverse proxy in front of a shared model that asks each
