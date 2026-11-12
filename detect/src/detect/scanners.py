@@ -156,7 +156,16 @@ def parse_trivy(data: dict[str, Any], client_id: str, target: Target, observed_a
                 v.get("Severity", "") or "",
                 trivy_cvss(v),
             )
-    return b.detection(os_name)
+    d = b.detection(os_name)
+    if target.kind == "image":  # v0.23.11: the libraries of the image (--list-all-pkgs) and its digest
+        from .sbom import image_digest, trivy_libraries
+
+        o = d.observations[0]
+        o.components = trivy_libraries(data)
+        digest = image_digest(data)
+        if digest:
+            o.attributes["digest"] = digest
+    return d
 
 
 # -- dnf updateinfo ------------------------------------------------------------------------------

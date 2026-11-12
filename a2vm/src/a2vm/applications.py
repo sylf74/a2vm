@@ -97,9 +97,16 @@ def app_key(vendor: str, name: str) -> str:
     return f"{vendor_key(vendor)}|{name_key(name)}"
 
 
+# Components matched elsewhere (v0.23.11): the libraries of a language ecosystem (a purl, OSV) and
+# the libraries a process still runs from a deleted file (a restart, not a product).
+NOT_APPLICATIONS = {"library", "in-memory"}
+
+
 def is_application(component: dict[str, Any]) -> bool:
-    """A component that is not a package of a distribution (matched by `a2vm.packages`)."""
-    return component.get("type", "rpm") not in PACKAGE_TYPES and bool(name_key(component.get("name", "")))
+    """A component that is not a package of a distribution (matched by `a2vm.packages`) nor a library
+    of a language ecosystem (matched by OSV, v0.23.11)."""
+    kind = component.get("type", "rpm")
+    return kind not in PACKAGE_TYPES and kind not in NOT_APPLICATIONS and bool(name_key(component.get("name", "")))
 
 
 def cpe_base(value: str) -> str:

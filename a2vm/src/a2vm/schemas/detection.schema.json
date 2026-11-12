@@ -329,6 +329,10 @@
                 "type": "string",
                 "description": "The publisher of an application (SentinelOne, Windows agents of Wazuh), matched through the applications table (since v0.23.3)"
               },
+              "processes": {
+                "type": "string",
+                "description": "Type in-memory: the processes that still run the deleted file of this package, pid and name (since v0.23.11)"
+              },
               "cpe": {
                 "type": "string",
                 "description": "The CPE of a firmware (type firmware), cpe:2.3:o:<vendor>:<product>, when its family is known (since v0.23.6)"

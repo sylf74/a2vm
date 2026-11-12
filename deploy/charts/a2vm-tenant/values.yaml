@@ -177,6 +177,11 @@ chat:
   adminEmail: admin@example.org
   # Time zone of the days and times the analysts give the tools ("since 9:00"), v0.23.2.
   timezone: Europe/Paris
+  # Open WebUI sends the user (name, id, e-mail, role) in headers to the tool server, which writes
+  # who asked in the audit journal, and to the LLM endpoints too. false for a SaaS LLM: the journal
+  # then reads "chat (user not forwarded)" (v0.23.11, docs/llm.md). deploy-k8s:
+  # A2VM_CHAT_FORWARD_USER_INFO.
+  forwardUserInfo: true
   llm:
     # OpenAI-compatible endpoints serving the model, in order (several VMs: the chat spreads its
     # calls over them). deploy-k8s: A2VM_LLM_BASE_URL, comma-separated.

@@ -13,7 +13,7 @@
 #
 #     include:
 #       - project: vulnops/a2vm
-#         ref: v0.23.10
+#         ref: v0.23.11
 #         file: templates/client-pipeline.yml
 #     variables:
 #       A2VM_REF: v0.19.0        # same version as the include
@@ -486,6 +486,8 @@ collect:
       if [ -n "${A2VM_EXTERNAL_PROJECT:-}" ]; then
         detect external "$A2VM_PROFILE" --project "$A2VM_EXTERNAL_PROJECT" --out work/detect || rc=$?
       fi
+      # v0.23.11: the libraries of the images and the SBOMs against OSV (A2VM_OSV_ENABLED=false: skipped).
+      detect osv --detect work/detect || rc=$?
       du -sh work/* 2>/dev/null || true
       if [ "$rc" -ne 0 ]; then exit 3; fi
 

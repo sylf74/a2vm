@@ -53,7 +53,8 @@ CMDB = "cmdb"
 WAZUH = "wazuh"  # the software inventory of an EDR (v0.23.1): components, no finding
 SENTINELONE = "sentinelone"  # the application inventory of an EDR (v0.23.3): components, no finding
 SNMP = "snmp"  # appliances and network devices (v0.23.6): their firmware, no finding
-NOT_SCANS = {CMDB, WAZUH, SENTINELONE, SNMP}  # sources that list assets without scanning them
+SBOM, OSV = "sbom", "osv"  # v0.23.11: SBOMs list libraries; OSV matches them, it scans nothing
+NOT_SCANS = {CMDB, WAZUH, SENTINELONE, SNMP, SBOM, OSV}  # sources that list assets without scanning them
 
 WORST_CASE = {
     "exposure": "open",

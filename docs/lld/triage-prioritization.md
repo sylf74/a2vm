@@ -880,6 +880,13 @@ since v0.23.3 the applications of SentinelOne's agents (source `sentinelone`), a
 the last keep-alive of a disconnected agent), the same package seen by two sources stays twice. `components_seen` is the newest date. They reach the triage file,
 the decision service (`GET components`, §16 `find_component`) and the watch (through the inventory).
 
+Since v0.23.11 two more types (LLD detection §3.10): `library`, a library of a language ecosystem
+with its `purl`, from the images Trivy scans (source `trivy`) and from SBOM files (source `sbom`),
+matched every day by OSV (findings of source `osv`, decided like any finding); and `in-memory`, a
+shared library deleted on disk and still mapped by a running process, its processes in `processes`
+(source `ssh`): a restart is needed for the update to apply. Neither goes through the packages'
+advisories nor the applications table.
+
 `a2vm.packages`, owned here and run by the watch (LLD vulnerability-intelligence §3.4), compares
 them with the package advisories of a record (`VulnRecord.packages`):
 
@@ -1102,7 +1109,7 @@ variable of the chart is missing from this table.
 | Setting | Value | Why |
 | --- | --- | --- |
 | `ENABLE_PERSISTENT_CONFIG` | `false` | The environment wins over the database: what an admin changes in the admin panel is lost at the next start, the chart stays the reference (GitOps) |
-| `ENABLE_FORWARD_USER_INFO_HEADERS` | `true` | Open WebUI sends the user's name, id, e-mail and role (`X-OpenWebUI-User-*`) with each call to the tool server, which writes who asked in the audit journal (v0.23.10, §16.10). The tool server trusts these headers because only Open WebUI reaches it, with the chat token; without them an entry reads `chat (user not forwarded)` |
+| `ENABLE_FORWARD_USER_INFO_HEADERS` | `chat.forwardUserInfo` (`true`; v0.23.11) | Open WebUI sends the user's name, id, e-mail and role (`X-OpenWebUI-User-*`) with each call to the tool server, which writes who asked in the audit journal (v0.23.10, §16.10). The tool server trusts these headers because only Open WebUI reaches it, with the chat token; without them an entry reads `chat (user not forwarded)`. The same headers go to the LLM endpoints: `false` for a SaaS LLM (`docs/llm.md` §4) |
 | `ENABLE_SIGNUP` | `false` | No self-registration; accounts are made by the admin |
 | `DEFAULT_USER_ROLE` | `pending` | An account made another way waits for the admin's approval |
 | `WEBUI_ADMIN_EMAIL`, `WEBUI_ADMIN_NAME` | `chat.adminEmail`, `A2VM admin` | The first admin, made at the first start when no account exists; sign-up then stays closed. Password: `chat-admin-password` |
