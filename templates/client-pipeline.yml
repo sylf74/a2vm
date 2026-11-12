@@ -317,6 +317,29 @@ deploy-k8s:
         INTEL="$INTEL --set intel.serve.digestsChecksum=$(sha256sum "$N/digests" | cut -d' ' -f1)"
         echo "A2VM_INTEL_SERVE=true: the shared intelligence service runs in $NS ($(grep -c '^read ' "$N/digests") read token(s))"
       fi
+    # A development identity provider (v0.23.15, docs/dev-idp.md), with A2VM_DEV_IDP_HOST and without
+    # A2VM_OIDC_ISSUER: a Keycloak in the namespace, which the sign-in below then uses. Its admin's
+    # password, its client's secret and each account's first password are made once and kept in the
+    # Secret a2vm-tenant; none printed.
+    - |
+      DEVIDP=""; K="$(mktemp -d)"; chmod 700 "$K"
+      if [ -n "${A2VM_DEV_IDP_HOST:-}" ] && [ -n "${A2VM_OIDC_ISSUER:-}" ]; then
+        echo "WARN A2VM_DEV_IDP_HOST ignored: A2VM_OIDC_ISSUER names the identity provider"
+      elif [ -n "${A2VM_DEV_IDP_HOST:-}" ]; then
+        command -v python3 >/dev/null || apk add --no-cache -q python3
+        python3 .a2vm/deploy/chat/dev_idp_values.py "$(echo "$CI_PROJECT_NAME" | tr 'A-Z_' 'a-z-')" "$K/values.json" "$K/oidc.env"
+        n="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['devIdp']['users'])" "$K/values.json")"
+        keys="dev-idp-admin-password dev-idp-client-secret"; i=0
+        while [ "$i" -lt "$n" ]; do keys="$keys dev-idp-password-$i"; i=$((i + 1)); done
+        for k in $keys; do
+          kubectl -n "$NS" get secret a2vm-tenant -o jsonpath="{.data.$k}" 2>/dev/null | base64 -d > "$K/$k" 2>/dev/null || true
+          if [ "$(wc -c < "$K/$k")" -lt 16 ]; then od -An -tx1 -N16 /dev/urandom | tr -d ' \n' > "$K/$k"; fi
+        done
+        . "$K/oidc.env"
+        A2VM_OIDC_CLIENT_SECRET="$(cat "$K/dev-idp-client-secret")"; export A2VM_OIDC_CLIENT_SECRET
+        DEVIDP="-f $K/values.json"
+        echo "WARN development identity provider https://$A2VM_DEV_IDP_HOST/realms/a2vm-dev: local accounts, never for production"
+      fi
     # Sign-in of the analysts with the tenant's identity provider (v0.17.0), when A2VM_OIDC_ISSUER is
     # set: the chat and, with A2VM_ALERTS_HOST, the review page of the alerts behind oauth2-proxy. The
     # proxy's cookie key and the key of the page's forms are made once and kept in the Secret a2vm-tenant.
@@ -387,6 +410,11 @@ deploy-k8s:
           eval "put dispatch-$t-ca \"\${${V}_CA:-}\""
         done
       fi
+      if [ -n "$DEVIDP" ]; then
+        put dev-idp-admin-password "$(cat "$K/dev-idp-admin-password")"
+        put dev-idp-client-secret "$(cat "$K/dev-idp-client-secret")"
+        for f in "$K"/dev-idp-password-*; do put "$(basename "$f")" "$(cat "$f")"; done
+      fi
       if [ -n "$SIGNIN" ]; then
         put oidc-client-secret "${A2VM_OIDC_CLIENT_SECRET:-}"
         put oidc-ca "${A2VM_OIDC_CA:-}"
@@ -436,8 +464,8 @@ deploy-k8s:
         --set secret.name=a2vm-tenant \
         --set daily.schedule="${A2VM_K8S_SCHEDULE:-45 5 * * *}" \
         --set daily.suspend="${A2VM_K8S_SUSPEND:-false}" \
-        $PULL $FILES $INTAKE $VERDICT $DATABASE $CHAT $WATCH $SIGNIN $DISPATCH $INTEL $OUT -f "$ENVF"
-      rm -rf "$I" "$V" "$C" "$W" "$O" "$D" "$N"
+        $PULL $FILES $INTAKE $VERDICT $DATABASE $CHAT $WATCH $DEVIDP $SIGNIN $DISPATCH $INTEL $OUT -f "$ENVF"
+      rm -rf "$I" "$V" "$C" "$W" "$O" "$D" "$N" "$K"
       kubectl -n "$NS" get cronjob,pvc
       if [ -n "$INTAKE" ]; then kubectl -n "$NS" get deployment,service,ingress -l app.kubernetes.io/component=detect; fi
       if [ -n "$VERDICT" ]; then kubectl -n "$NS" get deployment,service -l app.kubernetes.io/component=verdict; fi
@@ -447,6 +475,7 @@ deploy-k8s:
       if [ -n "$SIGNIN" ] && [ -n "${A2VM_ALERTS_HOST:-}" ]; then kubectl -n "$NS" get deployment,ingress -l 'app.kubernetes.io/component in (review,send)'; fi
       if [ -n "$DATABASE" ]; then kubectl -n "$NS" get cluster -l app.kubernetes.io/component=database; fi
       if [ -n "$DISPATCH" ]; then kubectl -n "$NS" get deployment,ingress -l 'app.kubernetes.io/component in (dispatch,dispatch-page)'; fi
+      if [ -n "$DEVIDP" ]; then kubectl -n "$NS" get deployment,ingress,pvc -l app.kubernetes.io/component=idp-dev; fi
 
 # Exit code 3 = collection incomplete: the job shows as a warning and the pipeline goes on with
 # what was collected (plus the declared inventory).
