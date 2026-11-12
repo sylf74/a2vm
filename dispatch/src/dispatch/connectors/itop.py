@@ -24,6 +24,8 @@ from typing import Any
 
 import httpx
 
+from a2vm import tls
+
 from ..rules import Target
 from ..tickets import Ticket
 from . import CLOSED, GONE, WORKING, ConnectorError, External
@@ -61,7 +63,7 @@ class ItopConnector:
         self._password = password
         self.http = httpx.Client(
             timeout=httpx.Timeout(float(s.get("timeout_seconds", 60)), connect=10.0),
-            verify=ca_file or True,
+            verify=tls.verify(ca_file),
             transport=transport,
         )
 

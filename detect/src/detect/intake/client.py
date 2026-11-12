@@ -12,7 +12,7 @@ from typing import Any
 
 import httpx
 
-from a2vm import __version__
+from a2vm import __version__, tls
 from a2vm.io import Detection, ExchangeError, validate_detection, write_detection
 from a2vm.models import AssetObservation, Finding, NotAffected
 
@@ -38,7 +38,7 @@ def _client(
     return httpx.Client(
         base_url=base_url.rstrip("/"),
         headers={"Authorization": f"Bearer {token}", "User-Agent": "a2vm-detect"},
-        verify=ca_file or True,
+        verify=tls.verify(ca_file),
         timeout=httpx.Timeout(timeout, connect=15.0),
         transport=transport,
     )
@@ -86,7 +86,14 @@ def push(
         raise err from exc
     if r.status_code == 202:
         return r.json()
-    err = IntakeError(f"push refused ({r.status_code}): {_detail(r)}")
+    hint = ""
+    if r.status_code == 413:  # v0.23.17: say what makes a detection too big, and what to do
+        hint = (
+            f" (detection of source {document.get('source')}: {len(document.get('observations') or [])} assets, "
+            f"{len(document.get('findings') or [])} findings, {len(body) / 1048576:.0f} MiB; the service takes "
+            "200 MiB uncompressed at most: narrow the connector, e.g. `groups` for cyberwatch)"
+        )
+    err = IntakeError(f"push refused ({r.status_code}): {_detail(r)}{hint}")
     err.retry = r.status_code >= 500 or r.status_code == 429  # type: ignore[attr-defined]
     raise err
 

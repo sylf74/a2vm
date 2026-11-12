@@ -26,6 +26,7 @@ from urllib.parse import quote
 
 import httpx
 
+from . import tls
 from .config import env
 
 MAX_ARTIFACT_BYTES = 200 * 1024 * 1024
@@ -64,12 +65,11 @@ def _client_options(environ: Mapping[str, str]) -> dict:
     else:
         raise GitLabError("no GitLab credentials: CI_JOB_TOKEN (pipeline) or A2VM_GITLAB_TOKEN")
     options: dict = {"headers": headers, "timeout": 60, "follow_redirects": True}
-    ca = environ.get("CI_SERVER_TLS_CA_FILE")
-    if ca:
-        options["verify"] = ca
     cert, key = environ.get("CI_SERVER_TLS_CERT_FILE"), environ.get("CI_SERVER_TLS_KEY_FILE")
-    if cert and key:
-        options["cert"] = (cert, key)
+    # The CA and the client certificate in one SSL context (a2vm.tls, v0.23.17): with a path in
+    # `verify`, httpx would not send the certificate.
+    options["verify"] = tls.verify(environ.get("CI_SERVER_TLS_CA_FILE"), cert if cert and key else None,
+                                   key if cert and key else None)  # fmt: skip
     return options
 
 

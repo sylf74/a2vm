@@ -11,6 +11,8 @@ from typing import Any
 
 import httpx
 
+from a2vm import tls
+
 TIMEOUT = 600.0
 
 
@@ -36,7 +38,7 @@ def push(
         with httpx.Client(
             base_url=base_url.rstrip("/"),
             headers={"Authorization": f"Bearer {token}", "User-Agent": "a2vm-verdict"},
-            verify=ca_file or True,
+            verify=tls.verify(ca_file),
             timeout=httpx.Timeout(timeout, connect=15.0),
             transport=transport,
         ) as c:
@@ -69,7 +71,7 @@ def sla_state(
         with httpx.Client(
             base_url=base_url.rstrip("/"),
             headers={"Authorization": f"Bearer {token}", "User-Agent": "a2vm-verdict"},
-            verify=ca_file or True,
+            verify=tls.verify(ca_file),
             timeout=httpx.Timeout(timeout, connect=15.0),
             transport=transport,
         ) as c:
