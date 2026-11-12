@@ -10,6 +10,9 @@ One service for every tenant, in the namespace of the watch team (`a2vm-via`):
   GET  /v1/feed?since=      what the tenants' watches read: the radar's validated events and, GTI
                             enabled, the vulnerabilities GTI knows on the technologies watched
   POST /v1/radar/events     the radar's sender publishes a validated event (role radar)
+  GET  /v1/osv/<ecosystem>  the index of OSV for one language ecosystem (v0.23.12, a2vm.osvdb),
+                            rebuilt every few hours from OSV's archive: the tenants match their
+                            libraries against it at home, none of them is sent here
 
 Roles: `read` (the tenants' jobs; one token per tenant, the service never records which one called),
 `radar` (the watch team's sender). The service holds no asset, no address, no client name: it is no
@@ -28,6 +31,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, urlsplit
 
+from a2vm import osvdb
 from a2vm.config import Settings
 from a2vm.service import JsonHandler, Problem, TokenSet, moment
 from a2vm.service import serve as _serve
@@ -135,6 +139,39 @@ class IntelService:
         self.collect_lock = threading.Lock()  # one collection at a time: one cache, one GTI quota
         self.transport = None  # tests
         self.fixtures: str | None = None  # tests: the sources read from files
+
+    # -- OSV (v0.23.12) ------------------------------------------------------------------------
+    def osv_mirror(self) -> osvdb.OsvMirror:
+        return osvdb.OsvMirror(self.store.root / "osv")
+
+    def sync_osv(self, ecosystems: list[str] | None = None) -> list[str]:
+        """Rebuild the index of each ecosystem whose archive changed; one line per ecosystem."""
+        lines = []
+        mirror = self.osv_mirror()
+        sources = self._sources()
+        try:
+            for eco in ecosystems or osvdb.DEFAULT_ECOSYSTEMS:
+                try:
+                    lines.append(mirror.refresh(eco, sources._client, _iso(_now())))
+                except osvdb.OsvDbError as exc:
+                    lines.append(f"WARN {exc}")
+        finally:
+            sources.close()
+        return lines
+
+    def osv_index(self, token: str | None, ecosystem: str, if_none_match: str = "") -> tuple[bytes, str]:
+        """(the gzipped index, its ETag); empty bytes when the reader's copy is the same (304)."""
+        self._require(token, "read")
+        if ecosystem not in osvdb.DEFAULT_ECOSYSTEMS:
+            raise Problem(HTTPStatus.NOT_FOUND, f"unknown ecosystem {ecosystem[:40]!r}")
+        path = self.osv_mirror().path(ecosystem)
+        if not path.exists():
+            raise Problem(HTTPStatus.SERVICE_UNAVAILABLE, f"the index of {ecosystem} is not built yet")
+        data = path.read_bytes()
+        import hashlib
+
+        etag = '"' + hashlib.sha256(data).hexdigest()[:32] + '"'
+        return (b"" if if_none_match == etag else data), etag
 
     def _require(self, token: str | None, role: str) -> None:
         if self.tokens.role_of(token) != role:
@@ -378,6 +415,18 @@ def make_handler(service: IntelService) -> type[JsonHandler]:
                 return
             try:
                 query = dict(parse_qsl(url.query))
+                if url.path.startswith("/v1/osv/"):  # v0.23.12
+                    data, etag = service.osv_index(self.bearer(), url.path.removeprefix("/v1/osv/"),
+                                                   self.headers.get("If-None-Match", ""))  # fmt: skip
+                    self.send_response(HTTPStatus.NOT_MODIFIED if not data else HTTPStatus.OK)
+                    self.send_header("ETag", etag)
+                    if data:
+                        self.send_header("Content-Type", "application/gzip")
+                        self.send_header("Content-Length", str(len(data)))
+                    self.end_headers()
+                    if data:
+                        self.wfile.write(data)
+                    return
                 if url.path == "/v1/records/new":  # v0.23.4
                     self.send_json(HTTPStatus.OK, service.new_records(self.bearer(), query))
                     return

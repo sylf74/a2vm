@@ -78,7 +78,7 @@ spec:
             - |
               {{- include "a2vm-tenant.settings" . | nindent 14 }}
               exec via intel-serve --settings "$SETTINGS" --digests /intel-secret/digests --store /data/intel \
-                --port 8080 --gti-every-hours {{ $s.gtiEveryHours }}
+                --port 8080 --gti-every-hours {{ $s.gtiEveryHours }} --osv-every-hours {{ $s.osvEveryHours | default 6 }}
           env:
             - name: A2VM_CACHE_DIR
               value: /data/cache

@@ -58,6 +58,29 @@ paths:
         "400": {$ref: "#/components/responses/Problem"}
         "401": {$ref: "#/components/responses/Problem"}
         "413": {$ref: "#/components/responses/Problem"}
+  /v1/osv/{ecosystem}:
+    get:
+      operationId: getOsvIndex
+      summary: >-
+        The index of OSV for one language ecosystem (since v0.23.12, a2vm.osvdb): the records with a
+        CVE, gzipped JSON, rebuilt from OSV's archive every few hours. The tenants match their
+        libraries against it at home: no library is sent here
+      security:
+        - readToken: []
+      parameters:
+        - {name: ecosystem, in: path, required: true,
+           schema: {type: string, enum: [PyPI, npm, Maven, Go, crates.io, RubyGems, NuGet, Packagist]}}
+        - {name: If-None-Match, in: header, schema: {type: string}, description: "the ETag of the reader's copy"}
+      responses:
+        "200":
+          description: The index (gzipped JSON), with its ETag
+          content:
+            application/gzip:
+              schema: {type: string, format: binary}
+        "304": {description: The reader's copy is the same}
+        "401": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
   /v1/records/new:
     get:
       operationId: listNewRecords
