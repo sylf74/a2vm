@@ -86,6 +86,8 @@ from .cyberwatch import fetch as fetch_cyberwatch
 from .intake.client import IntakeError, push
 from .intake.registry import ID
 from .openvas import load_openvas_file
+from .sbom import SbomConfig
+from .sbom import read as read_sbom
 from .scanners import load_dnf_file, load_trivy_file, merge
 from .sentinelone import SentinelOneConfig, SentinelOneError
 from .sentinelone import fetch as fetch_sentinelone
@@ -238,6 +240,24 @@ class CyberwatchConnector:
 
 
 @dataclass
+class SbomConnector:
+    """SBOM files (CycloneDX, SPDX) of a directory: one detection of source `sbom`, libraries only."""
+
+    name: str
+    config: SbomConfig
+
+    def run(self, tenant: str, work: Path, log: Callable[[str], None] = print) -> tuple[list[Detection], list[str]]:
+        started = time.monotonic()
+        try:
+            detection = read_sbom(self.config, tenant, log=log)
+        except (OSError, ValueError) as exc:
+            log(f"FAIL sbom [{self.name}]: {exc} ({time.monotonic() - started:.0f} s)")
+            return [], [f"{self.name}: {exc}"]
+        log(f"ok   sbom [{self.name}]: {len(detection.observations)} assets ({time.monotonic() - started:.0f} s)")
+        return [detection], []
+
+
+@dataclass
 class SnmpConnector:
     """Appliances and network devices by SNMP (read only): one detection of source `snmp`, their firmware."""
 
@@ -316,6 +336,11 @@ def load_config(path: str | Path) -> AgentConfig:
                 connectors.append(CyberwatchConnector(name, CyberwatchConfig.from_dict(c, where)))
             except ValueError as exc:
                 raise AgentError(str(exc)) from exc
+        elif kind == "sbom":
+            try:
+                connectors.append(SbomConnector(name, SbomConfig.from_dict(c, where)))
+            except ValueError as exc:
+                raise AgentError(str(exc)) from exc
         elif kind == "snmp":
             try:
                 connectors.append(SnmpConnector(name, SnmpConfig.from_dict(c, where)))
@@ -332,7 +357,8 @@ def load_config(path: str | Path) -> AgentConfig:
             connectors.append(FileImportConnector(name, c["source"], Path(c["folder"]), int(c.get("min_qod", 70))))
         else:
             raise AgentError(
-                f"{where}: unknown type {kind!r} (targets, file-import, itop, wazuh, sentinelone, cyberwatch, snmp)"
+                f"{where}: unknown type {kind!r}"
+                " (targets, file-import, itop, wazuh, sentinelone, cyberwatch, snmp, sbom)"
             )
     if not connectors:
         raise AgentError(f"{path}: at least one connector is required")

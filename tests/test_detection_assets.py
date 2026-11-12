@@ -8,7 +8,7 @@ from a2vm.config import Settings
 from a2vm.io import Detection, now
 from a2vm.models import AssetObservation
 from a2vm.profile import load_profile, validate_profile_data
-from detect.collect import DNF, PACKAGES, TRIVY_HOST, collect, load_targets, plan, ssh_command
+from detect.collect import DNF, LOADED, PACKAGES, TRIVY_HOST, collect, load_targets, plan, ssh_command
 from detect.scanners import Target, load_dnf_file, load_trivy_file, parse_trivy
 from verdict.assets.build import WORST_CASE, build_inventory
 from verdict.triage import Triage
@@ -125,6 +125,8 @@ def test_collect_with_fake_ssh(tmp_path):
         if cmd[-1] == PACKAGES:  # every package installed (v0.22.2); edge01 cannot list them
             listed = "openssl\t1:3.0.7-27.el9\tx86_64\trpm\nbash\t0:5.1.8-9.el9\tx86_64\trpm\n"
             return subprocess.CompletedProcess(cmd, 0, listed if host == "node00.lab.example" else "", "")
+        if cmd[-1] == LOADED:  # the deleted libraries still in memory (v0.23.11): none here
+            return subprocess.CompletedProcess(cmd, 0, "", "")
         code, out = outputs[host]
         assert cmd[-1] in (TRIVY_HOST, DNF)
         return subprocess.CompletedProcess(cmd, code, out, "ssh: connect to host down: refused" if code else "")

@@ -216,6 +216,55 @@ def cmd_agent_poll(args: argparse.Namespace) -> int:
     return 1 if report.errors and not report.pushed else 0
 
 
+def cmd_osv(args: argparse.Namespace) -> int:
+    """The libraries of the detections against OSV (v0.23.11): 0 done, 3 OSV unreachable (a warning)."""
+    import json
+    import os
+
+    from .osv import Osv, OsvError, match
+
+    if os.environ.get("A2VM_OSV_ENABLED", "true").strip().lower() in ("false", "0", "no", "off"):
+        print("osv: disabled (A2VM_OSV_ENABLED)")
+        return 0
+    status = 0
+    osv = Osv(args.cache or None)
+    try:
+        for tenant_dir in sorted(p for p in Path(args.detect).iterdir() if p.is_dir()):
+            docs = []
+            for f in sorted(tenant_dir.glob("*.json")):
+                if f.name == "osv.json":
+                    continue
+                try:
+                    docs.append(json.loads(f.read_text(encoding="utf-8")))
+                except (OSError, ValueError) as exc:
+                    print(f"osv: {f} unreadable: {exc}", file=sys.stderr)
+            try:
+                d = match(docs, tenant_dir.name, osv)
+            except OsvError as exc:
+                print(f"osv [{tenant_dir.name}]: {exc}", file=sys.stderr)
+                status = 3
+                continue
+            if d.observations or d.findings:
+                _write(args.out or args.detect, d)
+    finally:
+        osv.close()
+    return status
+
+
+def cmd_sbom(args: argparse.Namespace) -> int:
+    import yaml
+
+    from .sbom import SbomConfig, read
+
+    try:
+        data = yaml.safe_load(Path(args.config).read_text(encoding="utf-8")) or {}
+        _write(args.out, read(SbomConfig.from_dict(data, args.config), args.tenant))
+    except (OSError, ValueError, yaml.YAMLError) as exc:
+        print(exc, file=sys.stderr)
+        return 2
+    return 0
+
+
 def cmd_collectors(args: argparse.Namespace) -> int:
     from .intake.registry import RegistryError, load_collectors
 
@@ -529,6 +578,20 @@ def main(argv: list[str] | None = None) -> int:
     cf.add_argument("--tenant", required=True)
     cf.add_argument("--out", default="work/detect")
     cf.set_defaults(func=cmd_cyberwatch)
+
+    ov = sub.add_parser("osv", help="the libraries of the detections against OSV, findings of source osv (v0.23.11)")
+    ov.add_argument("--detect", required=True, help="directory of the detections, <dir>/<tenant>/<source>.json")
+    ov.add_argument("--out", default="", help="where to write osv.json (default: the same directory)")
+    ov.add_argument("--cache", default="", help="directory keeping OSV's vulnerability details")
+    ov.set_defaults(func=cmd_osv)
+
+    sb = sub.add_parser("sbom", help="SBOM files (CycloneDX, SPDX) as libraries of assets (read, v0.23.11)")
+    sb_sub = sb.add_subparsers(dest="sbom_command", required=True)
+    sr = sb_sub.add_parser("read", help="read the SBOMs of a directory into a detection of source sbom")
+    sr.add_argument("--config", required=True, help="YAML with the settings of an sbom connector")
+    sr.add_argument("--tenant", required=True)
+    sr.add_argument("--out", default="work/detect")
+    sr.set_defaults(func=cmd_sbom)
 
     sn = sub.add_parser("snmp", help="appliances and network devices by SNMP: read their firmware (fetch)")
     sn_sub = sn.add_subparsers(dest="snmp_command", required=True)

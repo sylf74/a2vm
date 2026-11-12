@@ -277,7 +277,7 @@ spec:
             # Configuration from these values only: what is changed in the admin panel does not stay.
             - {name: ENABLE_PERSISTENT_CONFIG, value: "false"}
             # Who asks: the user's name, id, e-mail and role to the tool server, for the audit journal (v0.23.10).
-            - {name: ENABLE_FORWARD_USER_INFO_HEADERS, value: "true"}
+            - {name: ENABLE_FORWARD_USER_INFO_HEADERS, value: {{ if eq (toString $chat.forwardUserInfo) "false" }}"false"{{ else }}"true"{{ end }}}
             - {name: ENABLE_SIGNUP, value: "false"}
             - {name: DEFAULT_USER_ROLE, value: pending}
             - {name: JWT_EXPIRES_IN, value: {{ printf "%vh" $chat.sessionHours | quote }}}

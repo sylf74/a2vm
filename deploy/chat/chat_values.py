@@ -14,6 +14,8 @@ NetworkPolicy. Endpoints given by name are resolved here, in the job, to their a
     A2VM_CHAT_RETENTION_DAYS        optional: chats unchanged for longer are deleted (default 30, 0: kept)
     A2VM_CHAT_MAX_CHARS             optional: longest tool answer, characters of JSON (default 8000, about
                                     2,000 tokens; 4000 for a model with a 16k context)
+    A2VM_CHAT_FORWARD_USER_INFO     optional: false keeps the user out of the headers Open WebUI sends to
+                                    the tools and the LLM (default true, v0.23.11)
     A2VM_CHAT_INGRESS_CONTROLLER, A2VM_CHAT_INGRESS_CLASS, A2VM_CHAT_TLS_SECRET,
     A2VM_CHAT_CLUSTER_ISSUER        optional; default to the A2VM_INTAKE_* ones
 """
@@ -95,6 +97,11 @@ def values(env: dict[str, str]) -> dict:
         if not 1000 <= chars <= 100000:
             raise ValueError("A2VM_CHAT_MAX_CHARS: 1000 to 100000 characters")
         chat["maxChars"] = chars
+    forward = env.get("A2VM_CHAT_FORWARD_USER_INFO", "").strip().lower()
+    if forward:
+        if forward not in ("true", "false"):
+            raise ValueError("A2VM_CHAT_FORWARD_USER_INFO: true or false")
+        chat["forwardUserInfo"] = forward == "true"
     return {"chat": chat}
 
 

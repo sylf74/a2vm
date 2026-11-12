@@ -48,7 +48,7 @@ TRIVY_HOST = f"{LOW_PRIORITY} trivy rootfs --quiet --timeout 15m --format json -
 # their analysis exceeds Trivy's time limit, and the pip packages' metadata stays outside them.
 TRIVY_IMAGE = (
     f"{LOW_PRIORITY} trivy image --quiet --timeout 30m --format json --scanners vuln --pkg-types os,library"
-    " --skip-dirs '**/dist-packages/nvidia' --skip-dirs '**/site-packages/nvidia'"
+    " --list-all-pkgs --skip-dirs '**/dist-packages/nvidia' --skip-dirs '**/site-packages/nvidia'"
 )
 DNF = f"{LOW_PRIORITY} dnf -q updateinfo list --security --with-cve"
 # Every package installed, one per line: name, version, architecture, type, source package. rpm first
@@ -60,6 +60,15 @@ PACKAGES = f"{LOW_PRIORITY} sh -c " + shlex.quote(
     "rpm -qa --qf '%{NAME}\\t%{EPOCHNUM}:%{VERSION}-%{RELEASE}\\t%{ARCH}\\trpm\\t%{SOURCERPM}\\n'; "
     "elif command -v dpkg-query >/dev/null 2>&1; then "
     "dpkg-query -W -f='${db:Status-Abbrev}\\t${Package}\\t${Version}\\t${Architecture}\\tdeb\\t${Source}\\n'; fi"
+)
+# v0.23.11: the files still mapped by a running process after their deletion (an update replaced
+# them): "<pid>\t<process>\t<file>". Only the shared libraries; without root, only the processes of
+# the SSH user are readable (the others are skipped, nothing fails).
+LOADED = f"{LOW_PRIORITY} sh -c " + shlex.quote(
+    "for m in /proc/[0-9]*/maps; do p=${m#/proc/}; p=${p%/maps}; "
+    "grep -s ' (deleted)$' \"$m\" | awk '{print $6}' | grep '\\.so' | sort -u | "
+    'while read -r f; do printf \'%s\\t%s\\t%s\\n\' "$p" "$(cat /proc/$p/comm 2>/dev/null)" "$f"; done; '
+    "done; true"
 )
 MAX_COMPONENTS = 20000
 DEFAULT_SSH_OPTIONS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=15", "-o", "StrictHostKeyChecking=accept-new"]
@@ -318,3 +327,36 @@ def _add_components(tf: TargetsFile, t: HostTarget, target: Target, detection: D
     for o in detection.observations:
         if o.ref == target.ref:
             o.components = components
+    _add_loaded(tf, t, target, detection, runner, log)
+
+
+def parse_loaded(text: str) -> list[dict[str, str]]:
+    """The output of LOADED as components of type in-memory: one per deleted file, its processes."""
+    files: dict[str, list[str]] = {}
+    for line in text.splitlines():
+        parts = line.split("\t")
+        if len(parts) != 3 or not parts[0].strip().isdigit() or not parts[2].startswith("/"):
+            continue
+        pid, name, path = (p.strip() for p in parts)
+        path = path.removesuffix(" (deleted)")
+        files.setdefault(path, []).append(f"{pid} {name}".strip())
+    return [
+        {"name": path, "version": "", "type": "in-memory", "processes": ", ".join(sorted(set(procs))), "source": "ssh"}
+        for path, procs in sorted(files.items())
+    ][:MAX_COMPONENTS]
+
+
+def _add_loaded(tf: TargetsFile, t: HostTarget, target: Target, detection: Detection, runner, log) -> None:  # noqa: ANN001
+    """The libraries deleted on disk but still loaded: the processes to restart (best effort)."""
+    try:
+        proc = runner(ssh_command(tf, t, LOADED), capture_output=True, text=True, timeout=tf.timeout_seconds)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        log(f"WARN {t.host} [loaded]: {exc}")
+        return
+    loaded = parse_loaded(proc.stdout) if proc.returncode == 0 else []
+    if not loaded:
+        return
+    log(f"WARN {t.host} [loaded]: {len(loaded)} deleted libraries still in memory, restart needed")
+    for o in detection.observations:
+        if o.ref == target.ref:
+            o.components = list(o.components or []) + loaded

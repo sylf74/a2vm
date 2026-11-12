@@ -186,12 +186,20 @@ connectors:
   #   type: sentinelone
   #   url: https://console.lab.example
   #   token_file: /etc/a2vm/collector/sentinelone-token
+  # - name: lan-sbom                       # SBOM files, CycloneDX or SPDX JSON (v0.23.11)
+  #   type: sbom
+  #   directory: /var/lib/a2vm/import/sbom
+  #   assets:                              # optional: else the SBOM's subject, as an image
+  #     - {file: billing.cdx.json, kind: host, name: app01.lab.example}
 ```
 
 A connector `itop` pushes the source `cmdb`, a connector `wazuh` the source `wazuh`, a connector
 `sentinelone` the source `sentinelone`, a connector `cyberwatch` the source `cyberwatch`, a connector
-`snmp` the source `snmp`: declare them in `collectors.yaml` with the collector's other sources
-(`sources: [trivy, dnf-updateinfo, openvas, cmdb, wazuh, sentinelone, cyberwatch, snmp]`).
+`snmp` the source `snmp`, a connector `sbom` the source `sbom`: declare them in `collectors.yaml`
+with the collector's other sources (`sources: [trivy, dnf-updateinfo, openvas, cmdb, wazuh,
+sentinelone, cyberwatch, snmp, sbom]`). The libraries of the SBOMs and of the images Trivy scans
+are matched against OSV by the daily run, in the cluster (`detect osv`, LLD detection §3.10): the
+collector does not reach OSV.
 
 The image, with the group deploy token of the cluster (`docs/kubernetes.md` §1), the password read
 from a file:

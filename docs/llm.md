@@ -74,3 +74,18 @@ them against the recipe of the vLLM version deployed.
 
 The decisions do not depend on the model (D4): changing it changes the rationales, the SSVC inputs
 estimated for CVEs without CVSS, the product matches it confirms, and the chat's answers.
+
+## 4. The user forwarded by the chat (v0.23.11)
+
+Open WebUI sends the user who asks (name, id, e-mail, role, headers `X-OpenWebUI-User-*`) with each
+call to the tool server, which writes it in the audit journal (`get_audit`, v0.23.10). Open WebUI
+sends the same headers with each call to the LLM endpoints. With a model the tenant runs, they stay
+in its network. With a SaaS LLM, the provider receives the analysts' e-mails.
+
+| Variable (`deploy-k8s`) | Chart value | Values |
+| --- | --- | --- |
+| `A2VM_CHAT_FORWARD_USER_INFO` | `chat.forwardUserInfo` | `true` (default), `false` |
+
+With `false`, Open WebUI sends no user header: the journal reads `chat (user not forwarded)` for the
+chat's calls. The validations on the review page keep their author (OIDC).
+
