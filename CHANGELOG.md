@@ -5,6 +5,30 @@ analyst and, under **Upgrade**, what a tenant must do when it moves to that tag 
 `A2VM_REF` in its `.gitlab-ci.yml`). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
 §11) and the LLDs. A release adds its entry here in the same merge request (CLAUDE.md, Releasing).
 
+## v0.23.13 — 2026-11-12
+
+An image lives in the exposure of its host: its decisions no longer rest on the worst case.
+
+- **Inherited from the host**: an image scanned on a host (`images:` of a `method: trivy` target,
+  or the `host` of an SBOM, v0.23.11) takes from that host each of owner, exposure, mission and
+  well-being that nothing says of the image itself, and its zone, when the host's comes from its
+  CMDB entry or a rule. Source `host`, shown « héritée de l'hôte ». Until now an image without its
+  own rule or CMDB entry was `open`, owner unknown: the worst case raised its decisions to ACT.
+- **Rules on images**: `rules: [{image: "vllm/*", set: {owner: ml-platform}}]` in `client.yaml`,
+  a glob on the image reference, alone. It comes before what the host gives.
+- **Where each attribute comes from**: every asset of the triage carries `origins` (`cmdb (CI-42)`,
+  `rule (…)`, `host (gpu01, cmdb)`, `default (worst case)`) and an image `runs_on`, its host; the
+  chat's `list_assets` and `get_asset` give both (« d'où vient l'exposition de l'image … ? »).
+- LLD triage §5.2.
+
+**Upgrade**:
+
+1. Move `ref` and `A2VM_REF` of the tenants to `v0.23.13`.
+2. The collectors to `detect:v0.23.13`: an image says its host from its next scan. Until then, its
+   decisions stay as they were.
+3. Expect fewer ACT on the images of hosts the CMDB or a rule describes, from the first daily run
+   after both.
+
 ## v0.23.12 — 2026-11-12
 
 No library of a tenant leaves it for OSV any more: the libraries are matched at home, against a copy
