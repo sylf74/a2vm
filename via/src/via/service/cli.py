@@ -273,26 +273,42 @@ def _send_validated(args: argparse.Namespace) -> int:
 
 
 def cmd_push_inventory(args: argparse.Namespace) -> int:
+    from via.alert.inventory import for_watch
+
     base = Path(args.assets_dir)
     try:
-        assets = json.loads((base / "assets.json").read_text(encoding="utf-8"))
-        findings = json.loads((base / "findings.json").read_text(encoding="utf-8"))
+        raw = {name: (base / name).read_bytes() for name in ("assets.json", "findings.json")}
+        assets, findings = (json.loads(raw[n]) for n in ("assets.json", "findings.json"))
     except (OSError, ValueError) as exc:
         print(f"{args.tenant}: no inventory to push ({exc})", file=sys.stderr)
         return 1
+    assets, findings = for_watch(assets, findings)
+    # v0.23.18: the sizes, so that a refusal (413) says which part is large
+    before = sum(map(len, raw.values()))
+    sent = {"assets": len(json.dumps(assets)), "findings": len(json.dumps(findings))}
+    size = (
+        f"{_mb(sent['assets'])} MB of assets and {_mb(sent['findings'])} MB of findings, "
+        f"{_mb(sum(sent.values()))} MB of the {_mb(before)} MB of the run"
+    )
     client = _client(args)
     try:
         client.put_inventory(assets, findings)
     except ServiceError as exc:
-        print(f"{args.tenant}: {exc}", file=sys.stderr)
+        print(f"{args.tenant}: {exc} ({size})", file=sys.stderr)
+        if "(413)" in str(exc):
+            print(f"{args.tenant}: raise A2VM_WATCH_MAX_MB (docs/kubernetes.md)", file=sys.stderr)
         return 3 if exc.retry else 1
     finally:
         client.close()
     print(
         f"{args.tenant}: inventory pushed to the watch service ({len(assets.get('assets', []))} assets, "
-        f"{len(findings.get('findings', []))} findings)"
+        f"{len(findings.get('findings', []))} findings; {size})"
     )
     return 0
+
+
+def _mb(n: int) -> str:
+    return f"{n / 1e6:.1f}"
 
 
 def _common(p: argparse.ArgumentParser) -> None:

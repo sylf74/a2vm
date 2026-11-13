@@ -34,6 +34,7 @@
 #                            (nginx, traefik), A2VM_INTAKE_CLUSTER_ISSUER: its push endpoint (docs/collectors.md)
 #   A2VM_VERDICT_SERVICE  false: no decision service in the cluster (default true; docs/kubernetes.md)
 #   A2VM_VERDICT_MEMORY   memory limit of the decision service (default 2Gi, v0.23.18; docs/kubernetes.md)
+#   A2VM_WATCH_MAX_MB     largest inventory the watch service accepts, in MB (default 50, v0.23.18)
 #   A2VM_DATABASE         true: the tenant's PostgreSQL (CloudNativePG) for the services, instead of
 #                            their volumes; A2VM_DATABASE_SIZE, _STORAGE_CLASS, _INSTANCES (docs/kubernetes.md §5)
 #   A2VM_CHAT_HOST        the analysts' chat on the decision service (Open WebUI); A2VM_CHAT_ALLOW,
@@ -283,6 +284,10 @@ deploy-k8s:
         WATCH="--set watch.enabled=true --set watch.digestsSecret=a2vm-via"
         WATCH="$WATCH --set watch.digestsChecksum=$(sha256sum "$W/digests" | cut -d' ' -f1)"
         WATCH="$WATCH --set watch.sendPipelineUrl=$CI_PROJECT_URL/-/pipelines/new --set watch.sendRef=$CI_DEFAULT_BRANCH"
+        if [ -n "${A2VM_WATCH_MAX_MB:-}" ]; then
+          if ! echo "$A2VM_WATCH_MAX_MB" | grep -qE '^[1-9][0-9]*$'; then echo "A2VM_WATCH_MAX_MB: a number of MB, such as 100"; exit 1; fi
+          WATCH="$WATCH --set watch.maxMb=$A2VM_WATCH_MAX_MB"
+        fi
         TPL=""; for t in templates/alert*.docx; do if [ -f "$t" ]; then TPL="$TPL --from-file=$(basename "$t")=$t"; fi; done
         if [ -n "$TPL" ]; then
           kubectl -n "$NS" create configmap a2vm-alert-template $TPL --dry-run=client -o yaml | upsert

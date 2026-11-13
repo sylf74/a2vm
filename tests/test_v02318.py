@@ -160,13 +160,14 @@ def test_a_push_drops_the_indexes_and_gives_the_memory_back(triage, tmp_path, mo
 def test_release_memory_runs_where_there_is_no_glibc(monkeypatch) -> None:
     import ctypes
 
-    from verdict.service import server
+    from a2vm.service import release_memory
 
     def missing(name):
         raise OSError(name)
 
+    release_memory()
     monkeypatch.setattr(ctypes, "CDLL", missing)
-    server.release_memory()
+    release_memory()
 
 
 def test_the_decision_service_has_room_for_a_large_run() -> None:
@@ -179,3 +180,114 @@ def test_the_decision_service_has_room_for_a_large_run() -> None:
     assert "--set-string verdict.resources.limits.memory=$A2VM_VERDICT_MEMORY" in pipeline
     assert "grep -qE '^[1-9][0-9]*(Mi|Gi)$'" in pipeline
     assert "A2VM_VERDICT_MEMORY" in (ROOT / "docs/kubernetes.md").read_text()
+
+
+# -- the inventory of the watch -------------------------------------------------------------------
+def _big_inventory(tmp_path, n: int = 400):
+    """An inventory of a run with many findings, components and fixed packages."""
+    from a2vm.io import write_assets, write_findings
+    from a2vm.models import Asset, Attribute, Finding, FindingObservation, Match, NotAffected
+
+    seen = "2026-11-12T08:30:00+00:00"
+    asset = Asset(
+        "host:hyp03.lan.example", "lab", "host", "hyp03", "hyp03", {"hostname": "hyp03"},
+        {"exposure": Attribute("controlled", "rule"), "owner": Attribute("infra", "declared"),
+         "mission_prevalence": Attribute("support", "default"),
+         "public_wellbeing_impact": Attribute("minimal", "default")},
+        ["trivy"], seen, seen,
+    )  # fmt: skip
+    asset.components = [{"name": f"pkg{i}", "version": "1.0", "type": "rpm"} for i in range(50)]
+    asset.scans = {"trivy": seen}
+    findings, fixed = [], []
+    for i in range(n):
+        cve = f"CVE-2026-{10000 + i}"
+        obs = FindingObservation(
+            "trivy", seen, Match("scanner", "", "openssl", 1.0, "matched by the scanner on its own name"),
+            "openssl", "3.0.7", "3.0.8", "fixed", "HIGH", "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", "trivy:nvd",
+        )  # fmt: skip
+        findings.append(
+            Finding(Finding.make_id("lab", asset.id, cve), "lab", asset.id, cve, "affected", ["3.0.7"], [obs],
+                    ["the version range of the advisory is not sure"])
+        )  # fmt: skip
+        fixed += [NotAffected("lab", f"CVE-2025-{20000 + i * 3 + k}", asset.id, ["2.0"], "trivy") for k in range(3)]
+    base = tmp_path / "lab"
+    write_assets(base / "assets.json", "lab", [asset])
+    write_findings(base / "findings.json", "lab", findings, fixed)
+    return base
+
+
+def test_the_watch_gets_what_it_reads_and_nothing_more(tmp_path) -> None:
+    import json
+
+    from a2vm.io import validate_assets, validate_findings
+    from via.alert.inventory import for_watch, load
+
+    base = _big_inventory(tmp_path)
+    assets = json.loads((base / "assets.json").read_text())
+    findings = json.loads((base / "findings.json").read_text())
+    slim_assets, slim_findings = for_watch(assets, findings)
+    validate_assets(slim_assets, "assets")
+    validate_findings(slim_findings, "findings")
+    assert slim_findings["not_affected"] == [] and "scans" not in slim_assets["assets"][0]
+    full = len(json.dumps(assets)) + len(json.dumps(findings))
+    assert len(json.dumps(slim_assets)) + len(json.dumps(slim_findings)) < full / 2
+
+    # the watch reads the same inventory from both
+    out = tmp_path / "slim" / "lab"
+    out.mkdir(parents=True)
+    (out / "assets.json").write_text(json.dumps(slim_assets))
+    (out / "findings.json").write_text(json.dumps(slim_findings))
+    before, after = load(tmp_path, "lab"), load(tmp_path / "slim", "lab")
+    assert before.assets.keys() == after.assets.keys()
+    assert after.assets["host:hyp03.lan.example"].components == before.assets["host:hyp03.lan.example"].components
+    assert before.findings_by_cve.keys() == after.findings_by_cve.keys()
+    a, b = before.findings_by_cve["CVE-2026-10000"][0], after.findings_by_cve["CVE-2026-10000"][0]
+    keep = ("package", "installed_version", "fixed_version", "source", "source_status")
+    assert [getattr(a.observations[0], k) for k in keep] == [getattr(b.observations[0], k) for k in keep]
+    assert a.asset_ref == b.asset_ref and a.affected_versions == b.affected_versions
+    # the daily run's own files are left as they are
+    assert json.loads((base / "findings.json").read_text())["not_affected"]
+
+
+def test_a_refused_inventory_says_its_size_and_what_to_raise(tmp_path, capsys, backend) -> None:
+    from a2vm.service import TokenSet, digest
+    from via.service.server import WatchService, serve
+
+    from .test_v0160 import RUN, watch_store
+
+    base = _big_inventory(tmp_path)
+    digests = tmp_path / "digests"
+    digests.write_text(f"run {digest(RUN)}\n")
+    svc = WatchService("lab", TokenSet.load(digests, {"run"}), watch_store(tmp_path, backend), max_bytes=10_000)
+    httpd = serve(svc, "127.0.0.1", 0)
+    import threading
+
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    token = tmp_path / "token"
+    token.write_text(RUN)
+    url = f"http://127.0.0.1:{httpd.server_address[1]}"
+    from via.cli import main
+
+    args = ["service", "push-inventory", "--url", url, "--tenant", "lab", "--token-file", str(token)]
+    try:
+        assert main([*args, "--assets-dir", str(base)]) == 1
+        err = capsys.readouterr().err
+        assert "(413)" in err and "MB of assets and" in err and "MB of findings" in err
+        assert "A2VM_WATCH_MAX_MB" in err
+        svc.max_bytes = 50 * 1024 * 1024
+        assert main([*args, "--assets-dir", str(base)]) == 0
+        out = capsys.readouterr().out
+        assert "inventory pushed to the watch service (1 assets, 400 findings;" in out and "MB of the" in out
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+
+def test_the_watch_service_takes_a_larger_inventory_when_asked() -> None:
+    values = yaml.safe_load((ROOT / "deploy/charts/a2vm-tenant/values.yaml").read_text())
+    assert values["watch"]["maxMb"] == 50 and values["watch"]["resources"]["limits"]["memory"] == "512Mi"
+    assert (
+        "--max-mb={{ $w.maxMb | default 50 }}" in (ROOT / "deploy/charts/a2vm-tenant/templates/watch.yaml").read_text()
+    )
+    pipeline = PIPELINE.read_text()
+    assert "--set watch.maxMb=$A2VM_WATCH_MAX_MB" in pipeline and "A2VM_WATCH_MAX_MB: a number of MB" in pipeline

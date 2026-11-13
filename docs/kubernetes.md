@@ -120,6 +120,7 @@ CI/CD variables of the tenant project (or of a subgroup):
 | `A2VM_K8S_SUSPEND` | Optional, `true` keeps the daily CronJob suspended from one deployment to the next (the radar tenant, `docs/radar.md`), default `false` | Visible |
 | `A2VM_IMAGE_REGISTRY` | Optional, default `<registry>/<code project path>`; another registry (Harbor, v0.23.4): `harbor.example.org/a2vm`, with `A2VM_REGISTRY`, `A2VM_REGISTRY_USER`, `A2VM_REGISTRY_PASSWORD` (a robot account allowed to pull) | Visible |
 | `A2VM_VERDICT_SERVICE` | Optional, `false` to deploy no decision service (default `true`, v0.14.0) | Visible |
+| `A2VM_WATCH_MAX_MB` | Optional, largest inventory the watch service accepts, in MB (default `50`, v0.23.18). The step `inventory` of the daily run says the size of what it sends (assets, findings) and, on a refusal (413), to raise it; the service's memory limit (`watch.resources`, 512Mi) holds about 5 times this | Visible |
 | `A2VM_VERDICT_MEMORY` | Optional, memory limit of the decision service, e.g. `3Gi` (default `2Gi`, v0.23.18). A push parses the whole run, about 5 times its `triage.json`; when the daily run's step `publish` says the service closed the connection and the service shows a restart `OOMKilled`, raise it | Visible |
 | `A2VM_RUN_MODE` | In the tenant's `.gitlab-ci.yml`: `gitlab` (default) or `kubernetes`, the daily run and the watch in the namespace only (§4) | — |
 | `A2VM_CHAT_HOST` | Optional: the analysts' chat on the decision service, at this host (v0.15.0, `chat.md`) | Visible |

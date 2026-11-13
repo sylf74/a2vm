@@ -279,6 +279,10 @@ watch:
   digestsSecret: ""
   digestsChecksum: ""
   keepDays: 30          # alerts and their sheets kept
+  # Largest inventory accepted (the daily run's assets and findings, as the watch reads them), in MB
+  # uncompressed (v0.23.18, A2VM_WATCH_MAX_MB); the service parses it whole: keep its memory above
+  # about 5 times this.
+  maxMb: 50
   # Where the analysts' mail sends them to validate an alert: a new pipeline of the tenant project
   # (deploy-k8s: <project URL>/-/pipelines/new), on this branch.
   sendPipelineUrl: ""
@@ -291,7 +295,7 @@ watch:
     storageClass: ""
   resources:
     requests: {cpu: 20m, memory: 64Mi}
-    limits: {memory: 256Mi}
+    limits: {memory: 512Mi}   # 256Mi up to v0.23.17: an inventory of 50 MB did not fit
   run:
     activeDeadlineSeconds: 900
     resources:

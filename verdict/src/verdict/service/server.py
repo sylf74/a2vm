@@ -11,10 +11,7 @@ SLA state it carries, v0.21.0) and `read` (analysts' tools). Acceptance of a pus
 
 from __future__ import annotations
 
-import contextlib
-import ctypes
 import datetime as dt
-import gc
 import json
 import logging
 import re
@@ -27,7 +24,7 @@ from urllib.parse import parse_qsl, unquote, urlsplit
 
 from a2vm import __version__
 from a2vm.io import ExchangeError, validate_triage
-from a2vm.service import JsonHandler, Problem, TokenSet
+from a2vm.service import JsonHandler, Problem, TokenSet, release_memory
 from a2vm.service import serve as _serve
 
 from .index import QueryError, RunIndex, changes, page
@@ -38,14 +35,6 @@ ROLES = {"publish", "read"}
 FUTURE_TOLERANCE = dt.timedelta(minutes=10)
 ROUTE = re.compile(r"^/v1/tenants/(?P<tenant>[a-z0-9][a-z0-9-]{0,62})/(?P<rest>.*)$")
 RUN_ID = re.compile(r"^(latest|[0-9]{8}T[0-9]{12}Z-[0-9a-f]{12})$")
-
-
-def release_memory() -> None:
-    """Collect, then hand the freed memory back to the system (glibc keeps it otherwise, and the pod's
-    memory stays at its peak until the next push adds to it)."""
-    gc.collect()
-    with contextlib.suppress(OSError, AttributeError):  # not glibc (musl, macOS): nothing to trim
-        ctypes.CDLL("libc.so.6").malloc_trim(0)
 
 
 class Service:
