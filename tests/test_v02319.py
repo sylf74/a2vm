@@ -353,3 +353,9 @@ def test_the_run_says_what_the_check_found(tmp_path) -> None:
 
     d, _ = dispatcher(tmp_path, [dec(1, "host:web01.lab.example", "ACT", ["openssl 3.0.15"])], tool=Checked())
     assert d.process_run()["detail"].startswith("iTop: 2 Persons")
+
+
+def test_release_recorded() -> None:
+    assert "## v0.23.19 — " in (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    chart = (ROOT / "deploy/charts/a2vm-tenant/Chart.yaml").read_text()
+    assert re.search(r"^version: 0\.(23\.(19|[2-9]\d)|2[4-9]\.\d+)$", chart, re.M)
