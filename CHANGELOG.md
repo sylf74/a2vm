@@ -5,6 +5,38 @@ analyst and, under **Upgrade**, what a tenant must do when it moves to that tag 
 `A2VM_REF` in its `.gitlab-ci.yml`). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
 §11) and the LLDs. A release adds its entry here in the same merge request (CLAUDE.md, Releasing).
 
+## v0.23.18 — 2026-11-13
+
+What the homelab and the integration found after v0.23.17: a tenant pipeline GitLab refused, a run
+too large for the decision service and for the watch, and a question of the chat.
+
+- **Tenant pipeline**: `publish` needed `triage`, which is excluded on Kubernetes: a tenant on
+  Kubernetes with `A2VM_REPORTING_DSN` could not use "Run pipeline" (`'publish' job needs 'triage'
+  job`), and its schedules failed the same way. `publish` now follows the run's rules. `deploy-k8s`
+  also runs for a pipeline made through the API on the default branch (`glab ci run -b main`).
+- **Decision service**: a run of 28,000 decisions never reached it (`Server disconnected without
+  sending a response` at the step `publish`, most likely the 1Gi memory limit). A push no longer
+  sits on top of the runs already read and gives its memory back; the limit is 2Gi,
+  `A2VM_VERDICT_MEMORY` to change it; the liveness probe gives a long push 3 minutes. The step
+  `publish` says when the service closed the connection, with the size it sent.
+- **Watch inventory**: refused over 50 MB (413), the watch kept an older inventory. The step
+  `inventory` sends what the watch reads only (no `not_affected`, review reasons, CVSS of each
+  source, scan dates) and says the size of each part; `A2VM_WATCH_MAX_MB` raises the limit; the
+  watch service's memory limit is 512Mi.
+- **Chat**: "Combien de temps verdict a-t-il tourné, et sur combien de findings ?" The run records
+  its `timing` (triage start, end, seconds, findings read and decided, the run's duration up to the
+  decisions); `get_platform_status` gives it in words. The job log has a line `timing: …`.
+
+**Upgrade**:
+
+1. Move `ref` and `A2VM_REF` of the tenants to `v0.23.18`, then deploy (`deploy-k8s`).
+2. After the next daily run, its step `publish` says `pushed to the decision service`, and the
+   step `inventory` says `inventory pushed to the watch service (…; <a> MB of assets and <f> MB of
+   findings…)`. Still too large: `A2VM_VERDICT_MEMORY` (e.g. `3Gi`) or `A2VM_WATCH_MAX_MB` (e.g.
+   `100`, with `watch.resources` above 5 times it).
+3. Collectors: no change needed (`detect:v0.23.17` still works); move them to `detect:v0.23.18`
+   with the rest when convenient.
+
 ## v0.23.17 — 2026-11-12
 
 A Cyberwatch master behind a reverse proxy that asks for a client certificate; the TLS of every

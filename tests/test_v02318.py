@@ -385,3 +385,9 @@ def test_the_summary_of_a_run_carries_its_timing(triage, tmp_path) -> None:
     service.push(service.tenant, PUBLISH, "k1", gzip.compress(json.dumps(doc).encode()), True)
     summary = service.read(service.tenant, READ, "summary", {})
     assert summary["timing"] == doc["timing"]
+
+
+def test_release_recorded() -> None:
+    assert "## v0.23.18 — " in (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    chart = (ROOT / "deploy/charts/a2vm-tenant/Chart.yaml").read_text()
+    assert re.search(r"^version: 0\.(23\.(1[8-9]|[2-9]\d)|2[4-9]\.\d+)$", chart, re.M)
