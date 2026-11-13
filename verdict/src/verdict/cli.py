@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import sys
+import time
 from pathlib import Path
 
 from a2vm.config import describe_llm, load_settings
@@ -89,6 +90,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(args_in)
 
+    started, clock = dt.datetime.now(dt.UTC).isoformat(timespec="seconds"), time.monotonic()  # v0.23.19
     settings = load_settings(args.settings)
     if args.no_llm:
         settings.llm.enabled = False
@@ -115,7 +117,6 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"{base}: files of {a_client!r}/{f_client!r}, expected {profile.id!r}", file=sys.stderr)
                 return 2
             run = triage.run(profile, records, assets, findings, not_affected, len(requested), errors)
-            run_started(run, args.run_started)
             priority.apply(run, _sla_state(args.sla_state, profile) if profile.sla else None)
             try:
                 run.exposure_gaps = read_gaps(base / "exposure_gaps.json", profile.id)
@@ -123,6 +124,15 @@ def main(argv: list[str] | None = None) -> int:
             except (ValueError, OSError) as exc:
                 print(f"{profile.id}: {exc}", file=sys.stderr)
                 return 2
+            # v0.23.19: the whole step, from reading the records to the decisions; the decision alone
+            # (v0.23.18) stays as decide_seconds.
+            run.timing["decide_seconds"] = run.timing["seconds"]
+            run.timing.update(
+                started_at=started,
+                ended_at=dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
+                seconds=round(time.monotonic() - clock, 1),
+            )
+            run_started(run, args.run_started)
             target = write_all(run, Path(args.out), settings.policy)
             counts = {d: sum(r.delivery_decision == d for r in run.rows) for d in ("ACT", "ATTEND", "TRACK")}
             llm_failures = [r for r in run.rows if r.rationale_source.startswith("template (LLM")]
@@ -148,7 +158,7 @@ def main(argv: list[str] | None = None) -> int:
             t = run.timing
             print(
                 f"  timing: {t['findings']} findings read, {t['decided']} decided, {t['without_record']} without a "
-                f"record, in {t['seconds']} s"
+                f"record, in {t['seconds']} s (deciding {t['decide_seconds']} s)"
                 + (f"; {t['run_seconds'] / 60:.0f} min since the start of the run" if "run_seconds" in t else "")
             )
             if triage.llm_stopped:

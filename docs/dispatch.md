@@ -132,6 +132,12 @@ The step prints `dispatch of run <id> (<mode>): proposed n, sent n, updated n, f
 fixed n, reopened n, errors n`. The service's first line gives its store, its mode, its targets, the
 levels of the automatic tickets and the targets of the requests.
 
+Since v0.23.19 the step also says what failed, grouped by message (`  61 x iTop refused: …`, the five
+most frequent; the service's log has them too), and what a target says would stop its tickets, checked
+once per run in live mode: for iTop, that `caller` is one Person of its organisation (`errors n;
+iTop: 2 Persons with name 'A2VM' in 'Homelab': …`). The homelab sent no ticket for two days with
+"errors 61" and nothing else.
+
 The tickets and the requests, with the read token (`dispatch-read-token` of the Secret
 `a2vm-tenant`), from a pod labelled `a2vm.io/dispatch-reader=true`. Since v0.22.2 `tickets` also
 takes `since` and `until` (sent to the ITSM between two days), `limit` and `offset`, gives each
@@ -148,7 +154,7 @@ kubectl -n a2vm-lab run dispatch-reader --rm -i --restart=Never --labels=a2vm.io
 | --- | --- | --- |
 | `iTop refused: code 1: ... Invalid login` | Wrong account or password | The account and `A2VM_DISPATCH_<TARGET>_PASSWORD`, then `deploy-k8s` |
 | `iTop refused: code 100` (or 1) `... caller_id`, `org_id`, `team_id` | The Person, the organisation or the Team of `dispatch.yaml` does not exist in iTop under that name | The names in `dispatch.yaml` |
-| `iTop refused: code 100: Error: caller_id: Several items found (2)` | Two Persons carry the name of `caller` in the organisation (before v0.23.3: in any organisation) | Remove the duplicate in iTop, or give the Person's e-mail as `caller`; the tickets left `proposed` are sent by the next daily run, the requested ones too |
+| `iTop refused: code 100: Error: caller_id: Several items found (2)`; since v0.23.19 also `iTop: 2 Persons with name … in …` | Two Persons carry the name of `caller` in the organisation (before v0.23.3: in any organisation) | Remove the duplicate in iTop, or give the Person's e-mail as `caller`; the tickets left `proposed` are sent by the next daily run, the requested ones too |
 | `iTop refused: ... ev_resolve` | iTop does not allow resolving a request in its current status (e.g. never assigned) | Nothing: the ticket is fixed in A2VM; the team closes it in iTop |
 | `iTop not reached` | Address, DNS, firewall, certificate | `A2VM_DISPATCH_<TARGET>_CA`, `A2VM_DISPATCH_EGRESS` |
 | `decision service answered 404` | No run pushed yet | The next daily run |

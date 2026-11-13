@@ -222,16 +222,16 @@ def _big_inventory(tmp_path, n: int = 400):
 def test_the_watch_gets_what_it_reads_and_nothing_more(tmp_path) -> None:
     import json
 
-    from a2vm.io import validate_assets, validate_findings
+    from a2vm.io import validate_assets, validate_watch_findings
     from via.alert.inventory import for_watch, load
 
     base = _big_inventory(tmp_path)
     assets = json.loads((base / "assets.json").read_text())
     findings = json.loads((base / "findings.json").read_text())
-    slim_assets, slim_findings = for_watch(assets, findings)
+    slim_assets, slim_findings = for_watch(assets, findings)  # compact since v0.23.19
     validate_assets(slim_assets, "assets")
-    validate_findings(slim_findings, "findings")
-    assert slim_findings["not_affected"] == [] and "scans" not in slim_assets["assets"][0]
+    validate_watch_findings(slim_findings, "findings")
+    assert "scans" not in slim_assets["assets"][0]
     full = len(json.dumps(assets)) + len(json.dumps(findings))
     assert len(json.dumps(slim_assets)) + len(json.dumps(slim_findings)) < full / 2
 
@@ -239,13 +239,13 @@ def test_the_watch_gets_what_it_reads_and_nothing_more(tmp_path) -> None:
     out = tmp_path / "slim" / "lab"
     out.mkdir(parents=True)
     (out / "assets.json").write_text(json.dumps(slim_assets))
-    (out / "findings.json").write_text(json.dumps(slim_findings))
+    (out / "watch-findings.json").write_text(json.dumps(slim_findings))
     before, after = load(tmp_path, "lab"), load(tmp_path / "slim", "lab")
     assert before.assets.keys() == after.assets.keys()
     assert after.assets["host:hyp03.lan.example"].components == before.assets["host:hyp03.lan.example"].components
     assert before.findings_by_cve.keys() == after.findings_by_cve.keys()
     a, b = before.findings_by_cve["CVE-2026-10000"][0], after.findings_by_cve["CVE-2026-10000"][0]
-    keep = ("package", "installed_version", "fixed_version", "source", "source_status")
+    keep = ("package", "installed_version", "fixed_version", "source")
     assert [getattr(a.observations[0], k) for k in keep] == [getattr(b.observations[0], k) for k in keep]
     assert a.asset_ref == b.asset_ref and a.affected_versions == b.affected_versions
     # the daily run's own files are left as they are

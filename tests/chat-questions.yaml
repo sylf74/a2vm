@@ -12,6 +12,7 @@ questions:
   - {q: "Qu'a trouvé le radar depuis lundi ?", tool: list_radar_events, params: [since], why: radar}
   - {q: "La CVE-2024-3094 est-elle sur le radar ?", tool: list_radar_events, params: [cve], why: radar}
   - {q: "La veille tourne-t-elle ? Quelles sources sont en erreur ?", tool: get_watch_status, params: [], why: sources}
+  - {q: "La veille connaît-elle l'inventaire du dernier run ?", tool: get_watch_status, params: [], why: inventory it names}
   - {q: "Sommes-nous concernés par la CVE-2024-3094 ?", tool: get_cve, params: [cve], why: concerned}
   - {q: "Quels actifs ont OpenSSL 3.0 ?", tool: find_component, params: [name, version], why: package}
   - {q: "Quelles applications n'ont pas encore de CPE validé ?", tool: list_applications, params: [state], why: CPE}

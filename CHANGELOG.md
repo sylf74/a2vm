@@ -5,6 +5,34 @@ analyst and, under **Upgrade**, what a tenant must do when it moves to that tag 
 `A2VM_REF` in its `.gitlab-ci.yml`). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
 §11) and the LLDs. A release adds its entry here in the same merge request (CLAUDE.md, Releasing).
 
+## v0.23.19 — 2026-11-13
+
+What the homelab and the integration found after v0.23.18.
+
+- **Watch inventory, compact**: 26,000 findings were still 75 MB once slimmed, refused (413), and the
+  watch service had no inventory at all while the step said it kept the previous one: its alerts named
+  the declared assets only. The step now sends the findings as `a2vm.watch_findings/1` (per asset:
+  CVE, status, versions, and what each source saw), a few MB. The service replaces the inventory
+  whole, its `status` says the inventory the watch uses (also in the chat's `get_watch_status`), and
+  a refused inventory says what the watch keeps. `vulnops.findings/2` is still accepted.
+- **Timing**: v0.23.18 timed the decisions alone (3.5 s for a step of minutes). `timing.seconds` now
+  covers the whole `verdict run`; `decide_seconds` keeps the decisions alone. The job log and the
+  chat say both.
+- **deploy-k8s**: one failed discovery through the GitLab agent's tunnel stopped it with "the
+  CloudNativePG operator is not installed". Three tries now, `kubectl`'s error shown, and "not
+  installed" only when the API answered without the operator.
+- **Dispatch**: the step says what failed, grouped by message (`61 x iTop refused: ...`), and checks
+  once per run that the iTop `caller` is one Person of its organisation: the homelab sent no ticket for
+  two days because two Persons carried that name.
+
+**Upgrade**:
+
+1. Move `ref` and `A2VM_REF` of the tenants to `v0.23.19`, then deploy (`deploy-k8s`), the shared
+   service's tenant (`via`) included.
+2. After the next daily run, the step `inventory` says `inventory pushed to the watch service (...;
+   <a> MB of assets and <f> MB of findings ...)`, and the service `inventory tenant=... findings=...`.
+3. Collectors: no change needed.
+
 ## v0.23.18 — 2026-11-13
 
 What the homelab and the integration found after v0.23.17: a tenant pipeline GitLab refused, a run

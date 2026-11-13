@@ -1,4 +1,4 @@
-# Operator's manual (v0.23.18)
+# Operator's manual (v0.23.19)
 
 Day-to-day operation of a tenant deployed on Kubernetes (`A2VM_RUN_MODE: kubernetes`): where each
 part runs, the usual actions, how to check the state, the known failures and their remedies,
@@ -219,9 +219,10 @@ shows an asset, with its scans since v0.18.1, even when it has no finding.
 | Collector journal: `FAIL cmdb [...]` (v0.19.0) | iTop not reached, its certificate not trusted (`ca_file`), the account refused (`code 1`) or without read rights on the CIs | `docs/cmdb.md` §5; the daily run keeps the previous CMDB detection while it is younger than `max_age_hours` |
 | A host "not in the CMDB", or a server "never scanned" (v0.19.0) | The CMDB and the scans disagree: an item missing, a name or an address different, a target missing | The `coverage` dashboard and `list_coverage` in the chat; `docs/cmdb.md` §6 |
 | Collector journal: push refused `401` or `403` | Token of the collector changed or not declared in `collectors.yaml` | `docs/collectors.md` (declaration and tokens) |
-| Watch: `inventory none yet` | The daily run has not pushed its inventory to the watch service (step `inventory`; needs `A2VM_RUN_MODE: kubernetes`) | The log of the step `inventory` of the last daily run; it warns and keeps the previous inventory when the service cannot be reached |
+| Watch: `inventory none yet` | The daily run has not pushed its inventory to the watch service (step `inventory`; needs `A2VM_RUN_MODE: kubernetes`) | The log of the step `inventory` of the last daily run; it warns, and says what the watch keeps (since v0.23.19), when the service cannot be reached or refuses it |
 | Services restart two or three times after `A2VM_DATABASE=true` | They wait for the database's secret while the cluster initialises | None: they settle within two minutes |
-| `deploy-k8s`: "the CloudNativePG operator is not installed" | `A2VM_DATABASE=true` without the operator | `deploy/cnpg/README.md` |
+| `deploy-k8s`: "the CloudNativePG operator is not installed" | `A2VM_DATABASE=true` without the operator: the cluster's API answered, without `postgresql.cnpg.io` (before v0.23.19, also a failed discovery) | `deploy/cnpg/README.md` |
+| `deploy-k8s`: "the cluster's API did not answer the discovery through the agent … 3 times" (v0.23.19) | The GitLab agent's tunnel failed three times in a row; the `WARN` lines above give `kubectl`'s error | Run the pipeline again; if it lasts, the agent's pod (`kubectl -n gitlab-agent get pods`) and its log |
 | `helm get values` shows no `database` although `A2VM_DATABASE` is set | The job did not see the variable: protected variable on an unprotected branch, wrong name or value | Settings > CI/CD > Variables: `A2VM_DATABASE` = `true`, then run the pipeline again |
 | Step `publish`: "schema version 2 … run `verdict db init`" | The reporting database is older than the release | `verdict db init` once (`docs/reporting.md`) |
 | The chat says "no run received yet" | The decision service has no run (new database) | A daily run (§2) |

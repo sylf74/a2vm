@@ -410,8 +410,10 @@ OPERATIONS: list[tuple[str, str, str, list[dict[str, Any]], str]] = [
         "/watch-status",
         "get_watch_status",
         "The watch of this tenant (v0.23.4): its last passages (when, how many items read, alerts drafted), "
-        "the sources it reads and those in error with their message. Use it for 'is the watch running', "
-        "'which sources are failing', 'when did the watch last look'.",
+        "the sources it reads and those in error with their message, and the inventory it names in its "
+        "alerts (v0.23.19: date, assets, findings; or none: the declared assets only). Use it for 'is the "
+        "watch running', 'which sources are failing', 'when did the watch last look', 'which inventory "
+        "does the watch use'.",
         [],
         "via:status",
     ),
@@ -1242,6 +1244,8 @@ def _timing_note(t: dict[str, Any]) -> str:
         f"the decision step (verdict) ran {span(t.get('seconds', 0))} on {t.get('findings', 0)} findings: "
         f"{t.get('decided', 0)} decided, {t.get('without_record', 0)} without a vulnerability record"
     )
+    if "decide_seconds" in t:  # v0.23.19: the step read its inputs, then decided
+        note += f" (reading its inputs included; the decisions alone {span(t['decide_seconds'])})"
     if "run_seconds" in t:
         note += f"; the whole run took {span(t['run_seconds'])} from its start up to the decisions"
     return note

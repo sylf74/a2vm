@@ -111,6 +111,8 @@ def cmd_run(args: argparse.Namespace) -> int:
         f"{s.get('claimed_fixed', 0)}, reopened {s.get('reopened', 0)}, errors {s.get('errors', 0)}"
         + (f"; {s['detail']}" if s.get("detail") else "")
     )
+    for g in s.get("error_messages") or []:  # v0.23.19: what failed, grouped
+        print(f"  {g['count']} x {g['error']}", file=sys.stderr)
     return 3 if s.get("errors") else 0
 
 

@@ -125,9 +125,16 @@ class PgWatchStore(WatchStore):
         return bytes(row[0]) if row else None
 
     # -- inventory -------------------------------------------------------------------------------
-    def put_inventory(self, tenant: str, client: str, docs: dict[str, bytes]) -> dict[str, Any]:
-        meta = {"client": client, "received_at": _now().isoformat(), "files": sorted(docs)}
+    def put_inventory(
+        self, tenant: str, client: str, docs: dict[str, bytes], extra: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """The inventory replaced whole: the files of an earlier one not in `docs` go (v0.23.19)."""
+        meta = {"client": client, "received_at": _now().isoformat(), "files": sorted(docs), **(extra or {})}
         with self.db.tx(tenant) as conn:
+            conn.execute(
+                "DELETE FROM via.inventory WHERE tenant = %s AND client = %s AND NOT (name = ANY(%s))",
+                (tenant, client, sorted(docs)),
+            )
             for name, data in docs.items():
                 conn.execute(
                     "INSERT INTO via.inventory (tenant, client, name, data) VALUES (%s, %s, %s, %s) "

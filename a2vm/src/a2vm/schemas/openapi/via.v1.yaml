@@ -25,7 +25,10 @@ paths:
     post:
       tags: [jobs]
       operationId: putInventory
-      summary: The daily run's assets and findings (vulnops.assets/1, vulnops.findings/2), for the watch
+      summary: >-
+        The daily run's assets (vulnops.assets/1) and findings, for the watch: compact
+        (watch_findings, a2vm.watch_findings/1, v0.23.19) or as before (findings, vulnops.findings/2).
+        It replaces the previous inventory whole.
       security:
         - runToken: []
       parameters:
@@ -35,11 +38,17 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required: [assets, findings]
-              properties:
-                assets: {$ref: "../assets.schema.json"}
-                findings: {$ref: "../findings.schema.json"}
+              oneOf:
+                - type: object
+                  required: [assets, watch_findings]
+                  properties:
+                    assets: {$ref: "../assets.schema.json"}
+                    watch_findings: {$ref: "../watch_findings.schema.json"}
+                - type: object
+                  required: [assets, findings]
+                  properties:
+                    assets: {$ref: "../assets.schema.json"}
+                    findings: {$ref: "../findings.schema.json"}
       responses:
         "202": {description: Kept, content: {application/json: {schema: {type: object}}}}
         "401": {$ref: "#/components/responses/Problem"}
@@ -53,7 +62,7 @@ paths:
         - runToken: []
       parameters:
         - $ref: "#/components/parameters/tenant"
-        - {name: file, in: path, required: true, schema: {type: string, enum: [assets.json, findings.json]}}
+        - {name: file, in: path, required: true, schema: {type: string, enum: [assets.json, findings.json, watch-findings.json]}}
       responses:
         "200": {description: The file, content: {application/json: {schema: {type: object}}}}
         "401": {$ref: "#/components/responses/Problem"}

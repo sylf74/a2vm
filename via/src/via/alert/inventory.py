@@ -13,6 +13,7 @@ contract are read: VIA imports no other pillar.
 from __future__ import annotations
 
 import datetime as dt
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -20,8 +21,8 @@ from typing import Any
 
 from a2vm import applications as apps
 from a2vm.gitlab import GitLabError, download_artifacts
-from a2vm.io import ExchangeError, read_assets, read_findings
-from a2vm.models import Asset, Finding
+from a2vm.io import WATCH_FINDINGS, ExchangeError, read_assets, read_findings, validate_watch_findings
+from a2vm.models import Asset, Finding, FindingObservation, Match
 
 MAX_AGE_DAYS = 8
 
@@ -53,6 +54,14 @@ def load(directory: str | Path, client_id: str) -> Inventory | None:
     if owner != client_id:
         raise ExchangeError(f"{base}/assets.json belongs to {owner!r}, not {client_id!r}")
     findings: dict[str, list[Finding]] = {}
+    compact = base / WATCH_FINDINGS_FILE
+    if compact.exists():  # what the watch service keeps since v0.23.19
+        doc = json.loads(compact.read_text(encoding="utf-8"))
+        validate_watch_findings(doc, str(compact))
+        if doc["client_id"] != client_id:
+            raise ExchangeError(f"{compact} belongs to {doc['client_id']!r}, not {client_id!r}")
+        as_of = max((a.last_seen for a in assets.values()), default="")
+        return Inventory(client_id, assets, _expand(doc, as_of), as_of)
     if (base / "findings.json").exists():
         _, found, _ = read_findings(base / "findings.json")
         for f in found:
@@ -81,25 +90,53 @@ def fetch(
     return inv, describe(inv)
 
 
+WATCH_FINDINGS_FILE = "watch-findings.json"
+
+
 def for_watch(assets: dict[str, Any], findings: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
-    """The inventory as the watch reads it (v0.23.18): still valid exchange files, without what
-    `load` and the alerts never read. The findings' `not_affected` (what a scanner found fixed or
-    not applicable, often the largest part), the review reasons, the CVSS each source gave and the
-    note of each match; the assets' scan dates. The daily run's own files are left as they are."""
+    """The inventory as the watch reads it: the assets without their scan dates (v0.23.18), and the
+    findings in the compact `a2vm.watch_findings/1` (v0.23.19). Per asset, each finding as
+    [cve, status, affected versions, [[source, package, installed, fixed], ...]]: what the alert sheet
+    shows, nothing else. 26,000 findings went from 75 MB in `vulnops.findings/2` to a few MB. The
+    daily run's own files are left as they are."""
     slim_assets = {**assets, "assets": [{k: v for k, v in a.items() if k != "scans"} for a in assets.get("assets", [])]}
-    slim_findings = {**findings, "not_affected": [], "findings": [_finding(f) for f in findings.get("findings", [])]}
-    return slim_assets, slim_findings
+    by_asset: dict[str, list[list[Any]]] = {}
+    for f in findings.get("findings", []):
+        seen = []
+        for o in f.get("observations", []):
+            row = [
+                o.get("source", ""),
+                o.get("package", ""),
+                o.get("installed_version", ""),
+                o.get("fixed_version", ""),
+            ]
+            if row not in seen:
+                seen.append(row)
+        by_asset.setdefault(f["asset_ref"], []).append(
+            [f["cve_id"], f.get("status", "affected"), list(f.get("affected_versions") or []), seen]
+        )
+    compact = {
+        "schema": WATCH_FINDINGS,
+        "generated_at": findings.get("generated_at", ""),
+        "client_id": findings.get("client_id", ""),
+        "assets": by_asset,
+    }
+    return slim_assets, compact
 
 
-def _finding(f: dict[str, Any]) -> dict[str, Any]:
-    observations = [
-        {
-            **{k: v for k, v in o.items() if k not in ("cvss_vector", "cvss_source")},
-            "match": {**o["match"], "note": ""},
-        }
-        for o in f.get("observations", [])
-    ]
-    return {**f, "review_reasons": [], "observations": observations}
+def _expand(doc: dict[str, Any], observed_at: str) -> dict[str, list[Finding]]:
+    """`a2vm.watch_findings/1` back into the findings the watch matches, by CVE."""
+    out: dict[str, list[Finding]] = {}
+    client = doc["client_id"]
+    for asset, rows in doc["assets"].items():
+        for cve, status, versions, seen in rows:
+            observations = [
+                FindingObservation(source, observed_at, Match("scanner", "", package, 1.0), package, installed, fixed)
+                for source, package, installed, fixed in seen
+            ]
+            finding = Finding(Finding.make_id(client, asset, cve), client, asset, cve, status, versions, observations)
+            out.setdefault(cve, []).append(finding)
+    return out
 
 
 def describe(inv: Inventory) -> str:

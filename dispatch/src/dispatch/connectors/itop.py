@@ -138,6 +138,27 @@ class ItopConnector:
         ref = (obj.get("fields") or {}).get("ref") or ""
         return External(ref=f"{self.cls}::{key}", url=self._url(key), status=f"{status} {ref}".strip())
 
+    def check(self) -> str:
+        """What stops the tickets before any is sent (v0.23.19): the caller must be one Person of its
+        organisation. "" when it is; else what to change."""
+        key = "email" if "@" in self.caller else "name"
+
+        def q(v: str) -> str:
+            return v.replace("\\", "\\\\").replace("'", "\\'")
+
+        oql = f"SELECT Person WHERE {key} = '{q(self.caller)}' AND org_name = '{q(self.caller_organization)}'"
+        data = self._call({"operation": "core/get", "class": "Person", "key": oql, "output_fields": "id"})
+        n = len(data.get("objects") or {})
+        if n == 1:
+            return ""
+        where = f"{key} {self.caller!r} in {self.caller_organization!r}"
+        if n == 0:
+            return f"iTop: no Person with {where}: no ticket can be created (dispatch.yaml `caller`)"
+        return (
+            f'iTop: {n} Persons with {where}: iTop refuses every ticket ("Several items found"); keep one, '
+            "or give `caller` the e-mail of one of them"
+        )
+
     def caller_criteria(self) -> dict[str, str]:
         """The iTop Person the tickets come from: its e-mail or its name, in its organisation."""
         key = "email" if "@" in self.caller else "name"

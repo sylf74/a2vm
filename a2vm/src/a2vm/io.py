@@ -26,6 +26,7 @@ ASSETS = "vulnops.assets/1"
 FINDINGS = "vulnops.findings/2"
 REPORTING = "a2vm.reporting/1"
 TRIAGE = "a2vm.triage/1"
+WATCH_FINDINGS = "a2vm.watch_findings/1"  # the findings as the watch reads them (v0.23.19)
 
 _SCHEMA_FILES = {
     RECORDS: "vulnerability_records",
@@ -34,6 +35,7 @@ _SCHEMA_FILES = {
     FINDINGS: "findings",
     REPORTING: "reporting",
     TRIAGE: "triage",
+    WATCH_FINDINGS: "watch_findings",
 }
 
 
@@ -70,6 +72,11 @@ def validate_assets(data: dict[str, Any], where: str = "<assets>") -> None:
 
 def validate_findings(data: dict[str, Any], where: str = "<findings>") -> None:
     _validate_doc(FINDINGS, data, where)
+
+
+def validate_watch_findings(data: dict[str, Any], where: str = "<watch findings>") -> None:
+    """The compact findings the daily run sends to the watch service (v0.23.19)."""
+    _validate_doc(WATCH_FINDINGS, data, where)
 
 
 def _validate_doc(kind: str, data: dict[str, Any], where: str) -> None:

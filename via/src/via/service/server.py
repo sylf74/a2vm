@@ -27,11 +27,11 @@ from urllib.parse import parse_qsl, unquote, urlsplit
 
 from a2vm import __version__
 from a2vm import applications as apps
-from a2vm.io import ExchangeError, validate_assets, validate_findings
+from a2vm.io import ExchangeError, validate_assets, validate_findings, validate_watch_findings
 from a2vm.service import JsonHandler, Problem, TokenSet, moment, release_memory
 from a2vm.service import serve as _serve
 
-from .store import ALERT_ID, FILE_NAME, INVENTORY_FILES, STATUSES, WatchStore
+from .store import ALERT_ID, FILE_NAME, INVENTORY_FILES, STATUSES, WATCH_FINDINGS_FILE, WatchStore
 
 log = logging.getLogger("via.serve")
 ROLES = {"run", "read"}
@@ -104,20 +104,32 @@ class WatchService:
     def _put_inventory(self, tenant: str, token: str | None, body: bytes, gzipped: bool) -> dict[str, Any]:
         self._check(tenant, token, ("run",))
         doc = self._json(body, gzipped)
-        if not isinstance(doc, dict) or not {"assets", "findings"} <= set(doc):
-            raise Problem(HTTPStatus.UNPROCESSABLE_ENTITY, "expected {assets, findings}")
+        # v0.23.19: the findings compact (`watch_findings`, a2vm.watch_findings/1) or as before
+        # (`findings`, vulnops.findings/2); one of them.
+        kind = "watch_findings" if isinstance(doc, dict) and "watch_findings" in doc else "findings"
+        if (
+            not isinstance(doc, dict)
+            or "assets" not in doc
+            or kind not in doc
+            or {"findings", "watch_findings"} <= set(doc)
+        ):
+            raise Problem(HTTPStatus.UNPROCESSABLE_ENTITY, "expected {assets, watch_findings} or {assets, findings}")
         try:
             validate_assets(doc["assets"], "assets")
-            validate_findings(doc["findings"], "findings")
+            (validate_watch_findings if kind == "watch_findings" else validate_findings)(doc[kind], kind)
         except ExchangeError as exc:
             raise Problem(HTTPStatus.UNPROCESSABLE_ENTITY, str(exc)[:500]) from exc
         client = doc["assets"].get("client_id", "")
-        if client != tenant or doc["findings"].get("client_id") != tenant:
+        if client != tenant or doc[kind].get("client_id") != tenant:
             raise Problem(HTTPStatus.UNPROCESSABLE_ENTITY, "client id differs from the tenant")
+        name = WATCH_FINDINGS_FILE if kind == "watch_findings" else "findings.json"
+        count = sum(map(len, doc[kind]["assets"].values())) if kind == "watch_findings" else len(doc[kind]["findings"])
+        # The previous inventory is replaced whole: no findings.json of an older version left beside it.
         meta = self.store.put_inventory(
             tenant,
             client,
-            {"assets.json": json.dumps(doc["assets"]).encode(), "findings.json": json.dumps(doc["findings"]).encode()},
+            {"assets.json": json.dumps(doc["assets"]).encode(), name: json.dumps(doc[kind]).encode()},
+            {"assets": len(doc["assets"].get("assets", [])), "findings": count},
         )
         found = apps.candidates(doc["assets"].get("assets", []))
         at = dt.datetime.now(dt.UTC).isoformat(timespec="seconds")
@@ -130,8 +142,8 @@ class WatchService:
         log.info(
             "inventory tenant=%s assets=%d findings=%d applications=%d new=%d",
             tenant,
-            len(doc["assets"].get("assets", [])),
-            len(doc["findings"].get("findings", [])),
+            meta["assets"],
+            count,
             len(found),
             added,
         )
@@ -168,9 +180,20 @@ class WatchService:
         """The watch of the tenant (v0.23.4, the chat's get_watch_status): its last passage, the
         sources failing in a row, the alerts of the last 24 hours."""
         self._check(tenant, token, ("run", "read"))
+        meta = self.store.inventory_meta(tenant, tenant)
+        inventory = (
+            {k: meta[k] for k in ("received_at", "assets", "findings") if k in meta}
+            if meta
+            else "none: the watch knows the declared assets only"
+        )  # v0.23.19: what the watch names in its alerts
         raw = self.store.state(tenant)
         if raw is None:
-            return {"tenant": tenant, "version": __version__, "state": "the watch has not run yet"}
+            return {
+                "tenant": tenant,
+                "version": __version__,
+                "state": "the watch has not run yet",
+                "inventory": inventory,
+            }
         state = json.loads(raw)
         failing = {k: v for k, v in (state.get("failures") or {}).items() if v}
         day = (dt.datetime.now(dt.UTC) - dt.timedelta(hours=24)).strftime("%Y%m%dT%H%M")
@@ -182,6 +205,7 @@ class WatchService:
             "cve_delta_since": state.get("delta_since", ""),
             "failing_sources": [{"source": k, "failed_passages_in_a_row": v} for k, v in sorted(failing.items())],
             "alerts_last_24h": len(recent),
+            "inventory": inventory,
             "note": "last_passage is empty before v0.23.4; a source fails once without a warning, the "
             "profile's threshold decides when it is reported",
         }

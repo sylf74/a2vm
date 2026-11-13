@@ -38,7 +38,8 @@ from via.alert import journal
 RUN_ID = re.compile(r"^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{8}$")
 FILE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,150}$")
 ALERT_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,150}$")
-INVENTORY_FILES = ("assets.json", "findings.json")
+WATCH_FINDINGS_FILE = "watch-findings.json"  # a2vm.watch_findings/1 (v0.23.19)
+INVENTORY_FILES = ("assets.json", "findings.json", WATCH_FINDINGS_FILE)
 STATUSES = ("pending", "translating", "validated", "dismissed", "sent", "failed")
 # The events that set the status of an alert; the last one wins (none: pending). A change of the
 # English reference (`edited`) takes the alert back to pending: its translations are outdated.
@@ -94,12 +95,17 @@ class WatchStore:
         return path.read_bytes() if path.exists() else None
 
     # -- inventory -------------------------------------------------------------------------------
-    def put_inventory(self, tenant: str, client: str, docs: dict[str, bytes]) -> dict[str, Any]:
+    def put_inventory(
+        self, tenant: str, client: str, docs: dict[str, bytes], extra: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """The inventory replaced whole: the files of an earlier one not in `docs` go (v0.23.19)."""
         base = self._t(tenant) / "inventory" / client
         with self._lock:
             for name, data in docs.items():
                 _atomic(base / name, data)
-            meta = {"client": client, "received_at": _now().isoformat(), "files": sorted(docs)}
+            for name in set(INVENTORY_FILES) - set(docs):
+                (base / name).unlink(missing_ok=True)
+            meta = {"client": client, "received_at": _now().isoformat(), "files": sorted(docs), **(extra or {})}
             _atomic(base / "meta.json", json.dumps(meta).encode())
         return meta
 

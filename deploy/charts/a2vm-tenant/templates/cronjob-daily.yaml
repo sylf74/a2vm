@@ -173,7 +173,7 @@ if [ ! -s /secrets/via-run-token ]; then echo "WARN no via-run-token: the watch 
 rc=0
 via service push-inventory --url {{ include "a2vm-tenant.viaUrl" . | quote }} --tenant {{ .Values.tenant | quote }} \
   --token-file /secrets/via-run-token --assets-dir /data/work/assets/{{ .Values.tenant }} || rc=$?
-if [ "$rc" -ne 0 ]; then echo "WARN watch service not updated (exit $rc): the watch keeps the previous inventory"; fi
+if [ "$rc" -ne 0 ]; then echo "WARN watch service not updated (exit $rc): see above what the watch keeps"; fi
 {{- end -}}
 
 {{- define "a2vm-tenant.container" -}}
