@@ -175,3 +175,43 @@ def test_the_contract_lists_the_compact_findings() -> None:
     assert [f["required"] for f in forms] == [["assets", "watch_findings"], ["assets", "findings"]]
     get = api["paths"]["/v1/tenants/{tenant}/inventory/{file}"]["get"]
     assert "watch-findings.json" in get["parameters"][1]["schema"]["enum"]
+
+
+# -- the timing: the whole step ------------------------------------------------------------------
+def test_the_timing_covers_the_whole_step(settings, sources, profile, tmp_path, capsys) -> None:
+    """v0.23.18 timed the decisions only (3.5 s for a step of minutes): the step now counts from
+    reading its inputs, the decisions alone kept as decide_seconds."""
+    import shutil
+
+    from verdict.cli import main
+
+    from .test_pipeline import _run
+
+    _run(settings, sources, profile, tmp=tmp_path)
+    client = tmp_path / "assets" / profile.id
+    client.mkdir(parents=True)
+    for name in ("assets.json", "findings.json"):
+        shutil.copy(tmp_path / name, client / name)
+    out = tmp_path / "out"
+    code = main(
+        ["run", str(ROOT / "examples" / "example-client" / "client.yaml"),
+         "--settings", str(ROOT / "config" / "settings.yaml"), "--records", str(tmp_path / "records.json"),
+         "--assets", str(tmp_path / "assets"), "--out", str(out), "--no-llm", "--run-started", "1700000000"]
+    )  # fmt: skip
+    assert code == 0
+    t = json.loads(next(out.rglob("triage.json")).read_text())["timing"]
+    assert t["seconds"] >= t["decide_seconds"] >= 0
+    assert t["started_at"] <= t["ended_at"] and t["run_started_at"] == "2023-11-14T22:13:20+00:00"
+    assert "(deciding " in capsys.readouterr().out
+
+
+def test_the_timing_note_names_the_decisions_alone() -> None:
+    from verdict.service.tools import _timing_note
+
+    note = _timing_note({"seconds": 312, "decide_seconds": 3.5, "findings": 26329, "decided": 26263,
+                         "without_record": 66, "run_seconds": 480})  # fmt: skip
+    assert note == (
+        "the decision step (verdict) ran 5 min 12 s on 26329 findings: 26263 decided, 66 without a vulnerability "
+        "record (reading its inputs included; the decisions alone 4 s); the whole run took 8 min 00 s from its "
+        "start up to the decisions"
+    )

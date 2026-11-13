@@ -67,11 +67,12 @@
     },
     "timing": {
       "type": "object",
-      "description": "How long the triage took and on what (since v0.23.18): started_at, ended_at, seconds; run_started_at and run_seconds (from the start of the daily run to the end of the triage) when the run's start is known; findings (read), decided, without_record, not_affected",
+      "description": "How long the triage took and on what (since v0.23.18): started_at, ended_at, seconds (since v0.23.19 the whole step, from reading its inputs; decide_seconds the decisions alone); run_started_at and run_seconds (from the start of the daily run to the end of the triage) when the run's start is known; findings (read), decided, without_record, not_affected",
       "properties": {
         "started_at": {"type": "string"},
         "ended_at": {"type": "string"},
         "seconds": {"type": "number"},
+        "decide_seconds": {"type": "number"},
         "run_started_at": {"type": "string"},
         "run_seconds": {"type": "number"},
         "findings": {"type": "integer"},

@@ -1244,6 +1244,8 @@ def _timing_note(t: dict[str, Any]) -> str:
         f"the decision step (verdict) ran {span(t.get('seconds', 0))} on {t.get('findings', 0)} findings: "
         f"{t.get('decided', 0)} decided, {t.get('without_record', 0)} without a vulnerability record"
     )
+    if "decide_seconds" in t:  # v0.23.19: the step read its inputs, then decided
+        note += f" (reading its inputs included; the decisions alone {span(t['decide_seconds'])})"
     if "run_seconds" in t:
         note += f"; the whole run took {span(t['run_seconds'])} from its start up to the decisions"
     return note
