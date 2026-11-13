@@ -264,3 +264,92 @@ def test_the_operator_check_tells_a_failed_discovery_from_an_absent_operator(tmp
     r = subprocess.run(["sh", "-c", _cnpg_block()], env=env, capture_output=True, text=True)
     assert r.returncode == code, r.stdout + r.stderr
     assert says in r.stdout
+
+
+# -- dispatch: what failed, said ------------------------------------------------------------------
+def test_dispatch_says_its_errors_grouped(tmp_path, capsys) -> None:
+    """Found in the homelab: 'errors 61' and nothing else, the messages only in the database."""
+    from dispatch.connectors import ConnectorError
+
+    from .test_v0200 import FakeTool, dec, dispatcher
+
+    msg = "iTop refused: code 100: Error: caller_id: Several items found (2) with criteria: name: A2VM"
+
+    class Refusing(FakeTool):
+        def create(self, ticket, text, title):
+            raise ConnectorError(msg)
+
+    items = [dec(i, f"host:web0{i}.lab.example", "ACT", ["openssl 3.0.15"]) for i in range(1, 4)]
+    d, _ = dispatcher(tmp_path, items, tool=Refusing())
+    s = d.process_run()
+    assert s["errors"] == 3 and s["error_messages"] == [{"count": 3, "error": msg}]
+    d2, _ = dispatcher(tmp_path, items)
+    s2 = d2.process_run()
+    assert s2["sent"] == 3 and "error_messages" not in s2
+
+
+def test_the_step_prints_the_grouped_errors(tmp_path, capsys, monkeypatch) -> None:
+    import httpx
+
+    from dispatch.cli import main
+
+    answer = {"run": {"id": "r1"}, "mode": "live", "sent": 0, "errors": 61,
+              "error_messages": [{"count": 61, "error": "iTop refused: code 100: Several items found (2)"}],
+              "detail": "iTop: 2 Persons with name 'A2VM' in 'Homelab'"}  # fmt: skip
+
+    def post(url, **kwargs):
+        return httpx.Response(200, json=answer)
+
+    monkeypatch.setattr(httpx, "post", post)
+    token = tmp_path / "token"
+    token.write_text("t" * 40)
+    code = main(["run", "--url", "http://dispatch:8080", "--tenant", "homelab", "--token-file", str(token)])
+    out = capsys.readouterr()
+    assert code == 3
+    assert "errors 61; iTop: 2 Persons with name 'A2VM' in 'Homelab'" in out.out
+    assert "  61 x iTop refused: code 100: Several items found (2)" in out.err
+
+
+@pytest.mark.parametrize(
+    "caller,found,says",
+    [
+        ("A2VM", 1, ""),
+        ("A2VM", 2, "iTop: 2 Persons with name 'A2VM' in 'Lab': iTop refuses every ticket"),
+        ("a2vm@example.org", 0, "iTop: no Person with email 'a2vm@example.org' in 'Lab'"),
+        ("O'Brien", 1, ""),
+    ],
+)
+def test_the_itop_caller_is_checked_before_any_ticket(caller, found, says) -> None:
+    import httpx
+
+    from dispatch.connectors.itop import ItopConnector
+    from dispatch.rules import Rules
+
+    from .test_v0200 import RULES
+
+    asked = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(dict(httpx.QueryParams(request.content.decode()))["json_data"])
+        asked.append(payload)
+        objects = {f"Person::{i}": {"code": 0, "fields": {"id": str(i)}} for i in range(1, found + 1)}
+        return httpx.Response(200, json={"code": 0, "objects": objects or None})
+
+    rules = Rules.from_dict({**RULES, "targets": {"itsm": {**RULES["targets"]["itsm"], "caller": caller}}})
+    c = ItopConnector(rules.targets["itsm"], "secret", transport=httpx.MockTransport(handler))
+    assert c.check().startswith(says) and bool(c.check()) == bool(says)
+    assert asked[0]["operation"] == "core/get" and asked[0]["class"] == "Person"
+    key = "email" if "@" in caller else "name"
+    escaped = caller.replace("'", "\\'")
+    assert asked[0]["key"] == f"SELECT Person WHERE {key} = '{escaped}' AND org_name = 'Lab'"
+
+
+def test_the_run_says_what_the_check_found(tmp_path) -> None:
+    from .test_v0200 import FakeTool, dec, dispatcher
+
+    class Checked(FakeTool):
+        def check(self):
+            return "iTop: 2 Persons with name 'A2VM' in 'Lab': ..."
+
+    d, _ = dispatcher(tmp_path, [dec(1, "host:web01.lab.example", "ACT", ["openssl 3.0.15"])], tool=Checked())
+    assert d.process_run()["detail"].startswith("iTop: 2 Persons")

@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
+from collections import Counter
 from collections.abc import Callable
 from typing import Any
 
@@ -61,6 +62,7 @@ class Dispatcher:
         self._connector_for = connector_for
         self._connectors: dict[str, Connector] = {}
         self.clock = clock or (lambda: dt.datetime.now(dt.UTC).isoformat(timespec="seconds"))
+        self._errors: Counter[str] = Counter()  # the messages of the errors of a run (v0.23.19)
 
     # -- tools -------------------------------------------------------------------------------------
     def connector(self, target: str) -> Connector:
@@ -84,7 +86,7 @@ class Dispatcher:
         except ConnectorError as exc:
             t.state, t.error = "proposed", str(exc)
             t.event(at, "send failed", error=str(exc))
-            summary["errors"] += 1
+            self._error(summary, t)
             log.warning("tenant=%s ticket %r not sent: %s", self.tenant, t.key, exc)
             return
         t.external = ext.to_dict()
@@ -104,16 +106,23 @@ class Dispatcher:
             self.connector(t.target).comment(External(**t.external), text)
         except ConnectorError as exc:
             t.error = str(exc)
-            summary["errors"] += 1
+            self._error(summary, t)
 
     # -- after a run -------------------------------------------------------------------------------
+    def _error(self, summary: dict[str, int], t: tk.Ticket) -> None:
+        """One error more, its message kept to be said grouped (v0.23.19)."""
+        summary["errors"] += 1
+        self._errors[(t.error or "unknown error")[:300]] += 1
+
     def process_run(self) -> dict[str, Any]:
         at = self.clock()
+        self._errors = Counter()
         summary = {"proposed": 0, "sent": 0, "updated": 0, "fixed": 0, "claimed_fixed": 0, "reopened": 0, "errors": 0}
         try:
             run = self.decisions.latest_run()
             if run is None:
                 return {"run": None, "mode": self.rules.mode, **summary, "detail": "no run in the decision service"}
+            notes = self._checks()
             done = self._automatic(at, summary)
             self._pending(at, summary, done)
             self._follow(at, summary)
@@ -122,7 +131,31 @@ class Dispatcher:
         finally:
             self.close()
         log.info("tenant=%s run=%s mode=%s %s", self.tenant, run.get("id"), self.rules.mode, summary)
-        return {"run": run, "mode": self.rules.mode, **summary}
+        grouped = [{"count": n, "error": e} for e, n in self._errors.most_common(5)]
+        for g in grouped:
+            log.warning("tenant=%s %d x %s", self.tenant, g["count"], g["error"])
+        out = {"run": run, "mode": self.rules.mode, **summary, **({"error_messages": grouped} if grouped else {})}
+        if notes:
+            out["detail"] = "; ".join(notes)
+        return out
+
+    def _checks(self) -> list[str]:
+        """What a target says would stop its tickets (v0.23.19: the caller of iTop), once per run."""
+        if not self.rules.live:
+            return []
+        notes = []
+        for name in sorted({self.rules.ticket_target or "", *self.rules.request_targets} - {""}):
+            check = getattr(self.connector(name), "check", None)
+            if check is None:
+                continue
+            try:
+                note = check()
+            except ConnectorError as exc:
+                note = f"{name}: {exc}"
+            if note:
+                log.warning("tenant=%s %s", self.tenant, note)
+                notes.append(note)
+        return notes
 
     def _link_cmdb(self, wanted: dict[str, tk.Ticket], known: dict[str, tk.Ticket | None]) -> None:
         """The CMDB item of the asset of each ticket about to be sent (one read per asset)."""
@@ -256,7 +289,7 @@ class Dispatcher:
                         self.connector(t.target).resolve(External(**t.external), text)
                 except ConnectorError as exc:
                     t.error = str(exc)
-                    summary["errors"] += 1
+                    self._error(summary, t)
             return
         if not self.rules.live or not t.external.get("ref"):
             return
@@ -264,7 +297,7 @@ class Dispatcher:
             status, view = self.connector(t.target).status(External(**t.external))
         except ConnectorError as exc:
             t.error = str(exc)
-            summary["errors"] += 1
+            self._error(summary, t)
             return
         t.external["status"] = status
         if view == CLOSED:
@@ -319,7 +352,7 @@ class Dispatcher:
                 t.event(at, "due date written", due=t.due)
         except ConnectorError as exc:
             t.error = str(exc)
-            summary["errors"] += 1
+            self._error(summary, t)
 
     # -- requests of a person ---------------------------------------------------------------------
     def selection(self, query: dict[str, str]) -> dict[str, str]:
