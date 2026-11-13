@@ -215,3 +215,52 @@ def test_the_timing_note_names_the_decisions_alone() -> None:
         "record (reading its inputs included; the decisions alone 4 s); the whole run took 8 min 00 s from its "
         "start up to the decisions"
     )
+
+
+# -- deploy-k8s: the CloudNativePG check ---------------------------------------------------------
+def _cnpg_block() -> str:
+    import yaml
+
+    doc = yaml.safe_load((ROOT / "templates/client-pipeline.yml").read_text())
+    return next(line for line in doc["deploy-k8s"]["script"] if "postgresql.cnpg.io" in line)
+
+
+@pytest.mark.parametrize(
+    "answers,code,says",
+    [
+        (["ok"], 0, "A2VM_DATABASE=true: the services keep"),
+        (["fail", "ok"], 0, "discovery of the API failed (try 1 of 3)"),
+        (["absent"], 1, "the CloudNativePG operator is not installed"),
+        (["fail", "fail", "fail"], 1, "did not answer the discovery through the agent"),
+        (["partial"], 0, "A2VM_DATABASE=true: the services keep"),
+    ],
+)
+def test_the_operator_check_tells_a_failed_discovery_from_an_absent_operator(tmp_path, answers, code, says):
+    """Found in integration: one failed discovery through the agent's tunnel stopped deploy-k8s with
+    "the operator is not installed" on a cluster where it runs."""
+    import os
+    import stat
+    import subprocess
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (tmp_path / "answers").write_text("\n".join(answers) + "\n")
+    kubectl = bin_dir / "kubectl"
+    kubectl.write_text(
+        "#!/bin/sh\n"
+        f'a=$(head -1 "{tmp_path}/answers"); sed -i 1d "{tmp_path}/answers"\n'
+        'case "$a" in\n'
+        "  ok) echo clusters.postgresql.cnpg.io; echo poolers.postgresql.cnpg.io;;\n"
+        "  absent) ;;\n"
+        "  partial) echo clusters.postgresql.cnpg.io; echo 'unable to retrieve metrics.k8s.io' >&2; exit 1;;\n"
+        "  *) echo 'error: the server is currently unable to handle the request' >&2; exit 1;;\n"
+        "esac\n"
+    )
+    (bin_dir / "sleep").write_text("#!/bin/sh\nexit 0\n")
+    for f in bin_dir.iterdir():
+        f.chmod(f.stat().st_mode | stat.S_IEXEC)
+    env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}", "A2VM_DATABASE": "true",
+           "A2VM_K8S_CONTEXT": "voc/a2vm/k8s:ngvm", "CI_PROJECT_NAME": "lab"}  # fmt: skip
+    r = subprocess.run(["sh", "-c", _cnpg_block()], env=env, capture_output=True, text=True)
+    assert r.returncode == code, r.stdout + r.stderr
+    assert says in r.stdout

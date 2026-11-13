@@ -239,8 +239,21 @@ deploy-k8s:
     - |
       DATABASE=""
       if [ "${A2VM_DATABASE:-false}" = "true" ]; then
-        if ! kubectl api-resources --api-group=postgresql.cnpg.io -o name 2>/dev/null | grep -q '^clusters\.'; then
+        # v0.23.19: the discovery goes through the GitLab agent's tunnel, which fails now and then;
+        # three tries, its error shown, and "not installed" only when it answered without the group.
+        CNPG=""
+        for try in 1 2 3; do
+          rc=0; out=$(kubectl api-resources --api-group=postgresql.cnpg.io -o name 2>&1) || rc=$?
+          if echo "$out" | grep -q '^clusters\.'; then CNPG=found; break; fi
+          if [ "$rc" -eq 0 ]; then CNPG=absent; break; fi
+          echo "WARN discovery of the API failed (try $try of 3): $(echo "$out" | tail -2)"
+          sleep 5
+        done
+        if [ "$CNPG" = absent ]; then
           echo "ERROR A2VM_DATABASE=true but the CloudNativePG operator is not installed in the cluster (deploy/cnpg/README.md)"
+          exit 1
+        elif [ "$CNPG" != found ]; then
+          echo "ERROR the cluster's API did not answer the discovery through the agent ($A2VM_K8S_CONTEXT) 3 times: run the pipeline again"
           exit 1
         fi
         DATABASE="--set database.enabled=true"
