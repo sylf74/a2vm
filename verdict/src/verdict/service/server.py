@@ -24,7 +24,7 @@ from urllib.parse import parse_qsl, unquote, urlsplit
 
 from a2vm import __version__
 from a2vm.io import ExchangeError, validate_triage
-from a2vm.service import JsonHandler, Problem, TokenSet
+from a2vm.service import JsonHandler, Problem, TokenSet, release_memory
 from a2vm.service import serve as _serve
 
 from .index import QueryError, RunIndex, changes, page
@@ -72,6 +72,19 @@ class Service:
             log.info("push tenant=%s run=%s duplicate=True", tenant, known.id)
             return known.to_dict()
         started = time.monotonic()
+        log.info("push tenant=%s receiving=%d bytes gzip=%s", tenant, len(body), gzipped)
+        # v0.23.18: the indexes of the runs already read are dropped (rebuilt on the next read), so a
+        # push does not sit on top of two runs held in memory; and what it parsed is given back.
+        with self._lock:
+            self._indexes = {}
+        try:
+            return self._push(tenant, key, body, gzipped, now, started)
+        finally:
+            release_memory()
+
+    def _push(
+        self, tenant: str, key: str, body: bytes, gzipped: bool, now: dt.datetime, started: float
+    ) -> dict[str, Any]:
         received = body
         if gzipped:
             try:

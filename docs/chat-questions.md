@@ -146,6 +146,7 @@ How to ask:
 
 - Quelle version d'A2VM tourne sur mon tenant ?
 - Le run de ce matin est-il terminé, avec quel LLM, et combien a-t-il coûté ?
+- Combien de temps verdict a-t-il tourné, et sur combien de findings ?
 - Tout est-il à jour ?
 - Quand les décisions seront-elles mises à jour ?
 

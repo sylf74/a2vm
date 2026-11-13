@@ -1,4 +1,4 @@
-# Operator's manual (v0.23.17)
+# Operator's manual (v0.23.18)
 
 Day-to-day operation of a tenant deployed on Kubernetes (`A2VM_RUN_MODE: kubernetes`): where each
 part runs, the usual actions, how to check the state, the known failures and their remedies,
@@ -168,14 +168,25 @@ tickets themselves: `docs/dispatch.md` §4.
 
 ### Deploy again
 
-`deploy-k8s` runs on a push to the default branch or a "Run pipeline" from the GitLab page; a
-pipeline made through the API (`glab ci run`) does not deploy, and an old job may not be retried.
-To deploy again without a change:
+`deploy-k8s` runs on a push to the default branch, a "Run pipeline" from the GitLab page, or a
+pipeline made through the API on the default branch (v0.23.18: `glab ci run -b main`, or
+`POST /projects/:id/pipeline` with a token that has the Developer role on the project). An old job
+may not be retried. To deploy again without a change, from the project's clone:
+
+```bash
+glab ci run -b main
+```
+
+Without `glab`, an empty commit does the same:
 
 ```bash
 git commit --allow-empty -m "Redeploy"
 git push
 ```
+
+Before v0.23.18, a tenant on Kubernetes with `A2VM_REPORTING_DSN` could not use "Run pipeline":
+GitLab refused it (`'publish' job needs 'triage' job, but 'triage' does not exist in the
+pipeline`), and its schedules failed the same way.
 
 ## 3. Check the state
 

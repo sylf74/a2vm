@@ -26,6 +26,7 @@ a product matched by name) always asks.
 from __future__ import annotations
 
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Any
@@ -204,6 +205,7 @@ class Triage:
         errors: list[dict[str, str]] | None = None,
     ) -> TriageRun:
         self.llm_calls, self.llm_errors_in_row, self.llm_stopped = 0, 0, None  # budget per client run
+        started, clock = now(), time.monotonic()
         before = self.llm.usage_summary() if self.llm else None
         run = TriageRun(
             client=profile,
@@ -245,6 +247,15 @@ class Triage:
             run.llm_usage.update({k: after[k] for k in ("thinking", "family", "reasoning")})
             if self.llm_stopped:
                 run.llm_usage["stopped"] = self.llm_stopped
+        run.timing = {
+            "started_at": started,
+            "ended_at": now(),
+            "seconds": round(time.monotonic() - clock, 1),
+            "findings": len(findings),
+            "decided": len(run.rows),
+            "without_record": sum(missing.values()),
+            "not_affected": len(run.not_affected),
+        }
         return run
 
     def _row(self, profile: ClientProfile, inputs: CveInputs, asset: Asset, finding: Finding) -> TriageRow:

@@ -87,19 +87,27 @@ spec:
             - --keep={{ .Values.verdict.keep }}
             - --max-mb={{ .Values.verdict.maxMb }}
             - --port=8080
-          {{- if $db }}
           env:
+            # v0.23.18: two glibc arenas instead of eight per core; with release_memory() after each
+            # push, the pod's memory goes back down instead of staying at its peak.
+            - name: MALLOC_ARENA_MAX
+              value: "2"
+            {{- if $db }}
             {{- include "a2vm-tenant.dbEnv" . | nindent 12 }}
-          {{- end }}
+            {{- end }}
           ports:
             - name: http
               containerPort: 8080
           readinessProbe:
             httpGet: {path: /readyz, port: http}
             periodSeconds: 10
+          # A push of tens of thousands of decisions holds the interpreter for seconds at a time: the
+          # probe waits 5 s and restarts the service after 3 minutes without an answer, not 90 s.
           livenessProbe:
             httpGet: {path: /healthz, port: http}
             periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 6
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

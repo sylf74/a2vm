@@ -200,6 +200,7 @@ spec:
             - --digests=/via-secret/digests
             - --store=/data/watch
             - --keep-days={{ $w.keepDays }}
+            - --max-mb={{ $w.maxMb | default 50 }}
             - --port=8080
             {{- if $w.review.enabled }}
             - --review-port=8081

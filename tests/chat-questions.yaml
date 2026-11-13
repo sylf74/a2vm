@@ -33,6 +33,7 @@ questions:
   - {q: "Quand a tourné le dernier run ?", tool: list_runs, params: [], why: runs}
   - {q: "Quelle version d'A2VM tourne sur mon tenant ?", tool: get_platform_status, params: [], why: version}
   - {q: "Le run de ce matin est-il terminé, avec quel LLM, et combien a-t-il coûté ?", tool: get_platform_status, params: [], why: LLM}
+  - {q: "Combien de temps verdict a-t-il tourné, et sur combien de findings ?", tool: get_platform_status, params: [], why: how long}
   - {q: "Tout est-il à jour ?", tool: get_platform_status, params: [], why: up to date}
   - {q: "Quels collecteurs remontent des données ?", tool: list_collectors, params: [], why: collectors}
   - {q: "Quand le connecteur OpenVAS a-t-il remonté pour la dernière fois ?", tool: list_collectors, params: [source], why: last pushed}

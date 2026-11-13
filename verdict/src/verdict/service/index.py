@@ -268,6 +268,7 @@ class RunIndex:
             "llm_model": self.document.get("llm_model"),
             "a2vm_version": self.document.get("a2vm_version", "before v0.23.9"),
             **({"llm_usage": self.document["llm_usage"]} if self.document.get("llm_usage") else {}),
+            **({"timing": self.document["timing"]} if self.document.get("timing") else {}),
             "cve_count": self.document["cve_count"],
             "findings": {lv: counts.get(lv, 0) for lv in LEVELS},
             "assets": len(set(self.by_asset) | set(self.inventory)),

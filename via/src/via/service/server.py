@@ -28,7 +28,7 @@ from urllib.parse import parse_qsl, unquote, urlsplit
 from a2vm import __version__
 from a2vm import applications as apps
 from a2vm.io import ExchangeError, validate_assets, validate_findings
-from a2vm.service import JsonHandler, Problem, TokenSet, moment
+from a2vm.service import JsonHandler, Problem, TokenSet, moment, release_memory
 from a2vm.service import serve as _serve
 
 from .store import ALERT_ID, FILE_NAME, INVENTORY_FILES, STATUSES, WatchStore
@@ -96,6 +96,12 @@ class WatchService:
 
     # -- the tenant's jobs ---------------------------------------------------------------------
     def put_inventory(self, tenant: str, token: str | None, body: bytes, gzipped: bool) -> dict[str, Any]:
+        try:
+            return self._put_inventory(tenant, token, body, gzipped)
+        finally:
+            release_memory()  # v0.23.18: the parsed inventory goes back to the system
+
+    def _put_inventory(self, tenant: str, token: str | None, body: bytes, gzipped: bool) -> dict[str, Any]:
         self._check(tenant, token, ("run",))
         doc = self._json(body, gzipped)
         if not isinstance(doc, dict) or not {"assets", "findings"} <= set(doc):

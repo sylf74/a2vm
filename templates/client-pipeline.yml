@@ -13,7 +13,7 @@
 #
 #     include:
 #       - project: vulnops/a2vm
-#         ref: v0.23.17
+#         ref: v0.23.18
 #         file: templates/client-pipeline.yml
 #     variables:
 #       A2VM_REF: v0.19.0        # same version as the include
@@ -33,6 +33,8 @@
 #                            A2VM_INTAKE_HOST, A2VM_INTAKE_ALLOW, A2VM_INTAKE_INGRESS_CONTROLLER
 #                            (nginx, traefik), A2VM_INTAKE_CLUSTER_ISSUER: its push endpoint (docs/collectors.md)
 #   A2VM_VERDICT_SERVICE  false: no decision service in the cluster (default true; docs/kubernetes.md)
+#   A2VM_VERDICT_MEMORY   memory limit of the decision service (default 2Gi, v0.23.18; docs/kubernetes.md)
+#   A2VM_WATCH_MAX_MB     largest inventory the watch service accepts, in MB (default 50, v0.23.18)
 #   A2VM_DATABASE         true: the tenant's PostgreSQL (CloudNativePG) for the services, instead of
 #                            their volumes; A2VM_DATABASE_SIZE, _STORAGE_CLASS, _INSTANCES (docs/kubernetes.md §5)
 #   A2VM_CHAT_HOST        the analysts' chat on the decision service (Open WebUI); A2VM_CHAT_ALLOW,
@@ -127,7 +129,7 @@ validate:
     - if: $A2VM_JOB == "watch" || $VULNOPS_JOB == "watch" || $A2VM_JOB == "send"
       when: never
     - if: $CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"
+    - if: $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "api"
   script:
     - a2vm validate "$A2VM_PROFILE"
     - |
@@ -142,7 +144,8 @@ validate:
 
 # -- Kubernetes (HLD D15, step 1): the daily run as a CronJob in the cluster -----------------------
 # When A2VM_K8S_CONTEXT names a GitLab agent context allowed for this project (e.g.
-# vulnops/k8s:homelab), each push to the default branch and each "Run pipeline" deploys this tenant
+# vulnops/k8s:homelab), each push to the default branch, each "Run pipeline" and each pipeline
+# created through the API (v0.23.18: a token with the Developer role on this project) deploys this tenant
 # with the chart deploy/charts/a2vm-tenant of A2VM_REF (a release tag: the images exist for tags
 # only): this project's profile, targets and settings, its secrets from its CI/CD variables, the
 # pillar images from the code project's registry. Variables: docs/kubernetes.md.
@@ -154,7 +157,7 @@ deploy-k8s:
   rules:
     - if: $A2VM_JOB == "watch" || $VULNOPS_JOB == "watch" || $A2VM_JOB == "send"
       when: never
-    - if: $A2VM_K8S_CONTEXT && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web")
+    - if: $A2VM_K8S_CONTEXT && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "api")
   cache: []
   script:
     - apk add --no-cache -q git helm kubectl
@@ -223,6 +226,10 @@ deploy-k8s:
         kubectl -n "$NS" create secret generic a2vm-verdict --from-file=digests="$V/digests" --dry-run=client -o yaml | upsert
         VERDICT="--set verdict.enabled=true --set verdict.digestsSecret=a2vm-verdict"
         VERDICT="$VERDICT --set verdict.digestsChecksum=$(sha256sum "$V/digests" | cut -d' ' -f1)"
+        if [ -n "${A2VM_VERDICT_MEMORY:-}" ]; then
+          if ! echo "$A2VM_VERDICT_MEMORY" | grep -qE '^[1-9][0-9]*(Mi|Gi)$'; then echo "A2VM_VERDICT_MEMORY: a size such as 3Gi or 2560Mi"; exit 1; fi
+          VERDICT="$VERDICT --set-string verdict.resources.limits.memory=$A2VM_VERDICT_MEMORY"
+        fi
       else
         echo "A2VM_VERDICT_SERVICE=false: no decision service"
       fi
@@ -277,6 +284,10 @@ deploy-k8s:
         WATCH="--set watch.enabled=true --set watch.digestsSecret=a2vm-via"
         WATCH="$WATCH --set watch.digestsChecksum=$(sha256sum "$W/digests" | cut -d' ' -f1)"
         WATCH="$WATCH --set watch.sendPipelineUrl=$CI_PROJECT_URL/-/pipelines/new --set watch.sendRef=$CI_DEFAULT_BRANCH"
+        if [ -n "${A2VM_WATCH_MAX_MB:-}" ]; then
+          if ! echo "$A2VM_WATCH_MAX_MB" | grep -qE '^[1-9][0-9]*$'; then echo "A2VM_WATCH_MAX_MB: a number of MB, such as 100"; exit 1; fi
+          WATCH="$WATCH --set watch.maxMb=$A2VM_WATCH_MAX_MB"
+        fi
         TPL=""; for t in templates/alert*.docx; do if [ -f "$t" ]; then TPL="$TPL --from-file=$(basename "$t")=$t"; fi; done
         if [ -n "$TPL" ]; then
           kubectl -n "$NS" create configmap a2vm-alert-template $TPL --dry-run=client -o yaml | upsert
@@ -570,7 +581,7 @@ triage:
     - {key: sources, paths: [.cache/]}
     - {key: inventory, paths: [work/assets/], policy: push}
   script:
-    - verdict run "$A2VM_PROFILE" --settings "$SETTINGS" --records work/records.json --assets work/assets --out output
+    - verdict run "$A2VM_PROFILE" --settings "$SETTINGS" --records work/records.json --assets work/assets --out output --run-started "$CI_PIPELINE_CREATED_AT"
   artifacts:
     name: "triage-$CI_PROJECT_NAME-$CI_PIPELINE_ID"
     paths: [output/, work/assets/]
@@ -579,13 +590,17 @@ triage:
 # The run's reporting dataset into the reporting database (dashboards read it, never GitLab), when
 # the project has A2VM_REPORTING_DSN (a postgresql:// URI, masked; or a File variable) and, to verify
 # the server, A2VM_REPORTING_CA (the server's certificate, File variable or pasted text).
-# Exit code 3: database unreachable or refused (warning; the next run publishes again).
+# Exit code 3: database unreachable or refused (warning; the next run publishes again). Same rules as
+# the run it publishes (v0.23.18): on Kubernetes the CronJob's step `publish` does it, and a pipeline
+# where `triage` does not exist must not hold a job that needs it (GitLab refuses the whole pipeline).
 publish:
   extends: .a2vm
   stage: publish
   needs: [triage]
   rules:
-    - if: $A2VM_JOB == "watch" || $VULNOPS_JOB == "watch"
+    - if: $A2VM_JOB == "watch" || $VULNOPS_JOB == "watch" || $A2VM_JOB == "send"
+      when: never
+    - if: $A2VM_RUN_MODE == "kubernetes"
       when: never
     - if: $A2VM_REPORTING_DSN && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
   allow_failure:

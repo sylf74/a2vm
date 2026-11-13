@@ -120,6 +120,8 @@ CI/CD variables of the tenant project (or of a subgroup):
 | `A2VM_K8S_SUSPEND` | Optional, `true` keeps the daily CronJob suspended from one deployment to the next (the radar tenant, `docs/radar.md`), default `false` | Visible |
 | `A2VM_IMAGE_REGISTRY` | Optional, default `<registry>/<code project path>`; another registry (Harbor, v0.23.4): `harbor.example.org/a2vm`, with `A2VM_REGISTRY`, `A2VM_REGISTRY_USER`, `A2VM_REGISTRY_PASSWORD` (a robot account allowed to pull) | Visible |
 | `A2VM_VERDICT_SERVICE` | Optional, `false` to deploy no decision service (default `true`, v0.14.0) | Visible |
+| `A2VM_WATCH_MAX_MB` | Optional, largest inventory the watch service accepts, in MB (default `50`, v0.23.18). The step `inventory` of the daily run says the size of what it sends (assets, findings) and, on a refusal (413), to raise it; the service's memory limit (`watch.resources`, 512Mi) holds about 5 times this | Visible |
+| `A2VM_VERDICT_MEMORY` | Optional, memory limit of the decision service, e.g. `3Gi` (default `2Gi`, v0.23.18). A push parses the whole run, about 5 times its `triage.json`; when the daily run's step `publish` says the service closed the connection and the service shows a restart `OOMKilled`, raise it | Visible |
 | `A2VM_RUN_MODE` | In the tenant's `.gitlab-ci.yml`: `gitlab` (default) or `kubernetes`, the daily run and the watch in the namespace only (§4) | — |
 | `A2VM_CHAT_HOST` | Optional: the analysts' chat on the decision service, at this host (v0.15.0, `chat.md`) | Visible |
 | `A2VM_DATABASE` | Optional, `true`: the tenant's PostgreSQL (CloudNativePG) for the watch, detection and decision services instead of their volumes (v0.18.0, §5) | Visible |
@@ -192,7 +194,20 @@ tokens once and keeps them in the Secret `a2vm-tenant` (`verdict-publish-token`,
 §15). Since v0.21.0 the `triage` step first reads from it the state of the tenant's findings
 (`verdict sla-state`, the publish token): when each decision entered its priority of the client's
 SLA (`docs/sla.md`); when the service cannot answer, a warning, and the delays of that run start at
-the first observation. Only the daily run and pods labelled `a2vm.io/verdict-reader=true` reach it. To read it
+the first observation. Only the daily run and pods labelled `a2vm.io/verdict-reader=true` reach it.
+
+Memory (v0.23.18): a push parses the whole run, about 5 times its `triage.json` (a run of 28,000
+decisions stopped the service at the 1Gi of v0.23.17, most likely its memory: `decision service unreachable: Server
+disconnected without sending a response`). The limit is 2Gi, `A2VM_VERDICT_MEMORY` to change it.
+The step `publish` now says when the service closed the connection, with the size it sent; the
+service's log has a line `push tenant=… receiving=…` before it reads the run, and gives the memory
+back after. To see whether the service was stopped, and why:
+
+```bash
+kubectl -n a2vm-homelab get pods -l app.kubernetes.io/component=verdict -o jsonpath='{range .items[*]}{.metadata.name}{" restarts="}{.status.containerStatuses[0].restartCount}{" last="}{.status.containerStatuses[0].lastState.terminated.reason}{"\n"}{end}'
+```
+
+To read it
 from a workstation (the token is mounted in the pod, never in its spec or a command line):
 
 ```bash

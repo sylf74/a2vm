@@ -420,10 +420,12 @@ OPERATIONS: list[tuple[str, str, str, list[dict[str, Any]], str]] = [
         "get_platform_status",
         "The A2VM platform of this tenant (v0.23.9): the version of each service (decision, watch, "
         "detection, this tool server), the version that made the latest daily run, when it ended, the LLM "
-        "it used and what it cost (questions, answers from the cache, tokens, seconds), when the next daily "
+        "it used and what it cost (questions, answers from the cache, tokens, seconds), how long the decision "
+        "step (verdict) ran and how long the run took up to the decisions, on how many findings (v0.23.18, "
+        "`timing` and `timing_note`: give them as written), when the next daily "
         "run starts (v0.23.10: when the decisions will be updated), and the collectors late or in error. "
         "Use it for 'which version of A2VM runs', 'did today's run end', 'which LLM', 'is everything up to "
-        "date', 'when will the decisions be updated'.",
+        "date', 'when will the decisions be updated', 'how long did verdict run, on how many findings'.",
         [],
         "platform",
     ),
@@ -1008,8 +1010,12 @@ class Tools:
         verdict = self._json(self._http, f"/v1/tenants/{self.tenant}/status", "decision service")
         summary = self._json(self._http, f"/v1/tenants/{self.tenant}/summary", "decision service")
         run = {
-            k: summary[k] for k in ("run_id", "generated_at", "a2vm_version", "llm_model", "llm_usage") if k in summary
+            k: summary[k]
+            for k in ("run_id", "generated_at", "a2vm_version", "llm_model", "llm_usage", "timing")
+            if k in summary
         }
+        if "timing" in run:  # v0.23.18: said in words, so that the model does not compute it
+            run["timing_note"] = _timing_note(run["timing"])
         via = self._json(self._via, f"/v1/tenants/{self.tenant}/status", "watch service")
         detect = self._detect_status()
         late = [
@@ -1222,3 +1228,20 @@ def make_handler(tools: Tools) -> type[JsonHandler]:
 
 def serve(tools: Tools, host: str = "0.0.0.0", port: int = 8080):  # noqa: S104, ANN201 - in a pod
     return _serve(make_handler(tools), host, port)
+
+
+def _timing_note(t: dict[str, Any]) -> str:
+    """The run's timing in one sentence (v0.23.18)."""
+
+    def span(seconds: float) -> str:
+        minutes, sec = divmod(round(seconds), 60)
+        hours, minutes = divmod(minutes, 60)
+        return f"{hours} h {minutes:02d} min" if hours else f"{minutes} min {sec:02d} s" if minutes else f"{sec} s"
+
+    note = (
+        f"the decision step (verdict) ran {span(t.get('seconds', 0))} on {t.get('findings', 0)} findings: "
+        f"{t.get('decided', 0)} decided, {t.get('without_record', 0)} without a vulnerability record"
+    )
+    if "run_seconds" in t:
+        note += f"; the whole run took {span(t['run_seconds'])} from its start up to the decisions"
+    return note

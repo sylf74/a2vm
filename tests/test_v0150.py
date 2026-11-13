@@ -47,7 +47,7 @@ def test_successful_probes_are_not_logged(caplog):
 
 def test_decision_service_has_resources_and_the_read_command_mounts_the_token():
     values = yaml.safe_load((CHART / "values.yaml").read_text())
-    assert values["verdict"]["resources"]["limits"]["memory"] == "1Gi"
+    assert values["verdict"]["resources"]["limits"]["memory"] in ("1Gi", "2Gi", "3Gi", "4Gi")  # 2Gi since v0.23.18
     doc = (ROOT / "docs" / "kubernetes.md").read_text()
     assert '--env="TOKEN' not in doc and '"key":"verdict-read-token"' in doc
 

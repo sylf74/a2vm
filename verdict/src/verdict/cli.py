@@ -16,6 +16,7 @@ verdict chat-retention … delete the analysts' chats older than the tenant's re
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import sys
 from pathlib import Path
 
@@ -80,6 +81,12 @@ def main(argv: list[str] | None = None) -> int:
         help="state of the tenant's database before this run (`verdict sla-state`, v0.21.0): when each "
         "decision entered its priority; absent or unreadable, the SLA delays start at the first observation",
     )
+    r.add_argument(
+        "--run-started",
+        default="",
+        help="when the daily run started (v0.23.18): epoch seconds or ISO 8601; the run's duration up to the "
+        "decisions goes into triage.json (`timing`). Empty or unreadable: the triage's own duration only",
+    )
     args = parser.parse_args(args_in)
 
     settings = load_settings(args.settings)
@@ -108,6 +115,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"{base}: files of {a_client!r}/{f_client!r}, expected {profile.id!r}", file=sys.stderr)
                 return 2
             run = triage.run(profile, records, assets, findings, not_affected, len(requested), errors)
+            run_started(run, args.run_started)
             priority.apply(run, _sla_state(args.sla_state, profile) if profile.sla else None)
             try:
                 run.exposure_gaps = read_gaps(base / "exposure_gaps.json", profile.id)
@@ -137,6 +145,12 @@ def main(argv: list[str] | None = None) -> int:
                     f"{u['prompt_tokens']}+{u['completion_tokens']} tokens, {u['seconds']} s, "
                     f"{u['family']}, reasoning {u['reasoning']}"
                 )
+            t = run.timing
+            print(
+                f"  timing: {t['findings']} findings read, {t['decided']} decided, {t['without_record']} without a "
+                f"record, in {t['seconds']} s"
+                + (f"; {t['run_seconds'] / 60:.0f} min since the start of the run" if "run_seconds" in t else "")
+            )
             if triage.llm_stopped:
                 print(f"  LLM not used for the rest of the run: {triage.llm_stopped}", file=sys.stderr)
             for row in llm_failures[:20]:
@@ -165,3 +179,25 @@ def _sla_state(path: str | None, profile) -> dict | None:  # noqa: ANN001 - a Cl
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+def run_started(run, value: str) -> None:
+    """The start of the daily run (epoch seconds, as the CronJob writes it, or ISO 8601, as GitLab's
+    CI_PIPELINE_CREATED_AT) into the run's timing, with the seconds up to the end of the triage."""
+    value = (value or "").strip()
+    if not value or not run.timing:
+        return
+    try:
+        if value.isdigit():
+            start = dt.datetime.fromtimestamp(int(value), dt.UTC)
+        else:
+            start = dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+            if start.tzinfo is None:
+                start = start.replace(tzinfo=dt.UTC)
+        end = dt.datetime.fromisoformat(run.timing["ended_at"].replace("Z", "+00:00"))
+    except (ValueError, OverflowError, OSError):
+        return
+    if start > end:
+        return
+    run.timing["run_started_at"] = start.astimezone(dt.UTC).isoformat(timespec="seconds")
+    run.timing["run_seconds"] = round((end - start).total_seconds())

@@ -10,7 +10,10 @@ own copy until it moves here.
 
 from __future__ import annotations
 
+import contextlib
+import ctypes
 import datetime as dt
+import gc
 import hashlib
 import hmac
 import json
@@ -145,3 +148,11 @@ def serve(handler: type[BaseHTTPRequestHandler], host: str, port: int) -> Thread
     httpd = ThreadingHTTPServer((host, port), handler)
     httpd.daemon_threads = True
     return httpd
+
+
+def release_memory() -> None:
+    """Collect, then hand the freed memory back to the system (glibc keeps it otherwise, and the pod's
+    memory stays at its peak until the next push adds to it)."""
+    gc.collect()
+    with contextlib.suppress(OSError, AttributeError):  # not glibc (musl, macOS): nothing to trim
+        ctypes.CDLL("libc.so.6").malloc_trim(0)

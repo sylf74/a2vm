@@ -16,6 +16,7 @@ import datetime as dt
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from a2vm import applications as apps
 from a2vm.gitlab import GitLabError, download_artifacts
@@ -78,6 +79,27 @@ def fetch(
     if inv is None:
         return None, f"no inventory of {client_id} in the last {job!r} artifacts: declared assets only"
     return inv, describe(inv)
+
+
+def for_watch(assets: dict[str, Any], findings: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """The inventory as the watch reads it (v0.23.18): still valid exchange files, without what
+    `load` and the alerts never read. The findings' `not_affected` (what a scanner found fixed or
+    not applicable, often the largest part), the review reasons, the CVSS each source gave and the
+    note of each match; the assets' scan dates. The daily run's own files are left as they are."""
+    slim_assets = {**assets, "assets": [{k: v for k, v in a.items() if k != "scans"} for a in assets.get("assets", [])]}
+    slim_findings = {**findings, "not_affected": [], "findings": [_finding(f) for f in findings.get("findings", [])]}
+    return slim_assets, slim_findings
+
+
+def _finding(f: dict[str, Any]) -> dict[str, Any]:
+    observations = [
+        {
+            **{k: v for k, v in o.items() if k not in ("cvss_vector", "cvss_source")},
+            "match": {**o["match"], "note": ""},
+        }
+        for o in f.get("observations", [])
+    ]
+    return {**f, "review_reasons": [], "observations": observations}
 
 
 def describe(inv: Inventory) -> str:
