@@ -62,15 +62,24 @@ class WatchClient:
         return r.content if r is not None else None
 
     def inventory(self, dest: Path) -> bool:
-        """The last daily inventory into dest/<tenant>/: False when the service has none yet."""
+        """The last daily inventory into dest/<tenant>/: False when the service has none yet. Its
+        findings compact (watch-findings.json, v0.23.19), else as before (findings.json)."""
         files = {}
-        for name in ("assets.json", "findings.json"):
+        r = self._call("GET", "/inventory/assets.json", missing_ok=True)
+        if r is None:
+            return False
+        files["assets.json"] = r.content
+        for name in ("watch-findings.json", "findings.json"):
             r = self._call("GET", f"/inventory/{name}", missing_ok=True)
-            if r is None:
-                return False
-            files[name] = r.content
+            if r is not None:
+                files[name] = r.content
+                break
+        else:
+            return False
         base = dest / self.tenant
         base.mkdir(parents=True, exist_ok=True)
+        for name in ("watch-findings.json", "findings.json"):
+            (base / name).unlink(missing_ok=True)
         for name, data in files.items():
             (base / name).write_bytes(data)
         return True
@@ -93,7 +102,12 @@ class WatchClient:
 
     # -- the daily run -------------------------------------------------------------------------
     def put_inventory(self, assets: dict, findings: dict) -> dict[str, Any]:
-        return self._call("POST", "/inventory", {"assets": assets, "findings": findings}).json()
+        """`findings`: a2vm.watch_findings/1 (v0.23.19) or vulnops.findings/2."""
+        key = "watch_findings" if findings.get("schema") == "a2vm.watch_findings/1" else "findings"
+        return self._call("POST", "/inventory", {"assets": assets, key: findings}).json()
+
+    def status(self) -> dict[str, Any]:
+        return self._call("GET", "/status").json()
 
     # -- the send job --------------------------------------------------------------------------
     def alerts(self, status: str = "all") -> list[dict[str, Any]]:

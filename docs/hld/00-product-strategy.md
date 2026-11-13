@@ -348,6 +348,7 @@ image with `a2vm` only.
 | Vulnerability records | Exchange file | `vulnerability_records.schema.json` (`vulnops.records/1`) | Pillar 1 (`via collect`) | Pillars 2, 3 |
 | Detection files | Exchange file | `detection.schema.json` (`vulnops.detection/1`) | Pillar 2 | Pillar 3 (asset context) |
 | Assets, findings | Exchange file | `assets.schema.json` (`vulnops.assets/1`), `findings.schema.json` (`vulnops.findings/2`) | Pillar 3 (asset context) | Pillar 3 (decision), pillar 1 (watch) |
+| Findings as the watch reads them (v0.23.19) | Exchange file | `watch_findings.schema.json` (`a2vm.watch_findings/1`): per asset, each CVE, its status, versions and what each source saw | Pillar 1 (`via service push-inventory`, from the files of pillar 3) | Pillar 1 (watch service, watch) |
 | Triage of a run | Exchange file | `triage.schema.json` (`a2vm.triage/1`) | Pillar 3 (decision) | Decision service, reports |
 | Reporting dataset | Exchange file | `reporting.schema.json` (`a2vm.reporting/1`) | Pillar 3 (decision) | Reporting database, client portal |
 | Client profile, contacts | Exchange file (tenant project) | `client_profile.schema.json`, `contacts.schema.json` | Tenant project | All pillars |

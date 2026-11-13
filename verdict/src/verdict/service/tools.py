@@ -410,8 +410,10 @@ OPERATIONS: list[tuple[str, str, str, list[dict[str, Any]], str]] = [
         "/watch-status",
         "get_watch_status",
         "The watch of this tenant (v0.23.4): its last passages (when, how many items read, alerts drafted), "
-        "the sources it reads and those in error with their message. Use it for 'is the watch running', "
-        "'which sources are failing', 'when did the watch last look'.",
+        "the sources it reads and those in error with their message, and the inventory it names in its "
+        "alerts (v0.23.19: date, assets, findings; or none: the declared assets only). Use it for 'is the "
+        "watch running', 'which sources are failing', 'when did the watch last look', 'which inventory "
+        "does the watch use'.",
         [],
         "via:status",
     ),

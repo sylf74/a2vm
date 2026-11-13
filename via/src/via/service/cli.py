@@ -282,9 +282,11 @@ def cmd_push_inventory(args: argparse.Namespace) -> int:
     except (OSError, ValueError) as exc:
         print(f"{args.tenant}: no inventory to push ({exc})", file=sys.stderr)
         return 1
+    count = len(findings.get("findings", []))
     assets, findings = for_watch(assets, findings)
-    # v0.23.18: the sizes, so that a refusal (413) says which part is large
+    # the sizes, so that a refusal (413) says which part is large (v0.23.18)
     before = sum(map(len, raw.values()))
+    del raw
     sent = {"assets": len(json.dumps(assets)), "findings": len(json.dumps(findings))}
     size = (
         f"{_mb(sent['assets'])} MB of assets and {_mb(sent['findings'])} MB of findings, "
@@ -297,14 +299,29 @@ def cmd_push_inventory(args: argparse.Namespace) -> int:
         print(f"{args.tenant}: {exc} ({size})", file=sys.stderr)
         if "(413)" in str(exc):
             print(f"{args.tenant}: raise A2VM_WATCH_MAX_MB (docs/kubernetes.md)", file=sys.stderr)
+        print(f"{args.tenant}: {_kept(client)}", file=sys.stderr)  # v0.23.19: what the watch has now
         return 3 if exc.retry else 1
     finally:
         client.close()
     print(
         f"{args.tenant}: inventory pushed to the watch service ({len(assets.get('assets', []))} assets, "
-        f"{len(findings.get('findings', []))} findings; {size})"
+        f"{count} findings; {size})"
     )
     return 0
+
+
+def _kept(client) -> str:
+    """What the watch names in its alerts after a refused inventory (v0.23.19)."""
+    try:
+        inv = client.status().get("inventory")
+    except ServiceError:
+        return "the watch keeps its previous inventory, if it has one (status not available)"
+    if isinstance(inv, dict) and inv.get("received_at"):
+        return (
+            f"the watch keeps the inventory of {inv['received_at'][:16]} ({inv.get('assets', '?')} assets, "
+            f"{inv.get('findings', '?')} findings)"
+        )
+    return "the watch has no inventory: its alerts name the declared assets only"
 
 
 def _mb(n: int) -> str:

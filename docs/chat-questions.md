@@ -47,6 +47,7 @@ How to ask:
 **`get_watch_status`**: the watch's last passage and the sources in error.
 
 - La veille tourne-t-elle ? Quelles sources sont en erreur ?
+- La veille connaît-elle l'inventaire du dernier run ?
 
 ## Are we concerned, and why
 

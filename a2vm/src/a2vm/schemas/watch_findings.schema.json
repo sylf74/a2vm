@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "a2vm/watch_findings.schema.json",
+  "title": "The findings of one client as the watch reads them (since v0.23.19): per asset, each CVE found, its status, the versions concerned and what each source saw",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "generated_at", "client_id", "assets"],
+  "properties": {
+    "schema": {"const": "a2vm.watch_findings/1"},
+    "generated_at": {"type": "string"},
+    "client_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+    "assets": {
+      "type": "object",
+      "description": "Asset id -> its findings: [cve, status, affected versions, [[source, package, installed version, fixed version], ...]]",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "array",
+          "prefixItems": [
+            {"type": "string", "minLength": 1},
+            {"type": "string"},
+            {"type": "array", "items": {"type": "string"}},
+            {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "prefixItems": [{"type": "string"}, {"type": "string"}, {"type": "string"}, {"type": "string"}],
+                "items": false,
+                "minItems": 4
+              }
+            }
+          ],
+          "items": false,
+          "minItems": 4
+        }
+      }
+    }
+  }
+}
