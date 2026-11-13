@@ -76,6 +76,7 @@ def write_json(run: TriageRun, path: Path) -> None:
         "llm_model": run.llm_model,
         "a2vm_version": __version__,  # the version that made the run (v0.23.9)
         **({"llm_usage": run.llm_usage} if run.llm_usage else {}),
+        **({"timing": run.timing} if run.timing else {}),
         "rows": [r.to_dict() for r in run.rows],
         "not_affected": [asdict(n) for n in run.not_affected],
         "errors": run.errors,

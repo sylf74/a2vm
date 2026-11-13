@@ -581,7 +581,7 @@ triage:
     - {key: sources, paths: [.cache/]}
     - {key: inventory, paths: [work/assets/], policy: push}
   script:
-    - verdict run "$A2VM_PROFILE" --settings "$SETTINGS" --records work/records.json --assets work/assets --out output
+    - verdict run "$A2VM_PROFILE" --settings "$SETTINGS" --records work/records.json --assets work/assets --out output --run-started "$CI_PIPELINE_CREATED_AT"
   artifacts:
     name: "triage-$CI_PROJECT_NAME-$CI_PIPELINE_ID"
     paths: [output/, work/assets/]

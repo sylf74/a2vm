@@ -90,9 +90,10 @@ if [ -s /secrets/verdict-publish-token ]; then
   if [ "$src" -ne 0 ]; then echo "WARN no SLA state (exit $src): the SLA delays of this run start at the first observation"; fi
 fi
 verdict run /config/client.yaml --settings "$SETTINGS" --records /data/work/records.json --assets /data/work/assets --out /data/output \
-  --sla-state /data/work/sla-state.json
+  --sla-state /data/work/sla-state.json --run-started "$(cat /data/.a2vm-run/started 2>/dev/null)"
 {{- else }}
-verdict run /config/client.yaml --settings "$SETTINGS" --records /data/work/records.json --assets /data/work/assets --out /data/output
+verdict run /config/client.yaml --settings "$SETTINGS" --records /data/work/records.json --assets /data/work/assets --out /data/output \
+  --run-started "$(cat /data/.a2vm-run/started 2>/dev/null)"
 {{- end }}
 {{- end -}}
 

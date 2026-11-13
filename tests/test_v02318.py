@@ -4,6 +4,9 @@
 - The tenant pipeline: `publish` needed `triage`, excluded on Kubernetes, so GitLab refused every
   "Run pipeline" and every schedule of a tenant on Kubernetes with a reporting database;
   `deploy-k8s` also starts from the API.
+- The decision service: a run of 28,000 decisions closed the connection of the push (memory).
+- The watch's inventory: refused over 50 MB; what the watch reads only, its size said.
+- The chat: how long verdict ran, and on how many findings.
 """
 
 from __future__ import annotations
@@ -291,3 +294,94 @@ def test_the_watch_service_takes_a_larger_inventory_when_asked() -> None:
     )
     pipeline = PIPELINE.read_text()
     assert "--set watch.maxMb=$A2VM_WATCH_MAX_MB" in pipeline and "A2VM_WATCH_MAX_MB: a number of MB" in pipeline
+
+
+# -- the chat: how long verdict ran, on how many findings ---------------------------------------
+def test_the_run_records_how_long_the_triage_took_and_on_what(triage) -> None:
+    import json
+
+    from a2vm.io import validate_triage
+
+    run, path = triage
+    doc = json.loads(path.read_text())
+    validate_triage(doc)
+    t = doc["timing"]
+    assert set(t) == {"started_at", "ended_at", "seconds", "findings", "decided", "without_record", "not_affected"}
+    assert t["decided"] == len(doc["rows"]) and t["findings"] >= t["decided"] and t["seconds"] >= 0
+    assert t["started_at"] <= t["ended_at"]
+
+
+@pytest.mark.parametrize(
+    "value,seconds",
+    [("1794466800", 3600), ("2026-11-12T07:00:00Z", 3600), ("2026-11-12T08:00:00+01:00", 3600), ("", None),
+     ("garbage", None), ("2026-11-12T09:00:00Z", None)],
+)  # fmt: skip
+def test_the_start_of_the_run_gives_its_duration_up_to_the_decisions(value, seconds) -> None:
+    from types import SimpleNamespace
+
+    from verdict.cli import run_started
+
+    run = SimpleNamespace(timing={"ended_at": "2026-11-12T08:00:00+00:00", "seconds": 60.0})
+    run_started(run, value)
+    assert run.timing.get("run_seconds") == seconds
+    if seconds:
+        assert run.timing["run_started_at"] == "2026-11-12T07:00:00+00:00"
+
+
+def test_the_daily_run_passes_its_start_to_the_triage() -> None:
+    daily = (ROOT / "deploy/charts/a2vm-tenant/templates/cronjob-daily.yaml").read_text()
+    assert daily.count('--run-started "$(cat /data/.a2vm-run/started 2>/dev/null)"') == 2
+    assert '--run-started "$CI_PIPELINE_CREATED_AT"' in PIPELINE.read_text()
+
+
+def test_the_chat_says_how_long_verdict_ran_and_on_how_many_findings(tmp_path) -> None:
+    import httpx
+
+    from .test_v0232 import CHAT, _tools
+    from .test_v0239 import _handler
+
+    timing = {"started_at": "2026-11-12T08:46:40+00:00", "ended_at": "2026-11-12T09:58:10+00:00",
+              "seconds": 4290.4, "run_started_at": "2026-11-12T08:30:00+00:00", "run_seconds": 5290,
+              "findings": 28433, "decided": 28370, "without_record": 63, "not_affected": 0}  # fmt: skip
+    base = _handler([])
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        r = base(request)
+        if request.url.path.endswith("/summary"):
+            return httpx.Response(200, json={**r.json(), "timing": timing})
+        return r
+
+    tools = _tools(tmp_path, handler, via_url="http://via.example", via_token="v",
+                   detect_url="http://detect.example", detect_token="d")  # fmt: skip
+    out = tools.call(CHAT, "/platform", {})
+    assert out["latest_run"]["timing"]["findings"] == 28433
+    note = out["latest_run"]["timing_note"]
+    assert note == (
+        "the decision step (verdict) ran 1 h 11 min on 28433 findings: 28370 decided, 63 without a "
+        "vulnerability record; the whole run took 1 h 28 min from its start up to the decisions"
+    )
+
+
+def test_the_timing_note_of_a_short_run_without_its_start() -> None:
+    from verdict.service.tools import _timing_note
+
+    assert _timing_note({"seconds": 42.4, "findings": 10, "decided": 9, "without_record": 1}) == (
+        "the decision step (verdict) ran 42 s on 10 findings: 9 decided, 1 without a vulnerability record"
+    )
+    assert _timing_note({"seconds": 125, "findings": 1, "decided": 1, "without_record": 0}).startswith(
+        "the decision step (verdict) ran 2 min 05 s"
+    )
+
+
+def test_the_summary_of_a_run_carries_its_timing(triage, tmp_path) -> None:
+    import gzip
+    import json
+
+    from .test_verdict_service import PUBLISH, READ, _service
+
+    _, path = triage
+    doc = json.loads(path.read_text())
+    service = _service(tmp_path, doc["client"]["id"])
+    service.push(service.tenant, PUBLISH, "k1", gzip.compress(json.dumps(doc).encode()), True)
+    summary = service.read(service.tenant, READ, "summary", {})
+    assert summary["timing"] == doc["timing"]
