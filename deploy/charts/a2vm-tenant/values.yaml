@@ -109,10 +109,12 @@ verdict:
   storage:
     size: 2Gi
     storageClass: ""
-  # A run is held in memory once read (about 250 MiB for 30,000 decisions), two runs at most.
+  # A run is held in memory once read (about 250 MiB for 30,000 decisions), two runs at most; a push
+  # parses the whole run (about 5 times its JSON). 1Gi up to v0.23.17: a run of 28,000 decisions
+  # stopped the service in the homelab. deploy-k8s sets the limit from A2VM_VERDICT_MEMORY (v0.23.18).
   resources:
     requests: {cpu: 50m, memory: 256Mi}
-    limits: {memory: 1Gi}
+    limits: {memory: 2Gi}
   # The service accepts connections from the tenant's daily run and from pods labelled
   # a2vm.io/verdict-reader=true in the namespace (the analysts' tools), and opens none.
   networkPolicy:

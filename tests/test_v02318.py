@@ -14,9 +14,11 @@ import re
 import pytest
 import yaml
 
+from . import test_verdict_service as _vs
 from .conftest import ROOT
 
 PIPELINE = ROOT / "templates/client-pipeline.yml"
+triage = _vs.triage
 
 
 # -- the tenant pipeline: GitLab's rules, evaluated -----------------------------------------------
@@ -35,7 +37,8 @@ def _jobs() -> dict[str, dict]:
         return merged
 
     keywords = {"variables", "default", "include", "stages", "workflow"}
-    return {k: resolved(k) for k, v in doc.items() if not k.startswith(".") and k not in keywords and isinstance(v, dict)}
+    names = [k for k, v in doc.items() if not k.startswith(".") and k not in keywords and isinstance(v, dict)]
+    return {k: resolved(k) for k in names}
 
 
 def _condition(expr: str, env: dict[str, str]) -> bool:
@@ -103,3 +106,76 @@ def test_deploy_k8s_starts_from_the_api_on_the_default_branch_only() -> None:
     assert "deploy-k8s" not in _pipeline(_env("api", "kubernetes", "", CI_COMMIT_BRANCH="feature"))
     assert "deploy-k8s" not in _pipeline(_env("api", "kubernetes", "", A2VM_K8S_CONTEXT=""))
     assert "deploy-k8s" not in _pipeline(_env("trigger", "kubernetes", ""))
+
+
+# -- the decision service: a push of a large run ----------------------------------------------------
+def test_a_connection_closed_during_the_push_says_so_with_its_size(tmp_path) -> None:
+    import httpx
+
+    from verdict.service.client import PushError, push
+
+    big = tmp_path / "triage.json"
+    big.write_text('{"rows": []}' + " " * 3_000_000)
+
+    def closed(request: httpx.Request) -> httpx.Response:
+        raise httpx.RemoteProtocolError("Server disconnected without sending a response.", request=request)
+
+    with pytest.raises(PushError) as err:
+        push("http://verdict:8080", "lab", "t", big, transport=httpx.MockTransport(closed))
+    assert err.value.retry
+    message = str(err.value)
+    assert "closed the connection during the push of 3 MB" in message
+    assert "OOMKilled" in message and "A2VM_VERDICT_MEMORY" in message
+
+
+def test_a_push_drops_the_indexes_and_gives_the_memory_back(triage, tmp_path, monkeypatch, caplog) -> None:
+    import gzip
+    import json
+    import logging
+
+    from verdict.service import server
+
+    from .test_verdict_service import PUBLISH, _service
+
+    _, path = triage
+    doc = json.loads(path.read_text())
+    service = _service(tmp_path, doc["client"]["id"])
+    released = []
+    monkeypatch.setattr(server, "release_memory", lambda: released.append(True))
+    service.push(service.tenant, PUBLISH, "k1", gzip.compress(json.dumps(doc).encode()), True)
+    assert released == [True]
+    service.index("latest")
+    assert len(service._indexes) == 1
+    doc["generated_at"] = doc["generated_at"].replace(doc["generated_at"][:4], str(int(doc["generated_at"][:4]) - 1))
+    with caplog.at_level(logging.INFO, logger=server.log.name):
+        service.push(service.tenant, PUBLISH, "k2", gzip.compress(json.dumps(doc).encode()), True)
+    assert service._indexes == {} and released == [True, True]
+    assert any("receiving=" in r.getMessage() for r in caplog.records)
+    # a refused push gives the memory back too
+    with pytest.raises(server.Problem):
+        service.push(service.tenant, PUBLISH, "k3", b"not gzip", True)
+    assert released == [True, True, True]
+
+
+def test_release_memory_runs_where_there_is_no_glibc(monkeypatch) -> None:
+    import ctypes
+
+    from verdict.service import server
+
+    def missing(name):
+        raise OSError(name)
+
+    monkeypatch.setattr(ctypes, "CDLL", missing)
+    server.release_memory()
+
+
+def test_the_decision_service_has_room_for_a_large_run() -> None:
+    values = yaml.safe_load((ROOT / "deploy/charts/a2vm-tenant/values.yaml").read_text())
+    assert values["verdict"]["resources"]["limits"]["memory"] == "2Gi"
+    template = (ROOT / "deploy/charts/a2vm-tenant/templates/verdict.yaml").read_text()
+    assert "MALLOC_ARENA_MAX" in template
+    assert "timeoutSeconds: 5" in template and "failureThreshold: 6" in template
+    pipeline = PIPELINE.read_text()
+    assert "--set-string verdict.resources.limits.memory=$A2VM_VERDICT_MEMORY" in pipeline
+    assert "grep -qE '^[1-9][0-9]*(Mi|Gi)$'" in pipeline
+    assert "A2VM_VERDICT_MEMORY" in (ROOT / "docs/kubernetes.md").read_text()

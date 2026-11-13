@@ -11,7 +11,10 @@ SLA state it carries, v0.21.0) and `read` (analysts' tools). Acceptance of a pus
 
 from __future__ import annotations
 
+import contextlib
+import ctypes
 import datetime as dt
+import gc
 import json
 import logging
 import re
@@ -35,6 +38,14 @@ ROLES = {"publish", "read"}
 FUTURE_TOLERANCE = dt.timedelta(minutes=10)
 ROUTE = re.compile(r"^/v1/tenants/(?P<tenant>[a-z0-9][a-z0-9-]{0,62})/(?P<rest>.*)$")
 RUN_ID = re.compile(r"^(latest|[0-9]{8}T[0-9]{12}Z-[0-9a-f]{12})$")
+
+
+def release_memory() -> None:
+    """Collect, then hand the freed memory back to the system (glibc keeps it otherwise, and the pod's
+    memory stays at its peak until the next push adds to it)."""
+    gc.collect()
+    with contextlib.suppress(OSError, AttributeError):  # not glibc (musl, macOS): nothing to trim
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
 
 
 class Service:
@@ -72,6 +83,19 @@ class Service:
             log.info("push tenant=%s run=%s duplicate=True", tenant, known.id)
             return known.to_dict()
         started = time.monotonic()
+        log.info("push tenant=%s receiving=%d bytes gzip=%s", tenant, len(body), gzipped)
+        # v0.23.18: the indexes of the runs already read are dropped (rebuilt on the next read), so a
+        # push does not sit on top of two runs held in memory; and what it parsed is given back.
+        with self._lock:
+            self._indexes = {}
+        try:
+            return self._push(tenant, key, body, gzipped, now, started)
+        finally:
+            release_memory()
+
+    def _push(
+        self, tenant: str, key: str, body: bytes, gzipped: bool, now: dt.datetime, started: float
+    ) -> dict[str, Any]:
         received = body
         if gzipped:
             try:

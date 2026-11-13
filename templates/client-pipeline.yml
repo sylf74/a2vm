@@ -33,6 +33,7 @@
 #                            A2VM_INTAKE_HOST, A2VM_INTAKE_ALLOW, A2VM_INTAKE_INGRESS_CONTROLLER
 #                            (nginx, traefik), A2VM_INTAKE_CLUSTER_ISSUER: its push endpoint (docs/collectors.md)
 #   A2VM_VERDICT_SERVICE  false: no decision service in the cluster (default true; docs/kubernetes.md)
+#   A2VM_VERDICT_MEMORY   memory limit of the decision service (default 2Gi, v0.23.18; docs/kubernetes.md)
 #   A2VM_DATABASE         true: the tenant's PostgreSQL (CloudNativePG) for the services, instead of
 #                            their volumes; A2VM_DATABASE_SIZE, _STORAGE_CLASS, _INSTANCES (docs/kubernetes.md §5)
 #   A2VM_CHAT_HOST        the analysts' chat on the decision service (Open WebUI); A2VM_CHAT_ALLOW,
@@ -224,6 +225,10 @@ deploy-k8s:
         kubectl -n "$NS" create secret generic a2vm-verdict --from-file=digests="$V/digests" --dry-run=client -o yaml | upsert
         VERDICT="--set verdict.enabled=true --set verdict.digestsSecret=a2vm-verdict"
         VERDICT="$VERDICT --set verdict.digestsChecksum=$(sha256sum "$V/digests" | cut -d' ' -f1)"
+        if [ -n "${A2VM_VERDICT_MEMORY:-}" ]; then
+          if ! echo "$A2VM_VERDICT_MEMORY" | grep -qE '^[1-9][0-9]*(Mi|Gi)$'; then echo "A2VM_VERDICT_MEMORY: a size such as 3Gi or 2560Mi"; exit 1; fi
+          VERDICT="$VERDICT --set-string verdict.resources.limits.memory=$A2VM_VERDICT_MEMORY"
+        fi
       else
         echo "A2VM_VERDICT_SERVICE=false: no decision service"
       fi

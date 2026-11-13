@@ -34,6 +34,9 @@ def push(
     """Push one triage.json as written; its digest is the idempotency key, so a retry is harmless."""
     body = Path(triage_file).read_bytes()
     key = hashlib.sha256(body).hexdigest()
+    content = gzip.compress(body, 6)
+    size = f"{len(body) / 1e6:.0f} MB, {len(content) / 1e6:.1f} MB compressed"
+    del body
     try:
         with httpx.Client(
             base_url=base_url.rstrip("/"),
@@ -44,9 +47,17 @@ def push(
         ) as c:
             r = c.post(
                 f"/v1/tenants/{tenant}/runs",
-                content=gzip.compress(body, 6),
+                content=content,
                 headers={"Content-Encoding": "gzip", "Content-Type": "application/json", "Idempotency-Key": key},
             )
+    except httpx.RemoteProtocolError as exc:
+        # v0.23.18: the service closed the connection while it read the run, without answering: it
+        # was most often stopped (memory limit, liveness probe), not unreachable.
+        raise PushError(
+            f"decision service closed the connection during the push of {size} ({exc}): look at its "
+            "restarts and their reason (OOMKilled: A2VM_VERDICT_MEMORY, docs/kubernetes.md)",
+            retry=True,
+        ) from exc
     except httpx.HTTPError as exc:
         raise PushError(f"decision service unreachable: {exc}", retry=True) from exc
     if r.status_code == 202:
