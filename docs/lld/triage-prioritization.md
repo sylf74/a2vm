@@ -410,8 +410,8 @@ matched by name) always asks. `review: all` keeps the rule of the earlier versio
 | Attribute | Values | Use |
 | --- | --- | --- |
 | `exposure` | `open`, `controlled`, `small` (SSVC System Exposure) | `open` is "publicly exposed" for the BOD 26-04 table |
-| `exposure_source` | `external-scan`, `declared`, `rule`, `<scanner>`, `assumed` | `assumed` flags the row; shown in the report |
-| `zone` | free label (`dmz`, `lan`, `ot`, `admin`...) | Grouping and sorting in reports only |
+| `exposure_source` | `external-scan`, `declared`, `rule`, `<scanner>`, `graph` (v0.24.0), `assumed` | `assumed` flags the row; shown in the report |
+| `zone` | `dmz`, `lan`, `ot`, `admin`... | Grouping in reports; since v0.24.0 a zone of `zones` places the asset in the asset graph (section 5.5) |
 
 Definitions, from SSVC: `open` — reachable from the internet or another widely accessible network,
 access cannot plausibly be restricted; `controlled` — networked, access restricted or protected by
@@ -425,7 +425,9 @@ and the alert stage apply the same reading to any value that bypasses the loader
 default is `open`, source `assumed`.
 
 `zone` is set by a declared asset or a profile rule (`set: {zone: dmz}`), first match wins as for
-the other attributes; it never defaults and has no effect on decisions.
+the other attributes, then by a `published` entry, then (v0.24.0) by an address in the `networks`
+of a zone of `zones` (source `networks`, note the network). It never defaults. Before v0.24.0 it had
+no effect on decisions; since, the exposure computed from the graph uses it (section 5.5).
 
 Exposure feeds the BOD table only; the CISA Coordinator table has no exposure input. The value is
 kept as SSVC defines it so that the CERT/CC deployer table, which uses System Exposure, can be
@@ -433,7 +435,11 @@ added later without changing the data.
 
 ### 5.2 Precedence
 
-`external-scan` (v0.11.2) > `declared` > `cmdb` (v0.19.0) > `rule` > `<scanner>` > `assumed`.
+`external-scan` (v0.11.2) > off the premises (`graph`, v0.24.0) > `declared` > `cmdb` (v0.19.0) >
+`rule` > `<scanner>` > `graph` (v0.24.0) > `assumed`.
+
+What is observed comes first: the external scan and a machine seen off the premises only raise the
+exposure, whatever was declared. The graph replaces only an assumed value otherwise (section 5.5).
 
 The CMDB gives `mission_prevalence` and `owner`, never the exposure (iTop has no such field); the
 rules of the profile still set what the CMDB does not say.
@@ -519,7 +525,10 @@ An exposure the client profile does not describe:
 | Kind | When |
 | --- | --- |
 | `unlisted` | A host the external scan reached that no `published` entry names |
-| `declared-not-open` | An asset whose exposure, declared or set by a rule, is `controlled` or `small`, and that the external scan reaches (directly or behind a published endpoint) |
+| `declared-not-open` | An asset whose exposure, declared or set by a rule, is `controlled` or `small`, and that the external scan reaches (directly or behind a published endpoint); since v0.24.0 also a machine seen off the premises |
+| `declared-small-but-reachable` | v0.24.0: an asset declared `small` that a scanner reached, or that listens on the network |
+| `undeclared-flow` | v0.24.0: a flow a scanner observed between two zones (or from the internet) that no declared flow allows; one gap per zones and port, `name` `lan -> dmz 5432/tcp`. Only when the profile declares flows |
+| `no-external-scan` | v0.24.0: the client has no external scan, and some exposures rest on its default assumption with nothing to check them; once per run, `asset` empty |
 
 The assets stage (`verdict.assets.build.exposure_gap`) writes them to
 `work/assets/<client>/exposure_gaps.json` (`a2vm.exposure_gaps/1`: kind, asset id and name, value
@@ -528,6 +537,98 @@ lists the gaps at the top of the report ("Écarts d'exposition"), in `triage.jso
 `reporting.json` (`exposure_gaps`). The decision itself already uses `open` (section 5.2). The
 immediate alert through the watch job, validated by the analyst like any alert, remains an open
 point (section 10).
+
+### 5.5 Asset graph and exposure path (v0.24.0)
+
+The exposure was mostly assumed: a run of a test tenant assumed 27 exposures of 45 assets. Since
+v0.24.0 the assets stage computes it from a path, and keeps the path as its proof.
+
+**Declared: zones and flows.** The profile describes the client's intention:
+
+```yaml
+zones:
+  - {id: dmz, networks: [192.0.2.0/26]}
+  - {id: lan, networks: [192.0.2.64/26]}
+  - {id: vpn, networks: [198.51.100.0/24], open: true, description: VPN pool}
+flows:
+  - {from: internet, to: dmz, ports: [443], description: reverse proxies}
+  - {from: lan, to: dmz, ports: [443, 5432]}
+  - {from: admin, to: "*"}
+off_premises_days: 7
+```
+
+`open: true` marks a widely accessible network the client cannot reasonably control (guest Wi-Fi,
+VPN pool, partners): SSVC `open`. `from` is `internet`, a zone or `*`; `to` a zone or `*`; without
+`ports`, every port; a bare port is TCP. Flows within a zone need no declaration. The loader checks
+that the zones exist, the networks are CIDR and no flow goes to the internet. `internet` and
+`off-premises` are reserved.
+
+**Observed: services.** Observations carry `services` (`a2vm.detection/1`, an optional field):
+
+| View | Source | Meaning |
+| --- | --- | --- |
+| `network` | OpenVAS, the external scan | The scanner reached the port from `from_zone`: the `zone` of the OpenVAS section, `internet` for the external scan, empty when none is named |
+| `local` | SSH collection (`ss -ltnu`) | The host listens on the port, on `bind`: `any`, `loopback` or an address |
+
+`services: null` says the source lists none; `[]` that it listed none. An OpenVAS host with open
+ports and no finding is observed too.
+
+**The graph** (`verdict.assets.graph`, `work/assets/<client>/asset_graph.json`, schema
+`a2vm.asset_graph/1`): nodes `internet`, `zone`, `endpoint` (a public endpoint), `host`, `image`,
+`declared`, `service` (`process` and `component` are reserved for v0.24.1); edges `member_of`
+(asset to zone), `flow` (declared), `publishes` (internet to endpoint to asset), `routes_to` (an
+asset `behind` another), `reaches` (a zone or the internet to a service, observed), `listens`
+(asset to service), `runs_on`. Each edge has `evidence` (declared or observed), `origin` (profile
+section, rule, scanner), `seen` and `port`. The file also holds, per asset, the exposure and its
+path; the declared flows and their state (`confirmed` when observed, else `unverified`); the flows
+observed between zones; the `checks` of the declared exposures (`confirmed`, `contradicted`,
+`unverified`); the sightings off the premises. The graph grows with the assets, not their square:
+an asset has one edge to its zone, flows go from zone to zone. Measured: 70,000 assets in about
+7 s and 600 MB (`tests/test_v0240.py`).
+
+**The exposure**, for an asset whose value is not declared (`verdict.assets.graph._exposure`):
+
+| Value | Path |
+| --- | --- |
+| `open`, source `external-scan` | The external scan reached it, directly or behind a `published` endpoint (section 5.3) |
+| `open`, source `graph` | Seen off the premises within `off_premises_days`; in a zone declared `open`; or in a zone a flow from the internet reaches, on a port the asset serves (or whose ports are not known) |
+| `small`, source `graph` | A source listed its sockets (SSH) and none listens beyond the loopback, and no scanner reached it. Only on proof |
+| `controlled`, source `graph` | A scanner reached it from a zone, or it listens on the network, or a declared flow reaches its zone; and a recent external scan did not reach it |
+| default, source `assumed` | Nothing proves a value. The client's default when the external scan of the run is recent, or when the client has no external scan (gap `no-external-scan`); `open` (worst case) when the client has an `external` section but no recent scan came in the run |
+
+No path from the internet is not `small`: it is `controlled` as soon as a zone reaches the asset.
+Not being seen by the external scan is not proof either: `controlled` needs the internal proof.
+
+**Off the premises.** A machine is off the premises when a source that knows its addresses (an EDR,
+not the CMDB, OpenVAS nor the external scan) last saw it with none of them in the `networks` of
+`zones`. It sits in the implicit zone `off-premises`, `open`, for `off_premises_days` (7) after the
+sighting: a laptop at home on Monday stays `open` the rest of the week. The window needs the graph
+of the run before: `verdict assets build --previous <assets dir>` (the daily job passes
+`/data/work/assets`, the pipeline restores `work/assets/` from the runner cache). Without
+`networks` in `zones`, no machine is off the premises. A VPN pool is declared as a zone, `open`.
+
+**Declared or observed.** A declaration is an intention, the observation is the state. A declared
+exposure (profile, CMDB, rule) stands over what the graph derives from declared zones and flows; an
+observation contradicts it without changing it (`checks`, a gap), except off the premises and the
+external scan, which raise it. Nobody has to correct the profile for the exposure to be right.
+
+**The path.** Each asset carries `exposure_path`: its steps from the internet or a zone, each
+`{node, kind, label, via, source, seen}`, for example `internet -> www.example.org:443 -> rproxy01
+-> app01`, or `lan -> db01 5432/tcp -> db01`. An image whose exposure comes from its host takes
+the host's path, then `runs_on`. An assumed exposure has no path. The triage lists `services` and
+`exposure_path` for each asset; the decision service answers `assets/{asset}/exposure`, the chat's
+tool `get_exposure_path`.
+
+**Proposed flows.** `flows_proposed.yaml`, next to the graph, and `verdict assets flows
+work/assets/<client>` give the flows the scanners observed between zones as a `flows:` section,
+each marked `declared`, `partly declared` or `not declared`: the client keeps what is intended and
+fixes the rest on the network, not in the profile.
+
+**Storage.** The graph stays a file of the run, and the path goes to the decision service inside
+the triage document: no graph database. The algorithms of v0.24.1 (the chokepoints of the paths to
+ACT decisions, the reach of a compromise) run in the run, in memory, on this graph (rustworkx,
+Apache 2.0, when plain Python is not enough). A graph database (Apache AGE first, in PostgreSQL)
+would come only for interactive exploration.
 
 ## 6. Configuration
 
@@ -794,12 +895,16 @@ external scan: section 5.
 ### 14.1 Command
 
 ```text
-verdict assets build <client.yaml>... [--detect work/detect] [--out work/assets]
+verdict assets build <client.yaml>... [--detect work/detect] [--out work/assets] [--previous work/assets]
+verdict assets flows work/assets/<client>
 ```
 
 Reads every detection file of the client (`<detect>/<client>/*.json`, `vulnops.detection/1`, one per
 source: inventory, trivy, dnf-updateinfo, openvas, external-scan…), writes
-`<out>/<client>/assets.json`, `findings.json` and `exposure_gaps.json`, and prints one line per
+`<out>/<client>/assets.json`, `findings.json` and `exposure_gaps.json`, since v0.24.0
+`asset_graph.json` (`a2vm.asset_graph/1`) and `flows_proposed.yaml` (section 5.5); `--previous`
+reads the graph of the run before (the sightings off the premises), and `flows` prints the
+proposed flows of a client. It prints one line per
 client (assets, sources, findings, attributes taken from a default) and one `WARN` line per
 exposure gap. Exit 2 when a profile or a detection file is unreadable, of another client, or when a
 client has no detection file. The inventory is rebuilt at each run from that run's observations;

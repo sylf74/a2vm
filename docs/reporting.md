@@ -20,7 +20,7 @@ triage-prioritization §13.
 | --- | --- |
 | `runs` | One row per tenant and run: version, policy hash, pipeline, totals per level, assets per level, to review, assumed inputs, overdue, due within 7 days, exposure gaps |
 | `decisions` | One row per decision of the run: finding, asset, zone, exposure and its source, CVE, title, level, SSVC outcome, BOD 26-04 timeline, first seen, due date, KEV, EPSS, review flag, rationale; since version 2, CVSS score and rating, fix available, vendor, product, product type, detection sources |
-| `assets`, `exposure_gaps`, `sources` | Per run: assets with their counts per level; exposure gaps; detection sources and their latest observation |
+| `assets`, `exposure_gaps`, `sources` | Per run: assets with their counts per level; exposure gaps (`unlisted`, `declared-not-open`; since v0.24.0 `declared-small-but-reachable`, `undeclared-flow` and `no-external-scan`, whose `asset` is empty); detection sources and their latest observation |
 | `latest_runs`, `latest_decisions`, `latest_assets`, `latest_exposure_gaps` | The latest run of each tenant and its rows |
 | `decision_facts` (view, version 2) | Every decision with its run's day and the labels the dashboards filter on: severity, KEV yes/no, EPSS band, product type, sources |
 | `snapshot_runs(tenants, day)` (function, version 2) | A snapshot: for each tenant, its latest run on or before the day |

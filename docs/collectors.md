@@ -152,11 +152,12 @@ connectors:
     type: targets
     targets: /etc/a2vm/collector/targets.yaml
     ssh: true
-    openvas: true
+    openvas: true                          # its `zone` goes in the openvas section of targets.yaml (v0.24.0)
   # - name: trivy-drop                     # Trivy exports dropped by another tool
   #   type: file-import
   #   source: trivy                        # trivy (.json), dnf-updateinfo (.txt), openvas (.xml)
   #   folder: /var/lib/a2vm/import/trivy
+  #   zone: lan                            # openvas: the zone the scanner observes from (v0.24.0)
   # - name: lan-cmdb                       # the tenant's CMDB, read only (v0.19.0, docs/cmdb.md)
   #   type: itop
   #   url: https://itop.lab.example

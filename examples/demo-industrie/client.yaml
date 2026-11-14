@@ -118,3 +118,21 @@ assets:
     public_wellbeing_impact: material
     zone: ot
     owner: automatisme@demo-industrie.example
+
+# Zones and the flows between them (v0.24.0): what the client intends. The scanners' observations
+# come first; a flow observed that none of these allows is an exposure gap (undeclared-flow), and
+# `verdict assets flows work/assets/demo-industrie` proposes the section from what was observed.
+zones:
+  - {id: edge, networks: [203.0.113.0/28], description: Internet firewalls}
+  - {id: dmz, networks: [192.0.2.0/26]}
+  - {id: lan, networks: [192.0.2.64/26]}
+  - {id: admin, networks: [192.0.2.128/27], description: Administration bastions}
+  - {id: ot, networks: [192.0.2.160/27], description: Workshop automation}
+  - {id: vpn, networks: [198.51.100.0/24], open: true, description: "Remote access pool, off the premises"}
+flows:
+  - {from: internet, to: edge, ports: [443]}
+  - {from: edge, to: dmz, ports: [443]}
+  - {from: dmz, to: lan, ports: [443, 5432]}
+  - {from: admin, to: "*", ports: [22, 443, 3389]}
+  - {from: lan, to: ot, ports: [102, 502], description: Supervision to the PLCs}
+off_premises_days: 7

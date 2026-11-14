@@ -6,7 +6,8 @@
 #                            accessible network; controlled = networked, access restricted by measures
 #                            that reliably interrupt an attack; small = local or isolated network
 #                            (the former internet / internal / isolated are still read, with a warning)
-#   zone                     optional free label for reports (dmz, lan, ot...)
+#   zone                     dmz, lan, ot...; a zone of `zones` (below) places the asset in the graph of its
+#                            exposure (v0.24.0), any other label only groups it in reports
 #   mission_prevalence       minimal | support | essential   (role of the asset in the client's mission)
 #   public_wellbeing_impact  minimal | material | irreversible (physical, psychological, financial harm)
 #   versions                 deployed versions; leave empty if unknown (rows are then flagged for review)
@@ -59,3 +60,14 @@ assets:
     mission_prevalence: minimal
     public_wellbeing_impact: minimal
     owner: devops-team
+
+# Zones and flows (v0.24.0, optional): the networks of each zone and the flows the client allows.
+# An intention: what the scanners observe comes first, and the differences are exposure gaps.
+# zones:
+#   - {id: dmz, networks: [192.0.2.0/26]}
+#   - {id: lan, networks: [192.0.2.64/26]}
+#   - {id: vpn, networks: [198.51.100.0/24], open: true}   # widely accessible: exposure open
+# flows:
+#   - {from: internet, to: dmz, ports: [443]}
+#   - {from: lan, to: dmz, ports: [443, 5432]}
+# off_premises_days: 7      # a machine seen outside every network stays open this long
