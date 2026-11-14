@@ -458,3 +458,46 @@ def test_the_chat_has_a_tool_for_the_path() -> None:
     assert contract["paths"]["/v1/tenants/{tenant}/assets/{asset}/exposure"]["get"]["operationId"] == "getExposurePath"
     guide = (ROOT / "docs" / "chat-questions.md").read_text(encoding="utf-8")
     assert "get_exposure_path" in guide and "joignable depuis Internet" in guide
+
+
+# -- the scale of a subsidiary ---------------------------------------------------------------------------------
+def test_sixty_thousand_assets_in_fifty_zones_within_the_budget() -> None:
+    """The load test of the graph (v0.24.0): 60,000 hosts reached by a scanner in 50 zones, 10,000
+    machines of an EDR off the premises, one external host. The graph grows with the assets, and the
+    assets stage stays within its budget (about 7 s and 600 MB on the development machine)."""
+    import time
+
+    from a2vm.models import ClientProfile, ExternalScan, Zone
+
+    zones = [Zone(f"z{i}", [f"10.{i}.0.0/16"]) for i in range(50)]
+    flows = [Flow(f"z{i}", f"z{(i + 1) % 50}", ["443/tcp"]) for i in range(50)] + [Flow("internet", "z0", ["443/tcp"])]
+    p = ClientProfile("big", "Big", "2026-11-14", [], zones=zones, flows=flows, external=ExternalScan("big-ext"))
+    hosts = []
+    for i in range(60000):
+        z = i % 50
+        ip = f"10.{z}.{(i // 50) // 250}.{(i // 50) % 250 + 1}"
+        services = [
+            {"port": "443/tcp", "view": "network", "from_zone": f"z{(z - 1) % 50}"},
+            {"port": "22/tcp", "view": "network", "from_zone": "z49"},
+        ]
+        ids = {"hostname": f"h{i}", "ips": [ip]}
+        hosts.append(AssetObservation(f"h{i}", "host", "openvas", TODAY, f"h{i}", identifiers=ids, services=services))
+    pcs = [
+        AssetObservation(f"pc{i}", "host", "sentinelone", TODAY, f"pc{i}",
+                         identifiers={"hostname": f"pc{i}", "ips": [f"172.16.{i // 250}.{i % 250 + 1}"]})
+        for i in range(10000)
+    ]  # fmt: skip
+    ext = AssetObservation(
+        "203.0.113.9", "host", "external-scan", TODAY, "203.0.113.9", identifiers={"ips": ["203.0.113.9"]}
+    )
+    detections = [
+        Detection("big", "openvas", hosts, []),
+        Detection("big", "sentinelone", pcs, []),
+        Detection("big", "external-scan", [ext], []),
+    ]
+    started = time.monotonic()
+    inv = build_inventory(p, detections, now=NOW)
+    elapsed = time.monotonic() - started
+    assert len(inv.assets) == 70001 and len(inv.graph.edges) < 5 * len(inv.assets)
+    assert len(inv.graph.off_premises) == 10000
+    assert elapsed < 120, f"assets stage of 70,000 assets in {elapsed:.0f} s"

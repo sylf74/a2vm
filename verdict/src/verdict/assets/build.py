@@ -235,6 +235,7 @@ def _attributes(
     kind: str,
     reached: str | None = None,
     published_zone: str | None = None,
+    zones: Zones | None = None,
 ) -> dict[str, Attribute]:
     out: dict[str, Attribute] = {}
     defaults = {**WORST_CASE, **profile.defaults}
@@ -268,7 +269,7 @@ def _attributes(
     if zone is None and published_zone:
         zone = Attribute(published_zone, "published")
     if zone is None and kind == "host":  # v0.24.0: an address in the networks of a zone
-        zone = zone_from_networks(Zones(profile), ids)
+        zone = zone_from_networks(zones or Zones(profile), ids)
     if zone:
         out["zone"] = zone
     return out
@@ -429,7 +430,7 @@ def build_inventory(
             name=name,
             description=description,
             identifiers=ids,
-            attributes=_attributes(profile, group, ids, kind, reached.get(root), published_zone.get(root)),
+            attributes=_attributes(profile, group, ids, kind, reached.get(root), published_zone.get(root), zones),
             sources=sorted({o.source for o in group}),
             first_seen=seen[0],
             last_seen=seen[-1],
