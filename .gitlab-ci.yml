@@ -6,6 +6,7 @@
 #   lint, test       every push and merge request
 #   examples         the example profiles and targets are valid, and the offline demo runs
 #   chart            the tenant chart renders (helm lint, helm template)
+#   tofu             deploy/tofu: formatted, scripts clean, every root valid, the example planned
 #   release          on a tag vX.Y.Z: checks that the packages and the chart carry that version
 #   images           on a tag (or by hand): one image per pillar into this project's registry
 #                    (Buildah, on the dedicated build runner)
@@ -45,6 +46,14 @@ chart:
     - helm template ngvm deploy/charts/ngvm-tenant --set tenant=lab --set image.registry=registry.example.org/vulnops/ngvm --set-file files.profile=examples/lab/client.yaml --set secret.name=ngvm-tenant --set database.enabled=true --set verdict.enabled=true --set verdict.digestsSecret=ngvm-verdict --set watch.enabled=true --set watch.digestsSecret=ngvm-via > /dev/null
     - helm template ngvm deploy/charts/ngvm-tenant --set tenant=lab --set image.registry=registry.example.org/vulnops/ngvm --set-file files.profile=examples/lab/client.yaml --set secret.name=ngvm-tenant --set verdict.enabled=true --set verdict.digestsSecret=ngvm-verdict --set dispatch.enabled=true --set dispatch.digestsSecret=ngvm-dispatch --set-file files.dispatch=examples/lab/dispatch.yaml > /dev/null
     - helm template ngvm deploy/charts/ngvm-tenant --set tenant=lab --set image.registry=registry.example.org/vulnops/ngvm --set-file files.profile=examples/lab/client.yaml --set secret.name=ngvm-tenant --set database.enabled=true --set verdict.enabled=true --set verdict.digestsSecret=ngvm-verdict --set dispatch.enabled=true --set dispatch.digestsSecret=ngvm-dispatch --set-file files.dispatch=examples/lab/dispatch.yaml --set oidc.issuerUrl=https://auth.example.org/realms/lab --set oidc.clientId=ngvm-lab --set oidc.inCluster=true --set dispatch.page.enabled=true --set dispatch.page.host=dispatch-lab.apps.example.org --set 'dispatch.page.remediators={NGVM-Remediation}' > /dev/null
+
+tofu:
+  stage: lint
+  image: alpine:3.22
+  cache: []
+  script:
+    - apk add --no-cache -q bash opentofu shellcheck
+    - deploy/tofu/check.sh
 
 test:
   stage: test
