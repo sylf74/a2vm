@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ngvm"
-version = "0.24.0"
+version = "0.25.0"
 description = "NGVM common contract: data model, exchange files and their schemas, service contracts, settings, client profiles, LLM client, SSVC tables, declared-asset matching."
 requires-python = ">=3.11"
 license = {text = "LicenseRef-ngvm-proprietary"}
