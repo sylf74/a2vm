@@ -115,7 +115,7 @@ class DeclaredAsset:
     product_aliases: list[str] = field(default_factory=list)
     cpe: str | None = None
     versions: list[str] = field(default_factory=list)
-    zone: str | None = None  # free label for reports (dmz, lan, ot...), no effect on decisions
+    zone: str | None = None  # dmz, lan, ot...; a zone of `zones` places the asset in the graph (v0.24.0)
 
 
 @dataclass
@@ -161,6 +161,44 @@ class CoveragePolicy:
         return [[s.strip() for s in entry.split("|") if s.strip()] for entry in entries]
 
 
+# Zones and flows (v0.24.0): where assets sit, and which zone may reach which. A declaration is an
+# intention: what the scanners observe comes first, and a gap says where the two differ.
+INTERNET = "internet"  # the source of every path from the internet
+OFF_PREMISES = "off-premises"  # implicit zone, open: a machine seen outside every declared network
+RESERVED_ZONES = (INTERNET, OFF_PREMISES, "*")
+
+
+@dataclass
+class Zone:
+    """A network zone of the client (profile section `zones`)."""
+
+    id: str
+    networks: list[str] = field(default_factory=list)  # CIDR: an address in one places the asset here
+    open: bool = False  # a widely accessible network (guest Wi-Fi, VPN pool, partners): SSVC open
+    description: str = ""
+
+
+@dataclass
+class Flow:
+    """A flow the client allows (profile section `flows`): `source` reaches `target` on `ports`."""
+
+    source: str  # internet, a zone id, or * (every zone)
+    target: str  # a zone id, or *
+    ports: list[str] = field(default_factory=list)  # "443/tcp", "53/udp"; empty: every port
+    description: str = ""
+
+    def allows(self, source: str, target: str, port: str | None) -> bool:
+        if self.source not in ("*", source) or self.target not in ("*", target):
+            return False
+        return not self.ports or port is None or port in self.ports
+
+
+def port_label(value: int | str) -> str:
+    """A port as written in flows and services: `443/tcp`; a bare number is TCP."""
+    text = str(value).strip().lower()
+    return text if "/" in text else f"{text}/tcp"
+
+
 @dataclass
 class PublishedEndpoint:
     """A public endpoint and the internal assets that answer behind it (profile section `published`)."""
@@ -204,6 +242,9 @@ class ClientProfile:
     language: str = "en"  # language of the client's deliverables (v0.17.3): en, fr
     coverage: CoveragePolicy = field(default_factory=CoveragePolicy)  # scan coverage (v0.19.0)
     sla: Any = None  # a2vm.sla.SlaPolicy, the client's priorities and SLA (v0.21.0); None: BOD 26-04 only
+    zones: list[Zone] = field(default_factory=list)  # v0.24.0
+    flows: list[Flow] = field(default_factory=list)  # v0.24.0
+    off_premises_days: int = 7  # v0.24.0: seen off the premises within these days -> open
 
     def declared(self, asset_id: str) -> DeclaredAsset:
         for a in self.assets:
@@ -253,6 +294,11 @@ class AssetObservation:
     # Every package installed on the host (v0.22.2), vulnerable or not: {name, version, arch, type, purl},
     # since v0.23.0 with source_package, distro and source (where it was seen: ssh).
     components: list[dict[str, str]] = field(default_factory=list)
+    # The network services of the asset (v0.24.0): {port: "443/tcp", view, from_zone, bind}. view
+    # `network`: a scanner reached the port from `from_zone` (internet for the external scan, "" when
+    # the connector names no zone); view `local`: the host listed it as listening, on `bind` (any,
+    # loopback or an address). None: the source does not list services; []: it listed none.
+    services: list[dict[str, str]] | None = None
 
 
 @dataclass
@@ -289,6 +335,10 @@ class Asset:
     # of each source, every source kept. `components_seen` is the newest of them.
     components: list[dict[str, str]] = field(default_factory=list)
     components_seen: str = ""
+    # v0.24.0: the services seen on the asset ({port, view, from_zone, bind, source, seen}) and the path
+    # its exposure rests on, step by step ({node, kind, label, via, source, seen}), first the internet.
+    services: list[dict[str, str]] = field(default_factory=list)
+    exposure_path: list[dict[str, str]] = field(default_factory=list)
 
     def attr(self, name: str) -> Attribute:
         return self.attributes[name]

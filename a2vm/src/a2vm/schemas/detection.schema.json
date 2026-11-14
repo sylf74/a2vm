@@ -299,6 +299,23 @@
             "null"
           ]
         },
+        "services": {
+          "type": ["array", "null"],
+          "description": "The network services of the asset (since v0.24.0): view network, a port a scanner reached from from_zone (internet for the external scan); view local, a port the host listens on, on bind (any, loopback or an address). null: the source does not list services.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["port", "view"],
+            "properties": {
+              "port": {"type": "string", "pattern": "^[0-9]{1,5}/(tcp|udp)$"},
+              "view": {"enum": ["network", "local"]},
+              "from_zone": {"type": "string"},
+              "bind": {"type": "string"},
+              "source": {"type": "string"},
+              "seen": {"type": "string"}
+            }
+          }
+        },
         "components": {
           "type": "array",
           "description": "Every package installed on the host, vulnerable or not (since v0.22.2)",

@@ -8,7 +8,7 @@ from a2vm.config import Settings
 from a2vm.io import Detection, now
 from a2vm.models import AssetObservation
 from a2vm.profile import load_profile, validate_profile_data
-from detect.collect import DNF, LOADED, PACKAGES, TRIVY_HOST, collect, load_targets, plan, ssh_command
+from detect.collect import DNF, LISTENING, LOADED, PACKAGES, TRIVY_HOST, collect, load_targets, plan, ssh_command
 from detect.scanners import Target, load_dnf_file, load_trivy_file, parse_trivy
 from verdict.assets.build import WORST_CASE, build_inventory
 from verdict.triage import Triage
@@ -127,6 +127,8 @@ def test_collect_with_fake_ssh(tmp_path):
             return subprocess.CompletedProcess(cmd, 0, listed if host == "node00.lab.example" else "", "")
         if cmd[-1] == LOADED:  # the deleted libraries still in memory (v0.23.11): none here
             return subprocess.CompletedProcess(cmd, 0, "", "")
+        if cmd[-1] == LISTENING:  # the sockets listening (v0.24.0)
+            return subprocess.CompletedProcess(cmd, 0, "tcp LISTEN 0 128 0.0.0.0:22 0.0.0.0:*\n", "")
         code, out = outputs[host]
         assert cmd[-1] in (TRIVY_HOST, DNF)
         return subprocess.CompletedProcess(cmd, code, out, "ssh: connect to host down: refused" if code else "")

@@ -399,7 +399,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
 
 def cmd_import(args: argparse.Namespace) -> int:
     if args.source == "openvas":
-        _write(args.out, merge([load_openvas_file(f, args.client, args.min_qod) for f in args.files]))
+        _write(args.out, merge([load_openvas_file(f, args.client, args.min_qod, args.zone) for f in args.files]))
         return 0
     loader = load_trivy_file if args.source == "trivy" else load_dnf_file
     _write(args.out, merge([loader(f, args.client) for f in args.files]))
@@ -544,6 +544,7 @@ def main(argv: list[str] | None = None) -> int:
         help="<host>.json (Trivy) or <host>.txt (dnf): the file name is the host; OpenVAS XML report",
     )
     m.add_argument("--min-qod", type=int, default=70, help="OpenVAS: minimum quality of detection (default 70)")
+    m.add_argument("--zone", default="", help="OpenVAS: the zone the scanner observes from (v0.24.0)")
     m.add_argument("--out", default="work/detect")
     m.set_defaults(func=cmd_import)
 
