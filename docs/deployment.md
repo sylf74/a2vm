@@ -14,6 +14,9 @@ clients except the code and the runner.
 
 Host names below are examples; replace `gitlab.lab.example` with the GitLab address.
 
+The Kubernetes cluster, its addons, the portal, the collectors and the identity provider are
+deployed with OpenTofu (`docs/platform.md`, v0.25.0); this guide covers GitLab and the tenants.
+
 ## 1. Groups
 
 1. **Groups > New group**: `vulnops`, visibility **Private**.

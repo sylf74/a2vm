@@ -84,6 +84,10 @@ that issuer's CA: the collectors need that CA as `ca_file` (section 2).
 
 ## 2. Install a collector (VM near the network)
 
+Since v0.25.0 a collector is installed by OpenTofu, with Podman, with the rest of the platform
+(`docs/platform.md` §6): the same `collector.yaml` and files, one timer per connector. The steps
+below install one by hand: with the install script (Docker), or step by step (Podman).
+
 A VM that reaches the targets and the push endpoint: 2 vCPU, 2 GB, 20 GB, Podman, outbound HTTPS
 only (no inbound port). The scanners run on the targets (Trivy, dnf) or on the OpenVAS host; the
 collector only drives them. The examples use Rocky Linux and the image of the release.

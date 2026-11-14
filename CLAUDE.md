@@ -4,7 +4,7 @@ NGVM (Next-Generation Vulnerability Management) turns vulnerability intelligence
 each client's asset context into one prioritised decision per finding (ACT / ATTEND / TRACK),
 explained, reviewed by an analyst, and restituted in reports and dashboards.
 
-Read first: `docs/hld/00-product-strategy.md` (goals, decisions D1–D21, contracts), then the
+Read first: `docs/hld/00-product-strategy.md` (goals, decisions D1–D22, contracts), then the
 chapter and the LLD of the pillar you touch (`docs/hld/`, `docs/lld/`). Operating guides are the
 other files of `docs/`; day-to-day operation: `docs/operations.md`.
 
@@ -27,6 +27,7 @@ other files of `docs/`; day-to-day operation: `docs/operations.md`.
 | `deploy/dispatch/` | Script of the job `deploy-k8s` that writes the values of the dispatch service (stdlib and PyYAML only) |
 | `deploy/chat/` | Scripts of the job `deploy-k8s` that write the values of the chat and of the analysts' sign-in and review page (stdlib only) |
 | `deploy/collector/` | Install script of a collector on its VM (`docs/collectors.md` §2) |
+| `deploy/tofu/` | OpenTofu: the platform from machines reached by SSH (`modules/platform`, its scripts in `scripts/`), on machines that exist (`existing`) or created on Scaleway, Azure or a KVM host (`docs/platform.md`, D22); checked by `check.sh` |
 | `deploy/cnpg/` | Installation of the CloudNativePG operator, once per Kubernetes cluster (the tenants' PostgreSQL, `docs/kubernetes.md` §5) |
 | `images/` | Dockerfile of the pillar images (one per pillar, built by the `images` job on tags) |
 | `scripts/` | Generators of committed files: dashboards, decision diagrams, architecture diagrams, neutral Word template |

@@ -20,7 +20,7 @@ repeat it. The examples use the tenant `lab` (namespace `ngvm-lab`); replace it 
 
 | Part | Where | When | Started by |
 | --- | --- | --- | --- |
-| Internal scans: SSH (Trivy, dnf) and OpenVAS | Collector VM near the network (`ngvm-collector@<connector>`, Docker or Podman) | Its systemd timer (`install-collector.sh --schedule`, default 07:30) | systemd |
+| Internal scans: SSH (Trivy, dnf) and OpenVAS | Collector VM near the network (`ngvm-collector@<connector>`, Docker or Podman) | Its systemd timer (`connectors` of `docs/platform.md` §6, or `install-collector.sh --schedule`, default 07:30) | systemd |
 | CMDB (iTop, read only, v0.19.0) | Connector `itop` of the collector (`ngvm-collector@<connector>`), source `cmdb` | Its systemd timer, before the daily run | systemd |
 | External scan (OpenVAS from the internet) | Pipeline of the project `<tenant>-external`, on the runner of the cloud scanner (tag `scan-cloud`; deployed by `deploy/scanner` since v0.18.2) | Its pipeline schedule | GitLab |
 | Daily run: collect → via → detect → assets → triage → publish, inventory, dispatch | CronJob `ngvm-<tenant>-daily` | `daily.schedule` (default 05:45, Europe/Paris; suspended with `NGVM_K8S_SUSPEND=true`) | Kubernetes |
