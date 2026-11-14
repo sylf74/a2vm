@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """`verdict serve` (the decision service of one tenant), `verdict push` (the daily run's push) and
 `verdict tools` (the tool server of the conversational search)."""
 
@@ -21,13 +21,13 @@ def _read_secret(path: str) -> str:
 
 
 def cmd_serve(args: argparse.Namespace) -> int:
-    from a2vm.service import TokenSet
+    from ngvm.service import TokenSet
 
     from .server import ROLES, Service, serve
     from .store import RunStore
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
-    from a2vm.db import DatabaseError, open_database
+    from ngvm.db import DatabaseError, open_database
 
     from .pgstore import MIGRATIONS, PgRunStore
 
@@ -105,7 +105,7 @@ def cmd_sla_state(args: argparse.Namespace) -> int:
 
 
 def cmd_tools(args: argparse.Namespace) -> int:
-    from a2vm.service import TokenSet
+    from ngvm.service import TokenSet
 
     from .tools import ROLES, Tools, serve
 
@@ -116,9 +116,9 @@ def cmd_tools(args: argparse.Namespace) -> int:
         print(exc, file=sys.stderr)
         return 2
     read_token = _read_secret(args.read_token_file)
-    from a2vm.actions import open_actions
-    from a2vm.audit import open_audit
-    from a2vm.db import DatabaseError
+    from ngvm.actions import open_actions
+    from ngvm.audit import open_audit
+    from ngvm.db import DatabaseError
 
     try:  # the journal and the actions (v0.23.10): the tenant's database, else the log only
         audit = open_audit("tools")
@@ -186,14 +186,14 @@ def main(argv: list[str]) -> int:
     s.set_defaults(func=cmd_serve)
     p = sub.add_parser("push", help="push a run's triage.json to the decision service")
     p.add_argument("triage", help="triage.json written by verdict run")
-    p.add_argument("--url", required=True, help="decision service, e.g. http://a2vm-lab-verdict:8080")
+    p.add_argument("--url", required=True, help="decision service, e.g. http://ngvm-lab-verdict:8080")
     p.add_argument("--tenant", required=True)
     p.add_argument("--token-file", required=True, help="the publish token")
     p.add_argument("--ca-file")
     p.add_argument("--timeout-seconds", type=float, default=600)
     p.set_defaults(func=cmd_push)
     st = sub.add_parser("sla-state", help="read the SLA state of the tenant's findings before a run (v0.21.0)")
-    st.add_argument("--url", required=True, help="decision service, e.g. http://a2vm-lab-verdict:8080")
+    st.add_argument("--url", required=True, help="decision service, e.g. http://ngvm-lab-verdict:8080")
     st.add_argument("--tenant", required=True)
     st.add_argument("--token-file", required=True, help="the publish token")
     st.add_argument("--out", required=True, help="the file `verdict run --sla-state` reads")
@@ -202,7 +202,7 @@ def main(argv: list[str]) -> int:
     st.set_defaults(func=cmd_sla_state)
     t = sub.add_parser("tools", help="tool server of the conversational search, on the decision service")
     t.add_argument("--tenant", required=True)
-    t.add_argument("--verdict-url", required=True, help="decision service, e.g. http://a2vm-lab-verdict:8080")
+    t.add_argument("--verdict-url", required=True, help="decision service, e.g. http://ngvm-lab-verdict:8080")
     t.add_argument("--read-token-file", required=True, help="read token of the decision service")
     t.add_argument("--digests", required=True, help="`chat <sha256>`: the chat interface's token")
     t.add_argument("--max-chars", type=int, default=8000, help="longest answer, in characters of JSON")

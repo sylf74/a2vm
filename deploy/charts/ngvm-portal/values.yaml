@@ -1,0 +1,77 @@
+# One NGVM portal: the reporting database the daily runs publish into, and Grafana reading it with
+# the dashboards of the version. Install it once for the operator (every tenant), or in a client's
+# cluster for that client only; a tenant publishes into several portals (NGVM_REPORTING_DSN_<NAME>,
+# docs/reporting.md). Needs the CloudNativePG operator (deploy/cnpg/README.md).
+#
+#   helm upgrade --install portal deploy/charts/ngvm-portal -n ngvm-portal --create-namespace \
+#     --set image.registry=<registry>/vulnops/ngvm --set grafana.host=portal.example.org
+
+image:
+  # Where the pillar images are: the job that creates the schema runs the verdict image.
+  registry: ""
+  tag: ""               # default v<appVersion>
+  pullPolicy: IfNotPresent
+  pullSecret: ""
+
+# Tenants whose data this portal shows: ["*"] for every tenant (the operator's), or a client's.
+tenants: ["*"]
+
+database:
+  instances: 1          # 1, or 3 for a standby that takes over
+  imageName: ""         # empty: the operator's default PostgreSQL image
+  storage:
+    size: 10Gi          # grows with the history of the runs
+    storageClass: ""
+  resources:
+    requests: {cpu: 50m, memory: 256Mi}
+    limits: {memory: 1Gi}
+  operatorNamespace: cnpg-system
+  dnsNamespace: kube-system
+  # Who publishes: the daily runs of these tenant namespaces (pods of component `daily`)...
+  writerNamespaces: []  # e.g. [ngvm-homelab, ngvm-lab]
+  # ...and publishers outside the cluster (GitLab runners, another site), through a LoadBalancer
+  # Service open to these addresses only. Empty: the database is reached inside the cluster only.
+  external:
+    allowFrom: []       # CIDR
+    annotations: {}     # e.g. the address the load balancer gives (MetalLB)
+
+grafana:
+  image: docker.io/grafana/grafana:11.6.0
+  host: ""              # e.g. portal.apps.example.org
+  storage:
+    size: 1Gi           # Grafana's own state (users, preferences); the dashboards are provisioned
+    storageClass: ""
+  resources:
+    requests: {cpu: 50m, memory: 128Mi}
+    limits: {memory: 512Mi}
+  # Sign-in with the identity provider (generic OAuth, Keycloak first). The client secret is the
+  # key oidc-client-secret of the Secret <release>-portal-oidc, made by hand (docs/reporting.md).
+  oidc:
+    enabled: false
+    issuerUrl: ""       # e.g. https://auth.example.org/realms/ngvm
+    clientId: ""
+    groupsClaim: groups
+    viewers: []         # groups that read the dashboards
+    admins: []          # groups that administer Grafana
+    egress: []          # {cidr, port} of the provider, for the NetworkPolicy
+    inCluster: false    # the provider is reached through the cluster's ingress controller
+  ingress:
+    className: ""
+    tlsSecret: ""       # empty: the controller's default, or with clusterIssuer <release>-portal-tls
+    clusterIssuer: ""
+    controller: nginx   # nginx, traefik or other
+    allowFrom: []       # optional: the readers' networks (CIDR)
+    annotations: {}
+    namespace: kube-system   # where the ingress controller runs, for the NetworkPolicy
+
+dashboards:
+  languages: [en]       # en, fr
+  # Address of the page of the requests for remediation of a tenant (https://<NGVM_DISPATCH_HOST>):
+  # set, the RSSI versions of the dashboards remediation and coverage are provisioned too (D18).
+  dispatchUrl: ""
+
+networkPolicy:
+  enabled: true
+
+nodeSelector: {}
+tolerations: []

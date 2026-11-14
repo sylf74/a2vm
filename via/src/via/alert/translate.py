@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """Translation of an alert sheet (v0.17.1): from the English reference an analyst validated and
 enriched, into the language of a contact, by the tenant's LLM; then validated by an analyst before
 anything is sent (LLD vulnerability-intelligence §3.9).
@@ -8,7 +8,7 @@ The model proposes a text; code keeps what must not move:
 - the headings and the table header of the asset table, set from the catalogue (`i18n.py`) in a
   language of the catalogue, never from the model;
 - the facts: every CVE id, version, score and URL of the reference is in the translation, and the
-  translation names none the reference does not (a2vm.llm.guard).
+  translation names none the reference does not (ngvm.llm.guard).
 A translation that fails a check is refused with the reason; the analyst can write it by hand.
 """
 
@@ -17,8 +17,8 @@ from __future__ import annotations
 import hashlib
 import re
 
-from a2vm.llm import UNTRUSTED, LlmClient, LlmError
-from a2vm.llm.guard import CVE_RE, unsupported_tokens
+from ngvm.llm import UNTRUSTED, LlmClient, LlmError
+from ngvm.llm.guard import CVE_RE, unsupported_tokens
 
 from .i18n import HEADINGS, heading_key, known, name, t, table_header
 

@@ -1,0 +1,126 @@
+{{- /*
+After each install and upgrade: the schema of the version (`verdict db init`, as the superuser, the
+tables owned by ngvm_writer) and the reading role of Grafana limited to .Values.tenants, with the
+password of the Secret <release>-portal-grafana (`verdict db grant --password-file`). Waits for the
+database at first install.
+*/ -}}
+{{- $name := include "ngvm-portal.name" . }}
+{{- $db := include "ngvm-portal.db" . }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $name }}-schema
+  labels:
+    {{- include "ngvm-portal.labels" . | nindent 4 }}
+    app.kubernetes.io/component: schema
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 1800
+  template:
+    metadata:
+      labels:
+        {{- include "ngvm-portal.labels" . | nindent 8 }}
+        app.kubernetes.io/component: schema
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      {{- if .Values.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.image.pullSecret }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: schema
+          image: {{ printf "%s/verdict:%s" (required "image.registry is required" .Values.image.registry) (.Values.image.tag | default (printf "v%s" .Chart.AppVersion)) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              DSN="host={{ $db }}-rw dbname=ngvm user=postgres sslmode=verify-full sslrootcert=/db-ca/ca.crt"
+              n=0
+              until verdict db init --dsn "$DSN" --writer ngvm_writer; do
+                n=$((n + 1)); if [ "$n" -ge 60 ]; then echo "the database does not answer"; exit 1; fi
+                sleep 10
+              done
+              verdict db grant ngvm_grafana {{ range .Values.tenants }}{{ . | squote }} {{ end }}--dsn "$DSN" --password-file /grafana/db-password
+          env:
+            - name: HOME
+              value: /tmp
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $db }}-superuser
+                  key: password
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: db-ca
+              mountPath: /db-ca
+              readOnly: true
+            - name: grafana
+              mountPath: /grafana
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: db-ca
+          secret:
+            secretName: {{ $db }}-ca
+            items:
+              - {key: ca.crt, path: ca.crt}
+        - name: grafana
+          secret:
+            secretName: {{ $name }}-grafana
+            items:
+              - {key: db-password, path: db-password}
+        - name: tmp
+          emptyDir: {}
+{{- if .Values.networkPolicy.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $name }}-schema
+  labels:
+    {{- include "ngvm-portal.labels" . | nindent 4 }}
+    app.kubernetes.io/component: schema
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "-1"
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "ngvm-portal.selector" (dict "root" . "component" "schema") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: {{ $db }}
+      ports:
+        - {port: 5432, protocol: TCP}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.database.dnsNamespace | quote }}
+      ports:
+        - {port: 53, protocol: UDP}
+        - {port: 53, protocol: TCP}
+{{- end }}

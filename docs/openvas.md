@@ -1,6 +1,6 @@
 # OpenVAS network scans (Greenbone Community Edition)
 
-A2VM (pillar 2, detect) drives a Greenbone scanner (gvmd + OpenVAS) over GMP: it creates or reuses a target and a
+NGVM (pillar 2, detect) drives a Greenbone scanner (gvmd + OpenVAS) over GMP: it creates or reuses a target and a
 task per client, starts the scan, waits for it and imports the XML report. A report exported from
 the Greenbone web interface can also be imported by hand.
 
@@ -31,7 +31,7 @@ the compose file it provides, `docker compose up -d`, then wait for the first fe
 (it can take hours; scans before it is complete find little). Size the VM generously: the scanner
 and its database need several cores and several GB of RAM.
 
-Create a dedicated GMP account for A2VM (named `vulnops`, unchanged since v0.11.0 to keep existing set-ups), with the User role (not Admin):
+Create a dedicated GMP account for NGVM (named `vulnops`, unchanged since v0.11.0 to keep existing set-ups), with the User role (not Admin):
 
 ```bash
 docker compose exec -u gvmd gvmd gvmd --create-user=vulnops --role=User --password='<password>'
@@ -126,14 +126,14 @@ CI/CD variables of the client project:
 
 | Key | Type | Value |
 | --- | --- | --- |
-| `A2VM_GVM_USER` | Variable | `vulnops` |
-| `A2VM_GVM_PASSWORD` | Variable, masked, protected | the GMP password |
-| `A2VM_GVM_CA` | File | `ca.pem` |
-| `A2VM_GVM_CERT` | File, protected | `client.crt` |
-| `A2VM_GVM_KEY` | File, protected | `client.key` |
+| `NGVM_GVM_USER` | Variable | `vulnops` |
+| `NGVM_GVM_PASSWORD` | Variable, masked, protected | the GMP password |
+| `NGVM_GVM_CA` | File | `ca.pem` |
+| `NGVM_GVM_CERT` | File, protected | `client.crt` |
+| `NGVM_GVM_KEY` | File, protected | `client.key` |
 
 Check the file with `detect plan targets.yaml` (the validate job does it). The daily
-`collect` job then runs the scan; it needs no `A2VM_SSH_KEY` when the file has no SSH target.
+`collect` job then runs the scan; it needs no `NGVM_SSH_KEY` when the file has no SSH target.
 
 ## 5. Scanner host as runner (external scans)
 
@@ -157,12 +157,12 @@ triage with the LLM) stay on the internal runner and get the detection through t
      clone_url = "https://gitlab.example.org"
      tls-cert-file = "/etc/gitlab-runner/certs/scanner.crt"
      tls-key-file = "/etc/gitlab-runner/certs/scanner.key"
-     environment = ["A2VM_SERVER_URL=https://gitlab.example.org"]
+     environment = ["NGVM_SERVER_URL=https://gitlab.example.org"]
      [runners.docker]
        volumes = ["/cache", "greenbone-community-edition_gvmd_socket_vol:/run/gvmd"]
    ```
 
-   `A2VM_SERVER_URL` makes the job fetch the vulnops code by the public URL; the client
+   `NGVM_SERVER_URL` makes the job fetch the vulnops code by the public URL; the client
    certificate is handed to git through `CI_SERVER_TLS_CERT_FILE` and `CI_SERVER_TLS_KEY_FILE`.
 
 2. In the client project, run the collection there and talk to gvmd over the socket:
@@ -170,7 +170,7 @@ triage with the LLM) stay on the internal runner and get the detection through t
    ```yaml
    # .gitlab-ci.yml
    variables:
-     A2VM_COLLECT_TAG: scan-cloud
+     NGVM_COLLECT_TAG: scan-cloud
    ```
 
    ```yaml
@@ -180,7 +180,7 @@ triage with the LLM) stay on the internal runner and get the detection through t
      hosts: [203.0.113.10, www.example.org]
    ```
 
-   Only `A2VM_GVM_USER` and `A2VM_GVM_PASSWORD` are needed (no certificates over a socket).
+   Only `NGVM_GVM_USER` and `NGVM_GVM_PASSWORD` are needed (no certificates over a socket).
 
 The scanner host then holds a runner token and, while a job runs, a job token: register it on
 this project only, and keep client projects with internal data on internal runners.
@@ -197,7 +197,7 @@ CVE (LLD triage, section 5.3).
    project a way in, one of:
    - **a project access token** (recommended, required on GitLab CE, v0.11.3): in the external
      project, Settings > Access tokens, role Reporter, scope `read_api`, with an expiry date. Store
-     it in the internal project as the CI/CD variable `A2VM_GITLAB_TOKEN` (masked, protected).
+     it in the internal project as the CI/CD variable `NGVM_GITLAB_TOKEN` (masked, protected).
      The latest successful `collect` job is then found among the project's jobs, whatever other
      pipelines run there;
    - **the job token**: Settings > CI/CD > Job token permissions, add the internal project (or
@@ -205,7 +205,7 @@ CVE (LLD triage, section 5.3).
      pipeline of `main` only: any other pipeline on `main` (a push, another schedule) hides it,
      and some GitLab editions do not let a job token read another project's artifacts.
 2. **Internal project**: CI/CD variable (or `.gitlab-ci.yml` variable)
-   `A2VM_EXTERNAL_PROJECT: vulnops/clients/<client>-external`.
+   `NGVM_EXTERNAL_PROJECT: vulnops/clients/<client>-external`.
 3. **Internal profile** (`client.yaml`): name the external client and map the public endpoints to
    the internal assets that answer behind them:
 

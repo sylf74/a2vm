@@ -34,13 +34,13 @@
 <rect x="20" y="130" width="1210" height="486" rx="10" class="r-k8s"/>
 <text x="34" y="150" class="t-region">Kubernetes cluster<tspan dx="10" class="t-region-sub">deploy-k8s, one namespace per project</tspan></text>
 <rect x="36" y="180" width="310" height="386" rx="10" class="r-ns"/>
-<text x="50" y="200" class="t-region">namespace a2vm-via</text>
+<text x="50" y="200" class="t-region">namespace ngvm-via</text>
 <rect x="360" y="180" width="260" height="386" rx="10" class="r-ns"/>
-<text x="374" y="200" class="t-region">namespace a2vm-client-a</text>
+<text x="374" y="200" class="t-region">namespace ngvm-client-a</text>
 <rect x="650" y="180" width="260" height="386" rx="10" class="r-ns"/>
-<text x="664" y="200" class="t-region">namespace a2vm-client-b</text>
+<text x="664" y="200" class="t-region">namespace ngvm-client-b</text>
 <rect x="940" y="180" width="260" height="386" rx="10" class="r-ns"/>
-<text x="954" y="200" class="t-region">namespace a2vm-client-n</text>
+<text x="954" y="200" class="t-region">namespace ngvm-client-n</text>
 <rect x="350" y="636" width="880" height="104" rx="10" class="r-client"/>
 <text x="364" y="730" class="t-region">Per client, outside the cluster</text>
 <polyline points="191,215 191,168 1170,168" class="edge"/>
@@ -96,11 +96,11 @@
 <text x="386" y="350" class="t-title">Pages, signed in</text>
 <text x="386" y="365" class="t-line">the client&#x27;s OIDC groups</text>
 <rect x="376" y="389" width="228" height="48" rx="6" class="box b-ext"/>
-<text x="386" y="408" class="t-title">Secret a2vm-tenant</text>
+<text x="386" y="408" class="t-title">Secret ngvm-tenant</text>
 <text x="386" y="423" class="t-line">its tokens, passwords, keys</text>
 <rect x="376" y="447" width="228" height="48" rx="6" class="box b-db"/>
 <text x="386" y="466" class="t-title">PostgreSQL</text>
-<text x="386" y="481" class="t-line">a2vm-client-a-db, own roles</text>
+<text x="386" y="481" class="t-line">ngvm-client-a-db, own roles</text>
 <rect x="666" y="215" width="228" height="48" rx="6" class="box b-ext"/>
 <text x="676" y="234" class="t-title">Daily run, watch</text>
 <text x="676" y="249" class="t-line">CronJobs of this client</text>
@@ -111,11 +111,11 @@
 <text x="676" y="350" class="t-title">Pages, signed in</text>
 <text x="676" y="365" class="t-line">the client&#x27;s OIDC groups</text>
 <rect x="666" y="389" width="228" height="48" rx="6" class="box b-ext"/>
-<text x="676" y="408" class="t-title">Secret a2vm-tenant</text>
+<text x="676" y="408" class="t-title">Secret ngvm-tenant</text>
 <text x="676" y="423" class="t-line">its tokens, passwords, keys</text>
 <rect x="666" y="447" width="228" height="48" rx="6" class="box b-db"/>
 <text x="676" y="466" class="t-title">PostgreSQL</text>
-<text x="676" y="481" class="t-line">a2vm-client-b-db, own roles</text>
+<text x="676" y="481" class="t-line">ngvm-client-b-db, own roles</text>
 <rect x="956" y="215" width="228" height="48" rx="6" class="box b-ext"/>
 <text x="966" y="234" class="t-title">Daily run, watch</text>
 <text x="966" y="249" class="t-line">CronJobs of this client</text>
@@ -126,18 +126,18 @@
 <text x="966" y="350" class="t-title">Pages, signed in</text>
 <text x="966" y="365" class="t-line">the client&#x27;s OIDC groups</text>
 <rect x="956" y="389" width="228" height="48" rx="6" class="box b-ext"/>
-<text x="966" y="408" class="t-title">Secret a2vm-tenant</text>
+<text x="966" y="408" class="t-title">Secret ngvm-tenant</text>
 <text x="966" y="423" class="t-line">its tokens, passwords, keys</text>
 <rect x="956" y="447" width="228" height="48" rx="6" class="box b-db"/>
 <text x="966" y="466" class="t-title">PostgreSQL</text>
-<text x="966" y="481" class="t-line">a2vm-client-n-db, own roles</text>
+<text x="966" y="481" class="t-line">ngvm-client-n-db, own roles</text>
 <rect x="538" y="154" width="444" height="15" rx="3" class="lbl-bg"/>
 <text x="760" y="165" text-anchor="middle" class="t-edge">records and the radar&#x27;s feed down; technologies back, without the tenant&#x27;s name</text>
 <rect x="788" y="593" width="224" height="15" rx="3" class="lbl-bg"/>
 <text x="900" y="604" text-anchor="middle" class="t-edge">runs published, the tenant on every row</text>
 <rect x="1262" y="215" width="220" height="150" rx="6" class="box b-ext"/>
 <text x="1272" y="234" class="t-title">Portal</text>
-<text x="1272" y="249" class="t-mono">chart a2vm-portal</text>
+<text x="1272" y="249" class="t-mono">chart ngvm-portal</text>
 <text x="1272" y="264" class="t-line">reporting PostgreSQL</text>
 <text x="1272" y="279" class="t-line">row-level security per tenant</text>
 <text x="1272" y="294" class="t-line">Grafana: an organisation</text>

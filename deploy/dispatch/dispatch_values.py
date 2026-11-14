@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """Values of the dispatch service for the chart, written by the job deploy-k8s (v0.20.0,
 docs/dispatch.md). Standard library and PyYAML only.
 
@@ -8,15 +8,15 @@ reads as YAML): where the targets of dispatch.yaml are, for the NetworkPolicy (t
 here, in the job), and the page of the requests for remediation. Also writes the names of the
 targets, one per line, so that the job copies each one's credential into the tenant's Secret.
 
-    A2VM_DISPATCH_<TARGET>_PASSWORD   credential of a target (masked), <TARGET> its name in capitals,
+    NGVM_DISPATCH_<TARGET>_PASSWORD   credential of a target (masked), <TARGET> its name in capitals,
                                       - as _ (read by the job, not here)
-    A2VM_DISPATCH_<TARGET>_CA         optional, File: the CA of its certificate (idem)
-    A2VM_DISPATCH_EGRESS              optional: `cidr:port,...` instead of resolving the targets
-    A2VM_DISPATCH_IN_CLUSTER          optional: true when the targets are reached through the cluster's ingress
-    A2VM_DISPATCH_HOST                host of the page of the requests for remediation (D18)
-    A2VM_OIDC_REMEDIATORS             groups that may ask for remediation (with A2VM_DISPATCH_HOST)
-    A2VM_DISPATCH_ALLOW               optional: the persons' networks (CIDR, comma-separated)
-    A2VM_DISPATCH_TLS_SECRET          optional; ingress controller, class and issuer as the chat's
+    NGVM_DISPATCH_<TARGET>_CA         optional, File: the CA of its certificate (idem)
+    NGVM_DISPATCH_EGRESS              optional: `cidr:port,...` instead of resolving the targets
+    NGVM_DISPATCH_IN_CLUSTER          optional: true when the targets are reached through the cluster's ingress
+    NGVM_DISPATCH_HOST                host of the page of the requests for remediation (D18)
+    NGVM_OIDC_REMEDIATORS             groups that may ask for remediation (with NGVM_DISPATCH_HOST)
+    NGVM_DISPATCH_ALLOW               optional: the persons' networks (CIDR, comma-separated)
+    NGVM_DISPATCH_TLS_SECRET          optional; ingress controller, class and issuer as the chat's
 
     dispatch_values.py dispatch.yaml OUT.json TARGETS.txt
 """
@@ -39,7 +39,7 @@ TARGET = re.compile(r"^[a-z][a-z0-9-]{0,30}$")
 
 
 def env_name(target: str) -> str:
-    return "A2VM_DISPATCH_" + target.upper().replace("-", "_")
+    return "NGVM_DISPATCH_" + target.upper().replace("-", "_")
 
 
 def values(rules: dict, env: dict[str, str]) -> tuple[dict, list[str]]:
@@ -50,32 +50,32 @@ def values(rules: dict, env: dict[str, str]) -> tuple[dict, list[str]]:
             raise ValueError(f"target {name!r}: lowercase letters, digits and - only")
         if not env.get(f"{env_name(name)}_PASSWORD"):
             raise ValueError(f"target {name}: the variable {env_name(name)}_PASSWORD (masked) is missing")
-    in_cluster = env.get("A2VM_DISPATCH_IN_CLUSTER", "").lower() == "true"
+    in_cluster = env.get("NGVM_DISPATCH_IN_CLUSTER", "").lower() == "true"
     urls = [str(t.get("url", "")) for t in targets.values()]
     dispatch: dict = {
         "enabled": True,
         "inCluster": in_cluster,
         "egress": []
-        if in_cluster and not env.get("A2VM_DISPATCH_EGRESS")
-        else egress_of(urls, env.get("A2VM_DISPATCH_EGRESS", ""))
+        if in_cluster and not env.get("NGVM_DISPATCH_EGRESS")
+        else egress_of(urls, env.get("NGVM_DISPATCH_EGRESS", ""))
         if urls
         else [],
     }
-    host = env.get("A2VM_DISPATCH_HOST", "")
+    host = env.get("NGVM_DISPATCH_HOST", "")
     if host:
-        if not env.get("A2VM_OIDC_ISSUER"):
-            raise ValueError("A2VM_DISPATCH_HOST needs A2VM_OIDC_ISSUER: the persons must sign in")
-        remediators = _groups(env.get("A2VM_OIDC_REMEDIATORS", ""))
+        if not env.get("NGVM_OIDC_ISSUER"):
+            raise ValueError("NGVM_DISPATCH_HOST needs NGVM_OIDC_ISSUER: the persons must sign in")
+        remediators = _groups(env.get("NGVM_OIDC_REMEDIATORS", ""))
         if not remediators:
-            raise ValueError("A2VM_DISPATCH_HOST needs A2VM_OIDC_REMEDIATORS: nobody could ask for remediation")
+            raise ValueError("NGVM_DISPATCH_HOST needs NGVM_OIDC_REMEDIATORS: nobody could ask for remediation")
         ingress = {
-            "controller": env.get("A2VM_CHAT_INGRESS_CONTROLLER")
-            or env.get("A2VM_INTAKE_INGRESS_CONTROLLER")
+            "controller": env.get("NGVM_CHAT_INGRESS_CONTROLLER")
+            or env.get("NGVM_INTAKE_INGRESS_CONTROLLER")
             or "nginx",
-            "className": env.get("A2VM_CHAT_INGRESS_CLASS") or env.get("A2VM_INTAKE_INGRESS_CLASS") or "",
-            "tlsSecret": env.get("A2VM_DISPATCH_TLS_SECRET", ""),
-            "clusterIssuer": env.get("A2VM_CHAT_CLUSTER_ISSUER") or env.get("A2VM_INTAKE_CLUSTER_ISSUER") or "",
-            "allowFrom": _list(env.get("A2VM_DISPATCH_ALLOW", "")),
+            "className": env.get("NGVM_CHAT_INGRESS_CLASS") or env.get("NGVM_INTAKE_INGRESS_CLASS") or "",
+            "tlsSecret": env.get("NGVM_DISPATCH_TLS_SECRET", ""),
+            "clusterIssuer": env.get("NGVM_CHAT_CLUSTER_ISSUER") or env.get("NGVM_INTAKE_CLUSTER_ISSUER") or "",
+            "allowFrom": _list(env.get("NGVM_DISPATCH_ALLOW", "")),
         }
         for cidr in ingress["allowFrom"]:
             ipaddress.ip_network(cidr, strict=False)

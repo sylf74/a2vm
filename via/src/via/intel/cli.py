@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """`via collect`: fetch and normalise vulnerability records into a records file.
 `via intel-serve`: the shared intelligence service of every tenant (D17, v0.22.0)."""
 
@@ -9,8 +9,8 @@ import datetime as dt
 import sys
 from pathlib import Path
 
-from a2vm.config import describe_gti, describe_intel, describe_relay, load_settings
-from a2vm.io import detection_files, read_detection, write_records
+from ngvm.config import describe_gti, describe_intel, describe_relay, load_settings
+from ngvm.io import detection_files, read_detection, write_records
 
 from .collect import collect, select_cve_ids
 from .sources import Sources
@@ -94,7 +94,7 @@ def serve(args: argparse.Namespace) -> int:
     import logging
     import threading
 
-    from a2vm.service import TokenSet
+    from ngvm.service import TokenSet
 
     from .service import ROLES, IntelService, IntelStore
     from .service import serve as http_serve

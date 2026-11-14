@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """Scanner connectors: turn scanner outputs into asset observations and findings.
 
   trivy           `trivy rootfs|image --format json` (Linux hosts, container images)
@@ -20,8 +20,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from a2vm.io import Detection, now
-from a2vm.models import AssetObservation, Finding, FindingObservation, Match
+from ngvm.io import Detection, now
+from ngvm.models import AssetObservation, Finding, FindingObservation, Match
 
 CVE_RE = re.compile(r"^CVE-\d{4}-\d{4,}$")
 

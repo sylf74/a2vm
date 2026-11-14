@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """The alert sheet as a Word file, from a template with tags (docxtpl).
 
 The client's template lives in its project (`templates/alert.<lang>.docx`, else
@@ -16,14 +16,14 @@ from importlib import resources
 from pathlib import Path
 from typing import Any
 
-from a2vm.models import CvssMetric, VulnRecord
+from ngvm.models import CvssMetric, VulnRecord
 
 from .fiche import Fiche, _versions
 from .i18n import LABELS, heading_key, known, t
 
 IMPACT_RISKS = ((("C", "VC"), "w.risk.c"), (("I", "VI"), "w.risk.i"), (("A", "VA"), "w.risk.a"))
 _KEYS = set(LABELS["en"])
-# Every tag A2VM fills; `via check-template` refuses a template naming another one.
+# Every tag NGVM fills; `via check-template` refuses a template naming another one.
 KNOWN = {
     "titre", "niveau", "date", "source", "pourquoi", "produit_description", "poc", "risques",
     "cvss_version", "cvss_score", "exploitee", "correctif_existe", "contournement_existe", "cwes",
@@ -220,7 +220,7 @@ def render(template: str | Path, ctx: dict[str, Any], out: str | Path) -> Path:
 
 
 def check_template(template: str | Path) -> list[str]:
-    """Problems of a template: unreadable, Jinja errors, or tags A2VM does not fill."""
+    """Problems of a template: unreadable, Jinja errors, or tags NGVM does not fill."""
     from docxtpl import DocxTemplate
 
     try:

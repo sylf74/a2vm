@@ -1,0 +1,828 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_NGVM",
+      "label": "NGVM reporting database",
+      "description": "PostgreSQL data source of the reporting database",
+      "type": "datasource",
+      "pluginId": "grafana-postgresql-datasource",
+      "pluginName": "PostgreSQL"
+    },
+    {
+      "name": "VAR_DISPATCH_URL",
+      "type": "constant",
+      "label": "Address of the page of the requests for remediation",
+      "value": "https://dispatch.example.org",
+      "description": "https://<host of NGVM_DISPATCH_HOST>"
+    }
+  ],
+  "__requires": [
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "11.0.0"
+    },
+    {
+      "type": "datasource",
+      "id": "grafana-postgresql-datasource",
+      "name": "PostgreSQL",
+      "version": "1.0.0"
+    },
+    {
+      "type": "panel",
+      "id": "stat",
+      "name": "stat",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "table",
+      "name": "table",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "timeseries",
+      "name": "timeseries",
+      "version": ""
+    }
+  ],
+  "title": "NGVM — assets and scan coverage (requests for remediation)",
+  "uid": "ngvm-coverage-rssi",
+  "tags": [
+    "ngvm",
+    "rssi"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "graphTooltip": 1,
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "refresh": "",
+  "links": [
+    {
+      "type": "dashboards",
+      "tags": [
+        "ngvm"
+      ],
+      "asDropdown": false,
+      "includeVars": true,
+      "keepTime": true,
+      "title": "NGVM"
+    },
+    {
+      "type": "link",
+      "title": "Ask for the remediation of every ACT",
+      "url": "${dispatch_url}/remediate?level=ACT",
+      "targetBlank": true,
+      "icon": "external link",
+      "tooltip": "Ask for the remediation of every ACT",
+      "asDropdown": false,
+      "includeVars": false,
+      "keepTime": false
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "tenant",
+        "label": "Client",
+        "description": "",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "${DS_NGVM}"
+        },
+        "query": "SELECT tenant AS __value, tenant_name AS __text FROM ngvm.latest_runs ORDER BY tenant_name",
+        "definition": "SELECT tenant AS __value, tenant_name AS __text FROM ngvm.latest_runs ORDER BY tenant_name",
+        "refresh": 1,
+        "sort": 0,
+        "multi": true,
+        "includeAll": true,
+        "current": {}
+      },
+      {
+        "name": "state",
+        "label": "Coverage",
+        "description": "States of the coverage shown in the table",
+        "type": "custom",
+        "query": "not-in-cmdb,retired-but-alive,never-scanned,stale,partial,not-scannable,not-expected,covered",
+        "multi": true,
+        "includeAll": true,
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": []
+      },
+      {
+        "name": "dispatch_url",
+        "type": "constant",
+        "hide": 2,
+        "query": "${VAR_DISPATCH_URL}",
+        "current": {
+          "text": "${VAR_DISPATCH_URL}",
+          "value": "${VAR_DISPATCH_URL}"
+        },
+        "options": []
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Covered",
+      "description": "Share of the assets in production in the CMDB that every expected means of detection saw within the tenant's stale_days (latest run).",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_NGVM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT 100.0 * count(*) FILTER (WHERE state = 'covered') / nullif(count(*) FILTER (WHERE in_production), 0) AS value FROM ngvm.latest_coverage WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[])"
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 3,
+        "h": 4
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_NGVM}"
+      },
+      "id": 1
+    },
+    {
+      "type": "stat",
+      "title": "In production",
+      "description": "Assets the CMDB expects to be scanned (in production), or every host when the run has no CMDB.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_NGVM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT count(*) AS value FROM ngvm.latest_coverage WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND in_production"
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 3,
+        "y": 0,
+        "w": 3,
+        "h": 4
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_NGVM}"
+      },
+      "id": 2
+    },
+    {
+      "type": "stat",
+      "title": "Never scanned",
+      "description": "In production, never seen by a scan.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_NGVM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT count(*) AS value FROM ngvm.latest_coverage WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND state = 'never-scanned'"
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "red"
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 0,
+        "w": 3,
+        "h": 4
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_NGVM}"
+      },
+      "id": 3
+    },
+    {
+      "type": "stat",
+      "title": "Stale",
+      "description": "In production, last scan older than the tenant's stale_days.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_NGVM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT count(*) AS value FROM ngvm.latest_coverage WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND state = 'stale'"
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "orange"
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 9,
+        "y": 0,
+        "w": 3,
+        "h": 4
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_NGVM}"
+      },
+      "id": 4
+    },
+    {
+      "type": "stat",
+      "title": "Partial",
+      "description": "In production, scanned lately, but a means of detection its class expects is missing.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_NGVM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT count(*) AS value FROM ngvm.latest_coverage WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND state = 'partial'"
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "yellow"
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 3,
+        "h": 4
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_NGVM}"
+      },
+      "id": 5
+    },
+    {
+      "type": "stat",
+      "title": "Not in the CMDB",
+      "description": "Scanned, but no configuration item of the CMDB.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_NGVM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT count(*) AS value FROM ngvm.latest_coverage WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND state = 'not-in-cmdb'"
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "purple"
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 15,
+        "y": 0,
+        "w": 3,
+        "h": 4
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_NGVM}"
+      },
+      "id": 6
+    },
+    {
+      "type": "stat",
+      "title": "Retired but alive",
+      "description": "Obsolete or in stock in the CMDB, but still seen by a scan.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_NGVM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT count(*) AS value FROM ngvm.latest_coverage WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND state = 'retired-but-alive'"
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "dark-red"
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 0,
+        "w": 3,
+        "h": 4
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_NGVM}"
+      },
+      "id": 7
+    },
+    {
+      "type": "stat",
+      "title": "Not scannable",
+      "description": "In production, with no address nor host name.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_NGVM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT count(*) AS value FROM ngvm.latest_coverage WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND state = 'not-scannable'"
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 21,
+        "y": 0,
+        "w": 3,
+        "h": 4
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_NGVM}"
+      },
+      "id": 8
+    },
+    {
+      "type": "table",
+      "title": "Assets and their means of detection",
+      "description": "Every host of the latest run: its configuration item, its coverage, the means missing, and for each means of detection the date it last saw the asset.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_NGVM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT asset_name AS \"Asset\", cmdb_class AS \"Class\", cmdb_status AS \"CMDB status\", criticality AS \"Criticality\", state AS \"Coverage\", array_to_string(missing, ', ') AS \"Missing\", (scans ->> 'openvas')::timestamptz AS \"OpenVAS\", (scans ->> 'trivy')::timestamptz AS \"Trivy\", (scans ->> 'dnf-updateinfo')::timestamptz AS \"dnf\", (scans ->> 'external-scan')::timestamptz AS \"External scan\", (SELECT string_agg(k, ', ' ORDER BY k) FROM jsonb_object_keys(coalesce(scans, '{}'::jsonb)) k WHERE k NOT IN ('openvas', 'trivy', 'dnf-updateinfo', 'external-scan')) AS \"Other means\", days_since_scan AS \"Days since scan\", owner AS \"Owner\" FROM ngvm.latest_coverage WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND state = ANY (ARRAY[${state:sqlstring}]::text[]) ORDER BY state_rank, criticality, asset_name"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Coverage"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "not-in-cmdb": {
+                        "color": "purple",
+                        "index": 0
+                      }
+                    }
+                  },
+                  {
+                    "type": "value",
+                    "options": {
+                      "retired-but-alive": {
+                        "color": "dark-red",
+                        "index": 1
+                      }
+                    }
+                  },
+                  {
+                    "type": "value",
+                    "options": {
+                      "never-scanned": {
+                        "color": "red",
+                        "index": 2
+                      }
+                    }
+                  },
+                  {
+                    "type": "value",
+                    "options": {
+                      "stale": {
+                        "color": "orange",
+                        "index": 3
+                      }
+                    }
+                  },
+                  {
+                    "type": "value",
+                    "options": {
+                      "partial": {
+                        "color": "yellow",
+                        "index": 4
+                      }
+                    }
+                  },
+                  {
+                    "type": "value",
+                    "options": {
+                      "not-scannable": {
+                        "color": "blue",
+                        "index": 5
+                      }
+                    }
+                  },
+                  {
+                    "type": "value",
+                    "options": {
+                      "not-expected": {
+                        "color": "text",
+                        "index": 6
+                      }
+                    }
+                  },
+                  {
+                    "type": "value",
+                    "options": {
+                      "covered": {
+                        "color": "green",
+                        "index": 7
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Asset"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Ask for the remediation of this asset",
+                    "url": "${dispatch_url}/remediate?asset=${__value.raw:percentencode}",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 24,
+        "h": 12
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_NGVM}"
+      },
+      "id": 9
+    },
+    {
+      "type": "table",
+      "title": "Coverage per class",
+      "description": "Per CMDB class, the assets in each coverage state.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_NGVM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT cmdb_class AS \"Class\", count(*) AS \"Assets\", count(*) FILTER (WHERE state = 'not-in-cmdb') AS \"not-in-cmdb\", count(*) FILTER (WHERE state = 'retired-but-alive') AS \"retired-but-alive\", count(*) FILTER (WHERE state = 'never-scanned') AS \"never-scanned\", count(*) FILTER (WHERE state = 'stale') AS \"stale\", count(*) FILTER (WHERE state = 'partial') AS \"partial\", count(*) FILTER (WHERE state = 'not-scannable') AS \"not-scannable\", count(*) FILTER (WHERE state = 'not-expected') AS \"not-expected\", count(*) FILTER (WHERE state = 'covered') AS \"covered\" FROM ngvm.latest_coverage WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) GROUP BY cmdb_class ORDER BY count(*) DESC, cmdb_class"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "filterable": true
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 14,
+        "h": 8
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_NGVM}"
+      },
+      "id": 10
+    },
+    {
+      "type": "timeseries",
+      "title": "Covered share, run after run",
+      "description": "Share of the assets in production that are covered, at each run (dashboard time range).",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_NGVM}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "time_series",
+          "rawSql": "SELECT generated_at AS time, 100.0 * covered_assets / nullif(expected_assets, 0) AS \"Covered\" FROM ngvm.runs WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND expected_assets IS NOT NULL AND $__timeFilter(generated_at) ORDER BY generated_at"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "always"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ACT"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ATTEND"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "TRACK"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "blue"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "x": 14,
+        "y": 16,
+        "w": 10,
+        "h": 8
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_NGVM}"
+      },
+      "id": 11
+    }
+  ]
+}

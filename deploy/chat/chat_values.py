@@ -1,25 +1,25 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """Values of the conversational search for the chart, written by the job deploy-k8s (stdlib only).
 
 Reads the tenant project's variables from the environment and writes a values file (JSON, which
 Helm reads as YAML): the host, the ingress, the LLM endpoints and where they are for the
 NetworkPolicy. Endpoints given by name are resolved here, in the job, to their addresses.
 
-    A2VM_CHAT_HOST                  host of the chat (required to deploy it)
-    A2VM_LLM_BASE_URL, A2VM_LLM_MODEL   the tenant's approved endpoints (comma-separated) and model
-    A2VM_CHAT_LLM_EGRESS            optional: `cidr:port,...`, instead of resolving the endpoints
-    A2VM_LLM_CLIENT_CERT            optional: the endpoint is behind mutual TLS, the chat goes through
+    NGVM_CHAT_HOST                  host of the chat (required to deploy it)
+    NGVM_LLM_BASE_URL, NGVM_LLM_MODEL   the tenant's approved endpoints (comma-separated) and model
+    NGVM_CHAT_LLM_EGRESS            optional: `cidr:port,...`, instead of resolving the endpoints
+    NGVM_LLM_CLIENT_CERT            optional: the endpoint is behind mutual TLS, the chat goes through
                                     the gateway that presents this certificate (v0.23.14)
-    A2VM_CHAT_ALLOW                 optional: the analysts' networks (CIDR, comma-separated)
-    A2VM_CHAT_ADMIN_EMAIL           optional: login of the first admin
-    A2VM_CHAT_RETENTION_DAYS        optional: chats unchanged for longer are deleted (default 30, 0: kept)
-    A2VM_CHAT_MAX_CHARS             optional: longest tool answer, characters of JSON (default 8000, about
+    NGVM_CHAT_ALLOW                 optional: the analysts' networks (CIDR, comma-separated)
+    NGVM_CHAT_ADMIN_EMAIL           optional: login of the first admin
+    NGVM_CHAT_RETENTION_DAYS        optional: chats unchanged for longer are deleted (default 30, 0: kept)
+    NGVM_CHAT_MAX_CHARS             optional: longest tool answer, characters of JSON (default 8000, about
                                     2,000 tokens; 4000 for a model with a 16k context)
-    A2VM_CHAT_FORWARD_USER_INFO     optional: false keeps the user out of the headers Open WebUI sends to
+    NGVM_CHAT_FORWARD_USER_INFO     optional: false keeps the user out of the headers Open WebUI sends to
                                     the tools and the LLM (default true, v0.23.11)
-    A2VM_CHAT_INGRESS_CONTROLLER, A2VM_CHAT_INGRESS_CLASS, A2VM_CHAT_TLS_SECRET,
-    A2VM_CHAT_CLUSTER_ISSUER        optional; default to the A2VM_INTAKE_* ones
+    NGVM_CHAT_INGRESS_CONTROLLER, NGVM_CHAT_INGRESS_CLASS, NGVM_CHAT_TLS_SECRET,
+    NGVM_CHAT_CLUSTER_ISSUER        optional; default to the NGVM_INTAKE_* ones
 """
 
 from __future__ import annotations
@@ -64,46 +64,46 @@ def egress_of(endpoints: list[str], explicit: str = "") -> list[dict]:
 
 
 def values(env: dict[str, str]) -> dict:
-    endpoints = [u.rstrip("/") for u in _list(env.get("A2VM_LLM_BASE_URL", ""))]
-    model = env.get("A2VM_LLM_MODEL", "")
+    endpoints = [u.rstrip("/") for u in _list(env.get("NGVM_LLM_BASE_URL", ""))]
+    model = env.get("NGVM_LLM_MODEL", "")
     if not endpoints or not model:
-        raise ValueError("the chat needs the tenant's LLM: A2VM_LLM_BASE_URL and A2VM_LLM_MODEL")
+        raise ValueError("the chat needs the tenant's LLM: NGVM_LLM_BASE_URL and NGVM_LLM_MODEL")
     ingress = {
-        "controller": env.get("A2VM_CHAT_INGRESS_CONTROLLER") or env.get("A2VM_INTAKE_INGRESS_CONTROLLER") or "nginx",
-        "className": env.get("A2VM_CHAT_INGRESS_CLASS") or env.get("A2VM_INTAKE_INGRESS_CLASS") or "",
-        "tlsSecret": env.get("A2VM_CHAT_TLS_SECRET", ""),
-        "clusterIssuer": env.get("A2VM_CHAT_CLUSTER_ISSUER") or env.get("A2VM_INTAKE_CLUSTER_ISSUER") or "",
-        "allowFrom": _list(env.get("A2VM_CHAT_ALLOW", "")),
+        "controller": env.get("NGVM_CHAT_INGRESS_CONTROLLER") or env.get("NGVM_INTAKE_INGRESS_CONTROLLER") or "nginx",
+        "className": env.get("NGVM_CHAT_INGRESS_CLASS") or env.get("NGVM_INTAKE_INGRESS_CLASS") or "",
+        "tlsSecret": env.get("NGVM_CHAT_TLS_SECRET", ""),
+        "clusterIssuer": env.get("NGVM_CHAT_CLUSTER_ISSUER") or env.get("NGVM_INTAKE_CLUSTER_ISSUER") or "",
+        "allowFrom": _list(env.get("NGVM_CHAT_ALLOW", "")),
     }
     for cidr in ingress["allowFrom"]:
         ipaddress.ip_network(cidr, strict=False)
     chat = {
         "enabled": True,
-        "host": env["A2VM_CHAT_HOST"],
+        "host": env["NGVM_CHAT_HOST"],
         "llm": {
             "endpoints": endpoints,
             "model": model,
-            "egress": egress_of(endpoints, env.get("A2VM_CHAT_LLM_EGRESS", "")),
-            "clientCert": bool(env.get("A2VM_LLM_CLIENT_CERT", "").strip()),
+            "egress": egress_of(endpoints, env.get("NGVM_CHAT_LLM_EGRESS", "")),
+            "clientCert": bool(env.get("NGVM_LLM_CLIENT_CERT", "").strip()),
         },
         "ingress": ingress,
     }
-    if env.get("A2VM_CHAT_ADMIN_EMAIL"):
-        chat["adminEmail"] = env["A2VM_CHAT_ADMIN_EMAIL"]
-    if env.get("A2VM_CHAT_RETENTION_DAYS", "").strip():
-        days = int(env["A2VM_CHAT_RETENTION_DAYS"])
+    if env.get("NGVM_CHAT_ADMIN_EMAIL"):
+        chat["adminEmail"] = env["NGVM_CHAT_ADMIN_EMAIL"]
+    if env.get("NGVM_CHAT_RETENTION_DAYS", "").strip():
+        days = int(env["NGVM_CHAT_RETENTION_DAYS"])
         if days < 0:
-            raise ValueError("A2VM_CHAT_RETENTION_DAYS: 0 (keep) or a number of days")
+            raise ValueError("NGVM_CHAT_RETENTION_DAYS: 0 (keep) or a number of days")
         chat["retentionDays"] = days
-    if env.get("A2VM_CHAT_MAX_CHARS", "").strip():
-        chars = int(env["A2VM_CHAT_MAX_CHARS"])
+    if env.get("NGVM_CHAT_MAX_CHARS", "").strip():
+        chars = int(env["NGVM_CHAT_MAX_CHARS"])
         if not 1000 <= chars <= 100000:
-            raise ValueError("A2VM_CHAT_MAX_CHARS: 1000 to 100000 characters")
+            raise ValueError("NGVM_CHAT_MAX_CHARS: 1000 to 100000 characters")
         chat["maxChars"] = chars
-    forward = env.get("A2VM_CHAT_FORWARD_USER_INFO", "").strip().lower()
+    forward = env.get("NGVM_CHAT_FORWARD_USER_INFO", "").strip().lower()
     if forward:
         if forward not in ("true", "false"):
-            raise ValueError("A2VM_CHAT_FORWARD_USER_INFO: true or false")
+            raise ValueError("NGVM_CHAT_FORWARD_USER_INFO: true or false")
         chat["forwardUserInfo"] = forward == "true"
     return {"chat": chat}
 

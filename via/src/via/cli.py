@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """`via`: pillar 1 commands.
 
   via collect …         build a records file for a set of CVEs (intel)

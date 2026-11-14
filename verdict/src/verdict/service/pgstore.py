@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """The decision service's runs in the tenant's PostgreSQL (v0.18.0, LLD triage-prioritization §15.8):
 the same interface as the files of `RunStore`, plus the life of each finding across runs.
 
@@ -21,7 +21,7 @@ import hashlib
 import json
 from typing import Any
 
-from a2vm.db import Database, Migration, rls
+from ngvm.db import Database, Migration, rls
 
 from .index import row_id
 from .store import RID, RunReceipt, parse_time

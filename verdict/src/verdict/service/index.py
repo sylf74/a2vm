@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """Read model of one run, built in memory from its triage document (LLD triage-prioritization §15).
 
 Answers are short and paged, for people and for the tools of the conversational search (HLD §8):
@@ -12,7 +12,7 @@ from collections import Counter
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from a2vm import sla
+from ngvm import sla
 
 LEVELS = ("ACT", "ATTEND", "TRACK")
 EXPOSURES = ("open", "controlled", "small")
@@ -266,7 +266,7 @@ class RunIndex:
             "run": self.run,
             "tenant": self.document["client"],
             "llm_model": self.document.get("llm_model"),
-            "a2vm_version": self.document.get("a2vm_version", "before v0.23.9"),
+            "ngvm_version": self.document.get("ngvm_version", "before v0.23.9"),
             **({"llm_usage": self.document["llm_usage"]} if self.document.get("llm_usage") else {}),
             **({"timing": self.document["timing"]} if self.document.get("timing") else {}),
             "cve_count": self.document["cve_count"],

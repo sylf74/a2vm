@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """Read-only collection over SSH: run a scanner on each target and keep its raw output.
 
 Targets file (YAML), one per client — see examples/lab/targets.yaml:
@@ -38,7 +38,7 @@ from typing import Any
 
 import yaml
 
-from a2vm.io import Detection
+from ngvm.io import Detection
 
 from .openvas import GmpError, OpenvasConfig, parse_gmp_report, run_scan
 from .openvas import connect as gmp_connect
@@ -182,7 +182,7 @@ def component(
     carries the distribution's vendor as namespace (`pkg:rpm/rocky/...?distro=rocky-9.4`). Shared by
     the SSH collection and the EDR connectors (Wazuh, v0.23.1; SentinelOne, v0.23.3). An application
     that is not a package of a distribution keeps its publisher (`vendor`, v0.23.3): the watch maps
-    it to a CPE through the applications table (`a2vm.applications`)."""
+    it to a CPE through the applications table (`ngvm.applications`)."""
     if kind == "rpm" and version.startswith(("0:", "(none):")):
         version = version.split(":", 1)[1]
     epoch, _, bare = version.rpartition(":") if kind == "rpm" else ("", "", version)

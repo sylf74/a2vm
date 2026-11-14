@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """v0.23.2: the chat asks a period in days or dates and times (the tenant's time zone), the
 alerts say when they were drafted, and the radar's validated events are a tool of the chat."""
 
@@ -10,7 +10,7 @@ import json
 import httpx
 import pytest
 
-from a2vm.service import Problem, TokenSet, digest, moment
+from ngvm.service import Problem, TokenSet, digest, moment
 
 from .conftest import ROOT
 
@@ -162,9 +162,9 @@ def test_tools_and_chart_wiring() -> None:
     assert any(op[1] == "list_radar_events" and op[4] == "intel:feed" for op in OPERATIONS)
     params = next(op[3] for op in OPERATIONS if op[1] == "list_alerts")
     assert {"since", "until"} <= {p["name"] for p in params}
-    chat = (ROOT / "deploy" / "charts" / "a2vm-tenant" / "templates" / "chat.yaml").read_text()
+    chat = (ROOT / "deploy" / "charts" / "ngvm-tenant" / "templates" / "chat.yaml").read_text()
     assert "--intel-url={{ .Values.intel.url }}" in chat and "--timezone=" in chat and "key: intel-token" in chat
-    intel = (ROOT / "deploy" / "charts" / "a2vm-tenant" / "templates" / "intel.yaml").read_text()
+    intel = (ROOT / "deploy" / "charts" / "ngvm-tenant" / "templates" / "intel.yaml").read_text()
     assert intel.count("values: [daily, watch, send, tools]}") == 2
 
 

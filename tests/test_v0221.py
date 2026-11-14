@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """v0.22.1: no container of the tenant chart gives an environment name twice."""
 
 from __future__ import annotations
@@ -6,7 +6,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-CHART = Path(__file__).resolve().parents[1] / "deploy" / "charts" / "a2vm-tenant" / "templates"
+CHART = Path(__file__).resolve().parents[1] / "deploy" / "charts" / "ngvm-tenant" / "templates"
 NAME = re.compile(r"^\s*- name: ([A-Z][A-Z0-9_]*)\s*$", re.M)
 
 
@@ -19,7 +19,7 @@ def _helper(name: str) -> str:
 
 def _names(block: str) -> list[str]:
     names = NAME.findall(block)
-    for helper in re.findall(r'include "(a2vm-tenant\.env\w*)"', block):
+    for helper in re.findall(r'include "(ngvm-tenant\.env\w*)"', block):
         names += _names(_helper(helper))
     return names
 
@@ -35,16 +35,16 @@ def test_shared_env_names_once() -> None:
 
 def test_watch_cache_in_tmp() -> None:
     text = (CHART / "watch.yaml").read_text(encoding="utf-8")
-    assert 'include "a2vm-tenant.envCommon"' in text and "/tmp/cache" in text
-    assert "A2VM_CACHE_DIR" not in _helper("a2vm-tenant.envCommon")
+    assert 'include "ngvm-tenant.envCommon"' in text and "/tmp/cache" in text
+    assert "NGVM_CACHE_DIR" not in _helper("ngvm-tenant.envCommon")
 
 
 def test_daily_suspend_from_variable() -> None:
     pipeline = (CHART.parents[3] / "templates" / "client-pipeline.yml").read_text(encoding="utf-8")
-    assert '--set daily.suspend="${A2VM_K8S_SUSPEND:-false}"' in pipeline
+    assert '--set daily.suspend="${NGVM_K8S_SUSPEND:-false}"' in pipeline
     docs = CHART.parents[3] / "docs"
-    assert "A2VM_K8S_SUSPEND" in (docs / "kubernetes.md").read_text(encoding="utf-8")
-    assert "A2VM_K8S_SUSPEND" in (docs / "radar.md").read_text(encoding="utf-8")
+    assert "NGVM_K8S_SUSPEND" in (docs / "kubernetes.md").read_text(encoding="utf-8")
+    assert "NGVM_K8S_SUSPEND" in (docs / "radar.md").read_text(encoding="utf-8")
 
 
 def test_intel_serve_quiet_httpx() -> None:
@@ -64,7 +64,7 @@ def test_radar_summary_line() -> None:
 def test_operations_manual_current() -> None:
     text = (CHART.parents[3] / "docs" / "operations.md").read_text(encoding="utf-8")
     assert re.match(r"# Operator's manual \(v0\.2[2-9]\.\d+\)", text)  # kept current by each release
-    for needle in ("a2vm-team-intel", "A2VM_K8S_SUSPEND", "dispatch of run", "$setElementOrder", "scan-cloud"):
+    for needle in ("ngvm-team-intel", "NGVM_K8S_SUSPEND", "dispatch of run", "$setElementOrder", "scan-cloud"):
         assert needle in text, needle
 
 

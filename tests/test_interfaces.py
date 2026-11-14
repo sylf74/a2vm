@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """Every contract between pillars is documented where a reader looks for it (v0.16.2): in the
 table of HLD §6 and in §1.1 of the LLD of each pillar that provides or consumes it."""
 
@@ -10,7 +10,7 @@ import pytest
 
 from .conftest import ROOT
 
-SCHEMAS = ROOT / "a2vm" / "src" / "a2vm" / "schemas"
+SCHEMAS = ROOT / "ngvm" / "src" / "ngvm" / "schemas"
 LLD = {
     "via": ROOT / "docs" / "lld" / "vulnerability-intelligence.md",
     "detect": ROOT / "docs" / "lld" / "vulnerability-detection.md",
@@ -18,11 +18,11 @@ LLD = {
     "dispatch": ROOT / "docs" / "lld" / "dispatch-capitalization.md",
 }
 LIBRARIES = {
-    "a2vm.declared": ("detect", "via"),
-    "a2vm.ssvc": ("verdict", "via"),
-    "a2vm.sla": ("verdict", "via"),
-    "a2vm.packages": ("verdict", "via"),  # v0.23.0
-    "a2vm.applications": ("verdict", "via"),  # v0.23.3
+    "ngvm.declared": ("detect", "via"),
+    "ngvm.ssvc": ("verdict", "via"),
+    "ngvm.sla": ("verdict", "via"),
+    "ngvm.packages": ("verdict", "via"),  # v0.23.0
+    "ngvm.applications": ("verdict", "via"),  # v0.23.3
 }
 
 
@@ -61,7 +61,7 @@ def test_each_library_names_its_owner_and_its_users(library):
     owner, user = LIBRARIES[library]
     assert any(r.startswith("| Provides |") and "owned by" in r for r in _rows(_interfaces(owner), library))
     assert any(r.startswith("| Consumes |") for r in _rows(_interfaces(user), library))
-    assert (ROOT / "a2vm" / "src" / "a2vm" / f"{library.split('.')[1]}.py").exists()
+    assert (ROOT / "ngvm" / "src" / "ngvm" / f"{library.split('.')[1]}.py").exists()
     assert _rows(_hld(), library)
 
 

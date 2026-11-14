@@ -1,5 +1,5 @@
 #cloud-config
-# A2VM cloud scanner, first boot (Ubuntu 24.04): Docker, Greenbone Community Edition in containers,
+# NGVM cloud scanner, first boot (Ubuntu 24.04): Docker, Greenbone Community Edition in containers,
 # GitLab Runner (Docker executor) for the client's external project. Rendered by Terraform
 # templatefile(): a doubled dollar sign is a shell variable, a single one a Terraform value.
 package_update: true
@@ -12,7 +12,7 @@ packages:
   - ca-certificates
 
 write_files:
-  - path: /opt/a2vm-scanner/scanner.env
+  - path: /opt/ngvm-scanner/scanner.env
     permissions: "0644"
     content: |
       GITLAB_URL=${gitlab_url}
@@ -22,13 +22,13 @@ write_files:
       SOCKET_VOLUME=greenbone-community-edition_gvmd_socket_vol
       GVM_USER=vulnops
 
-  - path: /opt/a2vm-scanner/lib.sh
+  - path: /opt/ngvm-scanner/lib.sh
     permissions: "0644"
     content: |
-      # Shared by the scripts of /opt/a2vm-scanner.
+      # Shared by the scripts of /opt/ngvm-scanner.
       set -euo pipefail
-      . /opt/a2vm-scanner/scanner.env
-      D=/opt/a2vm-scanner
+      . /opt/ngvm-scanner/scanner.env
+      D=/opt/ngvm-scanner
       gb() { docker compose -p "$COMPOSE_PROJECT" -f "$D/greenbone/compose.yaml" "$@"; }
       gvmd_cmd() { gb exec -T -u gvmd gvmd gvmd "$@"; }
       # Quiet gvmd command: its messages only when it fails.
@@ -37,13 +37,13 @@ write_files:
       RUNNER_CONFIG=/etc/gitlab-runner/config.toml
       runner_registered() { grep -q '^\[\[runners\]\]' "$RUNNER_CONFIG" 2>/dev/null; }
 
-  - path: /opt/a2vm-scanner/gvm-users.sh
+  - path: /opt/ngvm-scanner/gvm-users.sh
     permissions: "0700"
     content: |
       #!/bin/bash
-      # The GMP account of A2VM (role User) and the password of the web interface's admin, from
+      # The GMP account of NGVM (role User) and the password of the web interface's admin, from
       # the secrets generated at first boot. Waits for gvmd (up to 30 minutes at first start).
-      . /opt/a2vm-scanner/lib.sh
+      . /opt/ngvm-scanner/lib.sh
       for i in $(seq 1 180); do
         if users=$(gvmd_cmd --get-users 2>/dev/null); then break; fi
         [ "$i" -lt 180 ] || { echo "gvmd does not answer after 30 minutes: $D/status.sh" >&2; exit 1; }
@@ -60,16 +60,16 @@ write_files:
       fi
       echo "gvmd: account $GVM_USER ready"
 
-  - path: /opt/a2vm-scanner/register-runner.sh
+  - path: /opt/ngvm-scanner/register-runner.sh
     permissions: "0700"
     content: |
       #!/bin/bash
       # Registers the runner of the external project. The runner authentication token (glrt-...)
       # is read on stdin, never on the command line:
-      #   ... | ssh root@<scanner> /opt/a2vm-scanner/register-runner.sh
+      #   ... | ssh root@<scanner> /opt/ngvm-scanner/register-runner.sh
       # A client certificate for the GitLab reverse proxy, when it asks for one, is copied first to
-      # /opt/a2vm-scanner/certs/client.crt and client.key (ca.pem: a private CA of GitLab).
-      . /opt/a2vm-scanner/lib.sh
+      # /opt/ngvm-scanner/certs/client.crt and client.key (ca.pem: a private CA of GitLab).
+      . /opt/ngvm-scanner/lib.sh
       IFS= read -r token || true
       token=$(printf '%s' "$token" | tr -d '[:space:]')
       case "$token" in
@@ -82,7 +82,7 @@ write_files:
       trap 'rm -f "$tpl"' EXIT
       {
         echo '[[runners]]'
-        printf '  environment = ["A2VM_SERVER_URL=%s", "A2VM_GVM_USER=%s", "A2VM_GVM_PASSWORD=%s"]\n' \
+        printf '  environment = ["NGVM_SERVER_URL=%s", "NGVM_GVM_USER=%s", "NGVM_GVM_PASSWORD=%s"]\n' \
           "$GITLAB_URL" "$GVM_USER" "$(cat "$D/secrets/gvm-password.txt")"
         if [ -s "$D/certs/client.crt" ] && [ -s "$D/certs/client.key" ]; then
           printf '  tls-cert-file = "%s"\n  tls-key-file = "%s"\n' "$D/certs/client.crt" "$D/certs/client.key"
@@ -104,13 +104,13 @@ write_files:
       gitlab-runner verify 2>&1 | grep -v '^Runtime platform' | sed -E 's/\x1b\[[0-9;]*m//g'
       echo "runner registered: jobs tagged $RUNNER_TAG in the project of this token run here"
 
-  - path: /opt/a2vm-scanner/status.sh
+  - path: /opt/ngvm-scanner/status.sh
     permissions: "0700"
     content: |
       #!/bin/bash
       # State of the scanner: containers, feeds, GMP account, runner. Never prints a secret; a part
       # that does not answer within 20 s is skipped (gvmd waits on its lock while it loads the feeds).
-      . /opt/a2vm-scanner/lib.sh
+      . /opt/ngvm-scanner/lib.sh
       set +e
       echo "== first boot"; cloud-init status
       echo "== containers"; gb ps --format 'table {{.Service}}\t{{.State}}\t{{.Status}}'
@@ -132,20 +132,20 @@ write_files:
       if [ "$used" -ge 85 ]; then
         echo "WARNING: less than 15 % free: $D/cleanup.sh, then docker system df"
       fi
-      echo "== feed update and cleanup"; systemctl list-timers a2vm-greenbone-feed.timer --no-pager | head -2
+      echo "== feed update and cleanup"; systemctl list-timers ngvm-greenbone-feed.timer --no-pager | head -2
 
-  - path: /opt/a2vm-scanner/feed-update.sh
+  - path: /opt/ngvm-scanner/feed-update.sh
     permissions: "0700"
     content: |
       #!/bin/bash
       # Newer feed images (and Greenbone components), then the containers that changed restart,
       # then the disk is cleaned up.
-      . /opt/a2vm-scanner/lib.sh
+      . /opt/ngvm-scanner/lib.sh
       gb pull --quiet
       gb up -d --remove-orphans
       "$D/cleanup.sh"
 
-  - path: /opt/a2vm-scanner/cleanup.sh
+  - path: /opt/ngvm-scanner/cleanup.sh
     permissions: "0700"
     content: |
       #!/bin/bash
@@ -154,7 +154,7 @@ write_files:
       # system journal above 200 MB and the package cache. Greenbone is never touched: its
       # containers (running, or stopped once their feed data is copied) keep their images, and its
       # volumes are not the runner's.
-      . /opt/a2vm-scanner/lib.sh
+      . /opt/ngvm-scanner/lib.sh
       free() { df --output=avail -BG / | tail -1 | tr -dc 0-9; }
       before=$(free)
       docker container prune -f --filter "label!=com.docker.compose.project=$COMPOSE_PROJECT" > /dev/null
@@ -164,23 +164,23 @@ write_files:
       apt-get clean
       echo "cleanup: $before GB free before, $(free) GB after"
 
-  - path: /etc/systemd/system/a2vm-greenbone-feed.service
+  - path: /etc/systemd/system/ngvm-greenbone-feed.service
     permissions: "0644"
     content: |
       [Unit]
-      Description=Greenbone feed update and disk cleanup (A2VM scanner)
+      Description=Greenbone feed update and disk cleanup (NGVM scanner)
       After=docker.service
       Requires=docker.service
 
       [Service]
       Type=oneshot
-      ExecStart=/opt/a2vm-scanner/feed-update.sh
+      ExecStart=/opt/ngvm-scanner/feed-update.sh
 
-  - path: /etc/systemd/system/a2vm-greenbone-feed.timer
+  - path: /etc/systemd/system/ngvm-greenbone-feed.timer
     permissions: "0644"
     content: |
       [Unit]
-      Description=Daily Greenbone feed update and disk cleanup (A2VM scanner)
+      Description=Daily Greenbone feed update and disk cleanup (NGVM scanner)
 
       [Timer]
       OnCalendar=${feed_update_time}
@@ -189,12 +189,12 @@ write_files:
       [Install]
       WantedBy=timers.target
 
-  - path: /opt/a2vm-scanner/bootstrap.sh
+  - path: /opt/ngvm-scanner/bootstrap.sh
     permissions: "0700"
     content: |
       #!/bin/bash
       # Secrets generated here, once: they never leave the instance.
-      . /opt/a2vm-scanner/lib.sh
+      . /opt/ngvm-scanner/lib.sh
       umask 077
       mkdir -p "$D/secrets" "$D/certs" "$D/greenbone"
       for s in gvm-password gvm-admin; do
@@ -208,8 +208,8 @@ write_files:
       curl -fsSL https://packages.gitlab.com/install/repositories/runner/gitlab-runner/script.deb.sh | bash
       apt-get install -y gitlab-runner
       systemctl daemon-reload
-      systemctl enable --now gitlab-runner a2vm-greenbone-feed.timer
+      systemctl enable --now gitlab-runner ngvm-greenbone-feed.timer
       "$D/gvm-users.sh"
 
 runcmd:
-  - [/opt/a2vm-scanner/bootstrap.sh]
+  - [/opt/ngvm-scanner/bootstrap.sh]

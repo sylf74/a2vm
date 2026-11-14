@@ -1,9 +1,9 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """The analysts' Teams channel (v0.22.0): each alert to validate is also posted to a Teams webhook.
 
 The webhook's address is a secret (it carries its signature): the file named by
-A2VM_TEAMS_WEBHOOK_FILE (Kubernetes: a key of the tenant's secret), or the masked CI/CD variable
-A2VM_TEAMS_WEBHOOK (GitLab). Without either, nothing is posted. The message is an Adaptive Card,
+NGVM_TEAMS_WEBHOOK_FILE (Kubernetes: a key of the tenant's secret), or the masked CI/CD variable
+NGVM_TEAMS_WEBHOOK (GitLab). Without either, nothing is posted. The message is an Adaptive Card,
 which both the Workflows of Teams ("When a Teams webhook request is received") and the older
 incoming webhooks accept: the level, the title, the CVE ids, the tenant, and a button to the review
 page (or the pipeline). It carries no sheet: the analysts read and validate on the page.
@@ -16,7 +16,7 @@ from typing import Any
 
 import httpx
 
-from a2vm.config import env
+from ngvm.config import env
 
 TIMEOUT = 20.0
 
@@ -44,7 +44,7 @@ def card(profile: Any, alert: dict[str, Any], number: int, total: int, link: str
     if radar:
         facts.append({"title": "Magnitude", "value": str(radar.get("score", ""))})
     body: list[dict[str, Any]] = [
-        {"type": "TextBlock", "text": f"A2VM — alert {number}/{total} to validate", "weight": "Bolder",
+        {"type": "TextBlock", "text": f"NGVM — alert {number}/{total} to validate", "weight": "Bolder",
          "color": "Attention" if level == "URGENT" else "Default"},
         {"type": "TextBlock", "text": str(alert.get("title", ""))[:300], "wrap": True, "size": "Medium"},
         {"type": "FactSet", "facts": facts},

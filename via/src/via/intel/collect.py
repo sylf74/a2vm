@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """Collect vulnerability records: CVE JSON 5 record + KEV + EPSS (+ GTI when enabled), merged into one
 VulnRecord each.
 
@@ -13,7 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Any
 
-from a2vm.models import REJECTED, VulnRecord
+from ngvm.models import REJECTED, VulnRecord
 
 from .gti import enrich
 from .packages import SOURCES as PACKAGE_SOURCES

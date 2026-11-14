@@ -7,8 +7,8 @@ name = "detect"
 version = "0.24.0"
 description = "Pillar 2 (Vulnerability Detection): asset and vulnerability observations (inventory matching, scanner connectors)."
 requires-python = ">=3.11"
-license = {text = "LicenseRef-a2vm-proprietary"}
-dependencies = ["a2vm", "defusedxml>=0.7"]
+license = {text = "LicenseRef-ngvm-proprietary"}
+dependencies = ["ngvm", "defusedxml>=0.7"]
 
 [project.optional-dependencies]
 openvas = ["python-gvm>=26"]

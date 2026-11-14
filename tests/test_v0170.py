@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """v0.17.0: the analysts sign in with the tenant's identity provider; the review page of the alerts
 on via serve (behind oauth2-proxy), the validated alerts mailed by the sender."""
 
@@ -21,7 +21,7 @@ from .conftest import ROOT
 from .test_alert import PROFILE
 from .test_v0160 import READ, RUN, TENANT, _service, _watch, forget_alert, service  # noqa: F401 - fixture
 
-CHART = ROOT / "deploy" / "charts" / "a2vm-tenant"
+CHART = ROOT / "deploy" / "charts" / "ngvm-tenant"
 CONTACTS = """schema_version: 1
 contacts:
   - {name: IT, email: it@example.org}
@@ -51,14 +51,14 @@ def _alerts(svc, url, token):
 @pytest.fixture
 def page(service, monkeypatch, tmp_path):  # noqa: F811 - the fixture of test_v0160
     svc, url, token = service
-    monkeypatch.delenv("A2VM_ANALYST_TO", raising=False)
+    monkeypatch.delenv("NGVM_ANALYST_TO", raising=False)
     alerts = _alerts(svc, url, token)
     contacts = tmp_path / "contacts.yaml"
     contacts.write_text(CONTACTS)
     review = Review(
-        TENANT, svc.store, KEY, {"A2VM-Readers"}, {"A2VM-Validators"}, URL, contacts=contacts, profile=PROFILE
+        TENANT, svc.store, KEY, {"NGVM-Readers"}, {"NGVM-Validators"}, URL, contacts=contacts, profile=PROFILE
     )
-    from a2vm.service import serve as plain_serve
+    from ngvm.service import serve as plain_serve
 
     httpd = plain_serve(make_handler(review), "127.0.0.1", 0)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
@@ -67,7 +67,7 @@ def page(service, monkeypatch, tmp_path):  # noqa: F811 - the fixture of test_v0
     httpd.server_close()
 
 
-def _call(base, path, user="ana@example.org", groups="A2VM-Readers", form=None, origin=URL):
+def _call(base, path, user="ana@example.org", groups="NGVM-Readers", form=None, origin=URL):
     headers = {"X-Forwarded-Email": user, "X-Forwarded-Groups": groups} if user else {}
     data = None
     if form is not None:
@@ -97,7 +97,7 @@ def test_who_may_read_and_who_may_act(page):
     assert _call(base, f"/alerts/{q}/edit")[0] == 403
     assert _call(base, f"/alerts/{q}/validate", form={"token": review.token("ana@example.org", a["id"])})[0] == 403
     # A Keycloak full group path names the same group.
-    status, body, _ = _call(base, f"/alerts/{q}", user="val@example.org", groups="/A2VM-Validators")
+    status, body, _ = _call(base, f"/alerts/{q}", user="val@example.org", groups="/NGVM-Validators")
     assert status == 200 and "Choose these recipients and translate" in body and "rssi@example.org" in body
 
 
@@ -105,7 +105,7 @@ def test_forms_need_their_token_and_the_page_origin(page):
     review, base, alerts, svc, *_ = page
     a = alerts[0]
     q = urllib.parse.quote(a["id"], safe="")
-    val = {"user": "val@example.org", "groups": "A2VM-Validators"}
+    val = {"user": "val@example.org", "groups": "NGVM-Validators"}
     good = {"token": review.token("val@example.org", a["id"])}
     assert _call(base, f"/alerts/{q}/validate", form={"token": "0" * 64}, **val)[0] == 403
     assert _call(base, f"/alerts/{q}/validate", form=good, origin="https://evil.example", **val)[0] == 403
@@ -129,7 +129,7 @@ def test_a_validator_corrects_the_sheet_within_its_cves(page):
     review, base, alerts, svc, url, token = page
     a = alerts[0]
     q = urllib.parse.quote(a["id"], safe="")
-    val = {"user": "val@example.org", "groups": "A2VM-Validators"}
+    val = {"user": "val@example.org", "groups": "NGVM-Validators"}
     good = {"token": review.token("val@example.org", a["id"])}
     original = review.original(a)
     status, body, _ = _call(base, f"/alerts/{q}/edit", form={**good, "text": original + "\nCVE-2001-0001\n"}, **val)
@@ -145,7 +145,7 @@ def test_a_validator_corrects_the_sheet_within_its_cves(page):
 
 def test_the_sender_mails_the_validated_alerts_once_with_the_correction(page, tmp_path, monkeypatch):
     review, base, alerts, svc, url, token = page
-    monkeypatch.delenv("A2VM_SMTP_HOST", raising=False)
+    monkeypatch.delenv("NGVM_SMTP_HOST", raising=False)
     a = alerts[0]
     review.save_edit(review.alert(a["id"]), "val@example.org", review.original(a) + "\nAnalyst's note: seen.\n")
     review.prepare(review.alert(a["id"]), "val@example.org", ["it@example.org"])
@@ -178,8 +178,8 @@ def test_review_refuses_a_weak_configuration():
 def test_the_analysts_mail_links_to_the_review_page(monkeypatch):
     from via.alert.cli import _send_link
 
-    monkeypatch.setenv("A2VM_SEND_PIPELINE_URL", "https://gitlab.example.org/x/-/pipelines/new")
-    monkeypatch.setenv("A2VM_REVIEW_URL", URL)
+    monkeypatch.setenv("NGVM_SEND_PIPELINE_URL", "https://gitlab.example.org/x/-/pipelines/new")
+    monkeypatch.setenv("NGVM_REVIEW_URL", URL)
     link = _send_link("lab-CERTFR-2026-ALE-001")
     assert f'href="{URL}/alerts/lab-CERTFR-2026-ALE-001"' in link and "pipelines" not in link
 
@@ -193,20 +193,20 @@ def _render(tmp_path, extra: dict) -> list[dict]:
         pytest.skip("no chart renderer here (the CI lints the chart with helm)")
     base = {
         "tenant": "lab",
-        "image": {"registry": "registry.example.org/vulnops/a2vm"},
-        "secret": {"name": "a2vm-tenant"},
-        "verdict": {"enabled": True, "digestsSecret": "a2vm-verdict"},
+        "image": {"registry": "registry.example.org/vulnops/ngvm"},
+        "secret": {"name": "ngvm-tenant"},
+        "verdict": {"enabled": True, "digestsSecret": "ngvm-verdict"},
         "chat": {
             "enabled": True,
             "host": "chat-lab.apps.example.org",
-            "toolsDigestsSecret": "a2vm-chat",
+            "toolsDigestsSecret": "ngvm-chat",
             "llm": {
                 "endpoints": ["http://192.0.2.10:8000/v1"],
                 "model": "m",
                 "egress": [{"cidr": "192.0.2.10/32", "port": 8000}],
             },
         },
-        "watch": {"enabled": True, "digestsSecret": "a2vm-via"},
+        "watch": {"enabled": True, "digestsSecret": "ngvm-via"},
     }
     for k, v in extra.items():
         base[k] = {**base.get(k, {}), **v} if isinstance(v, dict) else v
@@ -221,10 +221,10 @@ def _render(tmp_path, extra: dict) -> list[dict]:
 
 
 OIDC = {
-    "issuerUrl": "https://auth.example.org/realms/a2vm",
-    "clientId": "a2vm-lab",
-    "readers": ["A2VM-Readers"],
-    "validators": ["A2VM-Validators"],
+    "issuerUrl": "https://auth.example.org/realms/ngvm",
+    "clientId": "ngvm-lab",
+    "readers": ["NGVM-Readers"],
+    "validators": ["NGVM-Validators"],
     "egress": [{"cidr": "192.0.2.20", "port": 443}],
 }
 
@@ -234,32 +234,32 @@ def test_chart_signs_the_analysts_in_and_keeps_the_page_behind_the_proxy(tmp_pat
         tmp_path, {"oidc": OIDC, "watch": {"review": {"enabled": True, "host": "alerts-lab.apps.example.org"}}}
     )
     by = {(d["kind"], d["metadata"]["name"]): d for d in docs}
-    proxy = by[("Deployment", "a2vm-lab-review")]["spec"]["template"]["spec"]["containers"][0]["args"]
-    assert "--allowed-group=A2VM-Readers" in proxy and "--allowed-group=A2VM-Validators" in proxy
-    assert "--upstream=http://a2vm-lab-via:8081/" in proxy and "--code-challenge-method=S256" in proxy
+    proxy = by[("Deployment", "ngvm-lab-review")]["spec"]["template"]["spec"]["containers"][0]["args"]
+    assert "--allowed-group=NGVM-Readers" in proxy and "--allowed-group=NGVM-Validators" in proxy
+    assert "--upstream=http://ngvm-lab-via:8081/" in proxy and "--code-challenge-method=S256" in proxy
     assert not any("secret=" in a for a in proxy)  # secrets from files only
-    np = by[("NetworkPolicy", "a2vm-lab-via")]["spec"]["ingress"]
+    np = by[("NetworkPolicy", "ngvm-lab-via")]["spec"]["ingress"]
     page = [r for r in np if r["ports"] == [{"port": 8081, "protocol": "TCP"}]]
     assert (
         len(page) == 1 and page[0]["from"][0]["podSelector"]["matchLabels"]["app.kubernetes.io/component"] == "review"
     )
-    chat = by[("Deployment", "a2vm-lab-chat")]["spec"]["template"]["spec"]["containers"][0]
+    chat = by[("Deployment", "ngvm-lab-chat")]["spec"]["template"]["spec"]["containers"][0]
     env = {e["name"]: e.get("value") for e in chat["env"]}
     assert (
-        env["OAUTH_ALLOWED_ROLES"] == "A2VM-Readers,A2VM-Validators" and env["OAUTH_MERGE_ACCOUNTS_BY_EMAIL"] == "false"
+        env["OAUTH_ALLOWED_ROLES"] == "NGVM-Readers,NGVM-Validators" and env["OAUTH_MERGE_ACCOUNTS_BY_EMAIL"] == "false"
     )
     assert env["ENABLE_LOGIN_FORM"] == "true" and "OAUTH_CLIENT_SECRET" not in env
-    sender = by[("Deployment", "a2vm-lab-sender")]["spec"]["template"]["spec"]
+    sender = by[("Deployment", "ngvm-lab-sender")]["spec"]["template"]["spec"]
     assert sender["restartPolicy"] == "Always" and "--validated --every 30" in sender["containers"][0]["args"][0]
-    watch = by[("CronJob", "a2vm-lab-watch")]["spec"]["jobTemplate"]["spec"]["template"]["spec"]["containers"][0]
-    assert {"name": "A2VM_REVIEW_URL", "value": "https://alerts-lab.apps.example.org"} in watch["env"]
+    watch = by[("CronJob", "ngvm-lab-watch")]["spec"]["jobTemplate"]["spec"]["template"]["spec"]["containers"][0]
+    assert {"name": "NGVM_REVIEW_URL", "value": "https://alerts-lab.apps.example.org"} in watch["env"]
 
 
 def test_chart_without_sign_in_stays_as_before(tmp_path):
     docs = _render(tmp_path, {})
     names = {d["metadata"]["name"] for d in docs}
-    assert "a2vm-lab-review" not in names and "a2vm-lab-sender" not in names
-    chat = next(d for d in docs if d["kind"] == "Deployment" and d["metadata"]["name"] == "a2vm-lab-chat")
+    assert "ngvm-lab-review" not in names and "ngvm-lab-sender" not in names
+    chat = next(d for d in docs if d["kind"] == "Deployment" and d["metadata"]["name"] == "ngvm-lab-chat")
     assert not any("OAUTH" in e["name"] for e in chat["spec"]["template"]["spec"]["containers"][0]["env"])
 
 
@@ -270,25 +270,25 @@ def test_sign_in_values_of_the_deploy_job(monkeypatch):
     from sign_in_values import values
 
     env = {
-        "A2VM_OIDC_ISSUER": "https://auth.example.org/realms/a2vm/",
-        "A2VM_OIDC_CLIENT_ID": "a2vm-lab",
-        "A2VM_OIDC_CLIENT_SECRET": "x",
-        "A2VM_OIDC_READERS": "A2VM-Readers",
-        "A2VM_OIDC_VALIDATORS": "A2VM-Validators",
-        "A2VM_OIDC_EGRESS": "192.0.2.20/32:443",
-        "A2VM_ALERTS_HOST": "alerts-lab.apps.example.org",
+        "NGVM_OIDC_ISSUER": "https://auth.example.org/realms/ngvm/",
+        "NGVM_OIDC_CLIENT_ID": "ngvm-lab",
+        "NGVM_OIDC_CLIENT_SECRET": "x",
+        "NGVM_OIDC_READERS": "NGVM-Readers",
+        "NGVM_OIDC_VALIDATORS": "NGVM-Validators",
+        "NGVM_OIDC_EGRESS": "192.0.2.20/32:443",
+        "NGVM_ALERTS_HOST": "alerts-lab.apps.example.org",
     }
     v = values(env, "kubernetes")
-    assert v["oidc"]["issuerUrl"] == "https://auth.example.org/realms/a2vm"
+    assert v["oidc"]["issuerUrl"] == "https://auth.example.org/realms/ngvm"
     assert v["oidc"]["egress"] == [{"cidr": "192.0.2.20/32", "port": 443}] and v["oidc"]["ca"] is False
     assert v["watch"]["review"]["host"] == "alerts-lab.apps.example.org"
     with pytest.raises(ValueError, match="kubernetes"):
         values(env, "gitlab")
     with pytest.raises(ValueError, match="VALIDATORS"):
-        values({**env, "A2VM_OIDC_VALIDATORS": ""}, "kubernetes")
+        values({**env, "NGVM_OIDC_VALIDATORS": ""}, "kubernetes")
     with pytest.raises(ValueError, match="CLIENT_SECRET"):
-        values({**env, "A2VM_OIDC_CLIENT_SECRET": ""}, "kubernetes")
+        values({**env, "NGVM_OIDC_CLIENT_SECRET": ""}, "kubernetes")
     with pytest.raises(ValueError):
-        values({**env, "A2VM_OIDC_READERS": "a;b"}, "kubernetes")
+        values({**env, "NGVM_OIDC_READERS": "a;b"}, "kubernetes")
     assert re.match(r"^https://", values(env, "kubernetes")["oidc"]["issuerUrl"])
     assert json.dumps(v)  # JSON for helm -f

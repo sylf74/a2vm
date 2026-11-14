@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """OSV: the libraries of the language ecosystems against the open vulnerability database (v0.23.11).
 
 The images' libraries (Trivy) and the SBOMs carry each library with its `purl`. Every daily run,
@@ -7,16 +7,16 @@ alias), and writes them as the findings of source `osv`: the triage decides on t
 finding. The hosts are not touched again: a new vulnerability of a library already listed is found
 from the list.
 
-Three modes (`A2VM_OSV_MODE`, v0.23.12):
+Three modes (`NGVM_OSV_MODE`, v0.23.12):
 
-- `offline` (default): the libraries are matched here, against a copy of OSV (`a2vm.osvdb`): the
+- `offline` (default): the libraries are matched here, against a copy of OSV (`ngvm.osvdb`): the
   index of each ecosystem from the shared intelligence service (`GET /v1/osv/<ecosystem>`) when the
   tenant has one, else built from OSV's archive (`<Ecosystem>/all.zip`). No library leaves the
   tenant: only the archive, the same for everyone, crosses the network.
 - `api`: each `purl@version` is sent to api.osv.dev (`POST /v1/querybatch`, the pages of an answer
   followed, then `GET /v1/vulns/<id>`, cached): the tenant's inventory goes to Google. For a test, or
   a tenant that accepts it in writing.
-- `off`: nothing (`A2VM_OSV_ENABLED=false`, v0.23.11, says the same).
+- `off`: nothing (`NGVM_OSV_ENABLED=false`, v0.23.11, says the same).
 
 Through the corporate proxy like every public source (`HTTPS_PROXY`, `SSL_CERT_FILE`). A
 vulnerability known only by its GHSA or PYSEC id is counted, not kept: the pipeline decides on CVEs.
@@ -33,9 +33,9 @@ from typing import Any
 
 import httpx
 
-from a2vm import osvdb
-from a2vm.io import Detection, now
-from a2vm.models import AssetObservation, Finding, FindingObservation, Match
+from ngvm import osvdb
+from ngvm.io import Detection, now
+from ngvm.models import AssetObservation, Finding, FindingObservation, Match
 
 SOURCE = "osv"
 API = "https://api.osv.dev"
@@ -80,7 +80,7 @@ class Osv:
         self.cache = Path(cache) if cache else None
         self.cache_days = cache_days
         self.client = httpx.Client(base_url=API, timeout=timeout, transport=transport, trust_env=True,
-                                   headers={"User-Agent": "a2vm-detect"})  # fmt: skip
+                                   headers={"User-Agent": "ngvm-detect"})  # fmt: skip
 
     def query(self, purls: list[str]) -> dict[str, list[str]]:
         """purl@version -> the ids of the vulnerabilities OSV knows for it; an answer cut in pages
@@ -234,7 +234,7 @@ class IndexSource:
                  timeout: float = 300):  # fmt: skip
         self.mirror = osvdb.OsvMirror(cache)
         self.intel_url = intel_url.rstrip("/")
-        headers = {"User-Agent": "a2vm-detect"}
+        headers = {"User-Agent": "ngvm-detect"}
         if self.intel_url and intel_token:
             headers["Authorization"] = f"Bearer {intel_token}"
         self.client = httpx.Client(timeout=httpx.Timeout(timeout, connect=15.0), transport=transport,

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """v0.23.1 (D20): Wazuh's software inventory as a source of components, read only, from the
 indexer or from the manager's API."""
 
@@ -9,8 +9,8 @@ import json
 import httpx
 import pytest
 
-from a2vm.models import AssetObservation
 from detect.wazuh import WazuhClient, WazuhConfig, WazuhError, distro_of, fetch, platform
+from ngvm.models import AssetObservation
 
 from .conftest import ROOT
 
@@ -40,7 +40,7 @@ PACKAGES = [
 def _cfg(tmp_path, api="indexer", page_size=2):
     (tmp_path / "pw").write_text("secret\n")
     url = "https://wazuh.example.org:9200" if api == "indexer" else "https://wazuh.example.org:55000"
-    return WazuhConfig.from_dict({"url": url, "user": "a2vm-inventory", "password_file": str(tmp_path / "pw"),
+    return WazuhConfig.from_dict({"url": url, "user": "ngvm-inventory", "password_file": str(tmp_path / "pw"),
                                   "api": api, "page_size": page_size})  # fmt: skip
 
 
@@ -164,7 +164,7 @@ def test_errors_say_what_to_do(tmp_path) -> None:
     with pytest.raises(WazuhError, match="api: manager reads every 4.x version"):
         fetch(cfg, "lab", missing, log=lambda line: None)
     refused = WazuhClient(cfg, transport=httpx.MockTransport(lambda r: httpx.Response(401, json={})))
-    with pytest.raises(WazuhError, match="refused the user 'a2vm-inventory'"):
+    with pytest.raises(WazuhError, match="refused the user 'ngvm-inventory'"):
         fetch(cfg, "lab", refused, log=lambda line: None)
     with pytest.raises(ValueError, match="indexer .* or manager"):
         WazuhConfig.from_dict({"url": "https://w.example.org", "user": "u", "password_file": "f", "api": "x"})
@@ -194,8 +194,8 @@ def test_the_collector_reads_a_wazuh_connector(tmp_path) -> None:
 
 
 def test_wazuh_and_ssh_components_meet_on_one_host(tmp_path) -> None:
-    from a2vm.io import Detection, write_detection
-    from a2vm.profile import load_profile
+    from ngvm.io import Detection, write_detection
+    from ngvm.profile import load_profile
     from verdict.assets.build import build_inventory
 
     cfg = _cfg(tmp_path)

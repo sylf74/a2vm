@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """Triage: findings + vulnerability records + consolidated assets -> one decision per finding.
 
 verdict collects nothing itself: records come from the intel stage, assets and findings from the
@@ -31,12 +31,12 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Any
 
-from a2vm import ssvc
-from a2vm.config import Settings
-from a2vm.gti import RANK, gti_unconfirmed, ssvc_exploitation
-from a2vm.io import now
-from a2vm.llm import LlmClient, LlmError
-from a2vm.models import (
+from ngvm import ssvc
+from ngvm.config import Settings
+from ngvm.gti import RANK, gti_unconfirmed, ssvc_exploitation
+from ngvm.io import now
+from ngvm.llm import LlmClient, LlmError
+from ngvm.models import (
     REJECTED,
     Assessed,
     Asset,

@@ -1,8 +1,8 @@
 {
   "__inputs": [
     {
-      "name": "DS_A2VM",
-      "label": "Base de restitution A2VM",
+      "name": "DS_NGVM",
+      "label": "Base de restitution NGVM",
       "description": "Source de données PostgreSQL de la base de restitution",
       "type": "datasource",
       "pluginId": "grafana-postgresql-datasource",
@@ -53,10 +53,10 @@
       "version": ""
     }
   ],
-  "title": "A2VM — quelles CVE corriger d'abord",
-  "uid": "a2vm-cves-fr",
+  "title": "NGVM — quelles CVE corriger d'abord",
+  "uid": "ngvm-cves-fr",
   "tags": [
-    "a2vm",
+    "ngvm",
     "fr"
   ],
   "timezone": "browser",
@@ -73,12 +73,12 @@
     {
       "type": "dashboards",
       "tags": [
-        "a2vm"
+        "ngvm"
       ],
       "asDropdown": false,
       "includeVars": true,
       "keepTime": true,
-      "title": "A2VM"
+      "title": "NGVM"
     }
   ],
   "templating": {
@@ -90,10 +90,10 @@
         "type": "query",
         "datasource": {
           "type": "grafana-postgresql-datasource",
-          "uid": "${DS_A2VM}"
+          "uid": "${DS_NGVM}"
         },
-        "query": "SELECT tenant AS __value, tenant_name AS __text FROM a2vm.latest_runs ORDER BY tenant_name",
-        "definition": "SELECT tenant AS __value, tenant_name AS __text FROM a2vm.latest_runs ORDER BY tenant_name",
+        "query": "SELECT tenant AS __value, tenant_name AS __text FROM ngvm.latest_runs ORDER BY tenant_name",
+        "definition": "SELECT tenant AS __value, tenant_name AS __text FROM ngvm.latest_runs ORDER BY tenant_name",
         "refresh": 1,
         "sort": 0,
         "multi": true,
@@ -107,10 +107,10 @@
         "type": "query",
         "datasource": {
           "type": "grafana-postgresql-datasource",
-          "uid": "${DS_A2VM}"
+          "uid": "${DS_NGVM}"
         },
-        "query": "SELECT to_char(d, 'DD Mon YYYY') || ' · W' || to_char(d, 'IW') AS __text, d::text AS __value FROM (SELECT DISTINCT generated_at::date AS d FROM a2vm.runs WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[])) s ORDER BY d DESC",
-        "definition": "SELECT to_char(d, 'DD Mon YYYY') || ' · W' || to_char(d, 'IW') AS __text, d::text AS __value FROM (SELECT DISTINCT generated_at::date AS d FROM a2vm.runs WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[])) s ORDER BY d DESC",
+        "query": "SELECT to_char(d, 'DD Mon YYYY') || ' · W' || to_char(d, 'IW') AS __text, d::text AS __value FROM (SELECT DISTINCT generated_at::date AS d FROM ngvm.runs WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[])) s ORDER BY d DESC",
+        "definition": "SELECT to_char(d, 'DD Mon YYYY') || ' · W' || to_char(d, 'IW') AS __text, d::text AS __value FROM (SELECT DISTINCT generated_at::date AS d FROM ngvm.runs WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[])) s ORDER BY d DESC",
         "refresh": 1,
         "sort": 0,
         "multi": false,
@@ -124,10 +124,10 @@
         "type": "query",
         "datasource": {
           "type": "grafana-postgresql-datasource",
-          "uid": "${DS_A2VM}"
+          "uid": "${DS_NGVM}"
         },
-        "query": "SELECT __text, __value FROM (SELECT to_char(d, 'DD Mon YYYY') || ' · W' || to_char(d, 'IW') AS __text, d::text AS __value FROM (SELECT DISTINCT generated_at::date AS d FROM a2vm.runs WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[])) s WHERE d < NULLIF('${snapshot}', '')::date UNION ALL SELECT 'none', '') v ORDER BY __value = '', __value DESC",
-        "definition": "SELECT __text, __value FROM (SELECT to_char(d, 'DD Mon YYYY') || ' · W' || to_char(d, 'IW') AS __text, d::text AS __value FROM (SELECT DISTINCT generated_at::date AS d FROM a2vm.runs WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[])) s WHERE d < NULLIF('${snapshot}', '')::date UNION ALL SELECT 'none', '') v ORDER BY __value = '', __value DESC",
+        "query": "SELECT __text, __value FROM (SELECT to_char(d, 'DD Mon YYYY') || ' · W' || to_char(d, 'IW') AS __text, d::text AS __value FROM (SELECT DISTINCT generated_at::date AS d FROM ngvm.runs WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[])) s WHERE d < NULLIF('${snapshot}', '')::date UNION ALL SELECT 'none', '') v ORDER BY __value = '', __value DESC",
+        "definition": "SELECT __text, __value FROM (SELECT to_char(d, 'DD Mon YYYY') || ' · W' || to_char(d, 'IW') AS __text, d::text AS __value FROM (SELECT DISTINCT generated_at::date AS d FROM ngvm.runs WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[])) s WHERE d < NULLIF('${snapshot}', '')::date UNION ALL SELECT 'none', '') v ORDER BY __value = '', __value DESC",
         "refresh": 1,
         "sort": 0,
         "multi": false,
@@ -141,10 +141,10 @@
         "type": "query",
         "datasource": {
           "type": "grafana-postgresql-datasource",
-          "uid": "${DS_A2VM}"
+          "uid": "${DS_NGVM}"
         },
-        "query": "SELECT DISTINCT unnest(sources) FROM a2vm.decision_facts WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) ORDER BY 1",
-        "definition": "SELECT DISTINCT unnest(sources) FROM a2vm.decision_facts WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) ORDER BY 1",
+        "query": "SELECT DISTINCT unnest(sources) FROM ngvm.decision_facts WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) ORDER BY 1",
+        "definition": "SELECT DISTINCT unnest(sources) FROM ngvm.decision_facts WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) ORDER BY 1",
         "refresh": 1,
         "sort": 0,
         "multi": true,
@@ -234,10 +234,10 @@
         "type": "query",
         "datasource": {
           "type": "grafana-postgresql-datasource",
-          "uid": "${DS_A2VM}"
+          "uid": "${DS_NGVM}"
         },
-        "query": "SELECT DISTINCT product_type FROM a2vm.decision_facts WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) ORDER BY 1",
-        "definition": "SELECT DISTINCT product_type FROM a2vm.decision_facts WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) ORDER BY 1",
+        "query": "SELECT DISTINCT product_type FROM ngvm.decision_facts WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) ORDER BY 1",
+        "definition": "SELECT DISTINCT product_type FROM ngvm.decision_facts WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) ORDER BY 1",
         "refresh": 1,
         "sort": 0,
         "multi": true,
@@ -272,12 +272,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "WITH snap (ord, snap_day) AS (VALUES (1, NULLIF('${compare}', '')::date), (2, NULLIF('${snapshot}', '')::date)),\nf AS (SELECT s.ord, s.snap_day, x.* FROM snap s\n  CROSS JOIN LATERAL a2vm.snapshot_runs(ARRAY[${tenant:sqlstring}]::text[], s.snap_day) r\n  JOIN a2vm.decision_facts x ON x.run_id = r.run_id\n  WHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label = ANY (ARRAY[${kev:sqlstring}]::text[]) AND x.severity = ANY (ARRAY[${severity:sqlstring}]::text[]) AND x.epss_band = ANY (ARRAY[${epss:sqlstring}]::text[]) AND x.product_type = ANY (ARRAY[${ptype:sqlstring}]::text[]))\n,\nc0 AS (SELECT f.ord, f.cve, min(f.level_rank) AS rank, bool_or(f.kev) AS kev, max(f.epss) AS epss,\n  max(f.cvss_score) AS cvss, min(f.severity_rank) AS sev_rank, bool_or(f.fix_available) AS fix,\n  count(DISTINCT f.asset) AS assets, count(*) AS exposures, min(f.title) AS title,\n  string_agg(DISTINCT nullif(concat_ws(' ', f.vendor, f.product), ''), ', ') AS products\n  FROM f GROUP BY f.ord, f.cve),\nc AS (SELECT c0.*, (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] AS level,\n  (ARRAY['Critical', 'High', 'Medium', 'Low', 'Unknown'])[c0.sev_rank] AS severity\n  FROM c0 WHERE (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] = ANY (ARRAY[${decision:sqlstring}]::text[]))\nSELECT s.snap_day::timestamptz AS time, count(c.cve) AS value\nFROM snap s LEFT JOIN c ON c.ord = s.ord\nWHERE s.snap_day IS NOT NULL GROUP BY s.ord, s.snap_day ORDER BY s.ord"
+          "rawSql": "WITH snap (ord, snap_day) AS (VALUES (1, NULLIF('${compare}', '')::date), (2, NULLIF('${snapshot}', '')::date)),\nf AS (SELECT s.ord, s.snap_day, x.* FROM snap s\n  CROSS JOIN LATERAL ngvm.snapshot_runs(ARRAY[${tenant:sqlstring}]::text[], s.snap_day) r\n  JOIN ngvm.decision_facts x ON x.run_id = r.run_id\n  WHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label = ANY (ARRAY[${kev:sqlstring}]::text[]) AND x.severity = ANY (ARRAY[${severity:sqlstring}]::text[]) AND x.epss_band = ANY (ARRAY[${epss:sqlstring}]::text[]) AND x.product_type = ANY (ARRAY[${ptype:sqlstring}]::text[]))\n,\nc0 AS (SELECT f.ord, f.cve, min(f.level_rank) AS rank, bool_or(f.kev) AS kev, max(f.epss) AS epss,\n  max(f.cvss_score) AS cvss, min(f.severity_rank) AS sev_rank, bool_or(f.fix_available) AS fix,\n  count(DISTINCT f.asset) AS assets, count(*) AS exposures, min(f.title) AS title,\n  string_agg(DISTINCT nullif(concat_ws(' ', f.vendor, f.product), ''), ', ') AS products\n  FROM f GROUP BY f.ord, f.cve),\nc AS (SELECT c0.*, (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] AS level,\n  (ARRAY['Critical', 'High', 'Medium', 'Low', 'Unknown'])[c0.sev_rank] AS severity\n  FROM c0 WHERE (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] = ANY (ARRAY[${decision:sqlstring}]::text[]))\nSELECT s.snap_day::timestamptz AS time, count(c.cve) AS value\nFROM snap s LEFT JOIN c ON c.ord = s.ord\nWHERE s.snap_day IS NOT NULL GROUP BY s.ord, s.snap_day ORDER BY s.ord"
         }
       ],
       "options": {
@@ -312,7 +312,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 2
     },
@@ -325,12 +325,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "WITH snap (ord, snap_day) AS (VALUES (1, NULLIF('${compare}', '')::date), (2, NULLIF('${snapshot}', '')::date)),\nf AS (SELECT s.ord, s.snap_day, x.* FROM snap s\n  CROSS JOIN LATERAL a2vm.snapshot_runs(ARRAY[${tenant:sqlstring}]::text[], s.snap_day) r\n  JOIN a2vm.decision_facts x ON x.run_id = r.run_id\n  WHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label = ANY (ARRAY[${kev:sqlstring}]::text[]) AND x.severity = ANY (ARRAY[${severity:sqlstring}]::text[]) AND x.epss_band = ANY (ARRAY[${epss:sqlstring}]::text[]) AND x.product_type = ANY (ARRAY[${ptype:sqlstring}]::text[]))\n,\nc0 AS (SELECT f.ord, f.cve, min(f.level_rank) AS rank, bool_or(f.kev) AS kev, max(f.epss) AS epss,\n  max(f.cvss_score) AS cvss, min(f.severity_rank) AS sev_rank, bool_or(f.fix_available) AS fix,\n  count(DISTINCT f.asset) AS assets, count(*) AS exposures, min(f.title) AS title,\n  string_agg(DISTINCT nullif(concat_ws(' ', f.vendor, f.product), ''), ', ') AS products\n  FROM f GROUP BY f.ord, f.cve),\nc AS (SELECT c0.*, (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] AS level,\n  (ARRAY['Critical', 'High', 'Medium', 'Low', 'Unknown'])[c0.sev_rank] AS severity\n  FROM c0 WHERE (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] = ANY (ARRAY[${decision:sqlstring}]::text[]))\nSELECT s.snap_day::timestamptz AS time, count(c.cve) FILTER (WHERE c.kev) AS value\nFROM snap s LEFT JOIN c ON c.ord = s.ord\nWHERE s.snap_day IS NOT NULL GROUP BY s.ord, s.snap_day ORDER BY s.ord"
+          "rawSql": "WITH snap (ord, snap_day) AS (VALUES (1, NULLIF('${compare}', '')::date), (2, NULLIF('${snapshot}', '')::date)),\nf AS (SELECT s.ord, s.snap_day, x.* FROM snap s\n  CROSS JOIN LATERAL ngvm.snapshot_runs(ARRAY[${tenant:sqlstring}]::text[], s.snap_day) r\n  JOIN ngvm.decision_facts x ON x.run_id = r.run_id\n  WHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label = ANY (ARRAY[${kev:sqlstring}]::text[]) AND x.severity = ANY (ARRAY[${severity:sqlstring}]::text[]) AND x.epss_band = ANY (ARRAY[${epss:sqlstring}]::text[]) AND x.product_type = ANY (ARRAY[${ptype:sqlstring}]::text[]))\n,\nc0 AS (SELECT f.ord, f.cve, min(f.level_rank) AS rank, bool_or(f.kev) AS kev, max(f.epss) AS epss,\n  max(f.cvss_score) AS cvss, min(f.severity_rank) AS sev_rank, bool_or(f.fix_available) AS fix,\n  count(DISTINCT f.asset) AS assets, count(*) AS exposures, min(f.title) AS title,\n  string_agg(DISTINCT nullif(concat_ws(' ', f.vendor, f.product), ''), ', ') AS products\n  FROM f GROUP BY f.ord, f.cve),\nc AS (SELECT c0.*, (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] AS level,\n  (ARRAY['Critical', 'High', 'Medium', 'Low', 'Unknown'])[c0.sev_rank] AS severity\n  FROM c0 WHERE (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] = ANY (ARRAY[${decision:sqlstring}]::text[]))\nSELECT s.snap_day::timestamptz AS time, count(c.cve) FILTER (WHERE c.kev) AS value\nFROM snap s LEFT JOIN c ON c.ord = s.ord\nWHERE s.snap_day IS NOT NULL GROUP BY s.ord, s.snap_day ORDER BY s.ord"
         }
       ],
       "options": {
@@ -365,7 +365,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 3
     },
@@ -378,12 +378,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "WITH snap (ord, snap_day) AS (VALUES (1, NULLIF('${compare}', '')::date), (2, NULLIF('${snapshot}', '')::date)),\nf AS (SELECT s.ord, s.snap_day, x.* FROM snap s\n  CROSS JOIN LATERAL a2vm.snapshot_runs(ARRAY[${tenant:sqlstring}]::text[], s.snap_day) r\n  JOIN a2vm.decision_facts x ON x.run_id = r.run_id\n  WHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label = ANY (ARRAY[${kev:sqlstring}]::text[]) AND x.severity = ANY (ARRAY[${severity:sqlstring}]::text[]) AND x.epss_band = ANY (ARRAY[${epss:sqlstring}]::text[]) AND x.product_type = ANY (ARRAY[${ptype:sqlstring}]::text[]))\n,\nc0 AS (SELECT f.ord, f.cve, min(f.level_rank) AS rank, bool_or(f.kev) AS kev, max(f.epss) AS epss,\n  max(f.cvss_score) AS cvss, min(f.severity_rank) AS sev_rank, bool_or(f.fix_available) AS fix,\n  count(DISTINCT f.asset) AS assets, count(*) AS exposures, min(f.title) AS title,\n  string_agg(DISTINCT nullif(concat_ws(' ', f.vendor, f.product), ''), ', ') AS products\n  FROM f GROUP BY f.ord, f.cve),\nc AS (SELECT c0.*, (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] AS level,\n  (ARRAY['Critical', 'High', 'Medium', 'Low', 'Unknown'])[c0.sev_rank] AS severity\n  FROM c0 WHERE (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] = ANY (ARRAY[${decision:sqlstring}]::text[]))\nSELECT s.snap_day::timestamptz AS time, coalesce(sum(c.exposures) FILTER (WHERE c.kev), 0) AS value\nFROM snap s LEFT JOIN c ON c.ord = s.ord\nWHERE s.snap_day IS NOT NULL GROUP BY s.ord, s.snap_day ORDER BY s.ord"
+          "rawSql": "WITH snap (ord, snap_day) AS (VALUES (1, NULLIF('${compare}', '')::date), (2, NULLIF('${snapshot}', '')::date)),\nf AS (SELECT s.ord, s.snap_day, x.* FROM snap s\n  CROSS JOIN LATERAL ngvm.snapshot_runs(ARRAY[${tenant:sqlstring}]::text[], s.snap_day) r\n  JOIN ngvm.decision_facts x ON x.run_id = r.run_id\n  WHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label = ANY (ARRAY[${kev:sqlstring}]::text[]) AND x.severity = ANY (ARRAY[${severity:sqlstring}]::text[]) AND x.epss_band = ANY (ARRAY[${epss:sqlstring}]::text[]) AND x.product_type = ANY (ARRAY[${ptype:sqlstring}]::text[]))\n,\nc0 AS (SELECT f.ord, f.cve, min(f.level_rank) AS rank, bool_or(f.kev) AS kev, max(f.epss) AS epss,\n  max(f.cvss_score) AS cvss, min(f.severity_rank) AS sev_rank, bool_or(f.fix_available) AS fix,\n  count(DISTINCT f.asset) AS assets, count(*) AS exposures, min(f.title) AS title,\n  string_agg(DISTINCT nullif(concat_ws(' ', f.vendor, f.product), ''), ', ') AS products\n  FROM f GROUP BY f.ord, f.cve),\nc AS (SELECT c0.*, (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] AS level,\n  (ARRAY['Critical', 'High', 'Medium', 'Low', 'Unknown'])[c0.sev_rank] AS severity\n  FROM c0 WHERE (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] = ANY (ARRAY[${decision:sqlstring}]::text[]))\nSELECT s.snap_day::timestamptz AS time, coalesce(sum(c.exposures) FILTER (WHERE c.kev), 0) AS value\nFROM snap s LEFT JOIN c ON c.ord = s.ord\nWHERE s.snap_day IS NOT NULL GROUP BY s.ord, s.snap_day ORDER BY s.ord"
         }
       ],
       "options": {
@@ -418,7 +418,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 4
     },
@@ -431,12 +431,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "WITH snap (ord, snap_day) AS (VALUES (1, NULLIF('${compare}', '')::date), (2, NULLIF('${snapshot}', '')::date)),\nf AS (SELECT s.ord, s.snap_day, x.* FROM snap s\n  CROSS JOIN LATERAL a2vm.snapshot_runs(ARRAY[${tenant:sqlstring}]::text[], s.snap_day) r\n  JOIN a2vm.decision_facts x ON x.run_id = r.run_id\n  WHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label = ANY (ARRAY[${kev:sqlstring}]::text[]) AND x.severity = ANY (ARRAY[${severity:sqlstring}]::text[]) AND x.epss_band = ANY (ARRAY[${epss:sqlstring}]::text[]) AND x.product_type = ANY (ARRAY[${ptype:sqlstring}]::text[]))\n,\nc0 AS (SELECT f.ord, f.cve, min(f.level_rank) AS rank, bool_or(f.kev) AS kev, max(f.epss) AS epss,\n  max(f.cvss_score) AS cvss, min(f.severity_rank) AS sev_rank, bool_or(f.fix_available) AS fix,\n  count(DISTINCT f.asset) AS assets, count(*) AS exposures, min(f.title) AS title,\n  string_agg(DISTINCT nullif(concat_ws(' ', f.vendor, f.product), ''), ', ') AS products\n  FROM f GROUP BY f.ord, f.cve),\nc AS (SELECT c0.*, (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] AS level,\n  (ARRAY['Critical', 'High', 'Medium', 'Low', 'Unknown'])[c0.sev_rank] AS severity\n  FROM c0 WHERE (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] = ANY (ARRAY[${decision:sqlstring}]::text[]))\nSELECT s.snap_day::timestamptz AS time, count(c.cve) FILTER (WHERE c.level = 'ACT') AS value\nFROM snap s LEFT JOIN c ON c.ord = s.ord\nWHERE s.snap_day IS NOT NULL GROUP BY s.ord, s.snap_day ORDER BY s.ord"
+          "rawSql": "WITH snap (ord, snap_day) AS (VALUES (1, NULLIF('${compare}', '')::date), (2, NULLIF('${snapshot}', '')::date)),\nf AS (SELECT s.ord, s.snap_day, x.* FROM snap s\n  CROSS JOIN LATERAL ngvm.snapshot_runs(ARRAY[${tenant:sqlstring}]::text[], s.snap_day) r\n  JOIN ngvm.decision_facts x ON x.run_id = r.run_id\n  WHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label = ANY (ARRAY[${kev:sqlstring}]::text[]) AND x.severity = ANY (ARRAY[${severity:sqlstring}]::text[]) AND x.epss_band = ANY (ARRAY[${epss:sqlstring}]::text[]) AND x.product_type = ANY (ARRAY[${ptype:sqlstring}]::text[]))\n,\nc0 AS (SELECT f.ord, f.cve, min(f.level_rank) AS rank, bool_or(f.kev) AS kev, max(f.epss) AS epss,\n  max(f.cvss_score) AS cvss, min(f.severity_rank) AS sev_rank, bool_or(f.fix_available) AS fix,\n  count(DISTINCT f.asset) AS assets, count(*) AS exposures, min(f.title) AS title,\n  string_agg(DISTINCT nullif(concat_ws(' ', f.vendor, f.product), ''), ', ') AS products\n  FROM f GROUP BY f.ord, f.cve),\nc AS (SELECT c0.*, (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] AS level,\n  (ARRAY['Critical', 'High', 'Medium', 'Low', 'Unknown'])[c0.sev_rank] AS severity\n  FROM c0 WHERE (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] = ANY (ARRAY[${decision:sqlstring}]::text[]))\nSELECT s.snap_day::timestamptz AS time, count(c.cve) FILTER (WHERE c.level = 'ACT') AS value\nFROM snap s LEFT JOIN c ON c.ord = s.ord\nWHERE s.snap_day IS NOT NULL GROUP BY s.ord, s.snap_day ORDER BY s.ord"
         }
       ],
       "options": {
@@ -471,7 +471,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 5
     },
@@ -484,12 +484,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "WITH snap (ord, snap_day) AS (VALUES (1, NULLIF('${compare}', '')::date), (2, NULLIF('${snapshot}', '')::date)),\nf AS (SELECT s.ord, s.snap_day, x.* FROM snap s\n  CROSS JOIN LATERAL a2vm.snapshot_runs(ARRAY[${tenant:sqlstring}]::text[], s.snap_day) r\n  JOIN a2vm.decision_facts x ON x.run_id = r.run_id\n  WHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label = ANY (ARRAY[${kev:sqlstring}]::text[]) AND x.severity = ANY (ARRAY[${severity:sqlstring}]::text[]) AND x.epss_band = ANY (ARRAY[${epss:sqlstring}]::text[]) AND x.product_type = ANY (ARRAY[${ptype:sqlstring}]::text[]))\n,\nc0 AS (SELECT f.ord, f.cve, min(f.level_rank) AS rank, bool_or(f.kev) AS kev, max(f.epss) AS epss,\n  max(f.cvss_score) AS cvss, min(f.severity_rank) AS sev_rank, bool_or(f.fix_available) AS fix,\n  count(DISTINCT f.asset) AS assets, count(*) AS exposures, min(f.title) AS title,\n  string_agg(DISTINCT nullif(concat_ws(' ', f.vendor, f.product), ''), ', ') AS products\n  FROM f GROUP BY f.ord, f.cve),\nc AS (SELECT c0.*, (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] AS level,\n  (ARRAY['Critical', 'High', 'Medium', 'Low', 'Unknown'])[c0.sev_rank] AS severity\n  FROM c0 WHERE (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] = ANY (ARRAY[${decision:sqlstring}]::text[]))\nSELECT s.snap_day::timestamptz AS time, round(100.0 * count(c.cve) FILTER (WHERE c.fix) / NULLIF(count(c.cve), 0), 1) AS value\nFROM snap s LEFT JOIN c ON c.ord = s.ord\nWHERE s.snap_day IS NOT NULL GROUP BY s.ord, s.snap_day ORDER BY s.ord"
+          "rawSql": "WITH snap (ord, snap_day) AS (VALUES (1, NULLIF('${compare}', '')::date), (2, NULLIF('${snapshot}', '')::date)),\nf AS (SELECT s.ord, s.snap_day, x.* FROM snap s\n  CROSS JOIN LATERAL ngvm.snapshot_runs(ARRAY[${tenant:sqlstring}]::text[], s.snap_day) r\n  JOIN ngvm.decision_facts x ON x.run_id = r.run_id\n  WHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label = ANY (ARRAY[${kev:sqlstring}]::text[]) AND x.severity = ANY (ARRAY[${severity:sqlstring}]::text[]) AND x.epss_band = ANY (ARRAY[${epss:sqlstring}]::text[]) AND x.product_type = ANY (ARRAY[${ptype:sqlstring}]::text[]))\n,\nc0 AS (SELECT f.ord, f.cve, min(f.level_rank) AS rank, bool_or(f.kev) AS kev, max(f.epss) AS epss,\n  max(f.cvss_score) AS cvss, min(f.severity_rank) AS sev_rank, bool_or(f.fix_available) AS fix,\n  count(DISTINCT f.asset) AS assets, count(*) AS exposures, min(f.title) AS title,\n  string_agg(DISTINCT nullif(concat_ws(' ', f.vendor, f.product), ''), ', ') AS products\n  FROM f GROUP BY f.ord, f.cve),\nc AS (SELECT c0.*, (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] AS level,\n  (ARRAY['Critical', 'High', 'Medium', 'Low', 'Unknown'])[c0.sev_rank] AS severity\n  FROM c0 WHERE (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] = ANY (ARRAY[${decision:sqlstring}]::text[]))\nSELECT s.snap_day::timestamptz AS time, round(100.0 * count(c.cve) FILTER (WHERE c.fix) / NULLIF(count(c.cve), 0), 1) AS value\nFROM snap s LEFT JOIN c ON c.ord = s.ord\nWHERE s.snap_day IS NOT NULL GROUP BY s.ord, s.snap_day ORDER BY s.ord"
         }
       ],
       "options": {
@@ -524,7 +524,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 6
     },
@@ -537,12 +537,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "WITH snap (ord, snap_day) AS (VALUES (1, NULLIF('${compare}', '')::date), (2, NULLIF('${snapshot}', '')::date)),\nf AS (SELECT s.ord, s.snap_day, x.* FROM snap s\n  CROSS JOIN LATERAL a2vm.snapshot_runs(ARRAY[${tenant:sqlstring}]::text[], s.snap_day) r\n  JOIN a2vm.decision_facts x ON x.run_id = r.run_id\n  WHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label = ANY (ARRAY[${kev:sqlstring}]::text[]) AND x.severity = ANY (ARRAY[${severity:sqlstring}]::text[]) AND x.epss_band = ANY (ARRAY[${epss:sqlstring}]::text[]) AND x.product_type = ANY (ARRAY[${ptype:sqlstring}]::text[]))\n,\nc0 AS (SELECT f.ord, f.cve, min(f.level_rank) AS rank, bool_or(f.kev) AS kev, max(f.epss) AS epss,\n  max(f.cvss_score) AS cvss, min(f.severity_rank) AS sev_rank, bool_or(f.fix_available) AS fix,\n  count(DISTINCT f.asset) AS assets, count(*) AS exposures, min(f.title) AS title,\n  string_agg(DISTINCT nullif(concat_ws(' ', f.vendor, f.product), ''), ', ') AS products\n  FROM f GROUP BY f.ord, f.cve),\nc AS (SELECT c0.*, (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] AS level,\n  (ARRAY['Critical', 'High', 'Medium', 'Low', 'Unknown'])[c0.sev_rank] AS severity\n  FROM c0 WHERE (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] = ANY (ARRAY[${decision:sqlstring}]::text[]))\nSELECT s.snap_day::timestamptz AS time, count(c.cve) FILTER (WHERE c.epss >= 0.1) AS value\nFROM snap s LEFT JOIN c ON c.ord = s.ord\nWHERE s.snap_day IS NOT NULL GROUP BY s.ord, s.snap_day ORDER BY s.ord"
+          "rawSql": "WITH snap (ord, snap_day) AS (VALUES (1, NULLIF('${compare}', '')::date), (2, NULLIF('${snapshot}', '')::date)),\nf AS (SELECT s.ord, s.snap_day, x.* FROM snap s\n  CROSS JOIN LATERAL ngvm.snapshot_runs(ARRAY[${tenant:sqlstring}]::text[], s.snap_day) r\n  JOIN ngvm.decision_facts x ON x.run_id = r.run_id\n  WHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label = ANY (ARRAY[${kev:sqlstring}]::text[]) AND x.severity = ANY (ARRAY[${severity:sqlstring}]::text[]) AND x.epss_band = ANY (ARRAY[${epss:sqlstring}]::text[]) AND x.product_type = ANY (ARRAY[${ptype:sqlstring}]::text[]))\n,\nc0 AS (SELECT f.ord, f.cve, min(f.level_rank) AS rank, bool_or(f.kev) AS kev, max(f.epss) AS epss,\n  max(f.cvss_score) AS cvss, min(f.severity_rank) AS sev_rank, bool_or(f.fix_available) AS fix,\n  count(DISTINCT f.asset) AS assets, count(*) AS exposures, min(f.title) AS title,\n  string_agg(DISTINCT nullif(concat_ws(' ', f.vendor, f.product), ''), ', ') AS products\n  FROM f GROUP BY f.ord, f.cve),\nc AS (SELECT c0.*, (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] AS level,\n  (ARRAY['Critical', 'High', 'Medium', 'Low', 'Unknown'])[c0.sev_rank] AS severity\n  FROM c0 WHERE (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] = ANY (ARRAY[${decision:sqlstring}]::text[]))\nSELECT s.snap_day::timestamptz AS time, count(c.cve) FILTER (WHERE c.epss >= 0.1) AS value\nFROM snap s LEFT JOIN c ON c.ord = s.ord\nWHERE s.snap_day IS NOT NULL GROUP BY s.ord, s.snap_day ORDER BY s.ord"
         }
       ],
       "options": {
@@ -577,7 +577,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 7
     },
@@ -590,12 +590,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "WITH snap (ord, snap_day) AS (VALUES (2, NULLIF('${snapshot}', '')::date)),\nf AS (SELECT s.ord, s.snap_day, x.* FROM snap s\n  CROSS JOIN LATERAL a2vm.snapshot_runs(ARRAY[${tenant:sqlstring}]::text[], s.snap_day) r\n  JOIN a2vm.decision_facts x ON x.run_id = r.run_id\n  WHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label = ANY (ARRAY[${kev:sqlstring}]::text[]) AND x.severity = ANY (ARRAY[${severity:sqlstring}]::text[]) AND x.epss_band = ANY (ARRAY[${epss:sqlstring}]::text[]) AND x.product_type = ANY (ARRAY[${ptype:sqlstring}]::text[]))\n,\nc0 AS (SELECT f.ord, f.cve, min(f.level_rank) AS rank, bool_or(f.kev) AS kev, max(f.epss) AS epss,\n  max(f.cvss_score) AS cvss, min(f.severity_rank) AS sev_rank, bool_or(f.fix_available) AS fix,\n  count(DISTINCT f.asset) AS assets, count(*) AS exposures, min(f.title) AS title,\n  string_agg(DISTINCT nullif(concat_ws(' ', f.vendor, f.product), ''), ', ') AS products\n  FROM f GROUP BY f.ord, f.cve),\nc AS (SELECT c0.*, (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] AS level,\n  (ARRAY['Critical', 'High', 'Medium', 'Low', 'Unknown'])[c0.sev_rank] AS severity\n  FROM c0 WHERE (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] = ANY (ARRAY[${decision:sqlstring}]::text[]))\nSELECT l.level AS \"Décision SSVC\",\n  count(c.cve) FILTER (WHERE c.severity = 'Critical') AS \"Critique\",\n  count(c.cve) FILTER (WHERE c.severity = 'High') AS \"Élevée\",\n  count(c.cve) FILTER (WHERE c.severity = 'Medium') AS \"Moyenne\",\n  count(c.cve) FILTER (WHERE c.severity = 'Low') AS \"Faible\",\n  count(c.cve) FILTER (WHERE c.severity = 'Unknown') AS \"Inconnue\"\nFROM (VALUES ('ACT', 1), ('ATTEND', 2), ('TRACK', 3)) l (level, o)\nLEFT JOIN c ON c.level = l.level AND c.ord = 2\nWHERE l.level = ANY (ARRAY[${decision:sqlstring}]::text[])\nGROUP BY l.level, l.o ORDER BY l.o"
+          "rawSql": "WITH snap (ord, snap_day) AS (VALUES (2, NULLIF('${snapshot}', '')::date)),\nf AS (SELECT s.ord, s.snap_day, x.* FROM snap s\n  CROSS JOIN LATERAL ngvm.snapshot_runs(ARRAY[${tenant:sqlstring}]::text[], s.snap_day) r\n  JOIN ngvm.decision_facts x ON x.run_id = r.run_id\n  WHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label = ANY (ARRAY[${kev:sqlstring}]::text[]) AND x.severity = ANY (ARRAY[${severity:sqlstring}]::text[]) AND x.epss_band = ANY (ARRAY[${epss:sqlstring}]::text[]) AND x.product_type = ANY (ARRAY[${ptype:sqlstring}]::text[]))\n,\nc0 AS (SELECT f.ord, f.cve, min(f.level_rank) AS rank, bool_or(f.kev) AS kev, max(f.epss) AS epss,\n  max(f.cvss_score) AS cvss, min(f.severity_rank) AS sev_rank, bool_or(f.fix_available) AS fix,\n  count(DISTINCT f.asset) AS assets, count(*) AS exposures, min(f.title) AS title,\n  string_agg(DISTINCT nullif(concat_ws(' ', f.vendor, f.product), ''), ', ') AS products\n  FROM f GROUP BY f.ord, f.cve),\nc AS (SELECT c0.*, (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] AS level,\n  (ARRAY['Critical', 'High', 'Medium', 'Low', 'Unknown'])[c0.sev_rank] AS severity\n  FROM c0 WHERE (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] = ANY (ARRAY[${decision:sqlstring}]::text[]))\nSELECT l.level AS \"Décision SSVC\",\n  count(c.cve) FILTER (WHERE c.severity = 'Critical') AS \"Critique\",\n  count(c.cve) FILTER (WHERE c.severity = 'High') AS \"Élevée\",\n  count(c.cve) FILTER (WHERE c.severity = 'Medium') AS \"Moyenne\",\n  count(c.cve) FILTER (WHERE c.severity = 'Low') AS \"Faible\",\n  count(c.cve) FILTER (WHERE c.severity = 'Unknown') AS \"Inconnue\"\nFROM (VALUES ('ACT', 1), ('ATTEND', 2), ('TRACK', 3)) l (level, o)\nLEFT JOIN c ON c.level = l.level AND c.ord = 2\nWHERE l.level = ANY (ARRAY[${decision:sqlstring}]::text[])\nGROUP BY l.level, l.o ORDER BY l.o"
         }
       ],
       "options": {
@@ -680,7 +680,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 8
     },
@@ -693,12 +693,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "WITH snap (ord, snap_day) AS (VALUES (2, NULLIF('${snapshot}', '')::date)),\nf AS (SELECT s.ord, s.snap_day, x.* FROM snap s\n  CROSS JOIN LATERAL a2vm.snapshot_runs(ARRAY[${tenant:sqlstring}]::text[], s.snap_day) r\n  JOIN a2vm.decision_facts x ON x.run_id = r.run_id\n  WHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label = ANY (ARRAY[${kev:sqlstring}]::text[]) AND x.severity = ANY (ARRAY[${severity:sqlstring}]::text[]) AND x.epss_band = ANY (ARRAY[${epss:sqlstring}]::text[]) AND x.product_type = ANY (ARRAY[${ptype:sqlstring}]::text[]))\n,\nc0 AS (SELECT f.ord, f.cve, min(f.level_rank) AS rank, bool_or(f.kev) AS kev, max(f.epss) AS epss,\n  max(f.cvss_score) AS cvss, min(f.severity_rank) AS sev_rank, bool_or(f.fix_available) AS fix,\n  count(DISTINCT f.asset) AS assets, count(*) AS exposures, min(f.title) AS title,\n  string_agg(DISTINCT nullif(concat_ws(' ', f.vendor, f.product), ''), ', ') AS products\n  FROM f GROUP BY f.ord, f.cve),\nc AS (SELECT c0.*, (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] AS level,\n  (ARRAY['Critical', 'High', 'Medium', 'Low', 'Unknown'])[c0.sev_rank] AS severity\n  FROM c0 WHERE (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] = ANY (ARRAY[${decision:sqlstring}]::text[]))\nSELECT l.level AS \"Décision SSVC\",\n  count(c.cve) FILTER (WHERE c.severity = 'Critical' AND c.kev) AS \"Critique\",\n  count(c.cve) FILTER (WHERE c.severity = 'High' AND c.kev) AS \"Élevée\",\n  count(c.cve) FILTER (WHERE c.severity = 'Medium' AND c.kev) AS \"Moyenne\",\n  count(c.cve) FILTER (WHERE c.severity = 'Low' AND c.kev) AS \"Faible\",\n  count(c.cve) FILTER (WHERE c.severity = 'Unknown' AND c.kev) AS \"Inconnue\"\nFROM (VALUES ('ACT', 1), ('ATTEND', 2), ('TRACK', 3)) l (level, o)\nLEFT JOIN c ON c.level = l.level AND c.ord = 2\nWHERE l.level = ANY (ARRAY[${decision:sqlstring}]::text[])\nGROUP BY l.level, l.o ORDER BY l.o"
+          "rawSql": "WITH snap (ord, snap_day) AS (VALUES (2, NULLIF('${snapshot}', '')::date)),\nf AS (SELECT s.ord, s.snap_day, x.* FROM snap s\n  CROSS JOIN LATERAL ngvm.snapshot_runs(ARRAY[${tenant:sqlstring}]::text[], s.snap_day) r\n  JOIN ngvm.decision_facts x ON x.run_id = r.run_id\n  WHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label = ANY (ARRAY[${kev:sqlstring}]::text[]) AND x.severity = ANY (ARRAY[${severity:sqlstring}]::text[]) AND x.epss_band = ANY (ARRAY[${epss:sqlstring}]::text[]) AND x.product_type = ANY (ARRAY[${ptype:sqlstring}]::text[]))\n,\nc0 AS (SELECT f.ord, f.cve, min(f.level_rank) AS rank, bool_or(f.kev) AS kev, max(f.epss) AS epss,\n  max(f.cvss_score) AS cvss, min(f.severity_rank) AS sev_rank, bool_or(f.fix_available) AS fix,\n  count(DISTINCT f.asset) AS assets, count(*) AS exposures, min(f.title) AS title,\n  string_agg(DISTINCT nullif(concat_ws(' ', f.vendor, f.product), ''), ', ') AS products\n  FROM f GROUP BY f.ord, f.cve),\nc AS (SELECT c0.*, (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] AS level,\n  (ARRAY['Critical', 'High', 'Medium', 'Low', 'Unknown'])[c0.sev_rank] AS severity\n  FROM c0 WHERE (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] = ANY (ARRAY[${decision:sqlstring}]::text[]))\nSELECT l.level AS \"Décision SSVC\",\n  count(c.cve) FILTER (WHERE c.severity = 'Critical' AND c.kev) AS \"Critique\",\n  count(c.cve) FILTER (WHERE c.severity = 'High' AND c.kev) AS \"Élevée\",\n  count(c.cve) FILTER (WHERE c.severity = 'Medium' AND c.kev) AS \"Moyenne\",\n  count(c.cve) FILTER (WHERE c.severity = 'Low' AND c.kev) AS \"Faible\",\n  count(c.cve) FILTER (WHERE c.severity = 'Unknown' AND c.kev) AS \"Inconnue\"\nFROM (VALUES ('ACT', 1), ('ATTEND', 2), ('TRACK', 3)) l (level, o)\nLEFT JOIN c ON c.level = l.level AND c.ord = 2\nWHERE l.level = ANY (ARRAY[${decision:sqlstring}]::text[])\nGROUP BY l.level, l.o ORDER BY l.o"
         }
       ],
       "options": {
@@ -783,7 +783,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 9
     },
@@ -796,12 +796,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "WITH snap (ord, snap_day) AS (VALUES (1, NULLIF('${compare}', '')::date), (2, NULLIF('${snapshot}', '')::date)),\nf AS (SELECT s.ord, s.snap_day, x.* FROM snap s\n  CROSS JOIN LATERAL a2vm.snapshot_runs(ARRAY[${tenant:sqlstring}]::text[], s.snap_day) r\n  JOIN a2vm.decision_facts x ON x.run_id = r.run_id\n  WHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label = ANY (ARRAY[${kev:sqlstring}]::text[]) AND x.severity = ANY (ARRAY[${severity:sqlstring}]::text[]) AND x.epss_band = ANY (ARRAY[${epss:sqlstring}]::text[]) AND x.product_type = ANY (ARRAY[${ptype:sqlstring}]::text[]))\n,\nc0 AS (SELECT f.ord, f.cve, min(f.level_rank) AS rank, bool_or(f.kev) AS kev, max(f.epss) AS epss,\n  max(f.cvss_score) AS cvss, min(f.severity_rank) AS sev_rank, bool_or(f.fix_available) AS fix,\n  count(DISTINCT f.asset) AS assets, count(*) AS exposures, min(f.title) AS title,\n  string_agg(DISTINCT nullif(concat_ws(' ', f.vendor, f.product), ''), ', ') AS products\n  FROM f GROUP BY f.ord, f.cve),\nc AS (SELECT c0.*, (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] AS level,\n  (ARRAY['Critical', 'High', 'Medium', 'Low', 'Unknown'])[c0.sev_rank] AS severity\n  FROM c0 WHERE (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] = ANY (ARRAY[${decision:sqlstring}]::text[]))\nSELECT cur.cve AS \"CVE\", cur.level AS \"Décision\", cur.severity AS \"Sévérité\",\n  round(cur.cvss::numeric, 1) AS \"CVSS\", round(cur.epss::numeric, 3) AS \"EPSS\",\n  CASE WHEN cur.kev THEN 'yes' ELSE '' END AS \"KEV\", CASE WHEN cur.fix THEN 'yes' ELSE '' END AS \"Correctif\",\n  cur.assets AS \"Actifs\", cur.exposures AS \"Expositions\",\n  CASE WHEN NULLIF('${compare}', '') IS NULL THEN NULL WHEN prev.cve IS NULL THEN 'new' WHEN prev.level <> cur.level THEN 'was ' || prev.level ELSE '' END AS \"Depuis\",\n  cur.products AS \"Produit\", cur.title AS \"Vulnérabilité\"\nFROM c cur LEFT JOIN c prev ON prev.cve = cur.cve AND prev.ord = 1\nWHERE cur.ord = 2\nORDER BY cur.rank, cur.kev DESC, cur.epss DESC NULLS LAST, cur.cvss DESC NULLS LAST,\n  cur.assets DESC, cur.cve\nLIMIT 500"
+          "rawSql": "WITH snap (ord, snap_day) AS (VALUES (1, NULLIF('${compare}', '')::date), (2, NULLIF('${snapshot}', '')::date)),\nf AS (SELECT s.ord, s.snap_day, x.* FROM snap s\n  CROSS JOIN LATERAL ngvm.snapshot_runs(ARRAY[${tenant:sqlstring}]::text[], s.snap_day) r\n  JOIN ngvm.decision_facts x ON x.run_id = r.run_id\n  WHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label = ANY (ARRAY[${kev:sqlstring}]::text[]) AND x.severity = ANY (ARRAY[${severity:sqlstring}]::text[]) AND x.epss_band = ANY (ARRAY[${epss:sqlstring}]::text[]) AND x.product_type = ANY (ARRAY[${ptype:sqlstring}]::text[]))\n,\nc0 AS (SELECT f.ord, f.cve, min(f.level_rank) AS rank, bool_or(f.kev) AS kev, max(f.epss) AS epss,\n  max(f.cvss_score) AS cvss, min(f.severity_rank) AS sev_rank, bool_or(f.fix_available) AS fix,\n  count(DISTINCT f.asset) AS assets, count(*) AS exposures, min(f.title) AS title,\n  string_agg(DISTINCT nullif(concat_ws(' ', f.vendor, f.product), ''), ', ') AS products\n  FROM f GROUP BY f.ord, f.cve),\nc AS (SELECT c0.*, (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] AS level,\n  (ARRAY['Critical', 'High', 'Medium', 'Low', 'Unknown'])[c0.sev_rank] AS severity\n  FROM c0 WHERE (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] = ANY (ARRAY[${decision:sqlstring}]::text[]))\nSELECT cur.cve AS \"CVE\", cur.level AS \"Décision\", cur.severity AS \"Sévérité\",\n  round(cur.cvss::numeric, 1) AS \"CVSS\", round(cur.epss::numeric, 3) AS \"EPSS\",\n  CASE WHEN cur.kev THEN 'yes' ELSE '' END AS \"KEV\", CASE WHEN cur.fix THEN 'yes' ELSE '' END AS \"Correctif\",\n  cur.assets AS \"Actifs\", cur.exposures AS \"Expositions\",\n  CASE WHEN NULLIF('${compare}', '') IS NULL THEN NULL WHEN prev.cve IS NULL THEN 'new' WHEN prev.level <> cur.level THEN 'was ' || prev.level ELSE '' END AS \"Depuis\",\n  cur.products AS \"Produit\", cur.title AS \"Vulnérabilité\"\nFROM c cur LEFT JOIN c prev ON prev.cve = cur.cve AND prev.ord = 1\nWHERE cur.ord = 2\nORDER BY cur.rank, cur.kev DESC, cur.epss DESC NULLS LAST, cur.cvss DESC NULLS LAST,\n  cur.assets DESC, cur.cve\nLIMIT 500"
         }
       ],
       "options": {
@@ -926,7 +926,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 10
     },
@@ -939,12 +939,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "time_series",
-          "rawSql": "SELECT day::timestamptz AS time, count(DISTINCT x.cve) FILTER (WHERE x.cve_level = 'ACT') AS \"ACT\", count(DISTINCT x.cve) FILTER (WHERE x.cve_level = 'ATTEND') AS \"ATTEND\", count(DISTINCT x.cve) FILTER (WHERE x.cve_level = 'TRACK') AS \"TRACK\"\nFROM (SELECT x.day, x.cve, (ARRAY['ACT', 'ATTEND', 'TRACK'])[min(x.level_rank)] AS cve_level\n  FROM (SELECT DISTINCT ON (tenant, generated_at::date) run_id FROM a2vm.runs\n  WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND $__timeFilter(generated_at)\n  ORDER BY tenant, generated_at::date, generated_at DESC) r\n  JOIN a2vm.decision_facts x ON x.run_id = r.run_id\n  WHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label = ANY (ARRAY[${kev:sqlstring}]::text[]) AND x.severity = ANY (ARRAY[${severity:sqlstring}]::text[]) AND x.epss_band = ANY (ARRAY[${epss:sqlstring}]::text[]) AND x.product_type = ANY (ARRAY[${ptype:sqlstring}]::text[]) GROUP BY x.day, x.cve) x\nWHERE x.cve_level = ANY (ARRAY[${decision:sqlstring}]::text[])\nGROUP BY day ORDER BY 1"
+          "rawSql": "SELECT day::timestamptz AS time, count(DISTINCT x.cve) FILTER (WHERE x.cve_level = 'ACT') AS \"ACT\", count(DISTINCT x.cve) FILTER (WHERE x.cve_level = 'ATTEND') AS \"ATTEND\", count(DISTINCT x.cve) FILTER (WHERE x.cve_level = 'TRACK') AS \"TRACK\"\nFROM (SELECT x.day, x.cve, (ARRAY['ACT', 'ATTEND', 'TRACK'])[min(x.level_rank)] AS cve_level\n  FROM (SELECT DISTINCT ON (tenant, generated_at::date) run_id FROM ngvm.runs\n  WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND $__timeFilter(generated_at)\n  ORDER BY tenant, generated_at::date, generated_at DESC) r\n  JOIN ngvm.decision_facts x ON x.run_id = r.run_id\n  WHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label = ANY (ARRAY[${kev:sqlstring}]::text[]) AND x.severity = ANY (ARRAY[${severity:sqlstring}]::text[]) AND x.epss_band = ANY (ARRAY[${epss:sqlstring}]::text[]) AND x.product_type = ANY (ARRAY[${ptype:sqlstring}]::text[]) GROUP BY x.day, x.cve) x\nWHERE x.cve_level = ANY (ARRAY[${decision:sqlstring}]::text[])\nGROUP BY day ORDER BY 1"
         }
       ],
       "fieldConfig": {
@@ -1021,7 +1021,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 11
     },
@@ -1034,12 +1034,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "WITH snap (ord, snap_day) AS (VALUES (2, NULLIF('${snapshot}', '')::date)),\nf AS (SELECT s.ord, s.snap_day, x.* FROM snap s\n  CROSS JOIN LATERAL a2vm.snapshot_runs(ARRAY[${tenant:sqlstring}]::text[], s.snap_day) r\n  JOIN a2vm.decision_facts x ON x.run_id = r.run_id\n  WHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label = ANY (ARRAY[${kev:sqlstring}]::text[]) AND x.severity = ANY (ARRAY[${severity:sqlstring}]::text[]) AND x.epss_band = ANY (ARRAY[${epss:sqlstring}]::text[]) AND x.product_type = ANY (ARRAY[${ptype:sqlstring}]::text[]))\n,\nc0 AS (SELECT f.ord, f.cve, min(f.level_rank) AS rank, bool_or(f.kev) AS kev, max(f.epss) AS epss,\n  max(f.cvss_score) AS cvss, min(f.severity_rank) AS sev_rank, bool_or(f.fix_available) AS fix,\n  count(DISTINCT f.asset) AS assets, count(*) AS exposures, min(f.title) AS title,\n  string_agg(DISTINCT nullif(concat_ws(' ', f.vendor, f.product), ''), ', ') AS products\n  FROM f GROUP BY f.ord, f.cve),\nc AS (SELECT c0.*, (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] AS level,\n  (ARRAY['Critical', 'High', 'Medium', 'Low', 'Unknown'])[c0.sev_rank] AS severity\n  FROM c0 WHERE (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] = ANY (ARRAY[${decision:sqlstring}]::text[]))\nSELECT coalesce(c.products, 'unknown product') AS \"Produit\",\ncount(*) FILTER (WHERE c.level = 'ACT') AS \"ACT\", count(*) FILTER (WHERE c.level = 'ATTEND') AS \"ATTEND\", count(*) FILTER (WHERE c.level = 'TRACK') AS \"TRACK\"\nFROM c WHERE c.ord = 2 GROUP BY 1\nORDER BY count(*) FILTER (WHERE c.level = 'ACT') DESC, count(*) DESC LIMIT 15"
+          "rawSql": "WITH snap (ord, snap_day) AS (VALUES (2, NULLIF('${snapshot}', '')::date)),\nf AS (SELECT s.ord, s.snap_day, x.* FROM snap s\n  CROSS JOIN LATERAL ngvm.snapshot_runs(ARRAY[${tenant:sqlstring}]::text[], s.snap_day) r\n  JOIN ngvm.decision_facts x ON x.run_id = r.run_id\n  WHERE x.sources && ARRAY[${scanner:sqlstring}]::text[] AND x.kev_label = ANY (ARRAY[${kev:sqlstring}]::text[]) AND x.severity = ANY (ARRAY[${severity:sqlstring}]::text[]) AND x.epss_band = ANY (ARRAY[${epss:sqlstring}]::text[]) AND x.product_type = ANY (ARRAY[${ptype:sqlstring}]::text[]))\n,\nc0 AS (SELECT f.ord, f.cve, min(f.level_rank) AS rank, bool_or(f.kev) AS kev, max(f.epss) AS epss,\n  max(f.cvss_score) AS cvss, min(f.severity_rank) AS sev_rank, bool_or(f.fix_available) AS fix,\n  count(DISTINCT f.asset) AS assets, count(*) AS exposures, min(f.title) AS title,\n  string_agg(DISTINCT nullif(concat_ws(' ', f.vendor, f.product), ''), ', ') AS products\n  FROM f GROUP BY f.ord, f.cve),\nc AS (SELECT c0.*, (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] AS level,\n  (ARRAY['Critical', 'High', 'Medium', 'Low', 'Unknown'])[c0.sev_rank] AS severity\n  FROM c0 WHERE (ARRAY['ACT', 'ATTEND', 'TRACK'])[c0.rank] = ANY (ARRAY[${decision:sqlstring}]::text[]))\nSELECT coalesce(c.products, 'unknown product') AS \"Produit\",\ncount(*) FILTER (WHERE c.level = 'ACT') AS \"ACT\", count(*) FILTER (WHERE c.level = 'ATTEND') AS \"ATTEND\", count(*) FILTER (WHERE c.level = 'TRACK') AS \"TRACK\"\nFROM c WHERE c.ord = 2 GROUP BY 1\nORDER BY count(*) FILTER (WHERE c.level = 'ACT') DESC, count(*) DESC LIMIT 15"
         }
       ],
       "options": {
@@ -1110,7 +1110,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 12
     }

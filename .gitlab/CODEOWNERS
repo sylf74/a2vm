@@ -18,7 +18,7 @@
 /docs/lld/triage-prioritization.md          @po-triage
 
 # Common contract: model, exchange-file schemas, settings, profiles, LLM client, extension points
-/a2vm/                                       @product-manager
+/ngvm/                                       @product-manager
 
 # Pillar 1 — VIA, Vulnerability Intelligence
 /via/                                       @po-intelligence

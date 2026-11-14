@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """v0.13.2: the install script of a collector (deploy/collector/install-collector.sh)."""
 
 from __future__ import annotations
@@ -47,7 +47,7 @@ def test_no_secret_is_printed_or_passed_as_an_argument():
     text = SCRIPT.read_text()
     assert "--password-stdin <" in text  # registry password read from its file
     assert 'rm -f "$HERE/registry-password.txt"' in text and 'rm -f "$HERE/scan_key"' in text
-    assert "( umask 077; printf 'A2VM_GVM_USER=%s\\nA2VM_GVM_PASSWORD=%s\\n'" in text
+    assert "( umask 077; printf 'NGVM_GVM_USER=%s\\nNGVM_GVM_PASSWORD=%s\\n'" in text
     assert 'chmod 0600 "$C/gvm.env"' in text and "unset pw out" in text
     for line in text.splitlines():
         if re.search(r"\becho\b", line):

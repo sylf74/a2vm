@@ -1,9 +1,9 @@
 # Choosing the LLM of a tenant (v0.23.8)
 
-A2VM speaks to any OpenAI-compatible endpoint (vLLM, SGLang, a cloud service): the model is the
+NGVM speaks to any OpenAI-compatible endpoint (vLLM, SGLang, a cloud service): the model is the
 tenant's choice. A client may refuse a model of some origin, or want one it already approved. What
 changes from one model to another is how it reasons before answering: a reasoning model writes a
-long chain of thought before its JSON, many times slower for the short answers A2VM asks for. Since
+long chain of thought before its JSON, many times slower for the short answers NGVM asks for. Since
 v0.23.8 one setting, `reasoning`, is sent the way each family takes it. Design: LLD triage §7.0.
 
 ## 1. Settings
@@ -13,12 +13,12 @@ CI/CD variables of the group or of the tenant project (passed to the cluster by 
 
 | Variable | Setting | Values |
 | --- | --- | --- |
-| `A2VM_LLM_ENABLED` | `llm.enabled` | `true` once the endpoint answers |
-| `A2VM_LLM_BASE_URL` | `llm.base_url` | the endpoint(s), `http://llm.lab.example:8000/v1`; several comma-separated (LLD triage §7.1) |
-| `A2VM_LLM_MODEL` | `llm.model` | the model's name as the server serves it |
-| `A2VM_LLM_FAMILY` | `llm.family` | `qwen3`, `gemma`, `gpt-oss`, `mistral`, `generic`; empty: found from the model's name |
-| `A2VM_LLM_REASONING` | `llm.reasoning` | `off`, `low`, `medium`, `high`; empty: the model's default |
-| `A2VM_LLM_THINKING` | `llm.thinking` | v0.23.7, Qwen3 only (`off`, `on`); `A2VM_LLM_REASONING` wins when both are set |
+| `NGVM_LLM_ENABLED` | `llm.enabled` | `true` once the endpoint answers |
+| `NGVM_LLM_BASE_URL` | `llm.base_url` | the endpoint(s), `http://llm.lab.example:8000/v1`; several comma-separated (LLD triage §7.1) |
+| `NGVM_LLM_MODEL` | `llm.model` | the model's name as the server serves it |
+| `NGVM_LLM_FAMILY` | `llm.family` | `qwen3`, `gemma`, `gpt-oss`, `mistral`, `generic`; empty: found from the model's name |
+| `NGVM_LLM_REASONING` | `llm.reasoning` | `off`, `low`, `medium`, `high`; empty: the model's default |
+| `NGVM_LLM_THINKING` | `llm.thinking` | v0.23.7, Qwen3 only (`off`, `on`); `NGVM_LLM_REASONING` wins when both are set |
 
 How each family takes the level:
 
@@ -34,7 +34,7 @@ For the triage and the watch, `off` is the right level: the answers are short, t
 decide (D4), and the guard checks every rationale. The job log says what each job received:
 `LLM: enabled, base_url=…, model=…, family gpt-oss, reasoning off`.
 
-## 2. Models known to work with A2VM
+## 2. Models known to work with NGVM
 
 All under Apache 2.0, served by vLLM. The memory is the order of magnitude for the weights; the
 context (`--max-model-len`) takes the rest.
@@ -61,7 +61,7 @@ them against the recipe of the vLLM version deployed.
 ## 3. Changing the model
 
 1. Start the new model on the inference server (or a second endpoint beside the first).
-2. Set `A2VM_LLM_MODEL` (and `A2VM_LLM_BASE_URL` if it moved), and `A2VM_LLM_REASONING=off`, on
+2. Set `NGVM_LLM_MODEL` (and `NGVM_LLM_BASE_URL` if it moved), and `NGVM_LLM_REASONING=off`, on
    the group or the tenant project; push the tenant project (`deploy-k8s`).
 3. The LLM cache (`/data/llm-cache.json`) keys its answers by model: the first run with the new
    model asks everything once, the next ones only what changed.
@@ -84,7 +84,7 @@ in its network. With a SaaS LLM, the provider receives the analysts' e-mails.
 
 | Variable (`deploy-k8s`) | Chart value | Values |
 | --- | --- | --- |
-| `A2VM_CHAT_FORWARD_USER_INFO` | `chat.forwardUserInfo` | `true` (default), `false` |
+| `NGVM_CHAT_FORWARD_USER_INFO` | `chat.forwardUserInfo` | `true` (default), `false` |
 
 With `false`, Open WebUI sends no user header: the journal reads `chat (user not forwarded)` for the
 chat's calls. The validations on the review page keep their author (OIDC).
@@ -92,25 +92,25 @@ chat's calls. The validations on the review page keep their author (OIDC).
 ## 5. An LLM behind mutual TLS (v0.23.14)
 
 A reverse proxy in front of the model may ask every client for a certificate
-(`400 No required SSL certificate was sent` without one). A2VM then presents a certificate of its
+(`400 No required SSL certificate was sent` without one). NGVM then presents a certificate of its
 own: a service certificate (usage `clientAuth`) from a CA the reverse proxy accepts, never a
 person's.
 
 | CI/CD variable (`deploy-k8s`) | Secret key | What |
 | --- | --- | --- |
-| `A2VM_LLM_CLIENT_CERT` (File) | `llm-client-cert` | the client certificate, PEM, with its intermediate CAs after it |
-| `A2VM_LLM_CLIENT_KEY` (File, protected) | `llm-client-key` | its private key, PEM, without a passphrase |
-| `A2VM_LLM_CA` (File) | `llm-ca` | the CA chain of the endpoint's server certificate (the company's CA) |
+| `NGVM_LLM_CLIENT_CERT` (File) | `llm-client-cert` | the client certificate, PEM, with its intermediate CAs after it |
+| `NGVM_LLM_CLIENT_KEY` (File, protected) | `llm-client-key` | its private key, PEM, without a passphrase |
+| `NGVM_LLM_CA` (File) | `llm-ca` | the CA chain of the endpoint's server certificate (the company's CA) |
 
-- **The triage** (daily run) reads them as files (`A2VM_LLM_CLIENT_CERT_FILE`,
-  `A2VM_LLM_CLIENT_KEY_FILE`, `A2VM_LLM_CA_FILE`, set by the chart to `/secrets/…`). A key absent
+- **The triage** (daily run) reads them as files (`NGVM_LLM_CLIENT_CERT_FILE`,
+  `NGVM_LLM_CLIENT_KEY_FILE`, `NGVM_LLM_CA_FILE`, set by the chart to `/secrets/…`). A key absent
   from the Secret: no certificate. In a GitLab pipeline without Kubernetes, the same three
   variables, of type File, name the files.
-- **The chat**: Open WebUI cannot present a client certificate. With `A2VM_LLM_CLIENT_CERT` set,
+- **The chat**: Open WebUI cannot present a client certificate. With `NGVM_LLM_CLIENT_CERT` set,
   `deploy-k8s` sets `chat.llm.clientCert`: Open WebUI calls the LLM gateway of the namespace
   (`<tenant>-llm`, nginx), which presents the certificate, checks the endpoint's against `llm-ca`
   and passes the API key on. One `https` endpoint.
-- The endpoint is often inside the company: its host in `A2VM_NO_PROXY` (the daily run would else
+- The endpoint is often inside the company: its host in `NGVM_NO_PROXY` (the daily run would else
   go through the corporate proxy, which does not carry the client certificate to it).
 
 Check the certificate from a machine of the cluster's network before deploying:

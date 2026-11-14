@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """The sender of the review page (LLD vulnerability-intelligence §3.8, §3.9): one replica, in a loop.
 
 Each pass:

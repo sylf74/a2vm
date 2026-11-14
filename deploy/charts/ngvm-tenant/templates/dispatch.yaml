@@ -1,0 +1,497 @@
+{{- /*
+Dispatch service of the tenant (pillar 4, v0.20.0, LLD dispatch §6): `dispatch serve`, the digests of
+its run and read tokens from a Secret, the tenant's rules (dispatch.yaml) from the ConfigMap. Its
+tickets in the tenant's PostgreSQL with database.enabled, else as files on a volume of its own. One
+replica: the tickets of a tenant move in one place. Called by the daily run's step `dispatch`; it
+reads the decision service and writes to the targets of dispatch.yaml only.
+
+With dispatch.page.enabled, the page of the requests for remediation (D18) on port 8081, behind
+oauth2-proxy (the persons of dispatch.page.remediators sign in with the tenant's identity provider).
+*/ -}}
+{{- if .Values.dispatch.enabled }}
+{{- include "ngvm-tenant.checks" . }}
+{{- $name := include "ngvm-tenant.name" . }}
+{{- $db := .Values.database.enabled }}
+{{- $d := .Values.dispatch }}
+{{- $p := $d.page }}
+{{- $rules := fromYaml .Values.files.dispatch }}
+{{- if not $db }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $name }}-dispatch
+  labels:
+    {{- include "ngvm-tenant.labels" . | nindent 4 }}
+  annotations:
+    # The tickets survive an uninstall: delete the claim by hand to drop them.
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: [ReadWriteOnce]
+  {{- if $d.storage.storageClass }}
+  storageClassName: {{ $d.storage.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ $d.storage.size | quote }}
+---
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}-dispatch
+  labels:
+    {{- include "ngvm-tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dispatch
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "ngvm-tenant.selector" (dict "root" . "component" "dispatch") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ngvm-tenant.labels" . | nindent 8 }}
+        app.kubernetes.io/component: dispatch
+        ngvm.io/verdict-reader: "true"
+      annotations:
+        checksum/digests: {{ $d.digestsChecksum | quote }}
+        checksum/rules: {{ .Values.files.dispatch | sha256sum | quote }}
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      {{- if .Values.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.image.pullSecret }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: dispatch
+          image: {{ include "ngvm-tenant.image" (dict "root" . "pillar" "dispatch") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["dispatch", "serve"]
+          args:
+            - --tenant={{ .Values.tenant }}
+            - --digests=/dispatch-secret/digests
+            - --rules=/config/dispatch.yaml
+            - --verdict-url={{ include "ngvm-tenant.verdictUrl" . }}
+            - --verdict-token-file=/secrets/verdict-read-token
+            - --secrets=/secrets
+            - --store=/data/dispatch
+            - --port=8080
+            {{- if $p.enabled }}
+            - --page-port=8081
+            - --page-url=https://{{ $p.host }}
+            - --page-key-file=/secrets/dispatch-page-key
+            - --remediators={{ join "," $p.remediators }}
+            {{- end }}
+          {{- if $db }}
+          env:
+            {{- include "ngvm-tenant.dbEnv" . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: 8080
+            {{- if $p.enabled }}
+            - name: page
+              containerPort: 8081
+            {{- end }}
+          readinessProbe:
+            httpGet: {path: /readyz, port: http}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 30
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            {{- if $db }}
+            {{- include "ngvm-tenant.dbMounts" . | nindent 12 }}
+            {{- else }}
+            - name: data
+              mountPath: /data
+            {{- end }}
+            - name: digests
+              mountPath: /dispatch-secret
+              readOnly: true
+            - name: secrets
+              mountPath: /secrets
+              readOnly: true
+            - name: config
+              mountPath: /config
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          {{- with $d.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        {{- if $db }}
+        {{- include "ngvm-tenant.dbVolumes" . | nindent 8 }}
+        {{- else }}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ $name }}-dispatch
+        {{- end }}
+        - name: digests
+          secret:
+            secretName: {{ $d.digestsSecret }}
+            defaultMode: 0440
+        - name: secrets       # only the keys the service needs, never the tenant's other secrets
+          secret:
+            secretName: {{ .Values.secret.name }}
+            defaultMode: 0440
+            optional: true
+            items:
+              - {key: verdict-read-token, path: verdict-read-token}
+              {{- if $p.enabled }}
+              - {key: dispatch-page-key, path: dispatch-page-key}
+              {{- end }}
+              {{- range $target, $_ := ($rules.targets | default dict) }}
+              - {key: {{ printf "dispatch-%s" $target }}, path: {{ printf "dispatch-%s" $target }}}
+              - {key: {{ printf "dispatch-%s-ca" $target }}, path: {{ printf "dispatch-%s-ca" $target }}}
+              {{- end }}
+        - name: config
+          configMap:
+            name: {{ $name }}-config
+            items:
+              - {key: dispatch.yaml, path: dispatch.yaml}
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}-dispatch
+  labels:
+    {{- include "ngvm-tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dispatch
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "ngvm-tenant.selector" (dict "root" . "component" "dispatch") | nindent 4 }}
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+    {{- if $p.enabled }}
+    - name: page
+      port: 8081
+      targetPort: page
+    {{- end }}
+{{- if $d.networkPolicy.enabled }}
+---
+# In: the daily run and the readers (8080), the page's proxy (8081). Out: the decision service, the
+# targets of dispatch.yaml, the tenant's database and the DNS.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $name }}-dispatch
+  labels:
+    {{- include "ngvm-tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dispatch
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "ngvm-tenant.selector" (dict "root" . "component" "dispatch") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "ngvm-tenant.selector" (dict "root" . "component" "daily") | nindent 14 }}
+        - podSelector:
+            matchLabels:
+              ngvm.io/dispatch-reader: "true"
+      ports:
+        - {port: 8080, protocol: TCP}
+    {{- if $p.enabled }}
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "ngvm-tenant.selector" (dict "root" . "component" "dispatch-page") | nindent 14 }}
+      ports:
+        - {port: 8081, protocol: TCP}
+    {{- end }}
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "ngvm-tenant.selector" (dict "root" . "component" "verdict") | nindent 14 }}
+      ports:
+        - {port: 8080, protocol: TCP}
+    {{- range $d.egress }}
+    - to:
+        - ipBlock:
+            cidr: {{ .cidr | quote }}
+      ports:
+        - {port: {{ .port }}, protocol: TCP}
+    {{- end }}
+    {{- if $d.inCluster }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.chat.networkPolicy.ingressNamespace | quote }}
+    {{- end }}
+    {{- if $db }}
+    {{- include "ngvm-tenant.dbEgress" . | nindent 4 }}
+    {{- else }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.database.dnsNamespace | quote }}
+      ports:
+        - {port: 53, protocol: UDP}
+        - {port: 53, protocol: TCP}
+    {{- end }}
+{{- end }}
+{{- if $p.enabled }}
+{{- $o := .Values.oidc }}
+{{- $ing := $p.ingress }}
+{{- $tls := $ing.tlsSecret | default (ternary (printf "%s-dispatch-tls" $name) "" (ne $ing.clusterIssuer "")) }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}-dispatch-page
+  labels:
+    {{- include "ngvm-tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dispatch-page
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "ngvm-tenant.selector" (dict "root" . "component" "dispatch-page") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ngvm-tenant.labels" . | nindent 8 }}
+        app.kubernetes.io/component: dispatch-page
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: oauth2-proxy
+          image: {{ $p.proxy.image | quote }}
+          imagePullPolicy: IfNotPresent
+          args:
+            - --http-address=0.0.0.0:4180
+            - --provider=oidc
+            - --provider-display-name={{ $o.providerName }}
+            - --oidc-issuer-url={{ $o.issuerUrl }}
+            - --client-id={{ $o.clientId }}
+            - --client-secret-file=/secrets/oidc-client-secret
+            - --cookie-secret-file=/secrets/oidc-cookie-secret
+            - --cookie-name=_ngvm_dispatch
+            - --cookie-secure=true
+            - --cookie-samesite=lax
+            - --cookie-expire={{ $p.proxy.cookieHours }}h
+            - --redirect-url={{ printf "https://%s/oauth2/callback" $p.host }}
+            - --upstream={{ printf "http://%s-dispatch:8081/" $name }}
+            - --upstream-timeout={{ $p.proxy.timeoutSeconds }}s
+            - --scope=openid email profile
+            - --code-challenge-method=S256
+            - --oidc-groups-claim={{ $o.groupsClaim }}
+            - --email-domain=*
+            {{- range $p.remediators }}
+            - --allowed-group={{ . }}
+            {{- end }}
+            - --pass-user-headers=true
+            - --skip-provider-button=true
+            - --reverse-proxy=true
+            - --silence-ping-logging=true
+            {{- if $o.ca }}
+            - --provider-ca-file=/oidc-ca/ca.crt
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: 4180
+          readinessProbe:
+            httpGet: {path: /ready, port: http}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /ping, port: http}
+            periodSeconds: 30
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: secrets
+              mountPath: /secrets
+              readOnly: true
+            {{- if $o.ca }}
+            - name: ca
+              mountPath: /oidc-ca
+              readOnly: true
+            {{- end }}
+          {{- with $p.proxy.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: secrets
+          secret:
+            secretName: {{ .Values.secret.name }}
+            defaultMode: 0444
+            items:
+              - {key: oidc-client-secret, path: oidc-client-secret}
+              - {key: oidc-cookie-secret, path: oidc-cookie-secret}
+        {{- if $o.ca }}
+        - name: ca
+          secret:
+            secretName: {{ .Values.secret.name }}
+            defaultMode: 0444
+            items:
+              - {key: oidc-ca, path: ca.crt}
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}-dispatch-page
+  labels:
+    {{- include "ngvm-tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dispatch-page
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "ngvm-tenant.selector" (dict "root" . "component" "dispatch-page") | nindent 4 }}
+  ports:
+    - name: http
+      port: 4180
+      targetPort: http
+{{- if and (eq $ing.controller "traefik") $ing.allowFrom }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ $name }}-dispatch-allow
+  labels:
+    {{- include "ngvm-tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dispatch-page
+spec:
+  ipAllowList:
+    sourceRange:
+      {{- range $ing.allowFrom }}
+      - {{ . | quote }}
+      {{- end }}
+{{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $name }}-dispatch-page
+  labels:
+    {{- include "ngvm-tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dispatch-page
+  annotations:
+    {{- if eq $ing.controller "nginx" }}
+    nginx.ingress.kubernetes.io/proxy-body-size: "1m"
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "16k"
+    {{- if $ing.allowFrom }}
+    nginx.ingress.kubernetes.io/whitelist-source-range: {{ join "," $ing.allowFrom | quote }}
+    {{- end }}
+    {{- else if and (eq $ing.controller "traefik") $ing.allowFrom }}
+    traefik.ingress.kubernetes.io/router.middlewares: {{ printf "%s-%s-dispatch-allow@kubernetescrd" .Release.Namespace $name | quote }}
+    {{- end }}
+    {{- if $ing.clusterIssuer }}
+    cert-manager.io/cluster-issuer: {{ $ing.clusterIssuer | quote }}
+    {{- end }}
+    {{- with $ing.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  {{- if $ing.className }}
+  ingressClassName: {{ $ing.className | quote }}
+  {{- end }}
+  tls:
+    - hosts: [{{ $p.host | quote }}]
+      {{- if $tls }}
+      secretName: {{ $tls | quote }}
+      {{- end }}
+  rules:
+    - host: {{ $p.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $name }}-dispatch-page
+                port:
+                  name: http
+{{- if $d.networkPolicy.enabled }}
+---
+# oauth2-proxy: from the ingress controller only; to the identity provider, the page and the DNS.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $name }}-dispatch-page
+  labels:
+    {{- include "ngvm-tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dispatch-page
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "ngvm-tenant.selector" (dict "root" . "component" "dispatch-page") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.chat.networkPolicy.ingressNamespace | quote }}
+      ports:
+        - {port: 4180, protocol: TCP}
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "ngvm-tenant.selector" (dict "root" . "component" "dispatch") | nindent 14 }}
+      ports:
+        - {port: 8081, protocol: TCP}
+    {{- include "ngvm-tenant.oidcEgress" . | nindent 4 }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.chat.networkPolicy.dnsNamespace | quote }}
+      ports:
+        - {port: 53, protocol: UDP}
+        - {port: 53, protocol: TCP}
+{{- end }}
+{{- end }}
+{{- end }}

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """v0.23.5 (D20): Cyberwatch as a scanner, read only: its assets with their components and the CVEs
 still open on each, as a detection of source cyberwatch."""
 
@@ -95,7 +95,7 @@ def _cfg(tmp_path, **extra):
 
 
 def test_every_asset_with_its_components_and_open_cves(tmp_path) -> None:
-    from a2vm.io import write_detection
+    from ngvm.io import write_detection
 
     master = FakeMaster()
     cfg = _cfg(tmp_path)
@@ -147,8 +147,8 @@ def test_read_only_and_clear_errors(tmp_path) -> None:
 
 
 def test_the_collector_reads_a_cyberwatch_connector_and_it_is_a_scan(tmp_path) -> None:
-    from a2vm.profile import load_profile
     from detect.agent import CyberwatchConnector, load_config
+    from ngvm.profile import load_profile
     from verdict.assets.build import NOT_SCANS, build_inventory
 
     (tmp_path / "token").write_text("t")
@@ -171,6 +171,6 @@ def test_release_recorded() -> None:
     assert re.search(r"^\| v0\.23\.5( \(current\))? \| D20: Cyberwatch", hld, re.M)
     assert "## v0.23.5 — " in (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     assert (ROOT / "docs" / "cyberwatch.md").exists()
-    for f in ("a2vm", "via", "detect", "verdict", "dispatch"):
+    for f in ("ngvm", "via", "detect", "verdict", "dispatch"):
         text = (ROOT / f / "pyproject.toml").read_text()
         assert re.search(r'^version = "0\.(23\.([5-9]|[1-9]\d)|2[4-9]\.\d+)"', text, re.M)

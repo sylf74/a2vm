@@ -1,5 +1,5 @@
 #!/bin/sh
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 # Assemble the HLD chapters (docs/hld/) into one document for a review outside GitLab.
 # Usage: scripts/build-hld.sh [output-dir]   (default: build/hld)
 # Always writes hld.md; also hld.html and hld.pdf when pandoc (and a PDF engine) are installed.
@@ -16,7 +16,7 @@ for f in "$here"/docs/hld/0*.md "$here"/docs/hld/[1-9]*.md; do
 done
 echo "hld: $md"
 if command -v pandoc >/dev/null 2>&1; then
-  pandoc "$md" -s --toc -o "$out/hld.html" --metadata title="AI-Assisted Vulnerability Management — HLD"
+  pandoc "$md" -s --toc -o "$out/hld.html" --metadata title="Next-Generation Vulnerability Management — HLD"
   echo "hld: $out/hld.html"
   pandoc "$md" --toc -o "$out/hld.pdf" 2>/dev/null && echo "hld: $out/hld.pdf" || echo "hld: no PDF engine, PDF skipped"
 fi

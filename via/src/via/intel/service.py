@@ -1,7 +1,7 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
-"""The shared intelligence service (HLD D17, v0.22.0; contract a2vm/schemas/openapi/intel.v1.yaml).
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
+"""The shared intelligence service (HLD D17, v0.22.0; contract ngvm/schemas/openapi/intel.v1.yaml).
 
-One service for every tenant, in the namespace of the watch team (`a2vm-via`):
+One service for every tenant, in the namespace of the watch team (`ngvm-via`):
 
   POST /v1/records          the records of a set of CVEs, collected and enriched once (CVE record, KEV,
                             EPSS, GTI when enabled) and cached for every tenant
@@ -10,7 +10,7 @@ One service for every tenant, in the namespace of the watch team (`a2vm-via`):
   GET  /v1/feed?since=      what the tenants' watches read: the radar's validated events and, GTI
                             enabled, the vulnerabilities GTI knows on the technologies watched
   POST /v1/radar/events     the radar's sender publishes a validated event (role radar)
-  GET  /v1/osv/<ecosystem>  the index of OSV for one language ecosystem (v0.23.12, a2vm.osvdb),
+  GET  /v1/osv/<ecosystem>  the index of OSV for one language ecosystem (v0.23.12, ngvm.osvdb),
                             rebuilt every few hours from OSV's archive: the tenants match their
                             libraries against it at home, none of them is sent here
 
@@ -31,10 +31,10 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, urlsplit
 
-from a2vm import osvdb
-from a2vm.config import Settings
-from a2vm.service import JsonHandler, Problem, TokenSet, moment
-from a2vm.service import serve as _serve
+from ngvm import osvdb
+from ngvm.config import Settings
+from ngvm.service import JsonHandler, Problem, TokenSet, moment
+from ngvm.service import serve as _serve
 
 from .collect import collect_direct
 from .gti import discovered
@@ -405,7 +405,7 @@ def gti_item(view: dict[str, Any], tech: dict[str, str]) -> dict[str, Any]:
 
 def make_handler(service: IntelService) -> type[JsonHandler]:
     class Handler(JsonHandler):
-        server_version = "a2vm-intel"
+        server_version = "ngvm-intel"
         logger = log
 
         def do_GET(self) -> None:  # noqa: N802 - http.server API

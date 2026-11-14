@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """Connectors of pillar 4 (LLD dispatch §5): each maps a ticket to one tool's fields and back, and
 nothing else (no rule, no decision). The credentials are read from files of the tenant's Secret."""
 
@@ -30,7 +30,7 @@ class External:
         return {"ref": self.ref, "url": self.url, "status": self.status}
 
 
-# A2VM's view of a tool's status.
+# NGVM's view of a tool's status.
 CLOSED = "closed"  # resolved or closed by the team
 WORKING = "working"  # new, assigned, pending...
 GONE = "gone"  # the tool no longer knows the ticket
@@ -45,7 +45,7 @@ class Connector(Protocol):
     def close(self) -> None: ...
 
     # Optional (v0.22.2): `declared_fix(external) -> str`, the date the team says it fixed; and
-    # `set_due(external, due) -> bool`, A2VM's due date written into the ticket.
+    # `set_due(external, due) -> bool`, NGVM's due date written into the ticket.
 
 
 def secret_file(directory: str | Path, name: str) -> str:

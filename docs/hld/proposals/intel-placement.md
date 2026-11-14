@@ -4,7 +4,7 @@ Status: planned. Topology R (the relay of the sources, §4.6) and the outgoing p
 v0.23.4; the cloud cluster (§4.1, §4.2, §4.4) later, when an operator needs it (HLD §11).
 
 Written after v0.23.2. Read with HLD `docs/hld/00-product-strategy.md` (D17, §6, §11),
-`docs/radar.md`, `docs/kubernetes.md` and the chart `deploy/charts/a2vm-tenant`.
+`docs/radar.md`, `docs/kubernetes.md` and the chart `deploy/charts/ngvm-tenant`.
 
 ## 1. Need
 
@@ -29,12 +29,12 @@ The way out must be a configuration choice, never imposed:
 
 | Item | State |
 | --- | --- |
-| Cluster of a tenant | Already chosen per tenant: `A2VM_K8S_CONTEXT` (GitLab agent context). Two tenants can live in two clusters today |
-| Address of the shared service | `intel.url` (variable `A2VM_INTEL_URL` of the group `vulnops/clients`), an in-cluster address (`http://a2vm-via-intel.a2vm-via.svc:8080`); token: key `intel-token` of the tenant's Secret |
+| Cluster of a tenant | Already chosen per tenant: `NGVM_K8S_CONTEXT` (GitLab agent context). Two tenants can live in two clusters today |
+| Address of the shared service | `intel.url` (variable `NGVM_INTEL_URL` of the group `vulnops/clients`), an in-cluster address (`http://ngvm-via-intel.ngvm-via.svc:8080`); token: key `intel-token` of the tenant's Secret |
 | Shared service | `intel.serve.enabled` in the watch team's release; a ClusterIP Service, **no Ingress**; its NetworkPolicy lets in only the pods `daily`, `watch`, `send`, `tools` of the namespaces in `intel.serve.allowNamespaces` (empty: every namespace of the cluster) |
 | Tool server of the chat | NetworkPolicy egress to the intel pods of the cluster only (`namespaceSelector: {}`, port 8080): **an external intel URL is blocked** |
 | Daily run and watch CronJobs | No NetworkPolicy: free egress |
-| GitLab mode | Works with `A2VM_INTEL_URL` if the runner reaches the service (`docs/radar.md` §3), but no ingress is provided to reach it |
+| GitLab mode | Works with `NGVM_INTEL_URL` if the runner reaches the service (`docs/radar.md` §3), but no ingress is provided to reach it |
 | Outgoing proxy | No setting in the chart. The HTTP clients are `httpx` with the default `trust_env=True`: `HTTPS_PROXY` and `NO_PROXY` in the environment would be honoured (to check in every client: sources, LLM, intel, mail, Graph, Teams, GTI) |
 | Cloud VMs | Terraform and cloud-init patterns already in the repo: `deploy/portal` (reporting, Scaleway, Caddy and Let's Encrypt), `deploy/scanner` (runner `scan-cloud`). No cloud cluster |
 | Fallback | A tenant whose shared service does not answer reads the sources itself (`collect` → `collect_direct`, noted in the log) |
@@ -56,7 +56,7 @@ the corporate proxy. B, D need §4.1, §4.2, and §4.4 for a cloud cluster.
 
 ### 4.1 Expose the shared service (watch team's release)
 
-- `intel.serve.ingress`: `enabled`, `host` (variable `A2VM_INTEL_HOST`), `className`, `tls`
+- `intel.serve.ingress`: `enabled`, `host` (variable `NGVM_INTEL_HOST`), `className`, `tls`
   (cert-manager issuer or an existing secret), `annotations`, optional source allowlist
   (`allowCidrs`: the corporate egress addresses; the chosen ingress controller's annotation).
 - NetworkPolicy of the intel pod: also allow the ingress controller's namespace (value
@@ -72,13 +72,13 @@ the corporate proxy. B, D need §4.1, §4.2, and §4.4 for a cloud cluster.
   - the tool server's egress allows TCP 443 to `intel.egressCidrs` (default `0.0.0.0/0`, to narrow
     down) instead of the in-cluster intel pods;
   - the jobs keep their free egress (no change), unless a later version restricts it.
-- `intel.ca`: a private CA for the intel certificate (variable `A2VM_INTEL_CA`, File), mounted and
+- `intel.ca`: a private CA for the intel certificate (variable `NGVM_INTEL_CA`, File), mounted and
   given to the client (`SSL_CERT_FILE` or an explicit `verify`).
-- GitLab mode: the same `A2VM_INTEL_URL` and `A2VM_INTEL_TOKEN`; document it.
+- GitLab mode: the same `NGVM_INTEL_URL` and `NGVM_INTEL_TOKEN`; document it.
 
 ### 4.3 Outgoing proxy (any tenant, any topology)
 
-- Group or project variables `A2VM_HTTPS_PROXY`, `A2VM_NO_PROXY`, `A2VM_PROXY_CA` (File) → chart
+- Group or project variables `NGVM_HTTPS_PROXY`, `NGVM_NO_PROXY`, `NGVM_PROXY_CA` (File) → chart
   values `proxy.https`, `proxy.noProxy`, `proxy.ca` → environment `HTTPS_PROXY`, `HTTP_PROXY`,
   `NO_PROXY` and a CA bundle in every pod that goes out (daily, watch, send, radar, intel, tools,
   dispatch). `NO_PROXY` keeps the cluster's services (`.svc`, `.cluster.local`), the LLM endpoints
@@ -97,8 +97,8 @@ the corporate proxy. B, D need §4.1, §4.2, and §4.4 for a cloud cluster.
   the instance, never through Terraform).
 - Sizing: radar, shared service, review page, oauth2-proxy, optionally CloudNativePG: 2 vCPU,
   4 GiB, 40 GB as a start; to measure.
-- Then the tenant `via` points `A2VM_K8S_CONTEXT` to the new agent, `A2VM_INTEL_HOST` set, and the
-  group variable `A2VM_INTEL_URL` becomes `https://<host>`.
+- Then the tenant `via` points `NGVM_K8S_CONTEXT` to the new agent, `NGVM_INTEL_HOST` set, and the
+  group variable `NGVM_INTEL_URL` becomes `https://<host>`.
 
 ### 4.5 What the cloud radar needs from elsewhere
 
@@ -141,7 +141,7 @@ https://relay.example.org/api.osv.dev/...                  -> https://api.osv.de
 - **Access to the relay**: its own token (header checked by Caddy) and the corporate egress
   addresses in an allowlist; otherwise it is an open relay to those sites.
 - **Cache** (optional): Caddy's cache or a short `Cache-Control` override for the large static files
-  (KEV, EPSS), to spare the upstreams; the A2VM caches stay the reference.
+  (KEV, EPSS), to spare the upstreams; the NGVM caches stay the reference.
 - **`deploy/relay/`**: Terraform (Scaleway) for the instance, its address, its security group (443
   from the allowed addresses, 22 from `admin_ips`); cloud-init (provider-agnostic) with Caddy, the
   host list from a variable, the token generated on the instance and read over SSH (never through
@@ -162,15 +162,15 @@ https://relay.example.org/api.osv.dev/...                  -> https://api.osv.de
 
 ## 6. Work items
 
-0. Topology R first (v0.23.4): `sources.relay` (settings, environment `A2VM_RELAY_URL`, `A2VM_RELAY_HOSTS`,
-   `A2VM_RELAY_TOKEN` into the tenant's Secret), the rewriting hook in every client that fetches a
+0. Topology R first (v0.23.4): `sources.relay` (settings, environment `NGVM_RELAY_URL`, `NGVM_RELAY_HOSTS`,
+   `NGVM_RELAY_TOKEN` into the tenant's Secret), the rewriting hook in every client that fetches a
    public source (via sources, feeds and CSAF, packages advisories, EPSS, KEV, CERT-FR, cvelist),
    `check-sources` showing the route, `deploy/relay/` and its README, `docs/radar.md` and
    `docs/deployment.md`.
 1. Chart: `intel.serve.ingress.*`, NetworkPolicy of the intel pod (ingress controller),
    `intel.external`, `intel.egressCidrs`, `intel.ca`, `proxy.*` on every pod that goes out.
-2. Pipeline template: variables `A2VM_INTEL_HOST`, `A2VM_INTEL_CA`, `A2VM_HTTPS_PROXY`,
-   `A2VM_NO_PROXY`, `A2VM_PROXY_CA` passed to helm; the CA files into the Secret or a ConfigMap.
+2. Pipeline template: variables `NGVM_INTEL_HOST`, `NGVM_INTEL_CA`, `NGVM_HTTPS_PROXY`,
+   `NGVM_NO_PROXY`, `NGVM_PROXY_CA` passed to helm; the CA files into the Secret or a ConfigMap.
 3. Code: `intel.fallback` (sources setting); one place that builds the httpx clients with the CA
    and the proxy; check SMTP, Graph, Teams, GTI, LLM.
 4. `deploy/cloud-k8s/` (Terraform Scaleway + cloud-init k3s, cert-manager, GitLab agent), README.
@@ -188,9 +188,9 @@ https://relay.example.org/api.osv.dev/...                  -> https://api.osv.de
 
 - Topology A: a tenant upgraded with no new variable renders the same objects as v0.23.2 (no
   ingress, same NetworkPolicies, no proxy variables).
-- Topology B: a client tenant with `A2VM_INTEL_URL=https://intel.example.org` gets its records and
+- Topology B: a client tenant with `NGVM_INTEL_URL=https://intel.example.org` gets its records and
   the radar's feed, and its chat's `list_radar_events` answers.
-- Behind a proxy: with `A2VM_HTTPS_PROXY` only, a tenant reads the shared service and the LLM as
+- Behind a proxy: with `NGVM_HTTPS_PROXY` only, a tenant reads the shared service and the LLM as
   configured, nothing else goes direct.
 - `intel.fallback: false`: an unreachable service fails the run with a clear message, no source is
   read.

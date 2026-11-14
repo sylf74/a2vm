@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """v0.11.4: the alert sheet in Word, and the analysts' edits before sending."""
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from pathlib import Path
 import yaml
 from docx import Document
 
-from a2vm.models import CvssMetric
+from ngvm.models import CvssMetric
 from via.alert import journal, word
 from via.alert.cli import main
 
@@ -51,11 +51,11 @@ def test_template_check_lists_unknown_tags(tmp_path):
 
 
 def test_watch_attaches_the_word_sheet_and_send_uses_the_edits(tmp_path, monkeypatch):
-    monkeypatch.setenv("A2VM_ANALYST_TO", "soc@example.org")
+    monkeypatch.setenv("NGVM_ANALYST_TO", "soc@example.org")
     monkeypatch.setenv("CI_PIPELINE_URL", "https://gitlab.example/acme/-/pipelines/1")
     monkeypatch.setenv("CI_PROJECT_URL", "https://gitlab.example/acme")
     monkeypatch.setenv("CI_JOB_URL", "https://gitlab.example/acme/-/jobs/9")
-    for v in ("A2VM_SMTP_HOST", "A2VM_MAIL_TRANSPORT", "A2VM_SEND_ONLY"):
+    for v in ("NGVM_SMTP_HOST", "NGVM_MAIL_TRANSPORT", "NGVM_SEND_ONLY"):
         monkeypatch.delenv(v, raising=False)
     profile = _profile(tmp_path, attach=["docx"])
 
@@ -85,7 +85,7 @@ def test_watch_attaches_the_word_sheet_and_send_uses_the_edits(tmp_path, monkeyp
     edits.mkdir()
     (edits / f"{pan['id']}.md").write_text("# Alerte\n\n## CVE\n\nCVE-2024-3400 et CVE-2023-0001\n")
     number = str(index.index(pan) + 1)
-    monkeypatch.setenv("A2VM_SEND_ONLY", number)
+    monkeypatch.setenv("NGVM_SEND_ONLY", number)
     args = ["send", str(profile), "--alerts", str(tmp_path / "alerts"), "--edits", str(edits),
             "--journal", str(tmp_path / "alerts-log.jsonl")]  # fmt: skip
     assert main(args) == 1
@@ -103,7 +103,7 @@ def test_watch_attaches_the_word_sheet_and_send_uses_the_edits(tmp_path, monkeyp
 
 
 def test_client_template_next_to_the_profile_wins(tmp_path):
-    from a2vm.profile import load_profile
+    from ngvm.profile import load_profile
     from via.alert.cli import _word_template
 
     profile = _profile(tmp_path, attach=["docx"])
@@ -125,8 +125,8 @@ def test_client_gets_a_pdf_made_from_the_word_sheet(tmp_path, monkeypatch):
 
     if not (shutil.which("soffice") or shutil.which("libreoffice")):
         pytest.skip("LibreOffice not installed")
-    monkeypatch.delenv("A2VM_ANALYST_TO", raising=False)
-    for v in ("A2VM_SMTP_HOST", "A2VM_MAIL_TRANSPORT"):
+    monkeypatch.delenv("NGVM_ANALYST_TO", raising=False)
+    for v in ("NGVM_SMTP_HOST", "NGVM_MAIL_TRANSPORT"):
         monkeypatch.delenv(v, raising=False)
     profile = _profile(tmp_path, attach=["pdf"])
 
@@ -137,7 +137,7 @@ def test_client_gets_a_pdf_made_from_the_word_sheet(tmp_path, monkeypatch):
     index = json.loads((tmp_path / "alerts" / "index.json").read_text())
     assert all(a.get("docx") for a in index)  # the Word sheet is always made: analysts edit it
     pan = next(a for a in index if "CERTFR-2024-ALE-006" in a["id"])
-    monkeypatch.setenv("A2VM_SEND_ONLY", str(index.index(pan) + 1))
+    monkeypatch.setenv("NGVM_SEND_ONLY", str(index.index(pan) + 1))
     assert main(["send", str(profile), "--alerts", str(tmp_path / "alerts")]) == 0
     sent = email.message_from_bytes(next((tmp_path / "alerts" / "outbox").glob("*.eml")).read_bytes(),
                                     policy=policy.default)  # fmt: skip

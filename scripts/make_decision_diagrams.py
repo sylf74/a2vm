@@ -1,6 +1,6 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """Build the decision diagrams of LLD triage-prioritization §4 from the SSVC tables themselves
-(a2vm/src/a2vm/data/*.csv), so that the pictures can never disagree with the tables.
+(ngvm/src/ngvm/data/*.csv), so that the pictures can never disagree with the tables.
 
 Prints three Mermaid blocks: the decision chain, the CISA Coordinator tree and the BOD 26-04
 tree; with --check, fails when the LLD does not contain them as printed (run in the test suite).
@@ -14,7 +14,7 @@ from collections import defaultdict
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-DATA = ROOT / "a2vm" / "src" / "a2vm" / "data"
+DATA = ROOT / "ngvm" / "src" / "ngvm" / "data"
 LLD = ROOT / "docs" / "lld" / "triage-prioritization.md"
 # Default delivery mapping (policy.decision_mapping, LLD §4.4); colours show the level delivered.
 MAPPING = {"track": "TRACK", "track*": "ATTEND", "attend": "ATTEND", "act": "ACT"}

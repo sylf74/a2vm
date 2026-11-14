@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """v0.24.0: the asset graph and the exposure computed from a path.
 
 Zones and flows in the client profile (an intention); the services the scanners and the hosts report
@@ -16,11 +16,11 @@ import subprocess
 import pytest
 import yaml
 
-from a2vm.io import Detection, read_assets, read_detection, write_detection
-from a2vm.models import AssetObservation, Flow, port_label
-from a2vm.profile import ProfileError, load_profile, validate_profile_data
 from detect.collect import LISTENING, parse_listening
 from detect.openvas import parse_gmp_report
+from ngvm.io import Detection, read_assets, read_detection, write_detection
+from ngvm.models import AssetObservation, Flow, port_label
+from ngvm.profile import ProfileError, load_profile, validate_profile_data
 from verdict.assets.build import build_inventory
 from verdict.assets.graph import AssetGraph, proposed_flows, read_graph, write_graph
 
@@ -376,7 +376,7 @@ def test_the_graph_is_written_read_and_carried_to_the_next_run(tmp_path, capsys)
     args = ["build", p.source_path, "--detect", str(tmp_path / "detect"), "--out", str(out), "--previous", str(out)]
     assert assets_main(args) == 0  # no graph before: fine
     graph = read_graph(out / "acme" / "asset_graph.json", "acme")
-    assert isinstance(graph, AssetGraph) and graph.to_dict()["schema"] == "a2vm.asset_graph/1"
+    assert isinstance(graph, AssetGraph) and graph.to_dict()["schema"] == "ngvm.asset_graph/1"
     assert "host:pc042" in graph.off_premises
     _, assets = read_assets(out / "acme" / "assets.json")
     assert assets["host:pc042"].exposure_path[1]["node"] == "zone:off-premises"
@@ -399,18 +399,18 @@ def test_the_graph_grows_with_the_assets_not_their_square(tmp_path) -> None:
 
 def test_the_asset_graph_artefact_is_documented() -> None:
     lld = (ROOT / "docs" / "lld" / "triage-prioritization.md").read_text(encoding="utf-8")
-    assert "a2vm.asset_graph/1" in lld and "flows_proposed.yaml" in lld
+    assert "ngvm.asset_graph/1" in lld and "flows_proposed.yaml" in lld
 
 
 def test_the_daily_job_carries_the_graph_of_the_run_before() -> None:
-    cron = (ROOT / "deploy" / "charts" / "a2vm-tenant" / "templates" / "cronjob-daily.yaml").read_text()
+    cron = (ROOT / "deploy" / "charts" / "ngvm-tenant" / "templates" / "cronjob-daily.yaml").read_text()
     assert "--previous /data/work/assets" in cron
     pipeline = (ROOT / "templates" / "client-pipeline.yml").read_text()
     assert "--previous work/assets" in pipeline
 
 
 def test_json_schemas_know_the_new_fields() -> None:
-    schemas = ROOT / "a2vm" / "src" / "a2vm" / "schemas"
+    schemas = ROOT / "ngvm" / "src" / "ngvm" / "schemas"
     detection = json.loads((schemas / "detection.schema.json").read_text())
     assert "services" in detection["$defs"]["observation"]["properties"]
     assets = json.loads((schemas / "assets.schema.json").read_text())
@@ -454,7 +454,7 @@ def test_the_chat_has_a_tool_for_the_path() -> None:
     spec = openapi("acme")
     op = spec["paths"]["/assets/{asset}/exposure"]["get"]
     assert op["operationId"] == "get_exposure_path" and "path" in op["description"]
-    contract = yaml.safe_load((ROOT / "a2vm" / "src" / "a2vm" / "schemas" / "openapi" / "verdict.v1.yaml").read_text())
+    contract = yaml.safe_load((ROOT / "ngvm" / "src" / "ngvm" / "schemas" / "openapi" / "verdict.v1.yaml").read_text())
     assert contract["paths"]["/v1/tenants/{tenant}/assets/{asset}/exposure"]["get"]["operationId"] == "getExposurePath"
     guide = (ROOT / "docs" / "chat-questions.md").read_text(encoding="utf-8")
     assert "get_exposure_path" in guide and "joignable depuis Internet" in guide
@@ -467,7 +467,7 @@ def test_sixty_thousand_assets_in_fifty_zones_within_the_budget() -> None:
     assets stage stays within its budget (about 7 s and 600 MB on the development machine)."""
     import time
 
-    from a2vm.models import ClientProfile, ExternalScan, Zone
+    from ngvm.models import ClientProfile, ExternalScan, Zone
 
     zones = [Zone(f"z{i}", [f"10.{i}.0.0/16"]) for i in range(50)]
     flows = [Flow(f"z{i}", f"z{(i + 1) % 50}", ["443/tcp"]) for i in range(50)] + [Flow("internet", "z0", ["443/tcp"])]
@@ -505,5 +505,5 @@ def test_sixty_thousand_assets_in_fifty_zones_within_the_budget() -> None:
 
 def test_release_recorded() -> None:
     assert "## v0.24.0 — " in (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    chart = (ROOT / "deploy/charts/a2vm-tenant/Chart.yaml").read_text()
+    chart = (ROOT / "deploy/charts/ngvm-tenant/Chart.yaml").read_text()
     assert re.search(r"^version: 0\.(24\.\d+|2[5-9]\.\d+|[3-9]\d\.\d+)$", chart, re.M)

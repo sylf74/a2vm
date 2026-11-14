@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """`verdict assets build`: consolidate the detection files of each client into its asset inventory.
 
 Reads <detect>/<client>/*.json, writes <out>/<client>/assets.json, findings.json, exposure_gaps.json,
@@ -16,8 +16,8 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-from a2vm.io import ExchangeError, detection_files, read_detection, write_assets, write_findings
-from a2vm.profile import ProfileError, load_profile
+from ngvm.io import ExchangeError, detection_files, read_detection, write_assets, write_findings
+from ngvm.profile import ProfileError, load_profile
 
 from .build import build_inventory
 from .coverage import GAPS, build_coverage, write_coverage

@@ -1,2 +1,2 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """verdict assets (asset context): consolidated, multi-tenant asset inventory."""

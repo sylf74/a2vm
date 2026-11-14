@@ -1,5 +1,5 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
-"""HTTP API of the watch service (contract: a2vm/schemas/openapi/via.v1.yaml).
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
+"""HTTP API of the watch service (contract: ngvm/schemas/openapi/via.v1.yaml).
 
 Plain HTTP inside the cluster, one service per tenant namespace; every call names the tenant and
 the service refuses another one. Roles:
@@ -25,11 +25,11 @@ from http import HTTPStatus
 from typing import Any
 from urllib.parse import parse_qsl, unquote, urlsplit
 
-from a2vm import __version__
-from a2vm import applications as apps
-from a2vm.io import ExchangeError, validate_assets, validate_findings, validate_watch_findings
-from a2vm.service import JsonHandler, Problem, TokenSet, moment, release_memory
-from a2vm.service import serve as _serve
+from ngvm import __version__
+from ngvm import applications as apps
+from ngvm.io import ExchangeError, validate_assets, validate_findings, validate_watch_findings
+from ngvm.service import JsonHandler, Problem, TokenSet, moment, release_memory
+from ngvm.service import serve as _serve
 
 from .store import ALERT_ID, FILE_NAME, INVENTORY_FILES, STATUSES, WATCH_FINDINGS_FILE, WatchStore
 
@@ -104,7 +104,7 @@ class WatchService:
     def _put_inventory(self, tenant: str, token: str | None, body: bytes, gzipped: bool) -> dict[str, Any]:
         self._check(tenant, token, ("run",))
         doc = self._json(body, gzipped)
-        # v0.23.19: the findings compact (`watch_findings`, a2vm.watch_findings/1) or as before
+        # v0.23.19: the findings compact (`watch_findings`, ngvm.watch_findings/1) or as before
         # (`findings`, vulnops.findings/2); one of them.
         kind = "watch_findings" if isinstance(doc, dict) and "watch_findings" in doc else "findings"
         if (
@@ -164,7 +164,7 @@ class WatchService:
             for k in sorted(table, key=lambda k: (-table[k].hosts, k))
             if (not state or table[k].state == state) and (not text or text in k or text in table[k].name.lower())
         ]
-        out: dict[str, Any] = {"schema": "a2vm.applications/1", "counts": counts, "total": len(rows)}
+        out: dict[str, Any] = {"schema": "ngvm.applications/1", "counts": counts, "total": len(rows)}
         if "limit" in query or "offset" in query:  # a page (the chat's list_applications, v0.23.4)
             try:
                 limit, offset = int(query.get("limit", 25)), int(query.get("offset", 0))
@@ -384,7 +384,7 @@ class WatchService:
 
 def make_handler(service: WatchService) -> type[JsonHandler]:
     class Handler(JsonHandler):
-        server_version = "a2vm-via"
+        server_version = "ngvm-via"
         logger = log
 
         def _route(self) -> tuple[str, str, dict[str, str]]:

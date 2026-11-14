@@ -1,2 +1,2 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """VIA alert: the watch, alert sheets and mails."""

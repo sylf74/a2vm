@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """Tickets of remediation (LLD dispatch §2.1): one per asset and fix, with the decisions it clears.
 
 A decision is cleared by the fixes the scanners reported for it (`<package> <fixed version>`); it
@@ -222,7 +222,7 @@ def title(t: Ticket) -> str:
     what = f"apply {t.fix}" if t.fix != NO_FIX else "mitigate, no known fix"
     cves = len(t.open_findings) or len(t.findings)
     tag = f"{t.level} {t.priority}" if t.priority else t.level
-    return f"[A2VM {tag}] {t.asset_name}: {what} ({cves} CVE{'s' if cves > 1 else ''})"[:250]
+    return f"[NGVM {tag}] {t.asset_name}: {what} ({cves} CVE{'s' if cves > 1 else ''})"[:250]
 
 
 def description(t: Ticket, base_url: str = "") -> str:
@@ -238,10 +238,10 @@ def description(t: Ticket, base_url: str = "") -> str:
         due = f"<br><b>Due date</b> (BOD 26-04): {e(t.due or 'none')}"
     lines = [
         f"<p><b>Asset</b>: {e(t.asset)}<br><b>Fix</b>: {e(t.fix)}<br><b>Level</b>: {e(t.level)}{due}</p>",
-        "<p>This ticket was opened by A2VM"
+        "<p>This ticket was opened by NGVM"
         + (f" at the request of {e(t.requested_by)}" if t.origin == "request" and t.requested_by else "")
         + ". It is closed when a new scan no longer sees these vulnerabilities: closing it here does not"
-        " close them in A2VM.</p>",
+        " close them in NGVM.</p>",
     ]
     if t.comment:
         lines.append(f"<p><b>Comment</b>: {e(t.comment)}</p>")

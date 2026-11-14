@@ -1,4 +1,4 @@
-# A2VM client pipeline — included by each client project, never run in the code project.
+# NGVM client pipeline — included by each client project, never run in the code project.
 #
 # A client project holds only its own data:
 #   client.yaml      client profile (schema v2)
@@ -6,95 +6,95 @@
 #                    without it, declared inventory only)
 #   contacts.yaml    who receives the alerts, with their role and levels (optional)
 #   watch-sources.yaml  optional, replaces the code's catalogue of watch sources for this client
-#   settings.yaml    optional, overrides the default settings of the A2VM version in use
+#   settings.yaml    optional, overrides the default settings of the NGVM version in use
 #   collectors.yaml  optional: the collectors that push this client's detections to its detection
 #                    service on Kubernetes (docs/collectors.md)
 #   .gitlab-ci.yml   includes this file at a fixed version:
 #
 #     include:
-#       - project: vulnops/a2vm
+#       - project: vulnops/ngvm
 #         ref: v0.24.0
 #         file: templates/client-pipeline.yml
 #     variables:
-#       A2VM_REF: v0.19.0        # same version as the include
+#       NGVM_REF: v0.19.0        # same version as the include
 #
 # Jobs:
 #   push to the default branch     validate (profile and targets)
 #   schedule or "Run pipeline"     collect -> via -> detect -> assets -> triage
 #                                  optional TRIAGE_CVES="CVE-... CVE-...", TRIAGE_SINCE (default 26h)
-#   same, with A2VM_JOB=watch   watch (CERT-FR, KEV, critical CVEs matched to the client; alerts
+#   same, with NGVM_JOB=watch   watch (CERT-FR, KEV, critical CVEs matched to the client; alerts
 #                                  mailed to the analysts) -> send-alerts (manual: the validation)
-#   push or "Run pipeline", with A2VM_K8S_CONTEXT   deploy-k8s: the daily run as a Kubernetes
+#   push or "Run pipeline", with NGVM_K8S_CONTEXT   deploy-k8s: the daily run as a Kubernetes
 #                                  CronJob (docs/kubernetes.md)
 #
 # CI/CD variables (client project, or inherited from the groups):
-#   A2VM_SSH_KEY          File, protected: private key of this client's read-only scan account
-#   A2VM_COLLECTOR_TOKEN_<ID> (masked, protected)   token of each collector of collectors.yaml;
-#                            A2VM_INTAKE_HOST, A2VM_INTAKE_ALLOW, A2VM_INTAKE_INGRESS_CONTROLLER
-#                            (nginx, traefik), A2VM_INTAKE_CLUSTER_ISSUER: its push endpoint (docs/collectors.md)
-#   A2VM_VERDICT_SERVICE  false: no decision service in the cluster (default true; docs/kubernetes.md)
-#   A2VM_VERDICT_MEMORY   memory limit of the decision service (default 2Gi, v0.23.18; docs/kubernetes.md)
-#   A2VM_WATCH_MAX_MB     largest inventory the watch service accepts, in MB (default 50, v0.23.18)
-#   A2VM_DATABASE         true: the tenant's PostgreSQL (CloudNativePG) for the services, instead of
-#                            their volumes; A2VM_DATABASE_SIZE, _STORAGE_CLASS, _INSTANCES (docs/kubernetes.md §5)
-#   A2VM_CHAT_HOST        the analysts' chat on the decision service (Open WebUI); A2VM_CHAT_ALLOW,
-#                            A2VM_CHAT_ADMIN_EMAIL, A2VM_CHAT_RETENTION_DAYS, A2VM_CHAT_LLM_EGRESS... (docs/chat.md)
-#   A2VM_OIDC_ISSUER, A2VM_OIDC_CLIENT_ID, A2VM_OIDC_CLIENT_SECRET (masked), A2VM_OIDC_READERS,
-#                            A2VM_OIDC_VALIDATORS, A2VM_OIDC_CA (File)...   sign-in of the analysts with
-#                            the tenant's identity provider; A2VM_ALERTS_HOST: the review page of the
-#                            alerts (A2VM_RUN_MODE=kubernetes) (docs/sign-in.md)
-#   A2VM_GVM_USER, A2VM_GVM_PASSWORD (masked)   OpenVAS (GMP) account, when targets.yaml has
-#                            an openvas section; A2VM_GVM_CA, A2VM_GVM_CERT, A2VM_GVM_KEY
+#   NGVM_SSH_KEY          File, protected: private key of this client's read-only scan account
+#   NGVM_COLLECTOR_TOKEN_<ID> (masked, protected)   token of each collector of collectors.yaml;
+#                            NGVM_INTAKE_HOST, NGVM_INTAKE_ALLOW, NGVM_INTAKE_INGRESS_CONTROLLER
+#                            (nginx, traefik), NGVM_INTAKE_CLUSTER_ISSUER: its push endpoint (docs/collectors.md)
+#   NGVM_VERDICT_SERVICE  false: no decision service in the cluster (default true; docs/kubernetes.md)
+#   NGVM_VERDICT_MEMORY   memory limit of the decision service (default 2Gi, v0.23.18; docs/kubernetes.md)
+#   NGVM_WATCH_MAX_MB     largest inventory the watch service accepts, in MB (default 50, v0.23.18)
+#   NGVM_DATABASE         true: the tenant's PostgreSQL (CloudNativePG) for the services, instead of
+#                            their volumes; NGVM_DATABASE_SIZE, _STORAGE_CLASS, _INSTANCES (docs/kubernetes.md §5)
+#   NGVM_CHAT_HOST        the analysts' chat on the decision service (Open WebUI); NGVM_CHAT_ALLOW,
+#                            NGVM_CHAT_ADMIN_EMAIL, NGVM_CHAT_RETENTION_DAYS, NGVM_CHAT_LLM_EGRESS... (docs/chat.md)
+#   NGVM_OIDC_ISSUER, NGVM_OIDC_CLIENT_ID, NGVM_OIDC_CLIENT_SECRET (masked), NGVM_OIDC_READERS,
+#                            NGVM_OIDC_VALIDATORS, NGVM_OIDC_CA (File)...   sign-in of the analysts with
+#                            the tenant's identity provider; NGVM_ALERTS_HOST: the review page of the
+#                            alerts (NGVM_RUN_MODE=kubernetes) (docs/sign-in.md)
+#   NGVM_GVM_USER, NGVM_GVM_PASSWORD (masked)   OpenVAS (GMP) account, when targets.yaml has
+#                            an openvas section; NGVM_GVM_CA, NGVM_GVM_CERT, NGVM_GVM_KEY
 #                            (File) for a tls:// GMP endpoint with client certificates (docs/openvas.md)
-#   A2VM_RUNNER_TAG, A2VM_COLLECT_TAG   runner tags (default llm-lan): set A2VM_COLLECT_TAG
+#   NGVM_RUNNER_TAG, NGVM_COLLECT_TAG   runner tags (default llm-lan): set NGVM_COLLECT_TAG
 #                            in the client .gitlab-ci.yml to run the collection on the scanner host
 #                            itself (docs/openvas.md, "Scanner host as runner")
 #   An OpenVAS scan often runs longer than GitLab's default job timeout (1 h): raise the project's
 #   timeout (Settings > CI/CD > General pipelines) above the targets' timeout_minutes (default 240).
-#   A2VM_LLM_ENABLED, A2VM_LLM_BASE_URL, A2VM_LLM_MODEL, LLM_API_KEY   (usually set on the group)
-#   A2VM_LLM_THINKING   off: a reasoning model (Qwen3) answers without thinking first, many times faster (v0.23.7)
-#   A2VM_LLM_FAMILY, A2VM_LLM_REASONING   the model's family and the level of reasoning (v0.23.8, docs/llm.md)
-#   A2VM_SMTP_HOST, A2VM_SMTP_PORT, A2VM_SMTP_TLS, A2VM_SMTP_USER, A2VM_SMTP_PASSWORD,
-#   A2VM_MAIL_FROM, A2VM_ANALYST_TO   (watch mode, usually set on the group)
+#   NGVM_LLM_ENABLED, NGVM_LLM_BASE_URL, NGVM_LLM_MODEL, LLM_API_KEY   (usually set on the group)
+#   NGVM_LLM_THINKING   off: a reasoning model (Qwen3) answers without thinking first, many times faster (v0.23.7)
+#   NGVM_LLM_FAMILY, NGVM_LLM_REASONING   the model's family and the level of reasoning (v0.23.8, docs/llm.md)
+#   NGVM_SMTP_HOST, NGVM_SMTP_PORT, NGVM_SMTP_TLS, NGVM_SMTP_USER, NGVM_SMTP_PASSWORD,
+#   NGVM_MAIL_FROM, NGVM_ANALYST_TO   (watch mode, usually set on the group)
 #
-# The code is fetched with the job token: in the A2VM code project (vulnops/a2vm), Settings > CI/CD >
+# The code is fetched with the job token: in the NGVM code project (vulnops/ngvm), Settings > CI/CD >
 # Job token permissions must allow the client projects (e.g. the group vulnops/clients).
 
 variables:
-  A2VM_PROJECT: vulnops/a2vm
-  A2VM_REF: main
-  A2VM_PROFILE: client.yaml
-  A2VM_TARGETS: targets.yaml
-  A2VM_COLLECTORS: collectors.yaml
+  NGVM_PROJECT: vulnops/ngvm
+  NGVM_REF: main
+  NGVM_PROFILE: client.yaml
+  NGVM_TARGETS: targets.yaml
+  NGVM_COLLECTORS: collectors.yaml
   # gitlab: the daily run and the watch run in these pipelines; kubernetes: they run in the tenant's
   # namespace (deploy-k8s deploys them) and the scheduled pipelines do nothing (docs/kubernetes.md §5).
-  A2VM_RUN_MODE: gitlab
+  NGVM_RUN_MODE: gitlab
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
-  A2VM_CACHE_DIR: "$CI_PROJECT_DIR/.cache"
+  NGVM_CACHE_DIR: "$CI_PROJECT_DIR/.cache"
   DEBIAN_FRONTEND: noninteractive
   PIP_ROOT_USER_ACTION: ignore
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
   PYTHONUNBUFFERED: "1"   # messages reach the job log as they are written
-  A2VM_RUNNER_TAG: llm-lan
-  A2VM_COLLECT_TAG: llm-lan
+  NGVM_RUNNER_TAG: llm-lan
+  NGVM_COLLECT_TAG: llm-lan
 
 stages: [validate, deploy, collect, via, detect, assets, triage, publish, watch, send]
 
-.a2vm:
+.ngvm:
   image: python:3.12-slim
-  tags: ["$A2VM_RUNNER_TAG"]
+  tags: ["$NGVM_RUNNER_TAG"]
   interruptible: false
   cache:
     - {key: pip, paths: [.pip-cache/]}
     - {key: sources, paths: [.cache/]}
   before_script:
-    # CI/CD variables renamed VULNOPS_* -> A2VM_* in v0.11.1: a VULNOPS_ variable still defined, whose
-    # A2VM_ name is not, is copied with a warning. Not for the variables this template defines
-    # (A2VM_REF, A2VM_PROJECT, A2VM_PROFILE, A2VM_TARGETS, runner tags): rename them in .gitlab-ci.yml.
-    - |
-      for v in $(env | sed -n 's/^VULNOPS_\([A-Z0-9_]*\)=.*/\1/p' | sort -u); do
-        if eval "[ -z \"\${A2VM_$v+x}\" ]"; then
-          eval "export A2VM_$v=\"\$VULNOPS_$v\""; echo "WARN  CI/CD variable VULNOPS_$v is deprecated: rename it A2VM_$v"
+    # CI/CD variables renamed A2VM_* -> NGVM_* in v0.25.0: an A2VM_ variable still defined, whose
+    # NGVM_ name is not, is copied with a warning (until v0.26.0). Not for the variables this template defines
+    # (NGVM_REF, NGVM_PROJECT, NGVM_PROFILE, NGVM_TARGETS, runner tags): rename them in .gitlab-ci.yml.
+    - &legacy_variables |
+      for v in $(env | sed -n 's/^A2VM_\([A-Z0-9_]*\)=.*/\1/p' | sort -u); do
+        if eval "[ -z \"\${NGVM_$v+x}\" ]"; then
+          eval "export NGVM_$v=\"\$A2VM_$v\""; echo "WARN  CI/CD variable A2VM_$v is deprecated: rename it NGVM_$v"
         fi
       done
     - apt-get update -qq && apt-get install -y -qq git openssh-client >/dev/null
@@ -102,20 +102,20 @@ stages: [validate, deploy, collect, via, detect, assets, triage, publish, watch,
     - if [ -n "${CI_SERVER_TLS_CA_FILE:-}" ]; then export GIT_SSL_CAINFO="$CI_SERVER_TLS_CA_FILE"; fi
     # GitLab behind a reverse proxy that asks for a client certificate (runner tls-cert-file)
     - if [ -n "${CI_SERVER_TLS_CERT_FILE:-}" ]; then export GIT_SSL_CERT="$CI_SERVER_TLS_CERT_FILE" GIT_SSL_KEY="$CI_SERVER_TLS_KEY_FILE"; fi
-    # A runner outside the LAN reaches GitLab by another URL: A2VM_SERVER_URL in its environment
-    - BASE="${A2VM_SERVER_URL:-${VULNOPS_SERVER_URL:-${CI_SERVER_PROTOCOL}://${CI_SERVER_HOST}:${CI_SERVER_PORT}}}"
-    - git -c advice.detachedHead=false clone -q --depth 1 --branch "$A2VM_REF"
-        "${BASE%%://*}://gitlab-ci-token:${CI_JOB_TOKEN}@${BASE#*://}/${A2VM_PROJECT}.git" .a2vm
-    - pip install --quiet .a2vm/a2vm .a2vm/via ".a2vm/detect[openvas,snmp]" .a2vm/verdict
-    - if [ -f settings.yaml ]; then export SETTINGS=settings.yaml; else export SETTINGS=.a2vm/config/settings.yaml; fi
-    - echo "A2VM $A2VM_REF ($(git -C .a2vm rev-parse --short HEAD)), client $CI_PROJECT_PATH, mode ${A2VM_JOB:-${VULNOPS_JOB:-daily}}, settings $SETTINGS"
+    # A runner outside the LAN reaches GitLab by another URL: NGVM_SERVER_URL in its environment
+    - BASE="${NGVM_SERVER_URL:-${A2VM_SERVER_URL:-${CI_SERVER_PROTOCOL}://${CI_SERVER_HOST}:${CI_SERVER_PORT}}}"
+    - git -c advice.detachedHead=false clone -q --depth 1 --branch "$NGVM_REF"
+        "${BASE%%://*}://gitlab-ci-token:${CI_JOB_TOKEN}@${BASE#*://}/${NGVM_PROJECT}.git" .ngvm
+    - pip install --quiet .ngvm/ngvm .ngvm/via ".ngvm/detect[openvas,snmp]" .ngvm/verdict
+    - if [ -f settings.yaml ]; then export SETTINGS=settings.yaml; else export SETTINGS=.ngvm/config/settings.yaml; fi
+    - echo "NGVM $NGVM_REF ($(git -C .ngvm rev-parse --short HEAD)), client $CI_PROJECT_PATH, mode ${NGVM_JOB:-${A2VM_JOB:-daily}}, settings $SETTINGS"
 
 .data:
-  extends: .a2vm
+  extends: .ngvm
   rules:
-    - if: $A2VM_JOB == "watch" || $VULNOPS_JOB == "watch" || $A2VM_JOB == "send"
+    - if: $NGVM_JOB == "watch" || $A2VM_JOB == "watch" || $NGVM_JOB == "send" || $A2VM_JOB == "send"
       when: never
-    - if: $A2VM_RUN_MODE == "kubernetes"
+    - if: $NGVM_RUN_MODE == "kubernetes"
       when: never
     - if: $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"
   artifacts:
@@ -123,52 +123,53 @@ stages: [validate, deploy, collect, via, detect, assets, triage, publish, watch,
     expire_in: 7 days
 
 validate:
-  extends: .a2vm
+  extends: .ngvm
   stage: validate
   rules:
-    - if: $A2VM_JOB == "watch" || $VULNOPS_JOB == "watch" || $A2VM_JOB == "send"
+    - if: $NGVM_JOB == "watch" || $A2VM_JOB == "watch" || $NGVM_JOB == "send" || $A2VM_JOB == "send"
       when: never
     - if: $CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "api"
   script:
-    - a2vm validate "$A2VM_PROFILE"
+    - ngvm validate "$NGVM_PROFILE"
     - |
-      if [ "$A2VM_RUN_MODE" = "kubernetes" ] && [ -z "${A2VM_K8S_CONTEXT:-}" ]; then
-        echo "A2VM_RUN_MODE=kubernetes needs A2VM_K8S_CONTEXT: nothing would run (docs/kubernetes.md)"; exit 1
+      if [ "$NGVM_RUN_MODE" = "kubernetes" ] && [ -z "${NGVM_K8S_CONTEXT:-}" ]; then
+        echo "NGVM_RUN_MODE=kubernetes needs NGVM_K8S_CONTEXT: nothing would run (docs/kubernetes.md)"; exit 1
       fi
-    - if [ -f "$A2VM_TARGETS" ]; then detect plan "$A2VM_TARGETS" --profile "$A2VM_PROFILE"; fi
-    - if [ -f "$A2VM_COLLECTORS" ]; then detect collectors "$A2VM_COLLECTORS" --tenant "$(echo "$CI_PROJECT_NAME" | tr 'A-Z_' 'a-z-')" --profile "$A2VM_PROFILE"; fi
-    - if [ -f contacts.yaml ]; then via contacts "$A2VM_PROFILE" --contacts contacts.yaml; fi
+    - if [ -f "$NGVM_TARGETS" ]; then detect plan "$NGVM_TARGETS" --profile "$NGVM_PROFILE"; fi
+    - if [ -f "$NGVM_COLLECTORS" ]; then detect collectors "$NGVM_COLLECTORS" --tenant "$(echo "$CI_PROJECT_NAME" | tr 'A-Z_' 'a-z-')" --profile "$NGVM_PROFILE"; fi
+    - if [ -f contacts.yaml ]; then via contacts "$NGVM_PROFILE" --contacts contacts.yaml; fi
     - for t in templates/alert*.docx; do if [ -f "$t" ]; then via check-template "$t" || exit 1; fi; done
-    - if [ -f dispatch.yaml ]; then pip install --quiet .a2vm/dispatch && dispatch check dispatch.yaml; fi
+    - if [ -f dispatch.yaml ]; then pip install --quiet .ngvm/dispatch && dispatch check dispatch.yaml; fi
 
 # -- Kubernetes (HLD D15, step 1): the daily run as a CronJob in the cluster -----------------------
-# When A2VM_K8S_CONTEXT names a GitLab agent context allowed for this project (e.g.
+# When NGVM_K8S_CONTEXT names a GitLab agent context allowed for this project (e.g.
 # vulnops/k8s:homelab), each push to the default branch, each "Run pipeline" and each pipeline
 # created through the API (v0.23.18: a token with the Developer role on this project) deploys this tenant
-# with the chart deploy/charts/a2vm-tenant of A2VM_REF (a release tag: the images exist for tags
+# with the chart deploy/charts/ngvm-tenant of NGVM_REF (a release tag: the images exist for tags
 # only): this project's profile, targets and settings, its secrets from its CI/CD variables, the
 # pillar images from the code project's registry. Variables: docs/kubernetes.md.
 deploy-k8s:
   stage: deploy
   image: alpine:3.22
-  tags: ["$A2VM_RUNNER_TAG"]
+  tags: ["$NGVM_RUNNER_TAG"]
   needs: [validate]
   rules:
-    - if: $A2VM_JOB == "watch" || $VULNOPS_JOB == "watch" || $A2VM_JOB == "send"
+    - if: $NGVM_JOB == "watch" || $A2VM_JOB == "watch" || $NGVM_JOB == "send" || $A2VM_JOB == "send"
       when: never
-    - if: $A2VM_K8S_CONTEXT && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "api")
+    - if: ($NGVM_K8S_CONTEXT || $A2VM_K8S_CONTEXT) && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "api")
   cache: []
   script:
+    - *legacy_variables
     - apk add --no-cache -q git helm kubectl
     - if [ -n "${CI_SERVER_TLS_CA_FILE:-}" ]; then export GIT_SSL_CAINFO="$CI_SERVER_TLS_CA_FILE"; fi
-    - BASE="${A2VM_SERVER_URL:-${CI_SERVER_PROTOCOL}://${CI_SERVER_HOST}:${CI_SERVER_PORT}}"
-    - git -c advice.detachedHead=false clone -q --depth 1 --branch "$A2VM_REF"
-        "${BASE%%://*}://gitlab-ci-token:${CI_JOB_TOKEN}@${BASE#*://}/${A2VM_PROJECT}.git" .a2vm
-    - kubectl config use-context "$A2VM_K8S_CONTEXT"
+    - BASE="${NGVM_SERVER_URL:-${CI_SERVER_PROTOCOL}://${CI_SERVER_HOST}:${CI_SERVER_PORT}}"
+    - git -c advice.detachedHead=false clone -q --depth 1 --branch "$NGVM_REF"
+        "${BASE%%://*}://gitlab-ci-token:${CI_JOB_TOKEN}@${BASE#*://}/${NGVM_PROJECT}.git" .ngvm
+    - kubectl config use-context "$NGVM_K8S_CONTEXT"
     # GitLab behind a private CA: kubectl reaches the cluster through GitLab (File variable).
-    - if [ -n "${A2VM_K8S_CA:-}" ]; then kubectl config set-cluster gitlab --certificate-authority="$A2VM_K8S_CA"; fi
-    - NS="${A2VM_K8S_NAMESPACE:-a2vm-$(echo "$CI_PROJECT_NAME" | tr 'A-Z_' 'a-z-')}"
+    - if [ -n "${NGVM_K8S_CA:-}" ]; then kubectl config set-cluster gitlab --certificate-authority="$NGVM_K8S_CA"; fi
+    - NS="${NGVM_K8S_NAMESPACE:-ngvm-$(echo "$CI_PROJECT_NAME" | tr 'A-Z_' 'a-z-')}"
     - kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f -
     # Secrets and generated ConfigMaps are created or replaced, never `kubectl apply`d (v0.23.16): a
     # client-side apply copies the whole object into the annotation last-applied-configuration,
@@ -182,63 +183,63 @@ deploy-k8s:
         rc=$?; rm -f "$f"; return $rc
       }
     # Detection service (HLD D15 step 2), when the project declares its collectors: the digests of
-    # their tokens (A2VM_COLLECTOR_TOKEN_<ID>) in the Secret a2vm-intake, the read token of the
+    # their tokens (NGVM_COLLECTOR_TOKEN_<ID>) in the Secret ngvm-intake, the read token of the
     # daily run kept from one deployment to the next; no token is printed (docs/collectors.md).
     - |
       INTAKE=""; READ_TOKEN=""; I="$(mktemp -d)"; chmod 700 "$I"
-      if [ -f "$A2VM_COLLECTORS" ]; then
+      if [ -f "$NGVM_COLLECTORS" ]; then
         apk add --no-cache -q python3 py3-yaml
-        kubectl -n "$NS" get secret a2vm-tenant -o jsonpath='{.data.detect-read-token}' 2>/dev/null \
+        kubectl -n "$NS" get secret ngvm-tenant -o jsonpath='{.data.detect-read-token}' 2>/dev/null \
           | base64 -d > "$I/deployed-read-token" 2>/dev/null || true
-        python3 .a2vm/deploy/intake/intake_secrets.py "$A2VM_COLLECTORS" --out "$I" --read-token "$I/deployed-read-token"
+        python3 .ngvm/deploy/intake/intake_secrets.py "$NGVM_COLLECTORS" --out "$I" --read-token "$I/deployed-read-token"
         rm -f "$I/deployed-read-token"
-        kubectl -n "$NS" create secret generic a2vm-intake --from-file=digests="$I/digests" --dry-run=client -o yaml | upsert
+        kubectl -n "$NS" create secret generic ngvm-intake --from-file=digests="$I/digests" --dry-run=client -o yaml | upsert
         READ_TOKEN="$I/detect-read-token"
-        INTAKE="--set intake.enabled=true --set-file intake.collectors=$A2VM_COLLECTORS --set intake.digestsSecret=a2vm-intake"
-        INTAKE="$INTAKE --set intake.digestsChecksum=$(sha256sum "$I/digests" | cut -d' ' -f1) --set collect.mode=${A2VM_COLLECT_MODE:-intake}"
+        INTAKE="--set intake.enabled=true --set-file intake.collectors=$NGVM_COLLECTORS --set intake.digestsSecret=ngvm-intake"
+        INTAKE="$INTAKE --set intake.digestsChecksum=$(sha256sum "$I/digests" | cut -d' ' -f1) --set collect.mode=${NGVM_COLLECT_MODE:-intake}"
         # The push endpoint for the collectors outside the cluster, open to their addresses only.
         # (a values file with an empty `intake:` would drop the chart's defaults: written only with a host)
-        if [ -n "${A2VM_INTAKE_HOST:-}" ]; then
-          printf 'intake:\n  ingress:\n    enabled: true\n    host: "%s"\n' "$A2VM_INTAKE_HOST" > "$I/values.yaml"
-          if [ -n "${A2VM_INTAKE_INGRESS_CLASS:-}" ]; then printf '    className: "%s"\n' "$A2VM_INTAKE_INGRESS_CLASS" >> "$I/values.yaml"; fi
-          if [ -n "${A2VM_INTAKE_TLS_SECRET:-}" ]; then printf '    tlsSecret: "%s"\n' "$A2VM_INTAKE_TLS_SECRET" >> "$I/values.yaml"; fi
-          if [ -n "${A2VM_INTAKE_INGRESS_CONTROLLER:-}" ]; then printf '    controller: "%s"\n' "$A2VM_INTAKE_INGRESS_CONTROLLER" >> "$I/values.yaml"; fi
-          if [ -n "${A2VM_INTAKE_CLUSTER_ISSUER:-}" ]; then printf '    clusterIssuer: "%s"\n' "$A2VM_INTAKE_CLUSTER_ISSUER" >> "$I/values.yaml"; fi
+        if [ -n "${NGVM_INTAKE_HOST:-}" ]; then
+          printf 'intake:\n  ingress:\n    enabled: true\n    host: "%s"\n' "$NGVM_INTAKE_HOST" > "$I/values.yaml"
+          if [ -n "${NGVM_INTAKE_INGRESS_CLASS:-}" ]; then printf '    className: "%s"\n' "$NGVM_INTAKE_INGRESS_CLASS" >> "$I/values.yaml"; fi
+          if [ -n "${NGVM_INTAKE_TLS_SECRET:-}" ]; then printf '    tlsSecret: "%s"\n' "$NGVM_INTAKE_TLS_SECRET" >> "$I/values.yaml"; fi
+          if [ -n "${NGVM_INTAKE_INGRESS_CONTROLLER:-}" ]; then printf '    controller: "%s"\n' "$NGVM_INTAKE_INGRESS_CONTROLLER" >> "$I/values.yaml"; fi
+          if [ -n "${NGVM_INTAKE_CLUSTER_ISSUER:-}" ]; then printf '    clusterIssuer: "%s"\n' "$NGVM_INTAKE_CLUSTER_ISSUER" >> "$I/values.yaml"; fi
           echo "    allowFrom:" >> "$I/values.yaml"
-          for cidr in $(echo "${A2VM_INTAKE_ALLOW:-}" | tr ',' ' '); do printf '      - "%s"\n' "$cidr" >> "$I/values.yaml"; done
+          for cidr in $(echo "${NGVM_INTAKE_ALLOW:-}" | tr ',' ' '); do printf '      - "%s"\n' "$cidr" >> "$I/values.yaml"; done
           INTAKE="$INTAKE -f $I/values.yaml"
         else
-          echo "No A2VM_INTAKE_HOST: the detection service has no ingress (collectors inside the cluster only)"
+          echo "No NGVM_INTAKE_HOST: the detection service has no ingress (collectors inside the cluster only)"
         fi
       fi
-    # Decision service (HLD D15 step 3, read side), unless A2VM_VERDICT_SERVICE=false: a publish token
+    # Decision service (HLD D15 step 3, read side), unless NGVM_VERDICT_SERVICE=false: a publish token
     # (the daily run) and a read token (the analysts' tools), made once and kept from one deployment
-    # to the next in the Secret a2vm-tenant; their digests in the Secret a2vm-verdict; none printed.
+    # to the next in the Secret ngvm-tenant; their digests in the Secret ngvm-verdict; none printed.
     - |
       VERDICT=""; V="$(mktemp -d)"; chmod 700 "$V"
-      if [ "${A2VM_VERDICT_SERVICE:-true}" != "false" ]; then
+      if [ "${NGVM_VERDICT_SERVICE:-true}" != "false" ]; then
         for k in verdict-publish-token verdict-read-token; do
-          kubectl -n "$NS" get secret a2vm-tenant -o jsonpath="{.data.$k}" 2>/dev/null | base64 -d > "$V/$k" 2>/dev/null || true
+          kubectl -n "$NS" get secret ngvm-tenant -o jsonpath="{.data.$k}" 2>/dev/null | base64 -d > "$V/$k" 2>/dev/null || true
           if [ "$(wc -c < "$V/$k")" -lt 32 ]; then od -An -tx1 -N32 /dev/urandom | tr -d ' \n' > "$V/$k"; fi
         done
         printf 'publish %s\nread %s\n' "$(sha256sum < "$V/verdict-publish-token" | cut -d' ' -f1)" \
           "$(sha256sum < "$V/verdict-read-token" | cut -d' ' -f1)" > "$V/digests"
-        kubectl -n "$NS" create secret generic a2vm-verdict --from-file=digests="$V/digests" --dry-run=client -o yaml | upsert
-        VERDICT="--set verdict.enabled=true --set verdict.digestsSecret=a2vm-verdict"
+        kubectl -n "$NS" create secret generic ngvm-verdict --from-file=digests="$V/digests" --dry-run=client -o yaml | upsert
+        VERDICT="--set verdict.enabled=true --set verdict.digestsSecret=ngvm-verdict"
         VERDICT="$VERDICT --set verdict.digestsChecksum=$(sha256sum "$V/digests" | cut -d' ' -f1)"
-        if [ -n "${A2VM_VERDICT_MEMORY:-}" ]; then
-          if ! echo "$A2VM_VERDICT_MEMORY" | grep -qE '^[1-9][0-9]*(Mi|Gi)$'; then echo "A2VM_VERDICT_MEMORY: a size such as 3Gi or 2560Mi"; exit 1; fi
-          VERDICT="$VERDICT --set-string verdict.resources.limits.memory=$A2VM_VERDICT_MEMORY"
+        if [ -n "${NGVM_VERDICT_MEMORY:-}" ]; then
+          if ! echo "$NGVM_VERDICT_MEMORY" | grep -qE '^[1-9][0-9]*(Mi|Gi)$'; then echo "NGVM_VERDICT_MEMORY: a size such as 3Gi or 2560Mi"; exit 1; fi
+          VERDICT="$VERDICT --set-string verdict.resources.limits.memory=$NGVM_VERDICT_MEMORY"
         fi
       else
-        echo "A2VM_VERDICT_SERVICE=false: no decision service"
+        echo "NGVM_VERDICT_SERVICE=false: no decision service"
       fi
-    # The tenant's PostgreSQL (v0.18.0), with A2VM_DATABASE=true: a CloudNativePG cluster in the
+    # The tenant's PostgreSQL (v0.18.0), with NGVM_DATABASE=true: a CloudNativePG cluster in the
     # namespace, where the services keep their data instead of their volumes. The operator is
     # installed once per Kubernetes cluster (deploy/cnpg/README.md); without it the job stops here.
     - |
       DATABASE=""
-      if [ "${A2VM_DATABASE:-false}" = "true" ]; then
+      if [ "${NGVM_DATABASE:-false}" = "true" ]; then
         # v0.23.19: the discovery goes through the GitLab agent's tunnel, which fails now and then;
         # three tries, its error shown, and "not installed" only when it answered without the group.
         CNPG=""
@@ -250,147 +251,147 @@ deploy-k8s:
           sleep 5
         done
         if [ "$CNPG" = absent ]; then
-          echo "ERROR A2VM_DATABASE=true but the CloudNativePG operator is not installed in the cluster (deploy/cnpg/README.md)"
+          echo "ERROR NGVM_DATABASE=true but the CloudNativePG operator is not installed in the cluster (deploy/cnpg/README.md)"
           exit 1
         elif [ "$CNPG" != found ]; then
-          echo "ERROR the cluster's API did not answer the discovery through the agent ($A2VM_K8S_CONTEXT) 3 times: run the pipeline again"
+          echo "ERROR the cluster's API did not answer the discovery through the agent ($NGVM_K8S_CONTEXT) 3 times: run the pipeline again"
           exit 1
         fi
         DATABASE="--set database.enabled=true"
-        if [ -n "${A2VM_DATABASE_SIZE:-}" ]; then DATABASE="$DATABASE --set database.storage.size=$A2VM_DATABASE_SIZE"; fi
-        if [ -n "${A2VM_DATABASE_STORAGE_CLASS:-}" ]; then DATABASE="$DATABASE --set database.storage.storageClass=$A2VM_DATABASE_STORAGE_CLASS"; fi
-        if [ -n "${A2VM_DATABASE_INSTANCES:-}" ]; then DATABASE="$DATABASE --set database.instances=$A2VM_DATABASE_INSTANCES"; fi
-        echo "A2VM_DATABASE=true: the services keep their data in the cluster a2vm-$(echo "$CI_PROJECT_NAME" | tr 'A-Z_' 'a-z-')-db"
+        if [ -n "${NGVM_DATABASE_SIZE:-}" ]; then DATABASE="$DATABASE --set database.storage.size=$NGVM_DATABASE_SIZE"; fi
+        if [ -n "${NGVM_DATABASE_STORAGE_CLASS:-}" ]; then DATABASE="$DATABASE --set database.storage.storageClass=$NGVM_DATABASE_STORAGE_CLASS"; fi
+        if [ -n "${NGVM_DATABASE_INSTANCES:-}" ]; then DATABASE="$DATABASE --set database.instances=$NGVM_DATABASE_INSTANCES"; fi
+        echo "NGVM_DATABASE=true: the services keep their data in the cluster ngvm-$(echo "$CI_PROJECT_NAME" | tr 'A-Z_' 'a-z-')-db"
       fi
-    # Conversational search (HLD §8), when A2VM_CHAT_HOST is set: Open WebUI and its tool server on
+    # Conversational search (HLD §8), when NGVM_CHAT_HOST is set: Open WebUI and its tool server on
     # the decision service. Its session key, its first admin's password and the tools' token are made
-    # once and kept in the Secret a2vm-tenant, the token's digest in the Secret a2vm-chat; none printed.
+    # once and kept in the Secret ngvm-tenant, the token's digest in the Secret ngvm-chat; none printed.
     - |
       CHAT=""; C="$(mktemp -d)"; chmod 700 "$C"
-      if [ -n "${A2VM_CHAT_HOST:-}" ] && [ -n "$VERDICT" ]; then
+      if [ -n "${NGVM_CHAT_HOST:-}" ] && [ -n "$VERDICT" ]; then
         command -v python3 >/dev/null || apk add --no-cache -q python3
         for k in chat-secret-key chat-admin-password chat-tools-token; do
-          kubectl -n "$NS" get secret a2vm-tenant -o jsonpath="{.data.$k}" 2>/dev/null | base64 -d > "$C/$k" 2>/dev/null || true
+          kubectl -n "$NS" get secret ngvm-tenant -o jsonpath="{.data.$k}" 2>/dev/null | base64 -d > "$C/$k" 2>/dev/null || true
           if [ "$(wc -c < "$C/$k")" -lt 32 ]; then od -An -tx1 -N32 /dev/urandom | tr -d ' \n' > "$C/$k"; fi
         done
         printf 'chat %s\n' "$(sha256sum < "$C/chat-tools-token" | cut -d' ' -f1)" > "$C/digests"
-        kubectl -n "$NS" create secret generic a2vm-chat --from-file=digests="$C/digests" --dry-run=client -o yaml | upsert
-        python3 .a2vm/deploy/chat/chat_values.py "$C/values.json"
-        CHAT="--set chat.toolsDigestsSecret=a2vm-chat --set chat.toolsDigestsChecksum=$(sha256sum "$C/digests" | cut -d' ' -f1) -f $C/values.json"
-      elif [ -n "${A2VM_CHAT_HOST:-}" ]; then
-        echo "WARN A2VM_CHAT_HOST is set but the decision service is not: no chat"
+        kubectl -n "$NS" create secret generic ngvm-chat --from-file=digests="$C/digests" --dry-run=client -o yaml | upsert
+        python3 .ngvm/deploy/chat/chat_values.py "$C/values.json"
+        CHAT="--set chat.toolsDigestsSecret=ngvm-chat --set chat.toolsDigestsChecksum=$(sha256sum "$C/digests" | cut -d' ' -f1) -f $C/values.json"
+      elif [ -n "${NGVM_CHAT_HOST:-}" ]; then
+        echo "WARN NGVM_CHAT_HOST is set but the decision service is not: no chat"
       fi
-    # The watch on Kubernetes (A2VM_RUN_MODE=kubernetes): the watch service and the watch CronJob. Its
-    # run and read tokens are made once and kept in the Secret a2vm-tenant, their digests in the Secret
-    # a2vm-via; the Word templates of the alerts (alert.docx, alert.<lang>.docx) go in the ConfigMap
-    # a2vm-alert-template.
+    # The watch on Kubernetes (NGVM_RUN_MODE=kubernetes): the watch service and the watch CronJob. Its
+    # run and read tokens are made once and kept in the Secret ngvm-tenant, their digests in the Secret
+    # ngvm-via; the Word templates of the alerts (alert.docx, alert.<lang>.docx) go in the ConfigMap
+    # ngvm-alert-template.
     - |
       WATCH=""; W="$(mktemp -d)"; chmod 700 "$W"
-      if [ "$A2VM_RUN_MODE" = "kubernetes" ]; then
+      if [ "$NGVM_RUN_MODE" = "kubernetes" ]; then
         for k in via-run-token via-read-token; do
-          kubectl -n "$NS" get secret a2vm-tenant -o jsonpath="{.data.$k}" 2>/dev/null | base64 -d > "$W/$k" 2>/dev/null || true
+          kubectl -n "$NS" get secret ngvm-tenant -o jsonpath="{.data.$k}" 2>/dev/null | base64 -d > "$W/$k" 2>/dev/null || true
           if [ "$(wc -c < "$W/$k")" -lt 32 ]; then od -An -tx1 -N32 /dev/urandom | tr -d ' \n' > "$W/$k"; fi
         done
         printf 'run %s\nread %s\n' "$(sha256sum < "$W/via-run-token" | cut -d' ' -f1)" \
           "$(sha256sum < "$W/via-read-token" | cut -d' ' -f1)" > "$W/digests"
-        kubectl -n "$NS" create secret generic a2vm-via --from-file=digests="$W/digests" --dry-run=client -o yaml | upsert
-        WATCH="--set watch.enabled=true --set watch.digestsSecret=a2vm-via"
+        kubectl -n "$NS" create secret generic ngvm-via --from-file=digests="$W/digests" --dry-run=client -o yaml | upsert
+        WATCH="--set watch.enabled=true --set watch.digestsSecret=ngvm-via"
         WATCH="$WATCH --set watch.digestsChecksum=$(sha256sum "$W/digests" | cut -d' ' -f1)"
         WATCH="$WATCH --set watch.sendPipelineUrl=$CI_PROJECT_URL/-/pipelines/new --set watch.sendRef=$CI_DEFAULT_BRANCH"
-        if [ -n "${A2VM_WATCH_MAX_MB:-}" ]; then
-          if ! echo "$A2VM_WATCH_MAX_MB" | grep -qE '^[1-9][0-9]*$'; then echo "A2VM_WATCH_MAX_MB: a number of MB, such as 100"; exit 1; fi
-          WATCH="$WATCH --set watch.maxMb=$A2VM_WATCH_MAX_MB"
+        if [ -n "${NGVM_WATCH_MAX_MB:-}" ]; then
+          if ! echo "$NGVM_WATCH_MAX_MB" | grep -qE '^[1-9][0-9]*$'; then echo "NGVM_WATCH_MAX_MB: a number of MB, such as 100"; exit 1; fi
+          WATCH="$WATCH --set watch.maxMb=$NGVM_WATCH_MAX_MB"
         fi
         TPL=""; for t in templates/alert*.docx; do if [ -f "$t" ]; then TPL="$TPL --from-file=$(basename "$t")=$t"; fi; done
         if [ -n "$TPL" ]; then
-          kubectl -n "$NS" create configmap a2vm-alert-template $TPL --dry-run=client -o yaml | upsert
-          WATCH="$WATCH --set watch.alertTemplate=a2vm-alert-template"
+          kubectl -n "$NS" create configmap ngvm-alert-template $TPL --dry-run=client -o yaml | upsert
+          WATCH="$WATCH --set watch.alertTemplate=ngvm-alert-template"
         fi
         if [ -f contacts.yaml ]; then WATCH="$WATCH --set-file files.contacts=contacts.yaml"; fi
         if [ -f watch-sources.yaml ]; then WATCH="$WATCH --set-file files.watchSources=watch-sources.yaml"; fi
-        echo "A2VM_RUN_MODE=kubernetes: the daily run and the watch run in $NS; the scheduled pipelines do nothing"
+        echo "NGVM_RUN_MODE=kubernetes: the daily run and the watch run in $NS; the scheduled pipelines do nothing"
       fi
     # Dispatch service (pillar 4, v0.20.0), when the project has dispatch.yaml and the decision service
     # runs: its run and read tokens and the key of its page made once and kept in the Secret
-    # a2vm-tenant, their digests in the Secret a2vm-dispatch; the targets' credentials from
-    # A2VM_DISPATCH_<TARGET>_PASSWORD (and _CA); none printed (docs/dispatch.md).
+    # ngvm-tenant, their digests in the Secret ngvm-dispatch; the targets' credentials from
+    # NGVM_DISPATCH_<TARGET>_PASSWORD (and _CA); none printed (docs/dispatch.md).
     - |
       DISPATCH=""; DT=""; D="$(mktemp -d)"; chmod 700 "$D"
       if [ -f dispatch.yaml ] && [ -n "$VERDICT" ]; then
         apk add --no-cache -q python3 py3-yaml
-        python3 .a2vm/deploy/dispatch/dispatch_values.py dispatch.yaml "$D/values.json" "$D/targets.txt"
+        python3 .ngvm/deploy/dispatch/dispatch_values.py dispatch.yaml "$D/values.json" "$D/targets.txt"
         DT="$(cat "$D/targets.txt")"
         for k in dispatch-run-token dispatch-read-token dispatch-page-key; do
-          kubectl -n "$NS" get secret a2vm-tenant -o jsonpath="{.data.$k}" 2>/dev/null | base64 -d > "$D/$k" 2>/dev/null || true
+          kubectl -n "$NS" get secret ngvm-tenant -o jsonpath="{.data.$k}" 2>/dev/null | base64 -d > "$D/$k" 2>/dev/null || true
           if [ "$(wc -c < "$D/$k")" -lt 32 ]; then od -An -tx1 -N32 /dev/urandom | tr -d ' \n' > "$D/$k"; fi
         done
         printf 'run %s\nread %s\n' "$(sha256sum < "$D/dispatch-run-token" | cut -d' ' -f1)" \
           "$(sha256sum < "$D/dispatch-read-token" | cut -d' ' -f1)" > "$D/digests"
-        kubectl -n "$NS" create secret generic a2vm-dispatch --from-file=digests="$D/digests" --dry-run=client -o yaml | upsert
-        DISPATCH="--set-file files.dispatch=dispatch.yaml --set dispatch.digestsSecret=a2vm-dispatch"
+        kubectl -n "$NS" create secret generic ngvm-dispatch --from-file=digests="$D/digests" --dry-run=client -o yaml | upsert
+        DISPATCH="--set-file files.dispatch=dispatch.yaml --set dispatch.digestsSecret=ngvm-dispatch"
         DISPATCH="$DISPATCH --set dispatch.digestsChecksum=$(sha256sum "$D/digests" | cut -d' ' -f1) -f $D/values.json"
       elif [ -f dispatch.yaml ]; then
-        echo "WARN dispatch.yaml but no decision service (A2VM_VERDICT_SERVICE=false): nothing dispatched"
+        echo "WARN dispatch.yaml but no decision service (NGVM_VERDICT_SERVICE=false): nothing dispatched"
       fi
-    # The shared intelligence service (HLD D17, v0.22.0, docs/radar.md): every tenant with A2VM_INTEL_URL
-    # and the read token A2VM_INTEL_TOKEN (a group variable: the service does not tell the tenants
-    # apart); the watch team's project, with A2VM_INTEL_SERVE=true, runs it: the digests of that read
-    # token (and of the lines `read <sha256>` of the File variable A2VM_INTEL_DIGESTS) and of its own
-    # radar token, made once and kept in the Secret a2vm-tenant, in the Secret a2vm-intel.
+    # The shared intelligence service (HLD D17, v0.22.0, docs/radar.md): every tenant with NGVM_INTEL_URL
+    # and the read token NGVM_INTEL_TOKEN (a group variable: the service does not tell the tenants
+    # apart); the watch team's project, with NGVM_INTEL_SERVE=true, runs it: the digests of that read
+    # token (and of the lines `read <sha256>` of the File variable NGVM_INTEL_DIGESTS) and of its own
+    # radar token, made once and kept in the Secret ngvm-tenant, in the Secret ngvm-intel.
     - |
       INTEL=""; N="$(mktemp -d)"; chmod 700 "$N"
-      if [ -n "${A2VM_INTEL_URL:-}" ]; then INTEL="--set intel.url=$A2VM_INTEL_URL"; fi
-      if [ "${A2VM_INTEL_SERVE:-false}" = "true" ]; then
-        if [ -z "${A2VM_INTEL_TOKEN:-}" ]; then echo "ERROR A2VM_INTEL_SERVE=true needs A2VM_INTEL_TOKEN"; exit 1; fi
-        kubectl -n "$NS" get secret a2vm-tenant -o jsonpath='{.data.intel-radar-token}' 2>/dev/null | base64 -d > "$N/intel-radar-token" 2>/dev/null || true
+      if [ -n "${NGVM_INTEL_URL:-}" ]; then INTEL="--set intel.url=$NGVM_INTEL_URL"; fi
+      if [ "${NGVM_INTEL_SERVE:-false}" = "true" ]; then
+        if [ -z "${NGVM_INTEL_TOKEN:-}" ]; then echo "ERROR NGVM_INTEL_SERVE=true needs NGVM_INTEL_TOKEN"; exit 1; fi
+        kubectl -n "$NS" get secret ngvm-tenant -o jsonpath='{.data.intel-radar-token}' 2>/dev/null | base64 -d > "$N/intel-radar-token" 2>/dev/null || true
         if [ "$(wc -c < "$N/intel-radar-token")" -lt 32 ]; then od -An -tx1 -N32 /dev/urandom | tr -d ' \n' > "$N/intel-radar-token"; fi
-        printf 'read %s\nradar %s\n' "$(printf '%s' "$A2VM_INTEL_TOKEN" | sha256sum | cut -d' ' -f1)" \
+        printf 'read %s\nradar %s\n' "$(printf '%s' "$NGVM_INTEL_TOKEN" | sha256sum | cut -d' ' -f1)" \
           "$(sha256sum < "$N/intel-radar-token" | cut -d' ' -f1)" > "$N/digests"
-        if [ -f "${A2VM_INTEL_DIGESTS:-}" ]; then grep -E '^read [0-9a-f]{64}$' "$A2VM_INTEL_DIGESTS" >> "$N/digests" || true; fi
-        kubectl -n "$NS" create secret generic a2vm-intel --from-file=digests="$N/digests" --dry-run=client -o yaml | upsert
-        INTEL="$INTEL --set intel.serve.enabled=true --set intel.serve.digestsSecret=a2vm-intel"
+        if [ -f "${NGVM_INTEL_DIGESTS:-}" ]; then grep -E '^read [0-9a-f]{64}$' "$NGVM_INTEL_DIGESTS" >> "$N/digests" || true; fi
+        kubectl -n "$NS" create secret generic ngvm-intel --from-file=digests="$N/digests" --dry-run=client -o yaml | upsert
+        INTEL="$INTEL --set intel.serve.enabled=true --set intel.serve.digestsSecret=ngvm-intel"
         INTEL="$INTEL --set intel.serve.digestsChecksum=$(sha256sum "$N/digests" | cut -d' ' -f1)"
-        echo "A2VM_INTEL_SERVE=true: the shared intelligence service runs in $NS ($(grep -c '^read ' "$N/digests") read token(s))"
+        echo "NGVM_INTEL_SERVE=true: the shared intelligence service runs in $NS ($(grep -c '^read ' "$N/digests") read token(s))"
       fi
-    # A development identity provider (v0.23.15, docs/dev-idp.md), with A2VM_DEV_IDP_HOST and without
-    # A2VM_OIDC_ISSUER: a Keycloak in the namespace, which the sign-in below then uses. Its admin's
+    # A development identity provider (v0.23.15, docs/dev-idp.md), with NGVM_DEV_IDP_HOST and without
+    # NGVM_OIDC_ISSUER: a Keycloak in the namespace, which the sign-in below then uses. Its admin's
     # password, its client's secret and each account's first password are made once and kept in the
-    # Secret a2vm-tenant; none printed.
+    # Secret ngvm-tenant; none printed.
     - |
       DEVIDP=""; K="$(mktemp -d)"; chmod 700 "$K"
-      if [ -n "${A2VM_DEV_IDP_HOST:-}" ] && [ -n "${A2VM_OIDC_ISSUER:-}" ]; then
-        echo "WARN A2VM_DEV_IDP_HOST ignored: A2VM_OIDC_ISSUER names the identity provider"
-      elif [ -n "${A2VM_DEV_IDP_HOST:-}" ]; then
+      if [ -n "${NGVM_DEV_IDP_HOST:-}" ] && [ -n "${NGVM_OIDC_ISSUER:-}" ]; then
+        echo "WARN NGVM_DEV_IDP_HOST ignored: NGVM_OIDC_ISSUER names the identity provider"
+      elif [ -n "${NGVM_DEV_IDP_HOST:-}" ]; then
         command -v python3 >/dev/null || apk add --no-cache -q python3
-        python3 .a2vm/deploy/chat/dev_idp_values.py "$(echo "$CI_PROJECT_NAME" | tr 'A-Z_' 'a-z-')" "$K/values.json" "$K/oidc.env"
+        python3 .ngvm/deploy/chat/dev_idp_values.py "$(echo "$CI_PROJECT_NAME" | tr 'A-Z_' 'a-z-')" "$K/values.json" "$K/oidc.env"
         n="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['devIdp']['users'])" "$K/values.json")"
         keys="dev-idp-admin-password dev-idp-client-secret"; i=0
         while [ "$i" -lt "$n" ]; do keys="$keys dev-idp-password-$i"; i=$((i + 1)); done
         for k in $keys; do
-          kubectl -n "$NS" get secret a2vm-tenant -o jsonpath="{.data.$k}" 2>/dev/null | base64 -d > "$K/$k" 2>/dev/null || true
+          kubectl -n "$NS" get secret ngvm-tenant -o jsonpath="{.data.$k}" 2>/dev/null | base64 -d > "$K/$k" 2>/dev/null || true
           if [ "$(wc -c < "$K/$k")" -lt 16 ]; then od -An -tx1 -N16 /dev/urandom | tr -d ' \n' > "$K/$k"; fi
         done
         . "$K/oidc.env"
-        A2VM_OIDC_CLIENT_SECRET="$(cat "$K/dev-idp-client-secret")"; export A2VM_OIDC_CLIENT_SECRET
+        NGVM_OIDC_CLIENT_SECRET="$(cat "$K/dev-idp-client-secret")"; export NGVM_OIDC_CLIENT_SECRET
         DEVIDP="-f $K/values.json"
-        echo "WARN development identity provider https://$A2VM_DEV_IDP_HOST/realms/a2vm-dev: local accounts, never for production"
+        echo "WARN development identity provider https://$NGVM_DEV_IDP_HOST/realms/ngvm-dev: local accounts, never for production"
       fi
-    # Sign-in of the analysts with the tenant's identity provider (v0.17.0), when A2VM_OIDC_ISSUER is
-    # set: the chat and, with A2VM_ALERTS_HOST, the review page of the alerts behind oauth2-proxy. The
-    # proxy's cookie key and the key of the page's forms are made once and kept in the Secret a2vm-tenant.
+    # Sign-in of the analysts with the tenant's identity provider (v0.17.0), when NGVM_OIDC_ISSUER is
+    # set: the chat and, with NGVM_ALERTS_HOST, the review page of the alerts behind oauth2-proxy. The
+    # proxy's cookie key and the key of the page's forms are made once and kept in the Secret ngvm-tenant.
     - |
       SIGNIN=""; O="$(mktemp -d)"; chmod 700 "$O"
-      if [ -n "${A2VM_OIDC_ISSUER:-}" ]; then
+      if [ -n "${NGVM_OIDC_ISSUER:-}" ]; then
         command -v python3 >/dev/null || apk add --no-cache -q python3
-        python3 .a2vm/deploy/chat/sign_in_values.py "$A2VM_RUN_MODE" "$O/values.json"
+        python3 .ngvm/deploy/chat/sign_in_values.py "$NGVM_RUN_MODE" "$O/values.json"
         for k in oidc-cookie-secret review-key; do
-          kubectl -n "$NS" get secret a2vm-tenant -o jsonpath="{.data.$k}" 2>/dev/null | base64 -d > "$O/$k" 2>/dev/null || true
+          kubectl -n "$NS" get secret ngvm-tenant -o jsonpath="{.data.$k}" 2>/dev/null | base64 -d > "$O/$k" 2>/dev/null || true
         done
         if [ "$(wc -c < "$O/oidc-cookie-secret")" -ne 32 ]; then od -An -tx1 -N16 /dev/urandom | tr -d ' \n' > "$O/oidc-cookie-secret"; fi
         if [ "$(wc -c < "$O/review-key")" -lt 64 ]; then od -An -tx1 -N32 /dev/urandom | tr -d ' \n' > "$O/review-key"; fi
         SIGNIN="-f $O/values.json"
-      elif [ -n "${A2VM_ALERTS_HOST:-}" ]; then
-        echo "WARN A2VM_ALERTS_HOST is set but not A2VM_OIDC_ISSUER: no review page (the analysts must sign in)"
+      elif [ -n "${NGVM_ALERTS_HOST:-}" ]; then
+        echo "WARN NGVM_ALERTS_HOST is set but not NGVM_OIDC_ISSUER: no review page (the analysts must sign in)"
       fi
     # The tenant's secrets, from its CI/CD variables (File or text), into one Secret; never printed.
     - |
@@ -399,22 +400,22 @@ deploy-k8s:
         if [ -z "$2" ]; then return 0; fi
         if [ -f "$2" ]; then cp "$2" "$S/$1"; else printf '%s' "$2" > "$S/$1"; fi
       }
-      put ssh-key "${A2VM_SSH_KEY:-}"
+      put ssh-key "${NGVM_SSH_KEY:-}"
       put llm-api-key "${LLM_API_KEY:-}"
-      put llm-client-cert "${A2VM_LLM_CLIENT_CERT:-}"
-      put llm-client-key "${A2VM_LLM_CLIENT_KEY:-}"
-      put llm-ca "${A2VM_LLM_CA:-}"
+      put llm-client-cert "${NGVM_LLM_CLIENT_CERT:-}"
+      put llm-client-key "${NGVM_LLM_CLIENT_KEY:-}"
+      put llm-ca "${NGVM_LLM_CA:-}"
       put gti-api-key "${GTI_API_KEY:-}"
-      put gvm-user "${A2VM_GVM_USER:-}"
-      put gvm-password "${A2VM_GVM_PASSWORD:-}"
-      put reporting-dsn "${A2VM_REPORTING_DSN:-}"
-      put reporting-ca "${A2VM_REPORTING_CA:-}"
-      for v in $(env | sed -n 's/^A2VM_REPORTING_DSN_\([A-Z0-9_]*\)=.*/\1/p' | sort -u); do
+      put gvm-user "${NGVM_GVM_USER:-}"
+      put gvm-password "${NGVM_GVM_PASSWORD:-}"
+      put reporting-dsn "${NGVM_REPORTING_DSN:-}"
+      put reporting-ca "${NGVM_REPORTING_CA:-}"
+      for v in $(env | sed -n 's/^NGVM_REPORTING_DSN_\([A-Z0-9_]*\)=.*/\1/p' | sort -u); do
         n="$(echo "$v" | tr 'A-Z_' 'a-z-')"
-        eval "put reporting-dsn-$n \"\${A2VM_REPORTING_DSN_$v:-}\""
-        eval "put reporting-ca-$n \"\${A2VM_REPORTING_CA_$v:-}\""
+        eval "put reporting-dsn-$n \"\${NGVM_REPORTING_DSN_$v:-}\""
+        eval "put reporting-ca-$n \"\${NGVM_REPORTING_CA_$v:-}\""
       done
-      put gitlab-token "${A2VM_GITLAB_TOKEN:-}"
+      put gitlab-token "${NGVM_GITLAB_TOKEN:-}"
       put gitlab-ca "${CI_SERVER_TLS_CA_FILE:-}"
       put detect-read-token "$READ_TOKEN"
       put verdict-publish-token "$(cat "$V/verdict-publish-token" 2>/dev/null)"
@@ -424,15 +425,15 @@ deploy-k8s:
       put chat-tools-token "$(cat "$C/chat-tools-token" 2>/dev/null)"
       put via-run-token "$(cat "$W/via-run-token" 2>/dev/null)"
       put via-read-token "$(cat "$W/via-read-token" 2>/dev/null)"
-      put smtp-password "${A2VM_SMTP_PASSWORD:-}"
-      put graph-client-secret "${A2VM_GRAPH_CLIENT_SECRET:-}"
-      put intel-token "${A2VM_INTEL_TOKEN:-}"
+      put smtp-password "${NGVM_SMTP_PASSWORD:-}"
+      put graph-client-secret "${NGVM_GRAPH_CLIENT_SECRET:-}"
+      put intel-token "${NGVM_INTEL_TOKEN:-}"
       put intel-radar-token "$(cat "$N/intel-radar-token" 2>/dev/null)"
-      put teams-webhook "${A2VM_TEAMS_WEBHOOK:-}"
-      put relay-token "${A2VM_RELAY_TOKEN:-}"
-      if [ -n "${A2VM_PROXY_CA:-}" ]; then
+      put teams-webhook "${NGVM_TEAMS_WEBHOOK:-}"
+      put relay-token "${NGVM_RELAY_TOKEN:-}"
+      if [ -n "${NGVM_PROXY_CA:-}" ]; then
         CAB="$(mktemp)"; cat /etc/ssl/certs/ca-certificates.crt > "$CAB"
-        if [ -f "$A2VM_PROXY_CA" ]; then cat "$A2VM_PROXY_CA" >> "$CAB"; else printf '%s\n' "$A2VM_PROXY_CA" >> "$CAB"; fi
+        if [ -f "$NGVM_PROXY_CA" ]; then cat "$NGVM_PROXY_CA" >> "$CAB"; else printf '%s\n' "$NGVM_PROXY_CA" >> "$CAB"; fi
         put ca-bundle "$CAB"; rm -f "$CAB"
       fi
       if [ -n "$DISPATCH" ]; then
@@ -440,7 +441,7 @@ deploy-k8s:
         put dispatch-read-token "$(cat "$D/dispatch-read-token")"
         put dispatch-page-key "$(cat "$D/dispatch-page-key")"
         for t in $DT; do
-          V="A2VM_DISPATCH_$(echo "$t" | tr 'a-z-' 'A-Z_')"
+          V="NGVM_DISPATCH_$(echo "$t" | tr 'a-z-' 'A-Z_')"
           eval "put dispatch-$t \"\${${V}_PASSWORD:-}\""
           eval "put dispatch-$t-ca \"\${${V}_CA:-}\""
         done
@@ -451,54 +452,54 @@ deploy-k8s:
         for f in "$K"/dev-idp-password-*; do put "$(basename "$f")" "$(cat "$f")"; done
       fi
       if [ -n "$SIGNIN" ]; then
-        put oidc-client-secret "${A2VM_OIDC_CLIENT_SECRET:-}"
-        put oidc-ca "${A2VM_OIDC_CA:-}"
+        put oidc-client-secret "${NGVM_OIDC_CLIENT_SECRET:-}"
+        put oidc-ca "${NGVM_OIDC_CA:-}"
         put oidc-cookie-secret "$(cat "$O/oidc-cookie-secret" 2>/dev/null)"
         put review-key "$(cat "$O/review-key" 2>/dev/null)"
       fi
-      kubectl -n "$NS" create secret generic a2vm-tenant --from-file="$S" --dry-run=client -o yaml | upsert
-      echo "secret a2vm-tenant: $(ls "$S" | tr '\n' ' ')"
+      kubectl -n "$NS" create secret generic ngvm-tenant --from-file="$S" --dry-run=client -o yaml | upsert
+      echo "secret ngvm-tenant: $(ls "$S" | tr '\n' ' ')"
       rm -rf "$S"
-    # A private registry: a deploy token with read_registry (A2VM_REGISTRY_USER, A2VM_REGISTRY_PASSWORD).
+    # A private registry: a deploy token with read_registry (NGVM_REGISTRY_USER, NGVM_REGISTRY_PASSWORD).
     - |
       PULL=""
-      if [ -n "${A2VM_REGISTRY_USER:-}" ] && [ -n "${A2VM_REGISTRY_PASSWORD:-}" ]; then
-        kubectl -n "$NS" create secret docker-registry a2vm-registry --docker-server="${A2VM_REGISTRY:-$CI_REGISTRY}" \
-          --docker-username="$A2VM_REGISTRY_USER" --docker-password="$A2VM_REGISTRY_PASSWORD" --dry-run=client -o yaml | upsert
-        PULL="--set image.pullSecret=a2vm-registry"
+      if [ -n "${NGVM_REGISTRY_USER:-}" ] && [ -n "${NGVM_REGISTRY_PASSWORD:-}" ]; then
+        kubectl -n "$NS" create secret docker-registry ngvm-registry --docker-server="${NGVM_REGISTRY:-$CI_REGISTRY}" \
+          --docker-username="$NGVM_REGISTRY_USER" --docker-password="$NGVM_REGISTRY_PASSWORD" --dry-run=client -o yaml | upsert
+        PULL="--set image.pullSecret=ngvm-registry"
       fi
     # Non-secret settings handed to the run.
     - |
       ENVF="$(mktemp)"; echo "env:" > "$ENVF"
-      for v in A2VM_LLM_ENABLED A2VM_LLM_BASE_URL A2VM_LLM_MODEL A2VM_GTI_ENABLED A2VM_EXTERNAL_PROJECT \
-          A2VM_LLM_THINKING A2VM_LLM_FAMILY A2VM_LLM_REASONING \
-          A2VM_MAIL_FROM A2VM_MAIL_TRANSPORT A2VM_SMTP_HOST A2VM_SMTP_PORT A2VM_SMTP_TLS A2VM_SMTP_USER \
-          A2VM_GRAPH_TENANT_ID A2VM_GRAPH_CLIENT_ID A2VM_GRAPH_SENDER A2VM_ANALYST_TO A2VM_SOURCE_FAILURES; do
+      for v in NGVM_LLM_ENABLED NGVM_LLM_BASE_URL NGVM_LLM_MODEL NGVM_GTI_ENABLED NGVM_EXTERNAL_PROJECT \
+          NGVM_LLM_THINKING NGVM_LLM_FAMILY NGVM_LLM_REASONING \
+          NGVM_MAIL_FROM NGVM_MAIL_TRANSPORT NGVM_SMTP_HOST NGVM_SMTP_PORT NGVM_SMTP_TLS NGVM_SMTP_USER \
+          NGVM_GRAPH_TENANT_ID NGVM_GRAPH_CLIENT_ID NGVM_GRAPH_SENDER NGVM_ANALYST_TO NGVM_SOURCE_FAILURES; do
         eval "val=\"\${$v:-}\""
         if [ -n "$val" ]; then printf '  %s: "%s"\n' "$v" "$val" >> "$ENVF"; fi
       done
-      printf '  A2VM_SERVER_URL: "%s"\n' "${A2VM_SERVER_URL:-$CI_SERVER_URL}" >> "$ENVF"
+      printf '  NGVM_SERVER_URL: "%s"\n' "${NGVM_SERVER_URL:-$CI_SERVER_URL}" >> "$ENVF"
     # The way out to the Internet (v0.23.4): the corporate proxy, the relay of the public sources.
     - |
       OUT=""
-      if [ -n "${A2VM_HTTPS_PROXY:-}" ]; then OUT="$OUT --set proxy.https=$A2VM_HTTPS_PROXY"; fi
-      if [ -n "${A2VM_NO_PROXY:-}" ]; then OUT="$OUT --set proxy.noProxy={$(echo "$A2VM_NO_PROXY" | tr ' ;' ',,')}"; fi
-      if [ -n "${A2VM_PROXY_CA:-}" ]; then OUT="$OUT --set proxy.ca=true"; fi
-      if [ -n "${A2VM_RELAY_URL:-}" ]; then
-        OUT="$OUT --set relay.url=$A2VM_RELAY_URL --set relay.hosts={$(echo "${A2VM_RELAY_HOSTS:-}" | tr ' ;' ',,')}"
-        if [ -z "${A2VM_RELAY_TOKEN:-}" ]; then echo "WARN A2VM_RELAY_URL without A2VM_RELAY_TOKEN: the relay will refuse the requests"; fi
+      if [ -n "${NGVM_HTTPS_PROXY:-}" ]; then OUT="$OUT --set proxy.https=$NGVM_HTTPS_PROXY"; fi
+      if [ -n "${NGVM_NO_PROXY:-}" ]; then OUT="$OUT --set proxy.noProxy={$(echo "$NGVM_NO_PROXY" | tr ' ;' ',,')}"; fi
+      if [ -n "${NGVM_PROXY_CA:-}" ]; then OUT="$OUT --set proxy.ca=true"; fi
+      if [ -n "${NGVM_RELAY_URL:-}" ]; then
+        OUT="$OUT --set relay.url=$NGVM_RELAY_URL --set relay.hosts={$(echo "${NGVM_RELAY_HOSTS:-}" | tr ' ;' ',,')}"
+        if [ -z "${NGVM_RELAY_TOKEN:-}" ]; then echo "WARN NGVM_RELAY_URL without NGVM_RELAY_TOKEN: the relay will refuse the requests"; fi
       fi
     - |
-      FILES="--set-file files.profile=$A2VM_PROFILE"
-      if [ -f "$A2VM_TARGETS" ]; then FILES="$FILES --set-file files.targets=$A2VM_TARGETS"; fi
+      FILES="--set-file files.profile=$NGVM_PROFILE"
+      if [ -f "$NGVM_TARGETS" ]; then FILES="$FILES --set-file files.targets=$NGVM_TARGETS"; fi
       if [ -f settings.yaml ]; then FILES="$FILES --set-file files.settings=settings.yaml"; fi
-      helm upgrade --install a2vm .a2vm/deploy/charts/a2vm-tenant -n "$NS" \
+      helm upgrade --install ngvm .ngvm/deploy/charts/ngvm-tenant -n "$NS" \
         --set tenant="$(echo "$CI_PROJECT_NAME" | tr 'A-Z_' 'a-z-')" \
-        --set image.registry="${A2VM_IMAGE_REGISTRY:-$CI_REGISTRY/$A2VM_PROJECT}" \
-        --set image.tag="$A2VM_REF" \
-        --set secret.name=a2vm-tenant \
-        --set daily.schedule="${A2VM_K8S_SCHEDULE:-45 5 * * *}" \
-        --set daily.suspend="${A2VM_K8S_SUSPEND:-false}" \
+        --set image.registry="${NGVM_IMAGE_REGISTRY:-$CI_REGISTRY/$NGVM_PROJECT}" \
+        --set image.tag="$NGVM_REF" \
+        --set secret.name=ngvm-tenant \
+        --set daily.schedule="${NGVM_K8S_SCHEDULE:-45 5 * * *}" \
+        --set daily.suspend="${NGVM_K8S_SUSPEND:-false}" \
         $PULL $FILES $INTAKE $VERDICT $DATABASE $CHAT $WATCH $DEVIDP $SIGNIN $DISPATCH $INTEL $OUT -f "$ENVF"
       rm -rf "$I" "$V" "$C" "$W" "$O" "$D" "$N" "$K"
       kubectl -n "$NS" get cronjob,pvc
@@ -506,8 +507,8 @@ deploy-k8s:
       if [ -n "$VERDICT" ]; then kubectl -n "$NS" get deployment,service -l app.kubernetes.io/component=verdict; fi
       if [ -n "$CHAT" ]; then kubectl -n "$NS" get deployment,ingress -l 'app.kubernetes.io/component in (chat,tools)'; fi
       if [ -n "$WATCH" ]; then kubectl -n "$NS" get deployment,cronjob -l 'app.kubernetes.io/component in (via,watch)'; fi
-      if [ "${A2VM_INTEL_SERVE:-false}" = "true" ]; then kubectl -n "$NS" get deployment,service -l app.kubernetes.io/component=intel; fi
-      if [ -n "$SIGNIN" ] && [ -n "${A2VM_ALERTS_HOST:-}" ]; then kubectl -n "$NS" get deployment,ingress -l 'app.kubernetes.io/component in (review,send)'; fi
+      if [ "${NGVM_INTEL_SERVE:-false}" = "true" ]; then kubectl -n "$NS" get deployment,service -l app.kubernetes.io/component=intel; fi
+      if [ -n "$SIGNIN" ] && [ -n "${NGVM_ALERTS_HOST:-}" ]; then kubectl -n "$NS" get deployment,ingress -l 'app.kubernetes.io/component in (review,send)'; fi
       if [ -n "$DATABASE" ]; then kubectl -n "$NS" get cluster -l app.kubernetes.io/component=database; fi
       if [ -n "$DISPATCH" ]; then kubectl -n "$NS" get deployment,ingress -l 'app.kubernetes.io/component in (dispatch,dispatch-page)'; fi
       if [ -n "$DEVIDP" ]; then kubectl -n "$NS" get deployment,ingress,pvc -l app.kubernetes.io/component=idp-dev; fi
@@ -517,7 +518,7 @@ deploy-k8s:
 collect:
   extends: .data
   stage: collect
-  tags: ["$A2VM_COLLECT_TAG"]
+  tags: ["$NGVM_COLLECT_TAG"]
   needs: [validate]
   allow_failure:
     exit_codes: [3]
@@ -529,31 +530,31 @@ collect:
     - mkdir -p work/detect
     - |
       rc=0
-      if [ ! -f "$A2VM_TARGETS" ]; then
-        echo "No $A2VM_TARGETS: no scanner collection, declared inventory only"
+      if [ ! -f "$NGVM_TARGETS" ]; then
+        echo "No $NGVM_TARGETS: no scanner collection, declared inventory only"
       else
         NO_SSH=""
-        if [ -z "${A2VM_SSH_KEY:-}" ]; then
-          echo "No A2VM_SSH_KEY: SSH targets skipped (OpenVAS scan only, if configured)"; NO_SSH="--no-ssh"
+        if [ -z "${NGVM_SSH_KEY:-}" ]; then
+          echo "No NGVM_SSH_KEY: SSH targets skipped (OpenVAS scan only, if configured)"; NO_SSH="--no-ssh"
         else
           # Normalise the key pasted in GitLab: no CR, a final newline (OpenSSH rejects the key otherwise).
           mkdir -p ~/.ssh && umask 077
-          tr -d '\r' < "$A2VM_SSH_KEY" | sed -e '$a\' > ~/.ssh/vulnops_scan
+          tr -d '\r' < "$NGVM_SSH_KEY" | sed -e '$a\' > ~/.ssh/vulnops_scan
           if ! ssh-keygen -y -f ~/.ssh/vulnops_scan > /dev/null 2>&1; then
-            echo "A2VM_SSH_KEY is not a usable private key: paste the whole file, from the BEGIN line to the END line"
+            echo "NGVM_SSH_KEY is not a usable private key: paste the whole file, from the BEGIN line to the END line"
             exit 3
           fi
           echo "scan key: $(ssh-keygen -l -f ~/.ssh/vulnops_scan)"
         fi
-        detect collect "$A2VM_TARGETS" $NO_SSH --raw work/scans --out work/detect || rc=$?
+        detect collect "$NGVM_TARGETS" $NO_SSH --raw work/scans --out work/detect || rc=$?
         # Raw outputs are not kept: Trivy JSON runs to hundreds of MB; what matters is in work/detect.
         rm -rf work/scans
       fi
       # The client's external scan (its collection-only project), when this project names it.
-      if [ -n "${A2VM_EXTERNAL_PROJECT:-}" ]; then
-        detect external "$A2VM_PROFILE" --project "$A2VM_EXTERNAL_PROJECT" --out work/detect || rc=$?
+      if [ -n "${NGVM_EXTERNAL_PROJECT:-}" ]; then
+        detect external "$NGVM_PROFILE" --project "$NGVM_EXTERNAL_PROJECT" --out work/detect || rc=$?
       fi
-      # v0.23.11: the libraries of the images and the SBOMs against OSV (A2VM_OSV_MODE: offline, api, off).
+      # v0.23.11: the libraries of the images and the SBOMs against OSV (NGVM_OSV_MODE: offline, api, off).
       detect osv --detect work/detect || rc=$?
       du -sh work/* 2>/dev/null || true
       if [ "$rc" -ne 0 ]; then exit 3; fi
@@ -574,7 +575,7 @@ detect:
   stage: detect
   needs: [via]
   script:
-    - detect inventory "$A2VM_PROFILE" --settings "$SETTINGS" --records work/records.json --out work/detect
+    - detect inventory "$NGVM_PROFILE" --settings "$SETTINGS" --records work/records.json --out work/detect
 
 assets:
   extends: .data
@@ -587,7 +588,7 @@ assets:
     - {key: sources, paths: [.cache/]}
     - {key: inventory, paths: [work/assets/], policy: pull}
   script:
-    - verdict assets build "$A2VM_PROFILE" --detect work/detect --out work/assets --previous work/assets
+    - verdict assets build "$NGVM_PROFILE" --detect work/detect --out work/assets --previous work/assets
 
 triage:
   extends: .data
@@ -600,43 +601,43 @@ triage:
     - {key: sources, paths: [.cache/]}
     - {key: inventory, paths: [work/assets/], policy: push}
   script:
-    - verdict run "$A2VM_PROFILE" --settings "$SETTINGS" --records work/records.json --assets work/assets --out output --run-started "$CI_PIPELINE_CREATED_AT"
+    - verdict run "$NGVM_PROFILE" --settings "$SETTINGS" --records work/records.json --assets work/assets --out output --run-started "$CI_PIPELINE_CREATED_AT"
   artifacts:
     name: "triage-$CI_PROJECT_NAME-$CI_PIPELINE_ID"
     paths: [output/, work/assets/]
     expire_in: 30 days
 
 # The run's reporting dataset into the reporting database (dashboards read it, never GitLab), when
-# the project has A2VM_REPORTING_DSN (a postgresql:// URI, masked; or a File variable) and, to verify
-# the server, A2VM_REPORTING_CA (the server's certificate, File variable or pasted text).
+# the project has NGVM_REPORTING_DSN (a postgresql:// URI, masked; or a File variable) and, to verify
+# the server, NGVM_REPORTING_CA (the server's certificate, File variable or pasted text).
 # Exit code 3: database unreachable or refused (warning; the next run publishes again). Same rules as
 # the run it publishes (v0.23.18): on Kubernetes the CronJob's step `publish` does it, and a pipeline
 # where `triage` does not exist must not hold a job that needs it (GitLab refuses the whole pipeline).
 publish:
-  extends: .a2vm
+  extends: .ngvm
   stage: publish
   needs: [triage]
   rules:
-    - if: $A2VM_JOB == "watch" || $VULNOPS_JOB == "watch" || $A2VM_JOB == "send"
+    - if: $NGVM_JOB == "watch" || $A2VM_JOB == "watch" || $NGVM_JOB == "send" || $A2VM_JOB == "send"
       when: never
-    - if: $A2VM_RUN_MODE == "kubernetes"
+    - if: $NGVM_RUN_MODE == "kubernetes"
       when: never
-    - if: $A2VM_REPORTING_DSN && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
+    - if: ($NGVM_REPORTING_DSN || $A2VM_REPORTING_DSN) && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
   allow_failure:
     exit_codes: [3]
   script:
     - verdict publish output/*/reporting.json
 
-# -- Watch mode: schedule every 10 minutes with the variable A2VM_JOB=watch -------------------
+# -- Watch mode: schedule every 10 minutes with the variable NGVM_JOB=watch -------------------
 # The state (what was already seen) lives in the GitLab cache; without it, a run only records the
 # current state and alerts on nothing. Exit code 3: a source or the mail failed (warning).
 watch:
-  extends: .a2vm
+  extends: .ngvm
   stage: watch
   rules:
-    - if: $A2VM_RUN_MODE == "kubernetes"
+    - if: $NGVM_RUN_MODE == "kubernetes"
       when: never
-    - if: ($A2VM_JOB == "watch" || $VULNOPS_JOB == "watch") && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
+    - if: ($NGVM_JOB == "watch" || $A2VM_JOB == "watch") && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
   resource_group: watch
   cache:
     - {key: pip, paths: [.pip-cache/]}
@@ -646,24 +647,24 @@ watch:
   allow_failure:
     exit_codes: [3]
   script:
-    - if [ -f watch-sources.yaml ]; then export SOURCES=watch-sources.yaml; else export SOURCES=.a2vm/config/watch-sources.yaml; fi
-    - via watch "$A2VM_PROFILE" --settings "$SETTINGS" --sources "$SOURCES" --state .watch/state.json --out alerts
+    - if [ -f watch-sources.yaml ]; then export SOURCES=watch-sources.yaml; else export SOURCES=.ngvm/config/watch-sources.yaml; fi
+    - via watch "$NGVM_PROFILE" --settings "$SETTINGS" --sources "$SOURCES" --state .watch/state.json --out alerts
   artifacts:
     when: always
     paths: [alerts/]
     expire_in: 14 days
 
 # The analyst's validation: running this job mails the alerts of this pipeline to the client. To send
-# only some of them, set A2VM_SEND_ONLY in the job's form before ▶: their numbers in the analysts'
+# only some of them, set NGVM_SEND_ONLY in the job's form before ▶: their numbers in the analysts'
 # mail (1 3) or their ids. The job writes alerts/sent.json and adds its events to the alerts journal.
 send-alerts:
-  extends: .a2vm
+  extends: .ngvm
   stage: send
   needs: [watch]
   rules:
-    - if: $A2VM_RUN_MODE == "kubernetes"
+    - if: $NGVM_RUN_MODE == "kubernetes"
       when: never
-    - if: ($A2VM_JOB == "watch" || $VULNOPS_JOB == "watch") && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
+    - if: ($NGVM_JOB == "watch" || $A2VM_JOB == "watch") && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")
       when: manual
       allow_failure: true
   resource_group: watch   # one writer of the alerts journal at a time
@@ -681,49 +682,50 @@ send-alerts:
     # alerts.attach: [pdf] -> the PDF is made from the Word sheet now: LibreOffice and fonts metric-
     # compatible with Calibri, Cambria, Arial and Times (installed in this manual job only).
     - |
-      if python3 -c "import sys, yaml; a = (yaml.safe_load(open(sys.argv[1])) or {}).get('alerts') or {}; sys.exit(0 if 'pdf' in (a.get('attach') or []) else 1)" "$A2VM_PROFILE"; then
+      if python3 -c "import sys, yaml; a = (yaml.safe_load(open(sys.argv[1])) or {}).get('alerts') or {}; sys.exit(0 if 'pdf' in (a.get('attach') or []) else 1)" "$NGVM_PROFILE"; then
         echo "alerts.attach: pdf -> installing LibreOffice"
         apt-get install -y -qq --no-install-recommends libreoffice-writer-nogui fonts-crosextra-carlito fonts-crosextra-caladea fonts-liberation >/dev/null
       fi
-    - via send "$A2VM_PROFILE" --alerts alerts --journal .watch/alerts-log.jsonl --edits edits
+    - via send "$NGVM_PROFILE" --alerts alerts --journal .watch/alerts-log.jsonl --edits edits
   artifacts:
     when: always
     paths: [alerts/sent.json, alerts/alerts-log.jsonl, alerts/pdf/]
     expire_in: 90 days
 
-# The analyst's validation on Kubernetes (A2VM_RUN_MODE=kubernetes): the analysts' mail links to a new
-# pipeline of this project with A2VM_JOB=send and A2VM_SEND_ONLY=<alert id> filled in; "Run pipeline"
+# The analyst's validation on Kubernetes (NGVM_RUN_MODE=kubernetes): the analysts' mail links to a new
+# pipeline of this project with NGVM_JOB=send and NGVM_SEND_ONLY=<alert id> filled in; "Run pipeline"
 # is the validation. The job hands the alert ids and this project's edits/ to a send Job in the
 # tenant's namespace (the deployed release's values), waits for it and shows its log.
 send-alerts-k8s:
   stage: send
   image: alpine:3.22
-  tags: ["$A2VM_RUNNER_TAG"]
+  tags: ["$NGVM_RUNNER_TAG"]
   needs: []
   rules:
-    - if: $A2VM_RUN_MODE == "kubernetes" && $A2VM_JOB == "send" && $CI_PIPELINE_SOURCE == "web" && $A2VM_K8S_CONTEXT
+    - if: $NGVM_RUN_MODE == "kubernetes" && ($NGVM_JOB == "send" || $A2VM_JOB == "send") && $CI_PIPELINE_SOURCE == "web" && ($NGVM_K8S_CONTEXT || $A2VM_K8S_CONTEXT)
   resource_group: watch
   cache: []
   script:
+    - *legacy_variables
     - apk add --no-cache -q git helm kubectl
     - if [ -n "${CI_SERVER_TLS_CA_FILE:-}" ]; then export GIT_SSL_CAINFO="$CI_SERVER_TLS_CA_FILE"; fi
-    - BASE="${A2VM_SERVER_URL:-${CI_SERVER_PROTOCOL}://${CI_SERVER_HOST}:${CI_SERVER_PORT}}"
-    - git -c advice.detachedHead=false clone -q --depth 1 --branch "$A2VM_REF"
-        "${BASE%%://*}://gitlab-ci-token:${CI_JOB_TOKEN}@${BASE#*://}/${A2VM_PROJECT}.git" .a2vm
-    - kubectl config use-context "$A2VM_K8S_CONTEXT"
-    - if [ -n "${A2VM_K8S_CA:-}" ]; then kubectl config set-cluster gitlab --certificate-authority="$A2VM_K8S_CA"; fi
-    - NS="${A2VM_K8S_NAMESPACE:-a2vm-$(echo "$CI_PROJECT_NAME" | tr 'A-Z_' 'a-z-')}"
+    - BASE="${NGVM_SERVER_URL:-${CI_SERVER_PROTOCOL}://${CI_SERVER_HOST}:${CI_SERVER_PORT}}"
+    - git -c advice.detachedHead=false clone -q --depth 1 --branch "$NGVM_REF"
+        "${BASE%%://*}://gitlab-ci-token:${CI_JOB_TOKEN}@${BASE#*://}/${NGVM_PROJECT}.git" .ngvm
+    - kubectl config use-context "$NGVM_K8S_CONTEXT"
+    - if [ -n "${NGVM_K8S_CA:-}" ]; then kubectl config set-cluster gitlab --certificate-authority="$NGVM_K8S_CA"; fi
+    - NS="${NGVM_K8S_NAMESPACE:-ngvm-$(echo "$CI_PROJECT_NAME" | tr 'A-Z_' 'a-z-')}"
     - |
-      ONLY="$(printf '%s' "${A2VM_SEND_ONLY:-}" | tr ',' ' ' | tr -cd 'A-Za-z0-9._ -')"
+      ONLY="$(printf '%s' "${NGVM_SEND_ONLY:-}" | tr ',' ' ' | tr -cd 'A-Za-z0-9._ -')"
       JOB="send-$CI_PIPELINE_ID"; EDITS=""; V="$(mktemp -d)"
       echo "alerts to send: ${ONLY:-the pending alerts of the latest watch}"
       if [ -d edits ] && [ -n "$(ls edits 2>/dev/null)" ]; then
-        kubectl -n "$NS" create configmap "a2vm-edits-$CI_PIPELINE_ID" --from-file=edits/ --dry-run=client -o yaml | kubectl apply -f -
-        EDITS="--set watch.send.editsConfigMap=a2vm-edits-$CI_PIPELINE_ID"
+        kubectl -n "$NS" create configmap "ngvm-edits-$CI_PIPELINE_ID" --from-file=edits/ --dry-run=client -o yaml | kubectl apply -f -
+        EDITS="--set watch.send.editsConfigMap=ngvm-edits-$CI_PIPELINE_ID"
         echo "edits/: $(ls edits | wc -l) file(s) handed to the send job"
       fi
-      helm get values a2vm -n "$NS" -o yaml > "$V/values.yaml"
-      helm template a2vm .a2vm/deploy/charts/a2vm-tenant -n "$NS" -f "$V/values.yaml" \
+      helm get values ngvm -n "$NS" -o yaml > "$V/values.yaml"
+      helm template ngvm .ngvm/deploy/charts/ngvm-tenant -n "$NS" -f "$V/values.yaml" \
         --set watch.send.job="$JOB" --set-string watch.send.only="$ONLY" $EDITS --show-only templates/watch.yaml \
         | kubectl -n "$NS" apply -f -
       rc=1
@@ -733,14 +735,14 @@ send-alerts-k8s:
         sleep 5
       done
       kubectl -n "$NS" logs "job/$JOB" --tail=-1 || true
-      if [ -n "$EDITS" ]; then kubectl -n "$NS" delete configmap "a2vm-edits-$CI_PIPELINE_ID" --ignore-not-found; fi
+      if [ -n "$EDITS" ]; then kubectl -n "$NS" delete configmap "ngvm-edits-$CI_PIPELINE_ID" --ignore-not-found; fi
       rm -rf "$V"
       if [ "$rc" -ne 0 ]; then echo "the send job did not succeed: see its log above"; exit 1; fi
 
-# Checks the mail settings (A2VM_MAIL_FROM, SMTP or Graph, A2VM_ANALYST_TO): Build > Pipelines >
-# New pipeline (or ▶ on a schedule), then ▶ on this job. To another address: A2VM_TEST_TO in its form.
+# Checks the mail settings (NGVM_MAIL_FROM, SMTP or Graph, NGVM_ANALYST_TO): Build > Pipelines >
+# New pipeline (or ▶ on a schedule), then ▶ on this job. To another address: NGVM_TEST_TO in its form.
 test-mail:
-  extends: .a2vm
+  extends: .ngvm
   stage: send
   needs: []
   rules:
@@ -750,4 +752,4 @@ test-mail:
   cache:
     - {key: pip, paths: [.pip-cache/]}
   script:
-    - via test-mail ${A2VM_TEST_TO:+--to $A2VM_TEST_TO}
+    - via test-mail ${NGVM_TEST_TO:+--to $NGVM_TEST_TO}

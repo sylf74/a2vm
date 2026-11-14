@@ -1,9 +1,9 @@
 # Operator's manual (v0.24.0)
 
-Day-to-day operation of a tenant deployed on Kubernetes (`A2VM_RUN_MODE: kubernetes`): where each
+Day-to-day operation of a tenant deployed on Kubernetes (`NGVM_RUN_MODE: kubernetes`): where each
 part runs, the usual actions, how to check the state, the known failures and their remedies,
 upgrades. The installation of each part is in its own guide (table below); this manual does not
-repeat it. The examples use the tenant `lab` (namespace `a2vm-lab`); replace it with yours.
+repeat it. The examples use the tenant `lab` (namespace `ngvm-lab`); replace it with yours.
 
 | To install or change | Guide |
 | --- | --- |
@@ -20,25 +20,25 @@ repeat it. The examples use the tenant `lab` (namespace `a2vm-lab`); replace it 
 
 | Part | Where | When | Started by |
 | --- | --- | --- | --- |
-| Internal scans: SSH (Trivy, dnf) and OpenVAS | Collector VM near the network (`a2vm-collector@<connector>`, Docker or Podman) | Its systemd timer (`install-collector.sh --schedule`, default 07:30) | systemd |
-| CMDB (iTop, read only, v0.19.0) | Connector `itop` of the collector (`a2vm-collector@<connector>`), source `cmdb` | Its systemd timer, before the daily run | systemd |
+| Internal scans: SSH (Trivy, dnf) and OpenVAS | Collector VM near the network (`ngvm-collector@<connector>`, Docker or Podman) | Its systemd timer (`install-collector.sh --schedule`, default 07:30) | systemd |
+| CMDB (iTop, read only, v0.19.0) | Connector `itop` of the collector (`ngvm-collector@<connector>`), source `cmdb` | Its systemd timer, before the daily run | systemd |
 | External scan (OpenVAS from the internet) | Pipeline of the project `<tenant>-external`, on the runner of the cloud scanner (tag `scan-cloud`; deployed by `deploy/scanner` since v0.18.2) | Its pipeline schedule | GitLab |
-| Daily run: collect → via → detect → assets → triage → publish, inventory, dispatch | CronJob `a2vm-<tenant>-daily` | `daily.schedule` (default 05:45, Europe/Paris; suspended with `A2VM_K8S_SUSPEND=true`) | Kubernetes |
-| Watch | CronJob `a2vm-<tenant>-watch` | Every 10 minutes | Kubernetes |
-| Detection, watch and decision services | Deployments `a2vm-<tenant>-detect`, `-via`, `-verdict` | Always | Kubernetes |
-| Review page and sender | Deployments `a2vm-<tenant>-review` (oauth2-proxy), `-sender` | Always | Kubernetes |
-| Chat | Deployments `a2vm-<tenant>-chat`, `-tools` | Always | Kubernetes |
-| Remediation tickets and the page of the requests | Deployments `a2vm-<tenant>-dispatch`, `-dispatch-page`; the step `dispatch` of the daily run | Always; tickets at the end of each daily run | Kubernetes |
-| Shared intelligence service (v0.22.0) | Deployment `a2vm-<team>-intel` of the watch team's tenant (`A2VM_INTEL_SERVE=true`) | Always; GTI search every 6 hours when enabled | Kubernetes |
+| Daily run: collect → via → detect → assets → triage → publish, inventory, dispatch | CronJob `ngvm-<tenant>-daily` | `daily.schedule` (default 05:45, Europe/Paris; suspended with `NGVM_K8S_SUSPEND=true`) | Kubernetes |
+| Watch | CronJob `ngvm-<tenant>-watch` | Every 10 minutes | Kubernetes |
+| Detection, watch and decision services | Deployments `ngvm-<tenant>-detect`, `-via`, `-verdict` | Always | Kubernetes |
+| Review page and sender | Deployments `ngvm-<tenant>-review` (oauth2-proxy), `-sender` | Always | Kubernetes |
+| Chat | Deployments `ngvm-<tenant>-chat`, `-tools` | Always | Kubernetes |
+| Remediation tickets and the page of the requests | Deployments `ngvm-<tenant>-dispatch`, `-dispatch-page`; the step `dispatch` of the daily run | Always; tickets at the end of each daily run | Kubernetes |
+| Shared intelligence service (v0.22.0) | Deployment `ngvm-<team>-intel` of the watch team's tenant (`NGVM_INTEL_SERVE=true`) | Always; GTI search every 6 hours when enabled | Kubernetes |
 | Radar (v0.22.0) | The watch of the watch team's tenant (`alerts.mode: radar`) | Every 10 minutes | Kubernetes |
-| Tenant's database | CloudNativePG cluster `a2vm-<tenant>-db` (with `A2VM_DATABASE=true`) | Always | The operator |
+| Tenant's database | CloudNativePG cluster `ngvm-<tenant>-db` (with `NGVM_DATABASE=true`) | Always | The operator |
 | Reporting database and Grafana | The portal (`deploy/portal`) or a PostgreSQL of your own | Always | — |
 
 **Order of the schedules.** The daily run reads the latest detection of each source, if it is not
 older than the source's `max_age_hours` (30 by default). With the defaults the collectors push at
 07:30 and the daily run starts at 05:45: each run takes the detections of the day before. For the
 same day's, set the collector timers before the daily run, an OpenVAS scan early enough to end
-before it (`sudo systemctl edit a2vm-collector@<connector>.timer`). The external scan likewise
+before it (`sudo systemctl edit ngvm-collector@<connector>.timer`). The external scan likewise
 runs before the daily run; one older than the profile's `external.max_age_days` is left out.
 
 ## 2. Usual actions
@@ -48,11 +48,11 @@ runs before the daily run; one older than the profile's `external.max_age_days` 
 On the collector VM:
 
 ```bash
-systemctl list-timers 'a2vm-collector@*' --all
-sudo systemctl start --no-block a2vm-collector@lan-ssh.service
-sudo systemctl start --no-block a2vm-collector@lan-openvas.service
-journalctl -fu a2vm-collector@lan-ssh.service
-systemctl list-units 'a2vm-collector@*.service' --all
+systemctl list-timers 'ngvm-collector@*' --all
+sudo systemctl start --no-block ngvm-collector@lan-ssh.service
+sudo systemctl start --no-block ngvm-collector@lan-openvas.service
+journalctl -fu ngvm-collector@lan-ssh.service
+systemctl list-units 'ngvm-collector@*.service' --all
 ```
 
 The connector names follow the `@` in the timer names. `--no-block` returns at once (an OpenVAS
@@ -60,7 +60,7 @@ scan can take hours); Ctrl-C leaves the journal without stopping the run. A fini
 `inactive`; `failed` means read its journal (§4). Each detection accepted shows in the service:
 
 ```bash
-kubectl -n a2vm-lab logs deploy/a2vm-lab-detect --tail=10
+kubectl -n ngvm-lab logs deploy/ngvm-lab-detect --tail=10
 ```
 
 ### Scan again, from the internet
@@ -76,23 +76,23 @@ glab api "runners?tag_list=scan-cloud" | jq '.[] | {id, description, status}'
 ### Run the daily run now
 
 ```bash
-kubectl -n a2vm-lab create job --from=cronjob/a2vm-lab-daily a2vm-lab-daily-manual-1101
-kubectl -n a2vm-lab get pods -l job-name=a2vm-lab-daily-manual-1101 -w
-kubectl -n a2vm-lab wait --for=condition=complete job/a2vm-lab-daily-manual-1101 --timeout=60m
+kubectl -n ngvm-lab create job --from=cronjob/ngvm-lab-daily ngvm-lab-daily-manual-1101
+kubectl -n ngvm-lab get pods -l job-name=ngvm-lab-daily-manual-1101 -w
+kubectl -n ngvm-lab wait --for=condition=complete job/ngvm-lab-daily-manual-1101 --timeout=60m
 ```
 
 The job name must be new (a date in it); delete an old job to reuse its name
-(`kubectl -n a2vm-lab delete job <name>`). The steps run one after the other as init containers;
+(`kubectl -n ngvm-lab delete job <name>`). The steps run one after the other as init containers;
 the pod ends `Completed`.
 
 ### Read the CronJobs, the jobs and the logs
 
 ```bash
-kubectl -n a2vm-lab get cronjob
-kubectl -n a2vm-lab describe cronjob a2vm-lab-daily
-kubectl -n a2vm-lab get jobs --sort-by=.metadata.creationTimestamp
-kubectl -n a2vm-lab logs job/a2vm-lab-daily-manual-1101 -c triage
-kubectl -n a2vm-lab get pod <pod> -o jsonpath='{range .status.initContainerStatuses[*]}{.name}{" "}{.state.terminated.exitCode}{"\n"}{end}'
+kubectl -n ngvm-lab get cronjob
+kubectl -n ngvm-lab describe cronjob ngvm-lab-daily
+kubectl -n ngvm-lab get jobs --sort-by=.metadata.creationTimestamp
+kubectl -n ngvm-lab logs job/ngvm-lab-daily-manual-1101 -c triage
+kubectl -n ngvm-lab get pod <pod> -o jsonpath='{range .status.initContainerStatuses[*]}{.name}{" "}{.state.terminated.exitCode}{"\n"}{end}'
 ```
 
 The last command gives the exit code of each step of a daily run: the first one not `0` is the one
@@ -112,43 +112,43 @@ The same figures are in the chat (« Où en sommes-nous ? », `llm_usage`). What
 
 | Seen | Meaning | Action |
 | --- | --- | --- |
-| Hours of GPU, few new decisions (« Qu'est-ce qui a changé depuis le run d'hier ? ») | The LLM is asked again what it already answered | `A2VM_LLM_REASONING=off` on the group (`docs/llm.md`); the cache is on by default on Kubernetes (`/data/llm-cache.json`) |
+| Hours of GPU, few new decisions (« Qu'est-ce qui a changé depuis le run d'hier ? ») | The LLM is asked again what it already answered | `NGVM_LLM_REASONING=off` on the group (`docs/llm.md`); the cache is on by default on Kubernetes (`/data/llm-cache.json`) |
 | `from_cache` close to `questions` from the second run | The cache works: only the new or changed CVEs cost | — |
-| Thousands of completion tokens per question | The model reasons before answering | `A2VM_LLM_REASONING=off` (`docs/llm.md`) |
+| Thousands of completion tokens per question | The model reasons before answering | `NGVM_LLM_REASONING=off` (`docs/llm.md`) |
 | `review` in the thousands | Rows asking an analyst whose doubt changes nothing | `policy.review: decisive` (the default since v0.23.7) |
 
 ### The watch and its alerts
 
 ```bash
-kubectl -n a2vm-lab logs job/$(kubectl -n a2vm-lab get jobs -l app.kubernetes.io/component=watch --sort-by=.metadata.creationTimestamp -o name | tail -1 | cut -d/ -f2)
-kubectl -n a2vm-lab logs deploy/a2vm-lab-via --tail=20
-kubectl -n a2vm-lab logs deploy/a2vm-lab-sender --tail=20
+kubectl -n ngvm-lab logs job/$(kubectl -n ngvm-lab get jobs -l app.kubernetes.io/component=watch --sort-by=.metadata.creationTimestamp -o name | tail -1 | cut -d/ -f2)
+kubectl -n ngvm-lab logs deploy/ngvm-lab-via --tail=20
+kubectl -n ngvm-lab logs deploy/ngvm-lab-sender --tail=20
 ```
 
-Analysts validate the alerts on the review page (`https://<A2VM_ALERTS_HOST>`); the sender mails
+Analysts validate the alerts on the review page (`https://<NGVM_ALERTS_HOST>`); the sender mails
 them within a minute. An alert never makes a ticket. The last watch passage in one command (expected:
 `sources: …`, `intel: N/N records from the shared service` with the shared service, `lab: N new
 items, N alerts`, no `ERROR`):
 
 ```bash
-kubectl -n a2vm-lab get jobs --sort-by=.metadata.creationTimestamp -o name | grep watch | tail -1 | xargs kubectl -n a2vm-lab logs --all-containers --tail=30
+kubectl -n ngvm-lab get jobs --sort-by=.metadata.creationTimestamp -o name | grep watch | tail -1 | xargs kubectl -n ngvm-lab logs --all-containers --tail=30
 ```
 
 ### The radar and the shared intelligence service (v0.22.0)
 
-The watch team's tenant (`team` here, namespace `a2vm-team`) runs the shared intelligence service
+The watch team's tenant (`team` here, namespace `ngvm-team`) runs the shared intelligence service
 and the radar; the other tenants read their CVE records and the radar's feed from it
 (`docs/radar.md`).
 
 ```bash
-kubectl -n a2vm-team logs deployment/a2vm-team-intel | grep -v httpx | head -5
-kubectl -n a2vm-team get jobs --sort-by=.metadata.creationTimestamp -o name | grep watch | tail -1 | xargs kubectl -n a2vm-team logs --all-containers --tail=30
+kubectl -n ngvm-team logs deployment/ngvm-team-intel | grep -v httpx | head -5
+kubectl -n ngvm-team get jobs --sort-by=.metadata.creationTimestamp -o name | grep watch | tail -1 | xargs kubectl -n ngvm-team logs --all-containers --tail=30
 ```
 
 The service starts with `intel: tokens radar 1, read 1; …`, then logs the requests it serves. Each
 radar passage logs `radar: N events in 14 days, alert at 4 (urgent 7); best: …` (v0.22.1): a
 passage without alerts shows how far the best events are from the thresholds. The team's daily run
-has nothing to scan: `A2VM_K8S_SUSPEND=true` keeps it suspended (a `kubectl patch` is undone by the
+has nothing to scan: `NGVM_K8S_SUSPEND=true` keeps it suspended (a `kubectl patch` is undone by the
 next deployment).
 
 ### Remediation tickets (v0.20.0)
@@ -159,8 +159,8 @@ requests. In `mode: dry-run` they stay `proposed`; the first daily run in `live`
 of `dispatch.yaml` takes effect at the next deployment.
 
 ```bash
-kubectl -n a2vm-lab get jobs --sort-by=.metadata.creationTimestamp -o name | grep daily | tail -1 | xargs kubectl -n a2vm-lab logs -c dispatch
-kubectl -n a2vm-lab logs deployment/a2vm-lab-dispatch --tail=20
+kubectl -n ngvm-lab get jobs --sort-by=.metadata.creationTimestamp -o name | grep daily | tail -1 | xargs kubectl -n ngvm-lab logs -c dispatch
+kubectl -n ngvm-lab logs deployment/ngvm-lab-dispatch --tail=20
 ```
 
 The step ends with `dispatch of run … (<mode>): proposed n, sent n, updated n, fixed n, …`. The
@@ -184,7 +184,7 @@ git commit --allow-empty -m "Redeploy"
 git push
 ```
 
-Before v0.23.18, a tenant on Kubernetes with `A2VM_REPORTING_DSN` could not use "Run pipeline":
+Before v0.23.18, a tenant on Kubernetes with `NGVM_REPORTING_DSN` could not use "Run pipeline":
 GitLab refused it (`'publish' job needs 'triage' job, but 'triage' does not exist in the
 pipeline`), and its schedules failed the same way.
 
@@ -192,16 +192,16 @@ pipeline`), and its schedules failed the same way.
 
 | Command | Expected |
 | --- | --- |
-| `kubectl -n a2vm-lab get pods \| grep -v -E "Running\|Completed"` | The header line only |
-| `kubectl -n a2vm-lab get pods` | Services `Running`; the last daily job `Completed`; watch jobs `Completed` every 10 minutes |
-| `kubectl -n a2vm-lab get deploy -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.spec.template.spec.containers[0].image}{"\n"}{end}'` | Every A2VM image at the tag of the tenant's `.gitlab-ci.yml` |
-| `kubectl -n a2vm-lab logs deploy/a2vm-lab-verdict \| head -1` | `store postgresql … (TLS verified)` with the tenant's database, else `store files …`; then `latest run …` |
-| `kubectl -n a2vm-lab logs deploy/a2vm-lab-via \| grep store` | The same for the watch service, with the number of alerts kept |
-| `kubectl -n a2vm-lab get pods -l cnpg.io/cluster=a2vm-lab-db` | The database instance(s) `Running` |
-| `kubectl -n a2vm-lab logs deploy/a2vm-lab-verdict --tail=5` | A `push tenant=lab run=… rows=…` line after each daily run |
-| `kubectl -n a2vm-lab logs deploy/a2vm-lab-dispatch \| head -1` | With `dispatch.yaml` (v0.20.0): its store, mode (dry-run or live), targets, automatic levels and targets of the requests; each daily run's container `dispatch` ends with `dispatch of run … : proposed n, sent n, …` (`docs/dispatch.md`) |
-| `helm -n a2vm-lab get values a2vm -o yaml` | What `deploy-k8s` set (database, chat, watch, sign-in, dispatch, intel) |
-| `kubectl -n a2vm-team logs deployment/a2vm-team-intel \| grep -v httpx \| head -1` | `intel: tokens radar 1, read N; …` (the watch team's tenant, v0.22.0) |
+| `kubectl -n ngvm-lab get pods \| grep -v -E "Running\|Completed"` | The header line only |
+| `kubectl -n ngvm-lab get pods` | Services `Running`; the last daily job `Completed`; watch jobs `Completed` every 10 minutes |
+| `kubectl -n ngvm-lab get deploy -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.spec.template.spec.containers[0].image}{"\n"}{end}'` | Every NGVM image at the tag of the tenant's `.gitlab-ci.yml` |
+| `kubectl -n ngvm-lab logs deploy/ngvm-lab-verdict \| head -1` | `store postgresql … (TLS verified)` with the tenant's database, else `store files …`; then `latest run …` |
+| `kubectl -n ngvm-lab logs deploy/ngvm-lab-via \| grep store` | The same for the watch service, with the number of alerts kept |
+| `kubectl -n ngvm-lab get pods -l cnpg.io/cluster=ngvm-lab-db` | The database instance(s) `Running` |
+| `kubectl -n ngvm-lab logs deploy/ngvm-lab-verdict --tail=5` | A `push tenant=lab run=… rows=…` line after each daily run |
+| `kubectl -n ngvm-lab logs deploy/ngvm-lab-dispatch \| head -1` | With `dispatch.yaml` (v0.20.0): its store, mode (dry-run or live), targets, automatic levels and targets of the requests; each daily run's container `dispatch` ends with `dispatch of run … : proposed n, sent n, …` (`docs/dispatch.md`) |
+| `helm -n ngvm-lab get values ngvm -o yaml` | What `deploy-k8s` set (database, chat, watch, sign-in, dispatch, intel) |
+| `kubectl -n ngvm-team logs deployment/ngvm-team-intel \| grep -v httpx \| head -1` | `intel: tokens radar 1, read N; …` (the watch team's tenant, v0.22.0) |
 
 In the chat: "summary of the latest run" names the run and its date; "details of asset web01"
 shows an asset, with its scans since v0.18.1, even when it has no finding.
@@ -219,28 +219,28 @@ shows an asset, with its scans since v0.18.1, even when it has no finding.
 | Collector journal: `FAIL cmdb [...]` (v0.19.0) | iTop not reached, its certificate not trusted (`ca_file`), the account refused (`code 1`) or without read rights on the CIs | `docs/cmdb.md` §5; the daily run keeps the previous CMDB detection while it is younger than `max_age_hours` |
 | A host "not in the CMDB", or a server "never scanned" (v0.19.0) | The CMDB and the scans disagree: an item missing, a name or an address different, a target missing | The `coverage` dashboard and `list_coverage` in the chat; `docs/cmdb.md` §6 |
 | Collector journal: push refused `401` or `403` | Token of the collector changed or not declared in `collectors.yaml` | `docs/collectors.md` (declaration and tokens) |
-| Watch: `inventory none yet` | The daily run has not pushed its inventory to the watch service (step `inventory`; needs `A2VM_RUN_MODE: kubernetes`) | The log of the step `inventory` of the last daily run; it warns, and says what the watch keeps (since v0.23.19), when the service cannot be reached or refuses it |
-| Services restart two or three times after `A2VM_DATABASE=true` | They wait for the database's secret while the cluster initialises | None: they settle within two minutes |
-| `deploy-k8s`: "the CloudNativePG operator is not installed" | `A2VM_DATABASE=true` without the operator: the cluster's API answered, without `postgresql.cnpg.io` (before v0.23.19, also a failed discovery) | `deploy/cnpg/README.md` |
+| Watch: `inventory none yet` | The daily run has not pushed its inventory to the watch service (step `inventory`; needs `NGVM_RUN_MODE: kubernetes`) | The log of the step `inventory` of the last daily run; it warns, and says what the watch keeps (since v0.23.19), when the service cannot be reached or refuses it |
+| Services restart two or three times after `NGVM_DATABASE=true` | They wait for the database's secret while the cluster initialises | None: they settle within two minutes |
+| `deploy-k8s`: "the CloudNativePG operator is not installed" | `NGVM_DATABASE=true` without the operator: the cluster's API answered, without `postgresql.cnpg.io` (before v0.23.19, also a failed discovery) | `deploy/cnpg/README.md` |
 | `deploy-k8s`: "the cluster's API did not answer the discovery through the agent … 3 times" (v0.23.19) | The GitLab agent's tunnel failed three times in a row; the `WARN` lines above give `kubectl`'s error | Run the pipeline again; if it lasts, the agent's pod (`kubectl -n gitlab-agent get pods`) and its log |
-| `helm get values` shows no `database` although `A2VM_DATABASE` is set | The job did not see the variable: protected variable on an unprotected branch, wrong name or value | Settings > CI/CD > Variables: `A2VM_DATABASE` = `true`, then run the pipeline again |
+| `helm get values` shows no `database` although `NGVM_DATABASE` is set | The job did not see the variable: protected variable on an unprotected branch, wrong name or value | Settings > CI/CD > Variables: `NGVM_DATABASE` = `true`, then run the pipeline again |
 | Step `publish`: "schema version 2 … run `verdict db init`" | The reporting database is older than the release | `verdict db init` once (`docs/reporting.md`) |
 | The chat says "no run received yet" | The decision service has no run (new database) | A daily run (§2) |
 | The chat does not find an asset | Before v0.18.1, an asset with no finding was not listed; since, an asset not scanned in the run | Since v0.18.1, check its scans in the remediation dashboard ("Assets by last scan") and the collector |
 | A finding "gone without a new scan" (v0.18.1) | Its asset was not scanned again by the source that had seen it | The asset's scans (collector journal, targets); it is counted fixed only after a new scan |
 | A French Grafana bar chart shows no bar (v0.17.3) | Dashboard imported before v0.18.1 | Import the French dashboards again |
-| `deploy-k8s`: `UPGRADE FAILED: cannot patch "a2vm-<tenant>-watch" … $setElementOrder` | The watch CronJob of v0.21.0 or v0.22.0 gave `A2VM_CACHE_DIR` twice, which breaks the patch once the environment changes (fixed in v0.22.1) | `kubectl -n a2vm-lab delete cronjob a2vm-lab-watch`, then deploy again (§2); before moving to v0.22.1, delete it the same way |
+| `deploy-k8s`: `UPGRADE FAILED: cannot patch "ngvm-<tenant>-watch" … $setElementOrder` | The watch CronJob of v0.21.0 or v0.22.0 gave `NGVM_CACHE_DIR` twice, which breaks the patch once the environment changes (fixed in v0.22.1) | `kubectl -n ngvm-lab delete cronjob ngvm-lab-watch`, then deploy again (§2); before moving to v0.22.1, delete it the same way |
 | A job `Pending`: "no runners … scan-cloud" | The cloud scanner is stopped or its runner is offline | Start the scanner, or `sudo systemctl restart gitlab-runner` on it; the job starts by itself |
 | `glab ci retry`: "Job is not retryable" | A newer pipeline exists | Deploy again (§2) |
 | Sender: "LibreOffice is not installed in the job" | `alerts.attach: [pdf]`, and the sender's image has no LibreOffice | `attach: [docx]`, then validate the alert again |
 | No ticket in the ITSM | `mode: dry-run`, no decision of the automatic levels, or no daily run since `live` | The line `dispatch of run …` of the last daily run (§2) |
-| Watch or daily log: "records read from the sources directly" | The shared intelligence service did not answer | Its log (§2), `A2VM_INTEL_URL` and `A2VM_INTEL_TOKEN` of the group |
-| Review page: Keycloak "Invalid redirect URI" | The page's address is not declared in the client | Add `https://<A2VM_ALERTS_HOST>/oauth2/callback` to the client's redirect URIs |
-| The watch team's daily run is no longer suspended | A deployment undid a `kubectl patch` | `A2VM_K8S_SUSPEND=true` (v0.22.1) |
+| Watch or daily log: "records read from the sources directly" | The shared intelligence service did not answer | Its log (§2), `NGVM_INTEL_URL` and `NGVM_INTEL_TOKEN` of the group |
+| Review page: Keycloak "Invalid redirect URI" | The page's address is not declared in the client | Add `https://<NGVM_ALERTS_HOST>/oauth2/callback` to the client's redirect URIs |
+| The watch team's daily run is no longer suspended | A deployment undid a `kubectl patch` | `NGVM_K8S_SUSPEND=true` (v0.22.1) |
 
 ## 5. Upgrades
 
-### A2VM itself (the code project)
+### NGVM itself (the code project)
 
 1. Push the release branch and open its merge request in one step:
 
@@ -253,7 +253,7 @@ shows an asset, with its scans since v0.18.1, even when it has no finding.
 
    ```bash
    git checkout main && git pull --ff-only origin main
-   git show origin/main:deploy/charts/a2vm-tenant/Chart.yaml | grep -c X.Y.Z
+   git show origin/main:deploy/charts/ngvm-tenant/Chart.yaml | grep -c X.Y.Z
    git tag vX.Y.Z origin/main && git push origin vX.Y.Z
    ```
 
@@ -261,7 +261,7 @@ shows an asset, with its scans since v0.18.1, even when it has no finding.
 
 ### A tenant
 
-When the tag's `images` job is green: in the tenant project, change `ref` and `A2VM_REF` in
+When the tag's `images` job is green: in the tenant project, change `ref` and `NGVM_REF` in
 `.gitlab-ci.yml` and push; `deploy-k8s` redeploys. Read the release's **Upgrade** paragraph in
 `CHANGELOG.md` first: some releases need `verdict db init` on the reporting database, or a
 dashboard imported again.
@@ -271,7 +271,7 @@ dashboard imported again.
 A collector pulls its image from the registry of the code project with a deploy token of its own,
 read-only, that can be revoked without touching the cluster:
 
-1. In GitLab, project `vulnops/a2vm` > Settings > Repository > Deploy tokens > Add token:
+1. In GitLab, project `vulnops/ngvm` > Settings > Repository > Deploy tokens > Add token:
    name and **Username** `collector-<host>` (left empty, GitLab makes `gitlab+deploy-token-<n>`,
    shown in the list of tokens), an expiry date, scope **`read_registry` only** (no
    `read_repository`, no `write_registry`). GitLab shows the password once.
@@ -290,8 +290,8 @@ read-only, that can be revoked without touching the cluster:
 ### A collector
 
 ```bash
-sudo docker pull <registry>/vulnops/a2vm/detect:vX.Y.Z
-sudo sed -i 's#/detect:v[0-9.]*#/detect:vX.Y.Z#' /etc/systemd/system/a2vm-collector@.service
+sudo docker pull <registry>/vulnops/ngvm/detect:vX.Y.Z
+sudo sed -i 's#/detect:v[0-9.]*#/detect:vX.Y.Z#' /etc/systemd/system/ngvm-collector@.service
 sudo systemctl daemon-reload
 ```
 
@@ -306,7 +306,7 @@ When the Kubernetes cluster is stopped for the night and started in the morning:
   once while the database comes up.
 - A schedule missed while the cluster was down: the daily run (no deadline) starts once when the
   cluster is back; the watch (`startingDeadlineSeconds` 300) skips what is older than 5 minutes and
-  resumes at its next slot. Check with `kubectl -n a2vm-lab get jobs`; start the daily run by hand
+  resumes at its next slot. Check with `kubectl -n ngvm-lab get jobs`; start the daily run by hand
   (§2) if none ran.
 - The collectors and the external scan do not depend on the cluster: their pushes made while it
   was down are kept in the collector's spool and sent at the next run of the connector.

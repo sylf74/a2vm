@@ -13,7 +13,7 @@ updated in the same merge request as the code it describes.
 
 ## 1. Scope
 
-Two flows will leave A2VM, each to its own team, side by side and never chained: **remediation**
+Two flows will leave NGVM, each to its own team, side by side and never chained: **remediation**
 tickets in the ITSM of the teams that patch (v0.20.0: iTop), and alerts in the SOC's incident
 response platform on a suspected compromise (SIRP, TheHive, planned). This version builds the first.
 
@@ -32,7 +32,7 @@ No LLM: the title and the text of a ticket come from templates, the facts from t
 | Way | Interface | Kind | Contract | Other side | Access | When the other side is missing |
 | --- | --- | --- | --- | --- | --- | --- |
 | Provides | Dispatch service (`dispatch serve`, §6) | API | `dispatch.v1.yaml` | Daily run (step `dispatch`, role `run`); tools (role `read`) | Run and read tokens | The daily run warns; the next run dispatches |
-| Provides | Page of the requests for remediation (§3.2) | Web page behind oauth2-proxy | — | Persons of the groups `A2VM_OIDC_REMEDIATORS`, from the links of the RSSI dashboards (D18) | OIDC sign-in | — |
+| Provides | Page of the requests for remediation (§3.2) | Web page behind oauth2-proxy | — | Persons of the groups `NGVM_OIDC_REMEDIATORS`, from the links of the RSSI dashboards (D18) | OIDC sign-in | — |
 | Consumes | Decision service | API | `verdict.v1.yaml` (`GET runs`, `decisions` with their `fixes` and, since v0.21.0, `priority`, `priority_rank`, `sla_due`, `assets/{asset}`, `findings/closed`) | verdict (`verdict serve`) | Read token | Nothing dispatched, the step warns (exit 3) |
 | Consumes | Rules of the tenant (`dispatch.yaml`, §4) | Exchange file (tenant project) | `dispatch.schema.json` | Tenant project | ConfigMap | Without the file the service is not deployed |
 
@@ -56,7 +56,7 @@ name. The decisions of an asset without a known fix make one ticket `<asset> / n
 | `cmdb` | Class and key of the CMDB item of the asset (v0.19.0), read from the asset's card when the ticket is created: the ticket is linked to it |
 | `origin`, `requested_by`, `requested_at`, `comment` | `rule` (§3.1) or `request` (§3.2): who asked, when, their comment |
 | `target`, `external` | The target of `dispatch.yaml`; the tool's reference, URL and status |
-| `state`, `error`, `history` | A2VM's state; the last refusal of the tool; the last 100 events |
+| `state`, `error`, `history` | NGVM's state; the last refusal of the tool; the last 100 events |
 
 States:
 
@@ -70,7 +70,7 @@ proposed ──► sent ──► in-progress ──► fixed (every finding clo
 A ticket `fixed` or `lost` whose key comes back with new findings is sent again as a new ticket in
 the tool, its history kept.
 
-Title: `[A2VM <level>] <asset name>: apply <fix> (<n> CVEs)`, `[A2VM <level> <priority>] …` when a
+Title: `[NGVM <level>] <asset name>: apply <fix> (<n> CVEs)`, `[NGVM <level> <priority>] …` when a
 finding has a priority (v0.21.0). Text (HTML): asset, fix, level, due date (with a priority: the
 priority, the SLA due date and, for comparison, the BOD 26-04 one), that closing the ticket does not
 close the vulnerabilities, the requester and comment, and a table of the CVEs (level, priority, KEV,
@@ -143,10 +143,10 @@ For each open ticket, against the newest run and the findings closed since the t
 | Absent, not closed | `unverified`: not a fix (the asset was not scanned again) |
 
 When no finding is open, the ticket is `fixed`, and resolved in the tool (`resolve_when_fixed`,
-default true) unless it already is. Otherwise A2VM reads the tool's status: closed there while a
+default true) unless it already is. Otherwise NGVM reads the tool's status: closed there while a
 finding is still seen → `claimed-fixed`, a comment names what the last scan still sees, and the
 ticket is reopened in the tool (`reopen_when_still_seen`, default true); unknown to the tool →
-`lost`. A2VM never takes the tool's word for a fix.
+`lost`. NGVM never takes the tool's word for a fix.
 
 ## 4. Rules of the tenant (`dispatch.yaml`)
 
@@ -160,9 +160,9 @@ targets:
   itsm:
     type: itop
     url: https://itop.lab.example
-    user: a2vm-itsm        # its password: CI/CD variable A2VM_DISPATCH_ITSM_PASSWORD
+    user: ngvm-itsm        # its password: CI/CD variable NGVM_DISPATCH_ITSM_PASSWORD
     organization: Lab
-    caller: A2VM           # the iTop Person the tickets come from: its name, or its e-mail (an @)
+    caller: NGVM           # the iTop Person the tickets come from: its name, or its e-mail (an @)
     caller_organization: IT   # optional (v0.23.3): the caller's organisation, else `organization`
     team: Linux            # optional: the iTop Team they are given to
     priorities:            # optional (v0.21.0): priority of the client's SLA -> impact, urgency
@@ -187,17 +187,17 @@ request (dry run)"); the first run in live mode sends them.
 ## 5. Connectors
 
 A connector maps a ticket to one tool and back, and nothing else: `create`, `comment`, `resolve`,
-`reopen`, `status` (the tool's status and A2VM's reading of it: working, closed, gone). A refusal is
+`reopen`, `status` (the tool's status and NGVM's reading of it: working, closed, gone). A refusal is
 kept on the ticket (`error`) and in the log; the ticket is tried again at the next run. The
 credential of a target `<name>` is the key `dispatch-<name>` of the tenant's Secret, the CA of its
 certificate, when private, `dispatch-<name>-ca`.
 
 ### 5.1 iTop
 
-REST API 1.3, a local account of its own (`a2vm-itsm`), distinct from the read-only CMDB account of
+REST API 1.3, a local account of its own (`ngvm-itsm`), distinct from the read-only CMDB account of
 pillar 2, allowed to create and update user requests in the tenant's organisation.
 
-| A2VM | iTop (`UserRequest`) |
+| NGVM | iTop (`UserRequest`) |
 | --- | --- |
 | create | `core/create`: `org_id` (`organization`), `caller_id` (the Person `caller`, by its name or, with an @, its e-mail, looked for in `caller_organization`, else `organization`: since v0.23.3, a name two persons carry is no longer refused as "Several items found"), `team_id` (`team`), `title`, `description` (HTML), `impact` and `urgency` from the priority of the client's SLA when `priorities` maps it (v0.21.0), else from the level (ACT 2/1, ATTEND 3/2, TRACK 3/3); a ticket already created keeps them, `functionalcis_list` (the CMDB item) |
 | comment | `core/update`: an entry in `public_log` |
@@ -216,11 +216,11 @@ investigation", then the watch's alerts on an exploitation in the wild, with D17
 
 | Item | Value |
 | --- | --- |
-| API | `/v1/tenants/{tenant}/runs` (POST, role `run`), `tickets` (since v0.22.2 with `since`, `until`, `limit`, `offset`, `sent_at` and `counts`), `tickets/{id}`, `requests`, `fixes` (v0.22.2: the findings the team declared fixed in the ITSM, with that date, read by the daily run's publication) (GET, role `read`); contract `a2vm/src/a2vm/schemas/openapi/dispatch.v1.yaml` |
+| API | `/v1/tenants/{tenant}/runs` (POST, role `run`), `tickets` (since v0.22.2 with `since`, `until`, `limit`, `offset`, `sent_at` and `counts`), `tickets/{id}`, `requests`, `fixes` (v0.22.2: the findings the team declared fixed in the ITSM, with that date, read by the daily run's publication) (GET, role `read`); contract `ngvm/src/ngvm/schemas/openapi/dispatch.v1.yaml` |
 | Page | `/remediate` (GET, POST) on port 8081, behind oauth2-proxy (`<release>-<tenant>-dispatch-page`), as the review page of the alerts (`docs/sign-in.md`); only the proxy reaches the port |
 | Storage | The tenant's PostgreSQL, schema `dispatch` (`tickets`: key, state, target, asset, reference, document; `requests`), row-level security on the tenant; without it, files on the volume of the service |
 | Secrets | Mounted item by item: `verdict-read-token`, `dispatch-page-key`, and `dispatch-<target>` (`-ca`) of each target of `dispatch.yaml`; never the tenant's other secrets; read from files, never logged |
-| Network | In: the daily run and the pods labelled `a2vm.io/dispatch-reader=true` (8080), the page's proxy (8081). Out: the decision service, the targets (`dispatch.egress`, resolved by `deploy-k8s`), the tenant's database, the DNS |
+| Network | In: the daily run and the pods labelled `ngvm.io/dispatch-reader=true` (8080), the page's proxy (8081). Out: the decision service, the targets (`dispatch.egress`, resolved by `deploy-k8s`), the tenant's database, the DNS |
 | Deployment | One replica (`Recreate`); deployed by `deploy-k8s` when the tenant project has `dispatch.yaml` and the decision service runs |
 
 ## 7. Restitution

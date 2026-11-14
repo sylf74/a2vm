@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """v0.23.6 (D20): appliances and network devices. Their exact firmware read by SNMP or from the CMDB,
 matched against the CVE records and the vendors' CSAF advisories with the level of proof embedded."""
 
@@ -10,10 +10,10 @@ import re
 
 import pytest
 
-from a2vm import applications as apps
-from a2vm.models import AffectedEntry, VulnRecord
 from detect.firmware import SYS_DESCR, SYS_NAME, SYS_OBJECT_ID, from_cmdb, from_snmp
 from detect.snmp import SnmpConfig, fetch
+from ngvm import applications as apps
+from ngvm.models import AffectedEntry, VulnRecord
 
 from .conftest import ROOT
 
@@ -85,7 +85,7 @@ def test_cmdb_observation_carries_the_firmware() -> None:
 
 # -- the connector ----------------------------------------------------------------------------------
 def _config(**extra) -> SnmpConfig:
-    data = {"targets": ["192.0.2.1", "192.0.2.64/30", "fw.lab.example"], "user": "a2vm-ro",
+    data = {"targets": ["192.0.2.1", "192.0.2.64/30", "fw.lab.example"], "user": "ngvm-ro",
             "auth_password_file": "/x", "priv_password_file": "/y", **extra}  # fmt: skip
     return SnmpConfig.from_dict(data)
 
@@ -152,7 +152,7 @@ def test_the_agent_and_the_cli_know_snmp(tmp_path) -> None:
 
     (tmp_path / "token").write_text("t")
     (tmp_path / "c.yaml").write_text(json.dumps({
-        "collector": "c1", "tenant": "lab", "service": "https://a2vm.example.org",
+        "collector": "c1", "tenant": "lab", "service": "https://ngvm.example.org",
         "token_file": str(tmp_path / "token"),
         "connectors": [{"name": "network", "type": "snmp", "targets": ["192.0.2.1"], "version": "2c",
                         "community_file": str(tmp_path / "community")}],
@@ -304,7 +304,7 @@ def test_the_vendor_status_comes_before_the_record() -> None:
 # -- wiring -----------------------------------------------------------------------------------------
 def test_schemas_carry_the_cpe() -> None:
     for name in ("detection", "assets", "triage"):
-        text = (ROOT / "a2vm" / "src" / "a2vm" / "schemas" / f"{name}.schema.json").read_text()
+        text = (ROOT / "ngvm" / "src" / "ngvm" / "schemas" / f"{name}.schema.json").read_text()
         assert '"cpe": {' in text and "since v0.23.6" in text
 
 

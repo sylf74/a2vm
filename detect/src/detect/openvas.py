@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """OpenVAS (Greenbone Community Edition) connector: network scans, without agent or SSH account.
 
 Two ways in:
@@ -33,8 +33,8 @@ from typing import Any
 from defusedxml import ElementTree as SafeET
 from defusedxml.common import DefusedXmlException
 
-from a2vm.config import env as cfg_env
-from a2vm.io import Detection, now
+from ngvm.config import env as cfg_env
+from ngvm.io import Detection, now
 
 from .scanners import Target, _Builder, merge
 
@@ -421,7 +421,7 @@ def run_scan(
 
 
 def connect(cfg: OpenvasConfig, env: dict[str, str]):
-    """An authenticated Gmp context manager from the CI variables (A2VM_GVM_*)."""
+    """An authenticated Gmp context manager from the CI variables (NGVM_GVM_*)."""
     try:
         from gvm.connections import TLSConnection, UnixSocketConnection
         from gvm.protocols.gmp import Gmp
@@ -430,7 +430,7 @@ def connect(cfg: OpenvasConfig, env: dict[str, str]):
         raise GmpError("python-gvm is not installed: pip install 'detect[openvas]'") from exc
     user, password = cfg_env("GVM_USER", environ=env) or None, cfg_env("GVM_PASSWORD", environ=env) or None
     if not user or not password:
-        raise GmpError("A2VM_GVM_USER and A2VM_GVM_PASSWORD must be set")
+        raise GmpError("NGVM_GVM_USER and NGVM_GVM_PASSWORD must be set")
     timeout = cfg.gmp_timeout_seconds
 
     def connection():

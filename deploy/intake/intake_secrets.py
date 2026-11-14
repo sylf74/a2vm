@@ -1,11 +1,11 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """Secrets of the detection service of one tenant, made by the job deploy-k8s (LLD detection §8.3).
 
   python3 intake_secrets.py collectors.yaml --out DIR [--read-token FILE]
 
-For each collector declared in collectors.yaml, the CI/CD variable A2VM_COLLECTOR_TOKEN_<ID> (id in
+For each collector declared in collectors.yaml, the CI/CD variable NGVM_COLLECTOR_TOKEN_<ID> (id in
 upper case, dashes as underscores; masked, text or File) holds its token, and
-A2VM_COLLECTOR_TOKEN_<ID>_NEXT a second one during a rotation. Writes, in DIR (mode 0600):
+NGVM_COLLECTOR_TOKEN_<ID>_NEXT a second one during a rotation. Writes, in DIR (mode 0600):
 
   digests             `<collector id> <sha256>` per token and `read <sha256>`: the service keeps
                       only these
@@ -13,7 +13,7 @@ A2VM_COLLECTOR_TOKEN_<ID>_NEXT a second one during a rotation. Writes, in DIR (m
                       redeployment does not change it; otherwise a new random one)
 
 Prints, per collector, whether its token is set, never a value. Standard library and PyYAML only:
-it runs in the deploy job, without the A2VM packages. The same digest as detect.intake.registry.
+it runs in the deploy job, without the NGVM packages. The same digest as detect.intake.registry.
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ TOKEN = re.compile(r"^[A-Za-z0-9._~+/=-]{32,512}$")
 
 
 def variable(collector_id: str) -> str:
-    return "A2VM_COLLECTOR_TOKEN_" + collector_id.upper().replace("-", "_")
+    return "NGVM_COLLECTOR_TOKEN_" + collector_id.upper().replace("-", "_")
 
 
 def digest(token: str) -> str:

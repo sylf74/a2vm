@@ -1,7 +1,7 @@
 # The alert sheet in Word and PDF (v0.11.4)
 
 The watch can make the alert sheet as a Word file, filled from a template with tags
-([docxtpl](https://docxtpl.readthedocs.io/)): the client's own layout, A2VM's facts. The analysts
+([docxtpl](https://docxtpl.readthedocs.io/)): the client's own layout, NGVM's facts. The analysts
 receive the Word file with the mail to validate, since it is the file they may correct; the client
 receives the Word file, or a PDF made from it when the alert is sent, or both.
 
@@ -25,16 +25,16 @@ receives the Word file, or a PDF made from it when the alert is sent, or both.
    (`templates/alert.en.docx`, `templates/alert.fr.docx`; v0.17.1), or one for every language
    (`templates/alert.docx`). Start from a sheet the team already sends to that client and replace
    its content with the tags below, keeping its layout, styles, header and footer. Without them,
-   the neutral template of the language shipped with A2VM is used
+   the neutral template of the language shipped with NGVM is used
    (`via/src/via/alert/templates/alert.<lang>.docx`, English and French, built by
-   `scripts/make_alert_template.py`). The values A2VM puts in the tags are in the language of the
+   `scripts/make_alert_template.py`). The values NGVM puts in the tags are in the language of the
    contact (English, French); the title, main impact and description are those of the sheet the
    analyst validated in that language.
 3. The `validate` job checks every template (`via check-template templates/alert*.docx`): it fails
-   on a tag A2VM does not fill, or on a broken tag.
+   on a tag NGVM does not fill, or on a broken tag.
 
 A client's template carries its branding and classification marks: it stays in the client project,
-never in the A2VM repository.
+never in the NGVM repository.
 
 ## Editing a template in Word
 

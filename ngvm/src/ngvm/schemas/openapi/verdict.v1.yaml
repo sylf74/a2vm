@@ -1,0 +1,579 @@
+# Contract of the pillar 3 decision service, read side (HLD D15 step 3, LLD triage-prioritization §15).
+# Status: v1, as built in v0.14.0 (verdict serve). Within v1, fields and calls are only added.
+openapi: 3.1.0
+info:
+  title: NGVM decision service
+  version: "1.0.0"
+  description: >
+    The daily run pushes its triage (ngvm.triage/1); analysts' tools read the latest run, or one
+    of the last runs kept, through short and paged answers. Every call carries the tenant. The
+    service is reached inside the cluster only. Every answer names the run it comes from.
+servers:
+  - url: http://ngvm-lab-verdict:8080
+tags:
+  - name: publish
+  - name: read
+  - name: operations
+paths:
+  /v1/tenants/{tenant}/runs:
+    post:
+      tags: [publish]
+      operationId: pushRun
+      summary: Push the triage of a run
+      security:
+        - publishToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: sha256 of the triage document; a retry with the same key is answered from it at once.
+          schema: {type: string, maxLength: 128}
+        - name: Content-Encoding
+          in: header
+          required: false
+          schema: {type: string, enum: [gzip]}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "../triage.schema.json"}
+      responses:
+        "202":
+          description: Stored (or already stored under this key)
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/RunReceipt"}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "413": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+    get:
+      tags: [read]
+      operationId: listRuns
+      summary: The runs kept, newest first
+      security:
+        - readToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+      responses:
+        "200":
+          description: Receipts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: {type: array, items: {$ref: "#/components/schemas/RunReceipt"}}
+        "401": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/sla-state:
+    get:
+      tags: [publish]
+      operationId: getSlaState
+      summary: >-
+        The state the daily run carries for the client's SLA (since v0.21.0, HLD D19): every finding not
+        closed, its level, the day it got it and its priority as stored (null: never computed); with the
+        tenant's database only (404 without it)
+      security:
+        - publishToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+      responses:
+        "200":
+          description: The state (ngvm.sla_state/1)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [schema, tenant, generated_at, findings]
+                properties:
+                  schema: {const: ngvm.sla_state/1}
+                  tenant: {type: string}
+                  generated_at: {type: string}
+                  findings:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, level]
+                      properties:
+                        id: {type: string}
+                        level: {enum: [ACT, ATTEND, TRACK]}
+                        level_since: {type: [string, "null"]}
+                        sla: {type: [object, "null"], additionalProperties: true}
+        "401": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/summary:
+    get:
+      tags: [read]
+      operationId: summary
+      summary: Counts of a run per level, exposure and KEV; assets and CVEs with most ACT; per priority of the client's SLA (since v0.21.0)
+      security:
+        - readToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+        - $ref: "#/components/parameters/run"
+      responses:
+        "200": {description: Summary, content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/decisions:
+    get:
+      tags: [read]
+      operationId: listDecisions
+      summary: Decisions of a run, filtered, sorted and paged; a few fields each
+      security:
+        - readToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+        - $ref: "#/components/parameters/run"
+        - {name: level, in: query, schema: {type: string}, description: "ACT, ATTEND, TRACK, comma-separated"}
+        - {name: cve, in: query, schema: {type: string}}
+        - {name: asset, in: query, schema: {type: string}}
+        - {name: exposure, in: query, schema: {type: string, enum: [open, controlled, small]}}
+        - {name: zone, in: query, schema: {type: string}}
+        - {name: kev, in: query, schema: {type: boolean}}
+        - {name: needs_review, in: query, schema: {type: boolean}}
+        - {name: source, in: query, schema: {type: string}, description: Detection source that saw the finding}
+        - {name: min_epss, in: query, schema: {type: number}}
+        - {name: min_cvss, in: query, schema: {type: number}}
+        - {name: product, in: query, schema: {type: string}, description: Part of the vendor or product name}
+        - {name: q, in: query, schema: {type: string}, description: Part of the CVE id, asset or description}
+        - {name: due_before, in: query, schema: {type: string, format: date}, description: Due on or before this day (since v0.15.2)}
+        - {name: overdue, in: query, schema: {type: boolean}, description: Past their due date (since v0.15.2)}
+        - {name: priority, in: query, schema: {type: string}, description: "Priorities of the client's SLA, comma-separated (since v0.21.0)"}
+        - {name: sla_overdue, in: query, schema: {type: boolean}, description: "Past their SLA due date, on the day in the client's time zone (since v0.21.0)"}
+        - {name: sla_due_before, in: query, schema: {type: string, format: date}, description: "SLA due on or before this day (since v0.21.0)"}
+        - {name: sort, in: query, schema: {type: string, enum: [level, epss, cvss, due_date, cve, asset, priority, sla_due]}, description: "priority and sla_due since v0.21.0"}
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 2000, default: 25}, description: "Up to 2000 here (since v0.20.2: the services that read every decision), 200 elsewhere"}
+        - $ref: "#/components/parameters/offset"
+      responses:
+        "200":
+          description: One page
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DecisionPage"}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/decisions/{id}:
+    get:
+      tags: [read]
+      operationId: getDecision
+      summary: One decision in full (rationale, SSVC inputs and their sources, reasons, fixes)
+      security:
+        - readToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+        - $ref: "#/components/parameters/run"
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200": {description: The decision, content: {application/json: {schema: {$ref: "#/components/schemas/Decision"}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/cves/{cve}:
+    get:
+      tags: [read]
+      operationId: getCve
+      summary: >-
+        One CVE in the run (description, CVSS, EPSS, KEV, SSVC inputs, fixes, dates) and the assets it concerns;
+        `concerned: false` with `not_affected` when the tenant has the product outside the vulnerable range
+        (since v0.15.2); 404 when no asset is concerned
+      security:
+        - readToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+        - $ref: "#/components/parameters/run"
+        - {name: cve, in: path, required: true, schema: {type: string, pattern: "^CVE-[0-9]{4}-[0-9]{4,}$"}}
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/offset"
+      responses:
+        "200": {description: The CVE, content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/assets:
+    get:
+      tags: [read]
+      operationId: listAssets
+      summary: Assets of the run with their counts per level, most ACT first
+      security:
+        - readToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+        - $ref: "#/components/parameters/run"
+        - {name: q, in: query, schema: {type: string}}
+        - {name: exposure, in: query, schema: {type: string}}
+        - {name: zone, in: query, schema: {type: string}}
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/offset"
+      responses:
+        "200": {description: One page, content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/components:
+    get:
+      tags: [read]
+      operationId: findComponent
+      summary: >-
+        The assets that carry a software component, vulnerable or not (since v0.22.2), from the
+        packages listed on each host; with the number of assets that have it, of assets whose
+        packages are listed, of hosts not listed, and the count of each version found
+      security:
+        - readToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+        - $ref: "#/components/parameters/run"
+        - {name: name, in: query, required: true, schema: {type: string}, description: "part of the package name"}
+        - {name: exact, in: query, schema: {type: boolean}, description: "true: the whole package name"}
+        - {name: version, in: query, schema: {type: string}, description: "the beginning of the version"}
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/offset"
+      responses:
+        "200": {description: One page, content: {application/json: {schema: {type: object}}}}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/coverage:
+    get:
+      tags: [read]
+      operationId: getCoverage
+      summary: >-
+        Scan coverage of the run (since v0.19.0): the state of each host asset against the CMDB and
+        the means of detection its class expects, gaps first; empty for a run built before
+      security:
+        - readToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+        - $ref: "#/components/parameters/run"
+        - name: state
+          in: query
+          schema: {type: string}
+          description: >-
+            comma-separated states (not-in-cmdb, retired-but-alive, not-expected, not-scannable,
+            never-scanned, stale, partial, covered), or gaps for every state that calls for an action
+        - {name: class, in: query, schema: {type: string}, description: "CMDB class (Server, VirtualMachine...)"}
+        - {name: q, in: query, schema: {type: string}}
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/offset"
+      responses:
+        "200":
+          description: Counts per state, the share covered, and one page of assets
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [run, total, items]
+                properties:
+                  run: {type: object}
+                  cmdb: {type: boolean, description: a CMDB took part in the run}
+                  stale_days: {type: integer}
+                  counts: {type: object, additionalProperties: {type: integer}}
+                  expected_assets: {type: integer}
+                  covered_share: {type: [number, "null"]}
+                  means: {type: array, items: {type: string}}
+                  total: {type: integer}
+                  next_offset: {type: integer}
+                  items: {type: array, items: {type: object}}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/assets/{asset}:
+    get:
+      tags: [read]
+      operationId: getAsset
+      summary: One asset and its decisions, paged
+      security:
+        - readToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+        - $ref: "#/components/parameters/run"
+        - {name: asset, in: path, required: true, schema: {type: string}}
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/offset"
+      responses:
+        "200": {description: The asset, content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/assets/{asset}/fixes:
+    get:
+      tags: [read]
+      operationId: getFixPlan
+      summary: The decisions of one asset grouped by the fix that clears them, most ACT cleared first (since v0.15.2)
+      security:
+        - readToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+        - $ref: "#/components/parameters/run"
+        - {name: asset, in: path, required: true, schema: {type: string}}
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/offset"
+      responses:
+        "200": {description: The plan, content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/assets/{asset}/exposure:
+    get:
+      tags: [read]
+      operationId: getExposurePath
+      summary: >-
+        Why one asset has its exposure (since v0.24.0): the value, its source, and the path it rests on from
+        the asset graph, step by step from the internet or a zone, each step with its source and date; empty
+        when the exposure is assumed
+      security:
+        - readToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+        - $ref: "#/components/parameters/run"
+        - {name: asset, in: path, required: true, schema: {type: string}}
+      responses:
+        "200": {description: The exposure and its path, content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/changes:
+    get:
+      tags: [read]
+      operationId: listChanges
+      summary: Decisions new, gone or at another level since an earlier run, each with why (since v0.15.2)
+      security:
+        - readToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+        - $ref: "#/components/parameters/run"
+        - {name: since, in: query, schema: {type: string}, description: "`previous` (default) or a run id"}
+        - {name: kind, in: query, schema: {type: string}, description: "new, gone, changed, comma-separated"}
+        - {name: level, in: query, schema: {type: string}}
+        - {name: asset, in: query, schema: {type: string}}
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/offset"
+      responses:
+        "200": {description: One page of changes, content: {application/json: {schema: {type: object}}}}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/findings/closed:
+    get:
+      tags: [read]
+      operationId: listClosedFindings
+      summary: >-
+        Findings closed since a day: in a run and absent from a newer one (since v0.18.1, only when
+        their asset was scanned again by a source that had seen them: fixed), most recent first (since
+        v0.18.0, with the tenant's database; 404 without it)
+      security:
+        - readToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+        - {name: since, in: query, schema: {type: string, format: date}, description: "a day (default: 30 days ago)"}
+        - {name: until, in: query, schema: {type: string, format: date}, description: "the last day included (since v0.22.2)"}
+        - {name: asset, in: query, schema: {type: string}, description: "one or several assets, comma-separated, ids or names (since v0.22.2)"}
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/offset"
+      responses:
+        "200":
+          description: One page of closed findings
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [since, total, items]
+                properties:
+                  since: {type: string}
+                  total: {type: integer}
+                  next_offset: {type: integer}
+                  items: {type: array, items: {$ref: "#/components/schemas/Lifecycle"}}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/findings/unverified:
+    get:
+      tags: [read]
+      operationId: listUnverifiedFindings
+      summary: >-
+        Findings gone from a run while their asset was not scanned again by the source that had seen
+        them (scan failed, host off): not known to be fixed, most recent first (since v0.18.1, with the
+        tenant's database; 404 without it)
+      security:
+        - readToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+        - {name: since, in: query, schema: {type: string, format: date}, description: "a day (default: 30 days ago)"}
+        - {name: until, in: query, schema: {type: string, format: date}, description: "the last day included (since v0.22.2)"}
+        - {name: asset, in: query, schema: {type: string}, description: "one or several assets, comma-separated, ids or names (since v0.22.2)"}
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/offset"
+      responses:
+        "200":
+          description: One page of unverified findings
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [since, total, items]
+                properties:
+                  since: {type: string}
+                  total: {type: integer}
+                  next_offset: {type: integer}
+                  items: {type: array, items: {$ref: "#/components/schemas/Lifecycle"}}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /healthz:
+    get:
+      tags: [operations]
+      operationId: healthz
+      security: []
+      responses:
+        "200": {description: Alive}
+  /readyz:
+    get:
+      tags: [operations]
+      operationId: readyz
+      security: []
+      responses:
+        "200": {description: Ready (store writable, or the database reached)}
+        "503": {description: Not ready}
+components:
+  securitySchemes:
+    publishToken:
+      type: http
+      scheme: bearer
+      description: Token of the tenant's daily run; the service keeps its digest only.
+    readToken:
+      type: http
+      scheme: bearer
+      description: Token of the analysts' tools of the tenant; the service keeps its digest only. Later the Kubernetes service account of the caller.
+  parameters:
+    tenant:
+      name: tenant
+      in: path
+      required: true
+      schema: {type: string, pattern: "^[a-z0-9][a-z0-9-]{0,62}$"}
+    run:
+      name: run
+      in: query
+      required: false
+      description: "`latest` (default) or the id of a run kept"
+      schema: {type: string}
+    limit:
+      name: limit
+      in: query
+      required: false
+      schema: {type: integer, minimum: 1, maximum: 200, default: 25}
+    offset:
+      name: offset
+      in: query
+      required: false
+      schema: {type: integer, minimum: 0, default: 0}
+  responses:
+    Problem:
+      description: Error (RFC 9457)
+      content:
+        application/problem+json:
+          schema: {$ref: "#/components/schemas/Problem"}
+  schemas:
+    RunReceipt:
+      type: object
+      required: [id, tenant, generated_at, received_at, digest, rows, counts]
+      properties:
+        id: {type: string}
+        tenant: {type: string}
+        generated_at: {type: string}
+        received_at: {type: string}
+        digest: {type: string, description: "sha256 of the uncompressed triage"}
+        rows: {type: integer}
+        counts: {type: object, additionalProperties: {type: integer}}
+        duplicate: {type: boolean}
+    DecisionPage:
+      type: object
+      required: [run, total, offset, limit, items]
+      properties:
+        run: {$ref: "#/components/schemas/RunRef"}
+        total: {type: integer}
+        offset: {type: integer}
+        limit: {type: integer}
+        next_offset: {type: integer}
+        items:
+          type: array
+          items:
+            type: object
+            required: [id, cve, asset, level, ssvc]
+            properties:
+              id: {type: string}
+              cve: {type: string}
+              asset: {type: string}
+              asset_name: {type: string}
+              level: {enum: [ACT, ATTEND, TRACK]}
+              ssvc: {type: string}
+              exposure: {type: string}
+              zone: {type: string}
+              kev: {type: boolean}
+              epss: {type: [number, "null"]}
+              cvss: {type: [number, "null"]}
+              due_date: {type: [string, "null"]}
+              needs_review: {type: boolean}
+              product: {type: string}
+              title: {type: string}
+              first_seen: {type: [string, "null"]}
+              cve_updated: {type: [string, "null"]}
+              fixes: {type: array, items: {type: string}, description: "the fixes the scanners reported, `<package> <fixed version>` (since v0.20.0)"}
+              priority: {type: string, description: "priority of the client's SLA, \"\" in none (since v0.21.0)"}
+              priority_rank: {type: [integer, "null"], description: "0 for the most urgent priority (since v0.21.0)"}
+              sla_due: {type: [string, "null"], description: "due date of the client's SLA; due_date stays the BOD 26-04 one (since v0.21.0)"}
+    Decision:
+      type: object
+      description: A row of the triage (ngvm.triage/1) with its run, id and due date; its other fields as in the triage.
+      required: [run, id]
+      properties:
+        run: {$ref: "#/components/schemas/RunRef"}
+        id: {type: string}
+        due_date: {type: [string, "null"]}
+        lifecycle: {$ref: "#/components/schemas/Lifecycle"}
+      additionalProperties: true
+    Lifecycle:
+      type: object
+      description: >-
+        The life of a finding across the runs (since v0.18.0, with the tenant's database): when it
+        was first decided, last seen, closed (absent from a newer run), reopened, and its levels.
+      required: [id, cve_id, asset, opened_at, last_seen_at, level, level_since, levels]
+      properties:
+        id: {type: string}
+        cve_id: {type: string}
+        asset: {type: string}
+        state: {enum: [open, closed, unverified], description: "since v0.18.1"}
+        opened_at: {type: string}
+        last_seen_at: {type: string}
+        last_run: {type: string}
+        closed_at: {type: string}
+        closed_run: {type: string}
+        unverified_since: {type: string, description: "gone from a run, its asset not scanned again (since v0.18.1)"}
+        reopened: {type: integer}
+        level: {enum: [ACT, ATTEND, TRACK]}
+        level_since: {type: string}
+        levels:
+          type: array
+          items:
+            type: object
+            properties:
+              at: {type: string}
+              level: {type: string}
+              run: {type: string}
+        sla: {type: object, description: "the priority of the client's SLA as stored after the last run (since v0.21.0; absent when never computed)", additionalProperties: true}
+        priorities:
+          type: array
+          description: "changes of the priority (since v0.21.0)"
+          items:
+            type: object
+            properties:
+              at: {type: string}
+              priority: {type: string}
+              due: {type: [string, "null"]}
+              run: {type: string}
+    RunRef:
+      type: object
+      required: [id, generated_at]
+      properties:
+        id: {type: string}
+        generated_at: {type: string}
+        language: {type: string, enum: [en, fr], description: "Language of the client's deliverables (v0.17.3)"}
+    Problem:
+      type: object
+      properties:
+        type: {type: string}
+        title: {type: string}
+        status: {type: integer}
+        detail: {type: string}

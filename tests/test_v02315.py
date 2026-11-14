@@ -1,8 +1,8 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """v0.23.15: a development identity provider, off unless asked.
 
-A platform for development whose company gives A2VM no OIDC client gets a Keycloak in its namespace,
-with a realm made for A2VM. The realm was imported into Keycloak 26.4 while writing this version:
+A platform for development whose company gives NGVM no OIDC client gets a Keycloak in its namespace,
+with a realm made for NGVM. The realm was imported into Keycloak 26.4 while writing this version:
 the client's secret from the environment, PKCE, the groups claim, verified e-mails, temporary
 passwords that ask for a change."""
 
@@ -19,14 +19,14 @@ import yaml
 
 from .conftest import ROOT
 
-CHART = ROOT / "deploy/charts/a2vm-tenant"
+CHART = ROOT / "deploy/charts/ngvm-tenant"
 ENV = {
-    "A2VM_DEV_IDP_HOST": "idp-dev.apps.example.org",
-    "A2VM_DEV_IDP_USERS": "Ana@Example.org:admins, bob@example.org:validators;carl@example.org:readers",
-    "A2VM_CHAT_HOST": "chat.example.org",
-    "A2VM_ALERTS_HOST": "alerts.example.org",
-    "A2VM_CHAT_CLUSTER_ISSUER": "company-ca",
-    "A2VM_CHAT_INGRESS_CLASS": "nginx",
+    "NGVM_DEV_IDP_HOST": "idp-dev.apps.example.org",
+    "NGVM_DEV_IDP_USERS": "Ana@Example.org:admins, bob@example.org:validators;carl@example.org:readers",
+    "NGVM_CHAT_HOST": "chat.example.org",
+    "NGVM_ALERTS_HOST": "alerts.example.org",
+    "NGVM_CHAT_CLUSTER_ISSUER": "company-ca",
+    "NGVM_CHAT_INGRESS_CLASS": "nginx",
 }
 
 
@@ -37,16 +37,16 @@ def _module():
     return mod
 
 
-def test_the_realm_is_made_for_a2vm() -> None:
+def test_the_realm_is_made_for_ngvm() -> None:
     out, oidc = _module().values("lab", ENV)
     dev = out["devIdp"]
     assert dev["enabled"] and dev["host"] == "idp-dev.apps.example.org" and dev["users"] == 3
     assert dev["ingress"]["clusterIssuer"] == "company-ca" and dev["ingress"]["className"] == "nginx"
     realm = dev["realm"]
-    assert realm["realm"] == "a2vm-dev" and not realm["registrationAllowed"] and realm["bruteForceProtected"]
+    assert realm["realm"] == "ngvm-dev" and not realm["registrationAllowed"] and realm["bruteForceProtected"]
     assert "DEVELOPMENT" in realm["displayNameHtml"]
     client = realm["clients"][0]
-    assert client["clientId"] == "a2vm-lab" and client["secret"] == "${A2VM_DEV_IDP_CLIENT_SECRET}"
+    assert client["clientId"] == "ngvm-lab" and client["secret"] == "${NGVM_DEV_IDP_CLIENT_SECRET}"
     assert client["redirectUris"] == [
         "https://chat.example.org/oauth/oidc/callback",
         "https://alerts.example.org/oauth2/callback",
@@ -56,21 +56,21 @@ def test_the_realm_is_made_for_a2vm() -> None:
     assert mapper["protocolMapper"] == "oidc-group-membership-mapper" and mapper["config"]["full.path"] == "false"
     assert mapper["config"]["claim.name"] == "groups"
     users = {u["email"]: u for u in realm["users"]}
-    assert users["ana@example.org"]["groups"] == ["/a2vm-validators", "/a2vm-admins"]
-    assert users["carl@example.org"]["groups"] == ["/a2vm-readers"]
+    assert users["ana@example.org"]["groups"] == ["/ngvm-validators", "/ngvm-admins"]
+    assert users["carl@example.org"]["groups"] == ["/ngvm-readers"]
     assert all(u["emailVerified"] and u["credentials"][0]["temporary"] for u in users.values())
-    assert users["bob@example.org"]["credentials"][0]["value"] == "${A2VM_DEV_IDP_PW_1}"  # the order given
+    assert users["bob@example.org"]["credentials"][0]["value"] == "${NGVM_DEV_IDP_PW_1}"  # the order given
     assert oidc == {
-        "A2VM_OIDC_ISSUER": "https://idp-dev.apps.example.org/realms/a2vm-dev",
-        "A2VM_OIDC_CLIENT_ID": "a2vm-lab",
-        "A2VM_OIDC_READERS": "a2vm-readers",
-        "A2VM_OIDC_VALIDATORS": "a2vm-validators",
-        "A2VM_OIDC_ADMINS": "a2vm-admins",
-        "A2VM_OIDC_IN_CLUSTER": "true",
-        "A2VM_OIDC_PROVIDER_NAME": "A2VM DEV",
+        "NGVM_OIDC_ISSUER": "https://idp-dev.apps.example.org/realms/ngvm-dev",
+        "NGVM_OIDC_CLIENT_ID": "ngvm-lab",
+        "NGVM_OIDC_READERS": "ngvm-readers",
+        "NGVM_OIDC_VALIDATORS": "ngvm-validators",
+        "NGVM_OIDC_ADMINS": "ngvm-admins",
+        "NGVM_OIDC_IN_CLUSTER": "true",
+        "NGVM_OIDC_PROVIDER_NAME": "NGVM DEV",
     }
     assert "storage" not in dev
-    assert _module().values("lab", {**ENV, "A2VM_DEV_IDP_STORAGE_CLASS": "fast"})[0]["devIdp"]["storage"] == {
+    assert _module().values("lab", {**ENV, "NGVM_DEV_IDP_STORAGE_CLASS": "fast"})[0]["devIdp"]["storage"] == {
         "storageClass": "fast"
     }
 
@@ -81,19 +81,19 @@ def test_the_sign_in_takes_what_it_derives() -> None:
     sys.path.insert(0, str(ROOT / "deploy/chat"))
     spec.loader.exec_module(mod)
     _, oidc = _module().values("lab", ENV)
-    out = mod.values({**ENV, **oidc, "A2VM_OIDC_CLIENT_SECRET": "s" * 32}, "kubernetes")
-    assert out["oidc"]["inCluster"] and out["oidc"]["egress"] == [] and out["oidc"]["admins"] == ["a2vm-admins"]
+    out = mod.values({**ENV, **oidc, "NGVM_OIDC_CLIENT_SECRET": "s" * 32}, "kubernetes")
+    assert out["oidc"]["inCluster"] and out["oidc"]["egress"] == [] and out["oidc"]["admins"] == ["ngvm-admins"]
 
 
 @pytest.mark.parametrize(
     ("change", "message"),
     [
-        ({"A2VM_DEV_IDP_HOST": "https://idp"}, "host name"),
-        ({"A2VM_DEV_IDP_USERS": ""}, "at least one"),
-        ({"A2VM_DEV_IDP_USERS": "ana@example.org:root"}, "readers, validators or admins"),
-        ({"A2VM_DEV_IDP_USERS": "not-an-email:admins"}, "e-mail:group"),
-        ({"A2VM_DEV_IDP_USERS": "a@example.org:admins,A@example.org:readers"}, "twice"),
-        ({"A2VM_CHAT_HOST": "", "A2VM_ALERTS_HOST": ""}, "sign in to"),
+        ({"NGVM_DEV_IDP_HOST": "https://idp"}, "host name"),
+        ({"NGVM_DEV_IDP_USERS": ""}, "at least one"),
+        ({"NGVM_DEV_IDP_USERS": "ana@example.org:root"}, "readers, validators or admins"),
+        ({"NGVM_DEV_IDP_USERS": "not-an-email:admins"}, "e-mail:group"),
+        ({"NGVM_DEV_IDP_USERS": "a@example.org:admins,A@example.org:readers"}, "twice"),
+        ({"NGVM_CHAT_HOST": "", "NGVM_ALERTS_HOST": ""}, "sign in to"),
     ],
 )
 def test_wrong_settings_stop_the_job(change, message) -> None:
@@ -108,7 +108,7 @@ def test_the_script_writes_the_values_and_the_variables(tmp_path) -> None:
     assert "dev-idp-password-0 ana@example.org (admins)" in proc.stdout
     assert json.loads((tmp_path / "v.json").read_text())["devIdp"]["users"] == 3
     assert (
-        "export A2VM_OIDC_ISSUER='https://idp-dev.apps.example.org/realms/a2vm-dev'" in (tmp_path / "o.env").read_text()
+        "export NGVM_OIDC_ISSUER='https://idp-dev.apps.example.org/realms/ngvm-dev'" in (tmp_path / "o.env").read_text()
     )
 
 
@@ -116,8 +116,8 @@ def test_the_pipeline_makes_it_only_when_asked() -> None:
     pipeline = yaml.safe_load((ROOT / "templates/client-pipeline.yml").read_text())
     script = "\n".join(pipeline["deploy-k8s"]["script"])
     block = next(x for x in pipeline["deploy-k8s"]["script"] if 'DEVIDP=""' in x)
-    assert 'elif [ -n "${A2VM_DEV_IDP_HOST:-}" ]; then' in block
-    assert "WARN A2VM_DEV_IDP_HOST ignored: A2VM_OIDC_ISSUER names the identity provider" in block
+    assert 'elif [ -n "${NGVM_DEV_IDP_HOST:-}" ]; then' in block
+    assert "WARN NGVM_DEV_IDP_HOST ignored: NGVM_OIDC_ISSUER names the identity provider" in block
     assert "never for production" in block
     assert script.index('DEVIDP=""') < script.index('SIGNIN=""')  # the sign-in uses what it exports
     assert "$WATCH $DEVIDP $SIGNIN" in script
@@ -139,7 +139,7 @@ def test_the_chart_runs_keycloak_only_when_enabled() -> None:
 
 def test_docs() -> None:
     doc = (ROOT / "docs/dev-idp.md").read_text(encoding="utf-8")
-    assert "**Never for production.**" in doc and "A2VM_DEV_IDP_USERS" in doc
+    assert "**Never for production.**" in doc and "NGVM_DEV_IDP_USERS" in doc
     assert "docs/dev-idp.md" in (ROOT / "docs/sign-in.md").read_text(encoding="utf-8")
 
 

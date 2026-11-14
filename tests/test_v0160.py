@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """v0.16.0: the watch on Kubernetes. The watch service of the tenant (`via serve`) keeps the state,
 the last inventory, the alerts and their journal; the watch, the send and the daily run use it."""
 
@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from a2vm.service import Problem, TokenSet, digest
+from ngvm.service import Problem, TokenSet, digest
 from via.alert.watch import State
 from via.cli import main
 from via.service.server import WatchService, serve
@@ -29,7 +29,7 @@ def watch_store(tmp_path, dsn):
     """The watch service's store: files, or the tenant's PostgreSQL (v0.18.0)."""
     if dsn is None:
         return WatchStore(tmp_path / "store")
-    from a2vm.db import Database
+    from ngvm.db import Database
     from via.service.pgstore import MIGRATIONS, PgWatchStore
 
     db = Database(dsn, "via", MIGRATIONS)
@@ -78,7 +78,7 @@ def test_the_watch_runs_from_the_service_and_names_the_inventory(service, tmp_pa
     import datetime as dt
 
     svc, url, token = service
-    monkeypatch.delenv("A2VM_ANALYST_TO", raising=False)
+    monkeypatch.delenv("NGVM_ANALYST_TO", raising=False)
     seen = dt.datetime.now(dt.UTC).replace(microsecond=0).isoformat()
     _inventory(tmp_path / "inv", TENANT, "CVE-2099-10001", seen)
     assert _service(url, token, "push-inventory", "--assets-dir", str(tmp_path / "inv" / TENANT)) == 0
@@ -102,9 +102,9 @@ def test_the_watch_runs_from_the_service_and_names_the_inventory(service, tmp_pa
 
 def test_the_validated_alert_is_sent_once_and_journaled(service, tmp_path, monkeypatch):
     svc, url, token = service
-    monkeypatch.delenv("A2VM_ANALYST_TO", raising=False)
-    monkeypatch.delenv("A2VM_SMTP_HOST", raising=False)
-    monkeypatch.delenv("A2VM_SEND_ONLY", raising=False)
+    monkeypatch.delenv("NGVM_ANALYST_TO", raising=False)
+    monkeypatch.delenv("NGVM_SMTP_HOST", raising=False)
+    monkeypatch.delenv("NGVM_SEND_ONLY", raising=False)
     assert _watch(url, token) == 0
     forget_alert(svc)
     assert _watch(url, token) == 0
@@ -126,11 +126,11 @@ def test_the_validated_alert_is_sent_once_and_journaled(service, tmp_path, monke
 def test_the_link_in_the_analysts_mail_opens_a_prefilled_pipeline(monkeypatch):
     from via.alert.cli import _send_link
 
-    monkeypatch.delenv("A2VM_SEND_PIPELINE_URL", raising=False)
+    monkeypatch.delenv("NGVM_SEND_PIPELINE_URL", raising=False)
     assert _send_link("a1") == ""
-    monkeypatch.setenv("A2VM_SEND_PIPELINE_URL", "https://gitlab.example.org/vulnops/clients/lab/-/pipelines/new")
+    monkeypatch.setenv("NGVM_SEND_PIPELINE_URL", "https://gitlab.example.org/vulnops/clients/lab/-/pipelines/new")
     link = _send_link("lab-CERTFR-2026-ALE-001")
-    assert "pipelines/new?ref=main&var[A2VM_JOB]=send&var[A2VM_SEND_ONLY]=lab-CERTFR-2026-ALE-001" in link
+    assert "pipelines/new?ref=main&var[NGVM_JOB]=send&var[NGVM_SEND_ONLY]=lab-CERTFR-2026-ALE-001" in link
 
 
 def test_roles_and_refusals(service, tmp_path):
@@ -162,7 +162,7 @@ def test_roles_and_refusals(service, tmp_path):
 
 
 # -- the pipeline, the chart, the deploy job ---------------------------------------------------------
-CHART = ROOT / "deploy" / "charts" / "a2vm-tenant"
+CHART = ROOT / "deploy" / "charts" / "ngvm-tenant"
 
 
 def _pipeline() -> dict:
@@ -171,30 +171,30 @@ def _pipeline() -> dict:
 
 def test_kubernetes_mode_turns_the_scheduled_pipelines_off():
     pipeline = _pipeline()
-    assert pipeline["variables"]["A2VM_RUN_MODE"] == "gitlab"
+    assert pipeline["variables"]["NGVM_RUN_MODE"] == "gitlab"
     for job in (".data", "watch", "send-alerts"):
         rules = pipeline[job]["rules"]
-        assert any(r.get("if") == '$A2VM_RUN_MODE == "kubernetes"' and r.get("when") == "never" for r in rules), job
+        assert any(r.get("if") == '$NGVM_RUN_MODE == "kubernetes"' and r.get("when") == "never" for r in rules), job
     send = pipeline["send-alerts-k8s"]
-    assert send["rules"][0]["if"].startswith('$A2VM_RUN_MODE == "kubernetes" && $A2VM_JOB == "send"')
+    assert send["rules"][0]["if"].startswith('$NGVM_RUN_MODE == "kubernetes" && ($NGVM_JOB == "send" || $A2VM_JOB')
     script = "\n".join(send["script"])
     assert "tr -cd 'A-Za-z0-9._ -'" in script  # what the analyst types never reaches a shell unfiltered
-    assert "helm get values a2vm" in script and "--show-only templates/watch.yaml" in script
+    assert "helm get values ngvm" in script and "--show-only templates/watch.yaml" in script
     assert "--from-file=edits/" in script
     for job in ("validate", "deploy-k8s"):
-        assert '$A2VM_JOB == "send"' in pipeline[job]["rules"][0]["if"], job
-    assert "A2VM_RUN_MODE=kubernetes needs A2VM_K8S_CONTEXT" in "\n".join(pipeline["validate"]["script"])
+        assert '$NGVM_JOB == "send"' in pipeline[job]["rules"][0]["if"], job
+    assert "NGVM_RUN_MODE=kubernetes needs NGVM_K8S_CONTEXT" in "\n".join(pipeline["validate"]["script"])
 
 
 def test_deploy_job_deploys_the_watch_with_its_tokens_and_files():
     script = "\n".join(_pipeline()["deploy-k8s"]["script"])
     block = next(s for s in _pipeline()["deploy-k8s"]["script"] if 'WATCH=""' in s)
-    assert 'if [ "$A2VM_RUN_MODE" = "kubernetes" ]' in block
-    assert "create secret generic a2vm-via" in block and "a2vm-alert-template" in block
+    assert 'if [ "$NGVM_RUN_MODE" = "kubernetes" ]' in block
+    assert "create secret generic ngvm-via" in block and "ngvm-alert-template" in block
     assert "--set-file files.contacts=contacts.yaml" in block and "pipelines/new" in block
     for key in ("via-run-token", "via-read-token", "smtp-password", "graph-client-secret"):
         assert f"put {key} " in script, key
-    assert "$CHAT $WATCH" in script and "A2VM_ANALYST_TO" in script
+    assert "$CHAT $WATCH" in script and "NGVM_ANALYST_TO" in script
 
 
 def test_chart_runs_the_watch_beside_a_closed_service():
@@ -224,7 +224,7 @@ def test_the_chat_reads_the_alerts_of_the_watch(service, monkeypatch, tmp_path):
     from verdict.service.tools import Tools
 
     svc, url, token = service
-    monkeypatch.delenv("A2VM_ANALYST_TO", raising=False)
+    monkeypatch.delenv("NGVM_ANALYST_TO", raising=False)
     assert _watch(url, token) == 0
     forget_alert(svc)
     assert _watch(url, token) == 0
@@ -247,7 +247,7 @@ def test_the_chat_reads_the_alerts_of_the_watch(service, monkeypatch, tmp_path):
 def test_contract_names_the_calls_the_service_answers():
     from .test_detect_api_contract import _refs
 
-    spec_path = ROOT / "a2vm" / "src" / "a2vm" / "schemas" / "openapi" / "via.v1.yaml"
+    spec_path = ROOT / "ngvm" / "src" / "ngvm" / "schemas" / "openapi" / "via.v1.yaml"
     spec = yaml.safe_load(spec_path.read_text())
     assert spec["openapi"].startswith("3.1")
     for ref in _refs(spec):

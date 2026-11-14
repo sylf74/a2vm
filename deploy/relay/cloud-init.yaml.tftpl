@@ -1,5 +1,5 @@
 #cloud-config
-# A2VM relay of the public sources, first boot (Rocky Linux 10): Podman and Caddy (HTTPS, Let's
+# NGVM relay of the public sources, first boot (Rocky Linux 10): Podman and Caddy (HTTPS, Let's
 # Encrypt). One route per allowed host: https://<domain>/<host>/<path> -> https://<host>/<path>.
 # Rendered by Terraform templatefile(): a doubled dollar sign is a shell variable, a single one a
 # Terraform value.
@@ -10,7 +10,7 @@ packages:
   - openssl
 
 write_files:
-  - path: /opt/a2vm-relay/compose.yaml
+  - path: /opt/ngvm-relay/compose.yaml
     permissions: "0644"
     content: |
       services:
@@ -26,7 +26,7 @@ write_files:
       volumes:
         caddy:
 
-  - path: /opt/a2vm-relay/Caddyfile
+  - path: /opt/ngvm-relay/Caddyfile
     permissions: "0644"
     content: |
       {
@@ -42,7 +42,7 @@ write_files:
       		output stdout
       		format filter {
       			fields {
-      				request>headers>X-A2vm-Relay-Token delete
+      				request>headers>X-Ngvm-Relay-Token delete
       			}
       		}
       	}
@@ -51,7 +51,7 @@ write_files:
       	route {
       		@outside not remote_ip ${join(" ", allowed_ips)}
       		respond @outside 403
-      		@notoken not header X-A2VM-Relay-Token {$RELAY_TOKEN}
+      		@notoken not header X-NGVM-Relay-Token {$RELAY_TOKEN}
       		respond @notoken 401
       		@credentials header Authorization *
       		respond @credentials "credentials never go through the relay" 400
@@ -61,7 +61,7 @@ write_files:
       		respond @write 405
 %{ for h in hosts ~}
       		handle_path /${h}/* {
-      			request_header -X-A2VM-Relay-Token
+      			request_header -X-NGVM-Relay-Token
       			reverse_proxy https://${h} {
       				header_up Host {upstream_hostport}
       			}
@@ -71,12 +71,12 @@ write_files:
       	}
       }
 
-  - path: /opt/a2vm-relay/bootstrap.sh
+  - path: /opt/ngvm-relay/bootstrap.sh
     permissions: "0700"
     content: |
       #!/bin/sh
       set -eu
-      cd /opt/a2vm-relay
+      cd /opt/ngvm-relay
       mkdir -p secrets
       chmod 700 secrets
       if [ ! -s secrets/relay-token ]; then
@@ -92,4 +92,4 @@ write_files:
       podman-compose ps
 
 runcmd:
-  - [/opt/a2vm-relay/bootstrap.sh]
+  - [/opt/ngvm-relay/bootstrap.sh]

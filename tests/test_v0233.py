@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """v0.23.3 (D20): SentinelOne's application inventory as a source of components, read only; the
 tenant's applications table (the LLM proposes the CPE of each application, a validator decides); the
 watch names the hosts of an application through it. Dispatch: a caller looked for in one
@@ -12,9 +12,9 @@ import re
 import httpx
 import pytest
 
-from a2vm import applications as apps
-from a2vm.models import AffectedEntry, VulnRecord
 from detect.sentinelone import SentinelOneClient, SentinelOneConfig, SentinelOneError, fetch
+from ngvm import applications as apps
+from ngvm.models import AffectedEntry, VulnRecord
 
 from .conftest import ROOT
 
@@ -68,7 +68,7 @@ def _cfg(tmp_path, **extra):
 
 @pytest.mark.parametrize("api", ["agents", "installed-applications"])
 def test_every_agent_with_its_applications(tmp_path, api) -> None:
-    from a2vm.io import write_detection
+    from ngvm.io import write_detection
 
     console = FakeConsole()
     cfg = _cfg(tmp_path, api=api, site_ids=["555"])
@@ -118,14 +118,14 @@ def test_the_collector_reads_a_sentinelone_connector(tmp_path) -> None:
     (tmp_path / "collector.yaml").write_text(
         "collector: lan\ntenant: lab\nservice: https://detect.example.org\n"
         f"token_file: {tmp_path / 'token'}\nconnectors:\n"
-        "  - {name: s1, type: sentinelone, url: https://console.example.org, token_file: /etc/a2vm/collector/s1}\n"
+        "  - {name: s1, type: sentinelone, url: https://console.example.org, token_file: /etc/ngvm/collector/s1}\n"
     )
     (connector,) = load_config(tmp_path / "collector.yaml").connectors
     assert isinstance(connector, SentinelOneConnector) and connector.config.api == "agents"
 
 
 def test_sentinelone_is_an_inventory_not_a_scan(tmp_path) -> None:
-    from a2vm.profile import load_profile
+    from ngvm.profile import load_profile
     from verdict.assets.build import NOT_SCANS, build_inventory
 
     cfg = _cfg(tmp_path)
@@ -289,7 +289,7 @@ def _inventory_doc(profile_id="example-client"):
 
 
 def test_the_service_fills_the_table_from_the_inventory(tmp_path, backend) -> None:
-    from a2vm.service import Problem, TokenSet, digest
+    from ngvm.service import Problem, TokenSet, digest
     from via.service.server import WatchService
 
     from .test_v0160 import RUN, TENANT, watch_store
@@ -314,7 +314,7 @@ def test_the_service_fills_the_table_from_the_inventory(tmp_path, backend) -> No
 
 
 def test_the_inventory_endpoint_records_the_applications(tmp_path) -> None:
-    from a2vm.service import TokenSet, digest
+    from ngvm.service import TokenSet, digest
     from via.service.server import WatchService
     from via.service.store import WatchStore
 
@@ -403,7 +403,7 @@ def test_the_watch_proposes_in_kubernetes_mode_only(tmp_path, profile) -> None:
 
 
 def test_package_matching_leaves_applications_out() -> None:
-    from a2vm.packages import exposures
+    from ngvm.packages import exposures
 
     advisory = [{"distro": "rhel:9", "name": "mozilla firefox (x64 fr)", "state": "affected", "fixed": "999"}]
     comps = [{"name": "Mozilla Firefox (x64 fr)", "version": "128.0", "type": "win", "vendor": "Mozilla"}]
@@ -421,9 +421,9 @@ def test_itop_caller_in_its_organisation_or_by_email() -> None:
         target = {**RULES["targets"]["itsm"], **settings}
         return ItopConnector(Rules.from_dict({**RULES, "targets": {"itsm": target}}).targets["itsm"], "pw")
 
-    assert connector().caller_criteria() == {"name": "A2VM", "org_name": "Lab"}
-    assert connector(caller="a2vm@lab.example", caller_organization="IT").caller_criteria() == {
-        "email": "a2vm@lab.example",
+    assert connector().caller_criteria() == {"name": "NGVM", "org_name": "Lab"}
+    assert connector(caller="ngvm@lab.example", caller_organization="IT").caller_criteria() == {
+        "email": "ngvm@lab.example",
         "org_name": "IT",
     }
 
@@ -474,6 +474,6 @@ def test_release_recorded() -> None:
     assert re.search(r"^\| v0\.23\.3( \(current\))? \| D20: SentinelOne", hld, re.M)
     assert "## v0.23.3 — " in (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     assert (ROOT / "docs" / "sentinelone.md").exists()
-    for f in ("a2vm", "via", "detect", "verdict", "dispatch"):
+    for f in ("ngvm", "via", "detect", "verdict", "dispatch"):
         text = (ROOT / f / "pyproject.toml").read_text()
         assert re.search(r'^version = "0\.(23\.([3-9]|[1-9]\d)|2[4-9]\.\d+)"', text, re.M)

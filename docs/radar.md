@@ -16,11 +16,11 @@ design: LLD vulnerability-intelligence §3.10 to §3.12).
       |                                              |
       |                                     validated by the team
       v                                              v
- shared intelligence service (a2vm-via)  <-  the event published
+ shared intelligence service (ngvm-via)  <-  the event published
    records for every tenant, feed
       |
       v
- each client's watch (source a2vm-intel)  ->  matched with ITS assets  ->  its own alert to validate
+ each client's watch (source ngvm-intel)  ->  matched with ITS assets  ->  its own alert to validate
 ```
 
 ![The watch: shared service, radar and the clients' watches](hld/watch.svg)
@@ -61,7 +61,7 @@ the radar works the same.
 
 ## 2. The watch team's tenant `via`
 
-A tenant project like the others (`vulnops/clients/via`, namespace `a2vm-via`), on Kubernetes, with
+A tenant project like the others (`vulnops/clients/via`, namespace `ngvm-via`), on Kubernetes, with
 the review page and the sign-in of the analysts (`docs/sign-in.md`). Its `client.yaml`:
 
 ```yaml
@@ -76,20 +76,20 @@ alerts:
   radar: {info: 4, urgent: 7, window_hours: 72, keep_days: 14, bulk_cves: 10}
 ```
 
-The daily run has nothing to scan: `A2VM_K8S_SUSPEND` `true` keeps its CronJob suspended (a
+The daily run has nothing to scan: `NGVM_K8S_SUSPEND` `true` keeps its CronJob suspended (a
 `kubectl patch` would be undone by the next deployment). Its
 `contacts.yaml` names the team (the validated radar alerts are mailed to them). Its CI/CD
 variables, beside those of every tenant on Kubernetes:
 
 | Variable | Value |
 | --- | --- |
-| `A2VM_RUN_MODE` | `kubernetes` |
-| `A2VM_K8S_SUSPEND` | `true` |
-| `A2VM_INTEL_SERVE` | `true`: the shared intelligence service runs in this namespace |
-| `A2VM_VERDICT_SERVICE` | `false`: no decision service, nothing to decide |
-| `A2VM_ALERTS_HOST`, `A2VM_OIDC_*` | the review page of the team (`docs/sign-in.md`) |
-| `A2VM_TEAMS_WEBHOOK` | optional, masked: the team's Teams webhook (§5) |
-| `A2VM_GTI_ENABLED`, `GTI_API_KEY` | optional: the GTI search (§4) |
+| `NGVM_RUN_MODE` | `kubernetes` |
+| `NGVM_K8S_SUSPEND` | `true` |
+| `NGVM_INTEL_SERVE` | `true`: the shared intelligence service runs in this namespace |
+| `NGVM_VERDICT_SERVICE` | `false`: no decision service, nothing to decide |
+| `NGVM_ALERTS_HOST`, `NGVM_OIDC_*` | the review page of the team (`docs/sign-in.md`) |
+| `NGVM_TEAMS_WEBHOOK` | optional, masked: the team's Teams webhook (§5) |
+| `NGVM_GTI_ENABLED`, `GTI_API_KEY` | optional: the GTI search (§4) |
 
 The radar reads the catalogue of the version (`config/watch-sources.yaml`) and the sources marked
 `radar_only`: the GTI search and research and news sites. These sites start disabled: check them
@@ -106,13 +106,13 @@ tell the tenants apart. Create it once, as a masked and protected variable of th
 
 | Variable (group) | Value |
 | --- | --- |
-| `A2VM_INTEL_TOKEN` | 64 random hexadecimal characters (`openssl rand -hex 32`) |
-| `A2VM_INTEL_URL` | `http://a2vm-via-intel.a2vm-via.svc:8080` |
+| `NGVM_INTEL_TOKEN` | 64 random hexadecimal characters (`openssl rand -hex 32`) |
+| `NGVM_INTEL_URL` | `http://ngvm-via-intel.ngvm-via.svc:8080` |
 
 The deployment of the project `via` writes the digest of that token, and of its own radar token,
-into the Secret `a2vm-intel`. A tenant that must be revoked alone gets its own token: its digest
+into the Secret `ngvm-intel`. A tenant that must be revoked alone gets its own token: its digest
 (`printf '%s' "$TOKEN" | sha256sum`) as a line `read <sha256>` of the File variable
-`A2VM_INTEL_DIGESTS` of the project `via`.
+`NGVM_INTEL_DIGESTS` of the project `via`.
 
 Then, at their next deployment, every tenant:
 
@@ -122,11 +122,11 @@ Then, at their next deployment, every tenant:
   its profile says `alerts.share_technologies: true` (v0.22.2, off by default): the service keeps
   them 48 hours, without who sent them, and GTI searches them; without it the client keeps the
   shared records and the radar's feed and loses only that search;
-- reads the shared feed (source `a2vm-intel`): a validated radar event that names one of its
+- reads the shared feed (source `ngvm-intel`): a validated radar event that names one of its
   products, or a CVE found on its assets, becomes its own alert to validate, urgent when the radar
   said so.
 
-On a GitLab tenant (`A2VM_RUN_MODE: gitlab`), the same variables work if the runner reaches the
+On a GitLab tenant (`NGVM_RUN_MODE: gitlab`), the same variables work if the runner reaches the
 service (an ingress of your choice).
 
 ## 3a. A corporate network (v0.23.4)
@@ -136,18 +136,18 @@ sites. Two settings, both optional ([`hld/proposals/intel-placement.md`](hld/pro
 
 - **The relay of the sources** (recommended): a small cloud instance (`deploy/relay/README.md`)
   that reaches only the hosts listed; the tenants send it the requests to those hosts
-  (`A2VM_RELAY_URL`, `A2VM_RELAY_HOSTS`, `A2VM_RELAY_TOKEN`): one flow to one domain, declared to
+  (`NGVM_RELAY_URL`, `NGVM_RELAY_HOSTS`, `NGVM_RELAY_TOKEN`): one flow to one domain, declared to
   the SOC. GTI and every authenticated API never go through it.
-- **The outgoing proxy**: `A2VM_HTTPS_PROXY`, `A2VM_NO_PROXY` (the LLM, the ITSM, internal hosts)
-  and `A2VM_PROXY_CA` (the certificate of its TLS inspection), for every pod that goes out, the
+- **The outgoing proxy**: `NGVM_HTTPS_PROXY`, `NGVM_NO_PROXY` (the LLM, the ITSM, internal hosts)
+  and `NGVM_PROXY_CA` (the certificate of its TLS inspection), for every pod that goes out, the
   relay included when it is reached through the proxy.
 
 `via check-sources` shows the route of each source (`[relay www.cisa.gov]`, `[direct …]`). A
-tenant that must never reach the Internet itself sets `A2VM_INTEL_FALLBACK=false`.
+tenant that must never reach the Internet itself sets `NGVM_INTEL_FALLBACK=false`.
 
 ## 4. GTI (optional, off by default)
 
-With `A2VM_GTI_ENABLED=true` and `GTI_API_KEY` in the project `via` (an Enterprise licence):
+With `NGVM_GTI_ENABLED=true` and `GTI_API_KEY` in the project `via` (an Enterprise licence):
 
 - the radar searches every 10 minutes the vulnerabilities GTI changed since the day before with an
   exploitation confirmed or wide, tagged zero-day or rated critical (source `gti-radar`; the filter
@@ -163,13 +163,13 @@ GTI's prose never reaches a client. Check the filter syntax against the GTI docu
 
 Every alert the watch drafts, the radar's and every client's, can also be posted to the analysts'
 Teams channel: create a webhook (Teams, the channel, *Workflows*, "Send webhook alerts to a
-channel"), and give its address as the masked variable `A2VM_TEAMS_WEBHOOK` of the project (the
-deployment puts it in the Secret `a2vm-tenant`, key `teams-webhook`). The card says the level, the
+channel"), and give its address as the masked variable `NGVM_TEAMS_WEBHOOK` of the project (the
+deployment puts it in the Secret `ngvm-tenant`, key `teams-webhook`). The card says the level, the
 title, the CVE ids, the tenant and, for the radar, the magnitude, with a button to the review page.
 
 ## 6. Upgrading to v0.22.0
 
-1. Every tenant: `ref` and `A2VM_REF` to `v0.22.0`. Nothing else changes until the group has
-   `A2VM_INTEL_URL`: the jobs read the sources themselves, as before.
+1. Every tenant: `ref` and `NGVM_REF` to `v0.22.0`. Nothing else changes until the group has
+   `NGVM_INTEL_URL`: the jobs read the sources themselves, as before.
 2. The project `via` (§2) and the group variables (§3); deploy `via` first, then the others.
 3. Optional: GTI (§4), Teams (§5).

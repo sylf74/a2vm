@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 import json
 from pathlib import Path
 
@@ -24,7 +24,7 @@ def test_feed_parsing():
 
 
 def test_first_run_records_a_baseline_then_alerts_on_news(tmp_path, monkeypatch):
-    monkeypatch.delenv("A2VM_ANALYST_TO", raising=False)
+    monkeypatch.delenv("NGVM_ANALYST_TO", raising=False)
     assert _watch(tmp_path) == 0
     assert json.loads((tmp_path / "alerts" / "index.json").read_text()) == []
     state = State.load(tmp_path / "state.json")
@@ -52,7 +52,7 @@ def test_first_run_records_a_baseline_then_alerts_on_news(tmp_path, monkeypatch)
 def test_advisories_only_with_level_all(tmp_path, monkeypatch):
     import yaml
 
-    monkeypatch.delenv("A2VM_ANALYST_TO", raising=False)
+    monkeypatch.delenv("NGVM_ANALYST_TO", raising=False)
     data = yaml.safe_load(Path(PROFILE).read_text())
     data["alerts"] = {"level": "all", "recipients": ["rssi@client.example"], "watchlist": ["Unrelated Product"]}
     profile = tmp_path / "client.yaml"
@@ -70,16 +70,16 @@ def test_advisories_only_with_level_all(tmp_path, monkeypatch):
     assert all(a["level"] == "info" for a in index if "AVI" in a["id"])
 
     # send: no SMTP host -> dry run, one .eml per alert, addressed to the client
-    monkeypatch.delenv("A2VM_SMTP_HOST", raising=False)
+    monkeypatch.delenv("NGVM_SMTP_HOST", raising=False)
     assert main(["send", str(profile), "--alerts", str(tmp_path / "alerts")]) == 0
     eml = list((tmp_path / "alerts" / "outbox").glob("*.eml"))
     assert len(eml) == len(index) and "rssi@client.example" in eml[0].read_text()
 
 
 def test_prose_written_by_llm_and_guarded(settings):
-    from a2vm.llm import LlmClient
-    from a2vm.profile import load_profile
     from detect.inventory import InventoryScanner
+    from ngvm.llm import LlmClient
+    from ngvm.profile import load_profile
     from via.alert.certfr import FeedItem, parse_publication
     from via.alert.fiche import build
     from via.alert.watch import Item, relevant
@@ -128,8 +128,8 @@ def test_graph_transport(monkeypatch):
         return httpx.Response(202)
 
     for k, v in {"TENANT_ID": "tid", "CLIENT_ID": "cid", "CLIENT_SECRET": "sec", "SENDER": "veille@x.example"}.items():
-        monkeypatch.setenv(f"A2VM_GRAPH_{k}", v)
-    monkeypatch.setenv("A2VM_MAIL_TRANSPORT", "graph")
+        monkeypatch.setenv(f"NGVM_GRAPH_{k}", v)
+    monkeypatch.setenv("NGVM_MAIL_TRANSPORT", "graph")
     msg = message("Sujet", "<p>fiche</p>", "fiche", ["rssi@client.example"], "veille@x.example")
     out = send(msg, transport=httpx.MockTransport(handler))
     assert "Microsoft Graph" in out and len(calls) == 2
@@ -137,7 +137,7 @@ def test_graph_transport(monkeypatch):
 
 
 def test_contacts_by_level_and_role(tmp_path, capsys):
-    from a2vm.profile import load_profile
+    from ngvm.profile import load_profile
     from via.alert.contacts import load_contacts, recipients
 
     lab = ROOT / "examples" / "lab"
@@ -156,8 +156,8 @@ def test_contacts_by_level_and_role(tmp_path, capsys):
 
 
 def _inventory(directory, client_id, cve, seen):
-    from a2vm.io import write_assets, write_findings
-    from a2vm.models import Asset, Attribute, Finding, FindingObservation, Match
+    from ngvm.io import write_assets, write_findings
+    from ngvm.models import Asset, Attribute, Finding, FindingObservation, Match
 
     asset = Asset(
         "host:web01.lan.example", client_id, "host", "web01", "web01", {"hostname": "web01"},
@@ -191,9 +191,9 @@ def _second_run(work, *extra):
 def test_watch_names_the_assets_of_the_last_daily_inventory(tmp_path, monkeypatch):
     import datetime as dt
 
-    from a2vm.profile import load_profile
+    from ngvm.profile import load_profile
 
-    monkeypatch.delenv("A2VM_ANALYST_TO", raising=False)
+    monkeypatch.delenv("NGVM_ANALYST_TO", raising=False)
     client_id = load_profile(PROFILE).id
     seen = dt.datetime.now(dt.UTC).replace(microsecond=0).isoformat()
     _inventory(tmp_path / "inv", client_id, "CVE-2099-10001", seen)
@@ -249,9 +249,9 @@ def test_inventory_fetch_reads_the_triage_artifacts_and_flags_an_old_one(tmp_pat
 def test_watch_reads_the_inventory_left_in_the_runner_cache(tmp_path, monkeypatch):
     import datetime as dt
 
-    from a2vm.profile import load_profile
+    from ngvm.profile import load_profile
 
-    monkeypatch.delenv("A2VM_ANALYST_TO", raising=False)
+    monkeypatch.delenv("NGVM_ANALYST_TO", raising=False)
     monkeypatch.chdir(tmp_path)  # the pipeline restores the cache into work/assets of the job
     seen = dt.datetime.now(dt.UTC).replace(microsecond=0).isoformat()
     _inventory(tmp_path / "work" / "assets", load_profile(PROFILE).id, "CVE-2099-10001", seen)
@@ -262,10 +262,10 @@ def test_watch_reads_the_inventory_left_in_the_runner_cache(tmp_path, monkeypatc
 def test_analysts_mail_numbers_the_alerts_and_the_journal_keeps_every_event(tmp_path, monkeypatch, capsys):
     from via.alert import journal
 
-    monkeypatch.setenv("A2VM_ANALYST_TO", "soc@example.org")
-    monkeypatch.delenv("A2VM_SMTP_HOST", raising=False)
-    monkeypatch.delenv("A2VM_MAIL_TRANSPORT", raising=False)
-    monkeypatch.delenv("A2VM_SEND_ONLY", raising=False)
+    monkeypatch.setenv("NGVM_ANALYST_TO", "soc@example.org")
+    monkeypatch.delenv("NGVM_SMTP_HOST", raising=False)
+    monkeypatch.delenv("NGVM_MAIL_TRANSPORT", raising=False)
+    monkeypatch.delenv("NGVM_SEND_ONLY", raising=False)
     monkeypatch.setenv("CI_PIPELINE_URL", "https://gitlab.example/acme/-/pipelines/1")
     found = _second_run(tmp_path)
     assert len(found) == 2
@@ -275,7 +275,7 @@ def test_analysts_mail_numbers_the_alerts_and_the_journal_keeps_every_event(tmp_
 
     first = email.message_from_bytes(outbox[0].read_bytes(), policy=policy.default)
     html = first.get_body(("html",)).get_content()
-    assert "A2VM_SEND_ONLY" in html and "of 2 of this run" in html
+    assert "NGVM_SEND_ONLY" in html and "of 2 of this run" in html
 
     log = journal.read(tmp_path / "alerts-log.jsonl")  # next to --state
     assert [e["event"] for e in log].count("drafted") == 2
@@ -292,7 +292,7 @@ def test_analysts_mail_numbers_the_alerts_and_the_journal_keeps_every_event(tmp_
     data.setdefault("alerts", {})["recipients"] = ["it@example.org"]
     profile = tmp_path / "client.yaml"
     profile.write_text(yaml.safe_dump(data, allow_unicode=True))
-    monkeypatch.setenv("A2VM_SEND_ONLY", "2")
+    monkeypatch.setenv("NGVM_SEND_ONLY", "2")
     args = ["send", str(profile), "--alerts", str(tmp_path / "alerts"), "--journal", str(tmp_path / "alerts-log.jsonl")]
     assert main(args) == 0
     sent = json.loads((tmp_path / "alerts" / "sent.json").read_text())
@@ -300,7 +300,7 @@ def test_analysts_mail_numbers_the_alerts_and_the_journal_keeps_every_event(tmp_
     assert journal.read(tmp_path / "alerts-log.jsonl")[-1]["event"] == "sent"
 
     # An unknown choice sends nothing.
-    monkeypatch.setenv("A2VM_SEND_ONLY", "7")
+    monkeypatch.setenv("NGVM_SEND_ONLY", "7")
     assert main(args) == 1
     assert len(json.loads((tmp_path / "alerts" / "sent.json").read_text())) == 1
 
@@ -315,9 +315,9 @@ def test_select_by_number_id_or_suffix():
 
 
 def test_test_mail_without_smtp_writes_the_message(tmp_path, monkeypatch):
-    monkeypatch.delenv("A2VM_SMTP_HOST", raising=False)
-    monkeypatch.delenv("A2VM_MAIL_TRANSPORT", raising=False)
-    monkeypatch.delenv("A2VM_ANALYST_TO", raising=False)
+    monkeypatch.delenv("NGVM_SMTP_HOST", raising=False)
+    monkeypatch.delenv("NGVM_MAIL_TRANSPORT", raising=False)
+    monkeypatch.delenv("NGVM_ANALYST_TO", raising=False)
     assert main(["test-mail"]) == 2  # nobody to write to
     assert main(["test-mail", "--to", "soc@example.org", "--out", str(tmp_path)]) == 0
     import email

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 from __future__ import annotations
 
 import json
@@ -8,14 +8,14 @@ from pathlib import Path
 import httpx
 import pytest
 
-from a2vm.config import Settings
-from a2vm.profile import load_profile
+from ngvm.config import Settings
+from ngvm.profile import load_profile
 from via.intel.sources import Sources
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests" / "fixtures"
 # An administrator connection to a disposable PostgreSQL (read before the environment is cleared).
-TEST_DSN = __import__("os").environ.get("A2VM_TEST_DSN", "")
+TEST_DSN = __import__("os").environ.get("NGVM_TEST_DSN", "")
 
 
 @pytest.fixture(autouse=True)
@@ -24,7 +24,7 @@ def isolated_environment(monkeypatch):
     import os
 
     for name in list(os.environ):
-        if name.startswith(("A2VM_", "VULNOPS_", "VERDICT_")) or name in ("LLM_API_KEY", "GTI_API_KEY"):
+        if name.startswith(("NGVM_", "A2VM_", "VERDICT_")) or name in ("LLM_API_KEY", "GTI_API_KEY"):
             monkeypatch.delenv(name)
 
 
@@ -73,7 +73,7 @@ def tenant_db():
     from psycopg import sql
 
     if not TEST_DSN:
-        pytest.skip("A2VM_TEST_DSN not set (disposable PostgreSQL)")
+        pytest.skip("NGVM_TEST_DSN not set (disposable PostgreSQL)")
     name = f"t_{uuid.uuid4().hex[:10]}"
     with psycopg.connect(TEST_DSN, autocommit=True) as conn:
         conn.execute(sql.SQL("CREATE ROLE {} LOGIN PASSWORD 'app'").format(sql.Identifier(name)))

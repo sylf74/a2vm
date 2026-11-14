@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """The tenant's CMDB as a detection source (`cmdb`, LLD vulnerability-detection §3.5): iTop first.
 
 Reads the configuration items over the iTop REST API (`core/get` only: the client refuses any
@@ -30,9 +30,9 @@ from typing import Any
 
 import httpx
 
-from a2vm import tls
-from a2vm.io import Detection, now
-from a2vm.models import AssetObservation
+from ngvm import tls
+from ngvm.io import Detection, now
+from ngvm.models import AssetObservation
 
 from .firmware import from_cmdb
 
@@ -111,7 +111,7 @@ class ItopClient:
         self.http.close()
 
     def _call(self, payload: dict[str, Any]) -> dict[str, Any]:
-        if payload.get("operation") != READ_ONLY:  # A2VM never writes to a CMDB
+        if payload.get("operation") != READ_ONLY:  # NGVM never writes to a CMDB
             raise CmdbError(f"refused: operation {payload.get('operation')!r}, the CMDB is read only")
         try:
             response = self.http.post(
@@ -260,8 +260,8 @@ EXPORT_COLUMNS = ["name", "org_id->name", "status", "managementip", "business_cr
 
 
 def export_candidates(triage: dict[str, Any], organization: str) -> list[dict[str, str]]:
-    """Hosts scanned but not in the CMDB, from a triage document (`a2vm.triage/1`), as rows for the
-    CSV import of iTop: a person checks them, chooses their class and imports them. A2VM itself
+    """Hosts scanned but not in the CMDB, from a triage document (`ngvm.triage/1`), as rows for the
+    CSV import of iTop: a person checks them, chooses their class and imports them. NGVM itself
     never writes to the CMDB.
 
     With a coverage section (v0.19.0), the assets in state `not-in-cmdb`; without, every host."""

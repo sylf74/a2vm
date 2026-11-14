@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """v0.23.10: the chat acts and knows the next scans, and an audit journal imputable to an author.
 
 An action is prepared by the chat, confirmed by a validator on the review page, taken and run by
@@ -13,13 +13,13 @@ import json
 import httpx
 import pytest
 
-from a2vm.actions import MIGRATIONS as ACTION_MIGRATIONS
-from a2vm.actions import ActionError, ActionStore
-from a2vm.audit import MIGRATIONS as AUDIT_MIGRATIONS
-from a2vm.audit import AuditLog
-from a2vm.db import Database
-from a2vm.schedule import ScheduleError, next_run
-from a2vm.service import Problem
+from ngvm.actions import MIGRATIONS as ACTION_MIGRATIONS
+from ngvm.actions import ActionError, ActionStore
+from ngvm.audit import MIGRATIONS as AUDIT_MIGRATIONS
+from ngvm.audit import AuditLog
+from ngvm.db import Database
+from ngvm.schedule import ScheduleError, next_run
+from ngvm.service import Problem
 
 from .conftest import ROOT
 from .test_v0232 import CHAT, _tools
@@ -100,10 +100,10 @@ def test_requests_expire(tenant_db) -> None:
 
 # -- the detection service: the poll --------------------------------------------------------------
 def _service(tmp_path, actions=None, audit=None):
-    from a2vm.service import digest
     from detect.intake.registry import load_registry
     from detect.intake.server import Service
     from detect.intake.store import FileStore
+    from ngvm.service import digest
 
     (tmp_path / "collectors.yaml").write_text(
         "collectors:\n  - {id: lan, sources: [cmdb, openvas]}\n  - {id: dmz, sources: [trivy]}\n"
@@ -146,8 +146,8 @@ def test_the_agent_reads_systemd_timers(tmp_path) -> None:
 
     usec = int(dt.datetime(2026, 11, 12, 6, 31, 53, tzinfo=dt.UTC).timestamp() * 1_000_000)
     (tmp_path / "t.json").write_text(json.dumps([
-        {"next": usec, "left": 1, "last": None, "passed": None, "unit": "a2vm-collector@lan-cmdb.timer",
-         "activates": "a2vm-collector@lan-cmdb.service"},
+        {"next": usec, "left": 1, "last": None, "passed": None, "unit": "ngvm-collector@lan-cmdb.timer",
+         "activates": "ngvm-collector@lan-cmdb.service"},
         {"next": usec, "unit": "apt-daily.timer"},
     ]))  # fmt: skip
     assert read_timers(tmp_path / "t.json") == [
@@ -275,7 +275,7 @@ def test_cron_refuses_nonsense() -> None:
 
 # -- the review page ----------------------------------------------------------------------------------
 def test_a_validator_confirms_on_the_review_page(tmp_path, tenant_db) -> None:
-    from a2vm.service import TokenSet  # noqa: F401
+    from ngvm.service import TokenSet  # noqa: F401
     from via.service.review import Denied, Review
     from via.service.store import WatchStore
 
@@ -312,12 +312,12 @@ def test_the_validations_are_journaled(tmp_path) -> None:
 
 # -- wiring -------------------------------------------------------------------------------------------
 def test_wiring() -> None:
-    charts = ROOT / "deploy" / "charts" / "a2vm-tenant" / "templates"
+    charts = ROOT / "deploy" / "charts" / "ngvm-tenant" / "templates"
     chat = (charts / "chat.yaml").read_text()
     assert "ENABLE_FORWARD_USER_INFO_HEADERS" in chat and "--daily-schedule=" in chat and "--review-url=" in chat
-    assert 'include "a2vm-tenant.dbEnv"' in chat and '(dict "root" . "component" "detect")' in chat
+    assert 'include "ngvm-tenant.dbEnv"' in chat and '(dict "root" . "component" "detect")' in chat
     assert '"tools" }}' in (charts / "database.yaml").read_text()
     intake = (charts / "intake.yaml").read_text()
     assert '"/v1/tenants/%s/poll"' in intake and '"component" "tools"' in intake
     script = (ROOT / "deploy" / "collector" / "install-collector.sh").read_text()
-    assert "a2vm-collector-poll.timer" in script and "detect agent poll" in script and "list-timers" in script
+    assert "ngvm-collector-poll.timer" in script and "detect agent poll" in script and "list-timers" in script

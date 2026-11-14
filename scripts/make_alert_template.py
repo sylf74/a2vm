@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """Build the neutral Word templates of the alert sheet, one per language of the catalogue
 (via/src/via/alert/templates/alert.<lang>.docx: en, the reference, and fr).
 
@@ -128,8 +128,8 @@ def build(lang: str) -> None:
         doc.styles[name].font.name = "Calibri"
         doc.styles[name].font.size = Pt(10.5)
     props = doc.core_properties
-    props.author, props.title = "A2VM", L["sheet_title"]
-    props.comments = "Neutral A2VM template; tags: docs/alert-word.md"
+    props.author, props.title = "NGVM", L["sheet_title"]
+    props.comments = "Neutral NGVM template; tags: docs/alert-word.md"
 
     def p(text: str = "", style: str | None = None, bold: bool = False):
         para = doc.add_paragraph(style=style)

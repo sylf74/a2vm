@@ -1,16 +1,16 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """English explanation of each triage row: a deterministic template, optionally rephrased by the LLM
-(v0.17.3, HLD D16: A2VM writes in English; deliverables in another language translate their labels,
+(v0.17.3, HLD D16: NGVM writes in English; deliverables in another language translate their labels,
 not these texts)."""
 
 from __future__ import annotations
 
 import json
 
-from a2vm.llm import LlmClient, LlmError
-from a2vm.llm.guard import unsupported_tokens
-from a2vm.models import TriageRow
-from a2vm.ssvc import BOD_EN
+from ngvm.llm import LlmClient, LlmError
+from ngvm.llm.guard import unsupported_tokens
+from ngvm.models import TriageRow
+from ngvm.ssvc import BOD_EN
 
 from .llm_tasks import write_rationale
 

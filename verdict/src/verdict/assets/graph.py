@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """The asset graph of a client (v0.24.0) and the exposure computed from it.
 
 The assets stage builds, next to the inventory, a graph of how its assets are reached: nodes for the
@@ -36,9 +36,10 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-from a2vm.models import INTERNET, OFF_PREMISES, Asset, AssetObservation, Attribute, ClientProfile
+from ngvm.io import legacy_schema
+from ngvm.models import INTERNET, OFF_PREMISES, Asset, AssetObservation, Attribute, ClientProfile
 
-SCHEMA = "a2vm.asset_graph/1"
+SCHEMA = "ngvm.asset_graph/1"
 GRAPH = "graph"  # the source of an exposure computed from the graph
 EXTERNAL = "external-scan"
 # Sources whose addresses do not say where a machine is: the CMDB (an inventory), the external scan
@@ -141,7 +142,7 @@ def read_graph(path: str | Path, client_id: str) -> AssetGraph | None:
     path = Path(path)
     if not path.exists():
         return None
-    data = json.loads(path.read_text(encoding="utf-8"))
+    data = legacy_schema(json.loads(path.read_text(encoding="utf-8")))
     if data.get("schema") != SCHEMA or data.get("client_id") != client_id:
         raise ValueError(f"{path}: not the asset graph of {client_id!r}")
     return AssetGraph.from_dict(data)

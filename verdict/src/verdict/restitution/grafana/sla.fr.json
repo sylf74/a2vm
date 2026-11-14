@@ -1,8 +1,8 @@
 {
   "__inputs": [
     {
-      "name": "DS_A2VM",
-      "label": "Base de restitution A2VM",
+      "name": "DS_NGVM",
+      "label": "Base de restitution NGVM",
       "description": "Source de données PostgreSQL de la base de restitution",
       "type": "datasource",
       "pluginId": "grafana-postgresql-datasource",
@@ -41,10 +41,10 @@
       "version": ""
     }
   ],
-  "title": "A2VM — priorités et SLA",
-  "uid": "a2vm-sla-fr",
+  "title": "NGVM — priorités et SLA",
+  "uid": "ngvm-sla-fr",
   "tags": [
-    "a2vm",
+    "ngvm",
     "fr"
   ],
   "timezone": "browser",
@@ -61,12 +61,12 @@
     {
       "type": "dashboards",
       "tags": [
-        "a2vm"
+        "ngvm"
       ],
       "asDropdown": false,
       "includeVars": true,
       "keepTime": true,
-      "title": "A2VM"
+      "title": "NGVM"
     }
   ],
   "templating": {
@@ -78,10 +78,10 @@
         "type": "query",
         "datasource": {
           "type": "grafana-postgresql-datasource",
-          "uid": "${DS_A2VM}"
+          "uid": "${DS_NGVM}"
         },
-        "query": "SELECT tenant AS __value, tenant_name AS __text FROM a2vm.latest_runs ORDER BY tenant_name",
-        "definition": "SELECT tenant AS __value, tenant_name AS __text FROM a2vm.latest_runs ORDER BY tenant_name",
+        "query": "SELECT tenant AS __value, tenant_name AS __text FROM ngvm.latest_runs ORDER BY tenant_name",
+        "definition": "SELECT tenant AS __value, tenant_name AS __text FROM ngvm.latest_runs ORDER BY tenant_name",
         "refresh": 1,
         "sort": 0,
         "multi": true,
@@ -100,12 +100,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT count(*) AS value FROM a2vm.decision_facts f WHERE f.run_id IN (SELECT run_id FROM a2vm.latest_runs WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[])) AND f.priority IS NOT NULL"
+          "rawSql": "SELECT count(*) AS value FROM ngvm.decision_facts f WHERE f.run_id IN (SELECT run_id FROM ngvm.latest_runs WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[])) AND f.priority IS NOT NULL"
         }
       ],
       "options": {
@@ -136,7 +136,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 1
     },
@@ -149,12 +149,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT count(*) AS value FROM a2vm.decision_facts f WHERE f.run_id IN (SELECT run_id FROM a2vm.latest_runs WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[])) AND f.sla_status = 'overdue'"
+          "rawSql": "SELECT count(*) AS value FROM ngvm.decision_facts f WHERE f.run_id IN (SELECT run_id FROM ngvm.latest_runs WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[])) AND f.sla_status = 'overdue'"
         }
       ],
       "options": {
@@ -185,7 +185,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 2
     },
@@ -198,12 +198,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT count(*) AS value FROM a2vm.decision_facts f WHERE f.run_id IN (SELECT run_id FROM a2vm.latest_runs WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[])) AND f.sla_due BETWEEN f.day AND f.day + 7"
+          "rawSql": "SELECT count(*) AS value FROM ngvm.decision_facts f WHERE f.run_id IN (SELECT run_id FROM ngvm.latest_runs WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[])) AND f.sla_due BETWEEN f.day AND f.day + 7"
         }
       ],
       "options": {
@@ -234,7 +234,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 3
     },
@@ -247,12 +247,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT 100.0 * avg(CASE WHEN within_sla THEN 1 ELSE 0 END) AS value FROM a2vm.finding_closures WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND $__timeFilter(closed_at) AND outcome = 'fixed' AND within_sla IS NOT NULL"
+          "rawSql": "SELECT 100.0 * avg(CASE WHEN within_sla THEN 1 ELSE 0 END) AS value FROM ngvm.finding_closures WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND $__timeFilter(closed_at) AND outcome = 'fixed' AND within_sla IS NOT NULL"
         }
       ],
       "options": {
@@ -283,7 +283,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 4
     },
@@ -296,12 +296,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT 100.0 * avg(CASE WHEN within_due THEN 1 ELSE 0 END) AS value FROM a2vm.finding_closures WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND $__timeFilter(closed_at) AND outcome = 'fixed' AND within_sla IS NOT NULL AND within_due IS NOT NULL"
+          "rawSql": "SELECT 100.0 * avg(CASE WHEN within_due THEN 1 ELSE 0 END) AS value FROM ngvm.finding_closures WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND $__timeFilter(closed_at) AND outcome = 'fixed' AND within_sla IS NOT NULL AND within_due IS NOT NULL"
         }
       ],
       "options": {
@@ -332,7 +332,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 5
     },
@@ -345,12 +345,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT count(*) AS value FROM a2vm.decision_facts f WHERE f.run_id IN (SELECT run_id FROM a2vm.latest_runs WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[])) AND f.priority IS NULL AND f.level IN ('ACT', 'ATTEND') AND EXISTS (SELECT 1 FROM a2vm.runs x WHERE x.run_id = f.run_id AND x.sla_overdue IS NOT NULL)"
+          "rawSql": "SELECT count(*) AS value FROM ngvm.decision_facts f WHERE f.run_id IN (SELECT run_id FROM ngvm.latest_runs WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[])) AND f.priority IS NULL AND f.level IN ('ACT', 'ATTEND') AND EXISTS (SELECT 1 FROM ngvm.runs x WHERE x.run_id = f.run_id AND x.sla_overdue IS NOT NULL)"
         }
       ],
       "options": {
@@ -381,7 +381,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 6
     },
@@ -394,12 +394,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "WITH o AS (SELECT f.priority, min(f.priority_rank) AS rk, count(*) AS n, count(*) FILTER (WHERE f.sla_status = 'overdue') AS late, count(*) FILTER (WHERE f.sla_due BETWEEN f.day AND f.day + 7) AS soon FROM a2vm.decision_facts f WHERE f.run_id IN (SELECT run_id FROM a2vm.latest_runs WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[])) AND f.priority IS NOT NULL GROUP BY f.priority),\nc AS (SELECT priority, min(priority_rank) AS rk, count(*) AS n, round(100.0 * avg(CASE WHEN within_sla THEN 1 ELSE 0 END), 1) AS pct, round(avg(days_open), 1) AS d FROM a2vm.finding_closures WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND $__timeFilter(closed_at) AND outcome = 'fixed' AND priority IS NOT NULL GROUP BY priority)\nSELECT priority AS \"Priorité\", coalesce(o.n, 0) AS \"Ouvertes\", coalesce(o.late, 0) AS \"En retard\", coalesce(o.soon, 0) AS \"Échéance sous 7 jours\", coalesce(c.n, 0) AS \"Corrigés\", c.pct AS \"Corrigés dans le SLA (%)\", c.d AS \"Jours (moyenne)\"\nFROM o FULL JOIN c USING (priority) ORDER BY coalesce(o.rk, c.rk), priority"
+          "rawSql": "WITH o AS (SELECT f.priority, min(f.priority_rank) AS rk, count(*) AS n, count(*) FILTER (WHERE f.sla_status = 'overdue') AS late, count(*) FILTER (WHERE f.sla_due BETWEEN f.day AND f.day + 7) AS soon FROM ngvm.decision_facts f WHERE f.run_id IN (SELECT run_id FROM ngvm.latest_runs WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[])) AND f.priority IS NOT NULL GROUP BY f.priority),\nc AS (SELECT priority, min(priority_rank) AS rk, count(*) AS n, round(100.0 * avg(CASE WHEN within_sla THEN 1 ELSE 0 END), 1) AS pct, round(avg(days_open), 1) AS d FROM ngvm.finding_closures WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND $__timeFilter(closed_at) AND outcome = 'fixed' AND priority IS NOT NULL GROUP BY priority)\nSELECT priority AS \"Priorité\", coalesce(o.n, 0) AS \"Ouvertes\", coalesce(o.late, 0) AS \"En retard\", coalesce(o.soon, 0) AS \"Échéance sous 7 jours\", coalesce(c.n, 0) AS \"Corrigés\", c.pct AS \"Corrigés dans le SLA (%)\", c.d AS \"Jours (moyenne)\"\nFROM o FULL JOIN c USING (priority) ORDER BY coalesce(o.rk, c.rk), priority"
         }
       ],
       "options": {
@@ -425,7 +425,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 7
     },
@@ -438,12 +438,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "time_series",
-          "rawSql": "SELECT x.generated_at::date::timestamptz AS time, sum(x.sla_overdue) AS \"En retard\", sum(x.sla_due_soon) AS \"Échéance sous 7 jours\" FROM (SELECT DISTINCT ON (tenant, generated_at::date) run_id FROM a2vm.runs\n  WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND $__timeFilter(generated_at)\n  ORDER BY tenant, generated_at::date, generated_at DESC) r JOIN a2vm.runs x USING (run_id) WHERE x.sla_overdue IS NOT NULL GROUP BY 1 ORDER BY 1"
+          "rawSql": "SELECT x.generated_at::date::timestamptz AS time, sum(x.sla_overdue) AS \"En retard\", sum(x.sla_due_soon) AS \"Échéance sous 7 jours\" FROM (SELECT DISTINCT ON (tenant, generated_at::date) run_id FROM ngvm.runs\n  WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND $__timeFilter(generated_at)\n  ORDER BY tenant, generated_at::date, generated_at DESC) r JOIN ngvm.runs x USING (run_id) WHERE x.sla_overdue IS NOT NULL GROUP BY 1 ORDER BY 1"
         }
       ],
       "fieldConfig": {
@@ -505,7 +505,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 8
     },
@@ -518,12 +518,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT f.asset_name AS \"Actif\", f.cve AS \"CVE\", f.level AS \"Niveau\", f.priority AS \"Priorité\", f.sla_due AS \"Échéance SLA\", (f.day - f.sla_due) AS \"Jours de retard\", f.sla_since AS \"Dans la priorité depuis\", f.due_date AS \"Échéance BOD 26-04\", f.kev_label AS \"KEV\", f.title AS \"Description\" FROM a2vm.decision_facts f WHERE f.run_id IN (SELECT run_id FROM a2vm.latest_runs WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[])) AND f.sla_status = 'overdue' ORDER BY f.sla_due, f.priority_rank, f.level_rank, f.cve LIMIT 1000"
+          "rawSql": "SELECT f.asset_name AS \"Actif\", f.cve AS \"CVE\", f.level AS \"Niveau\", f.priority AS \"Priorité\", f.sla_due AS \"Échéance SLA\", (f.day - f.sla_due) AS \"Jours de retard\", f.sla_since AS \"Dans la priorité depuis\", f.due_date AS \"Échéance BOD 26-04\", f.kev_label AS \"KEV\", f.title AS \"Description\" FROM ngvm.decision_facts f WHERE f.run_id IN (SELECT run_id FROM ngvm.latest_runs WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[])) AND f.sla_status = 'overdue' ORDER BY f.sla_due, f.priority_rank, f.level_rank, f.cve LIMIT 1000"
         }
       ],
       "options": {
@@ -586,7 +586,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 9
     },
@@ -599,12 +599,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT f.asset_name AS \"Actif\", f.cve AS \"CVE\", f.level AS \"Niveau\", f.priority AS \"Priorité\", f.sla_due AS \"Échéance SLA\", f.due_date AS \"Échéance BOD 26-04\", f.kev_label AS \"KEV\", f.title AS \"Description\" FROM a2vm.decision_facts f WHERE f.run_id IN (SELECT run_id FROM a2vm.latest_runs WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[])) AND f.sla_due BETWEEN f.day AND f.day + 7 ORDER BY f.sla_due, f.priority_rank, f.level_rank, f.cve LIMIT 1000"
+          "rawSql": "SELECT f.asset_name AS \"Actif\", f.cve AS \"CVE\", f.level AS \"Niveau\", f.priority AS \"Priorité\", f.sla_due AS \"Échéance SLA\", f.due_date AS \"Échéance BOD 26-04\", f.kev_label AS \"KEV\", f.title AS \"Description\" FROM ngvm.decision_facts f WHERE f.run_id IN (SELECT run_id FROM ngvm.latest_runs WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[])) AND f.sla_due BETWEEN f.day AND f.day + 7 ORDER BY f.sla_due, f.priority_rank, f.level_rank, f.cve LIMIT 1000"
         }
       ],
       "options": {
@@ -667,7 +667,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 10
     },
@@ -680,12 +680,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT fix_status AS \"Statut\", count(*) AS \"Constats\" FROM a2vm.finding_closures WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND $__timeFilter(closed_at) AND outcome = 'fixed' AND fix_status IS NOT NULL GROUP BY fix_status ORDER BY CASE fix_status WHEN 'met (observed)' THEN 1 WHEN 'met (declared, verified)' THEN 2 WHEN 'to verify' THEN 3 ELSE 4 END"
+          "rawSql": "SELECT fix_status AS \"Statut\", count(*) AS \"Constats\" FROM ngvm.finding_closures WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND $__timeFilter(closed_at) AND outcome = 'fixed' AND fix_status IS NOT NULL GROUP BY fix_status ORDER BY CASE fix_status WHEN 'met (observed)' THEN 1 WHEN 'met (declared, verified)' THEN 2 WHEN 'to verify' THEN 3 ELSE 4 END"
         }
       ],
       "options": {
@@ -711,7 +711,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 11
     },
@@ -724,12 +724,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT asset_name AS \"Actif\", cve AS \"CVE\", priority AS \"Priorité\", fix_status AS \"Statut\", deadline AS \"Échéance retenue\", last_vulnerable AS \"Vu vulnérable pour la dernière fois\", first_clean AS \"Premier scan sans la faille\", declared_at AS \"Déclaré dans l'ITSM\" FROM a2vm.finding_closures WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND $__timeFilter(closed_at) AND outcome = 'fixed' AND fix_status IN ('missed', 'to verify') ORDER BY deadline, asset_name, cve LIMIT 1000"
+          "rawSql": "SELECT asset_name AS \"Actif\", cve AS \"CVE\", priority AS \"Priorité\", fix_status AS \"Statut\", deadline AS \"Échéance retenue\", last_vulnerable AS \"Vu vulnérable pour la dernière fois\", first_clean AS \"Premier scan sans la faille\", declared_at AS \"Déclaré dans l'ITSM\" FROM ngvm.finding_closures WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND $__timeFilter(closed_at) AND outcome = 'fixed' AND fix_status IN ('missed', 'to verify') ORDER BY deadline, asset_name, cve LIMIT 1000"
         }
       ],
       "options": {
@@ -755,7 +755,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 12
     }

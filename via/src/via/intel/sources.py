@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """Data sources: CVE JSON 5 records, CISA KEV, FIRST EPSS, cvelistV5 delta log, CERT-FR feeds,
 package advisories of the distributions (Red Hat, OSV; v0.23.0), Google Threat Intelligence
 (optional, licensed).
@@ -27,7 +27,7 @@ from urllib.parse import urlsplit
 
 import httpx
 
-from a2vm.config import SourceSettings
+from ngvm.config import SourceSettings
 
 CVE_ID = re.compile(r"^CVE-(\d{4})-(\d{4,})$")
 
@@ -36,7 +36,7 @@ class SourceError(RuntimeError):
     pass
 
 
-RELAY_TOKEN_HEADER = "X-A2VM-Relay-Token"
+RELAY_TOKEN_HEADER = "X-NGVM-Relay-Token"
 CREDENTIALS = ("authorization", "x-apikey", "proxy-authorization")
 
 

@@ -1,14 +1,14 @@
-# A2VM — AI-Assisted Vulnerability Management
+# NGVM — Next-Generation Vulnerability Management
 
-A2VM is the project that brings the pillars of the platform together: each pillar is an
-independent package with its own command, and they meet only through `a2vm`, the common contract
+NGVM is the project that brings the pillars of the platform together: each pillar is an
+independent package with its own command, and they meet only through `ngvm`, the common contract
 (data model, exchange files and their schemas, settings, client profiles, LLM client, extension
 points). Decisions are deterministic (CISA SSVC tables + per-client policy); AI proposes and
 writes — it fills flagged gaps, proposes uncertain matches and writes rationales — but never
 decides.
 
 ```
-a2vm/        common contract              model, schemas, settings, profiles, LLM client, SSVC tables, matching
+ngvm/        common contract              model, schemas, settings, profiles, LLM client, SSVC tables, matching
 via/        1. VIA (Vulnerability Intelligence: Advanced, AI-assisted, Alerting)
               via collect                public sources + CTI                              -> work/records.json
               via watch / send           watch on each client's estate, alert sheets       -> alerts/
@@ -22,18 +22,18 @@ dispatch/   4. Dispatch & Capitalization
 
 The pillars never import one another (a test checks it): each reads and writes only the common
 model, and every exchange file is validated against its JSON Schema on write and on read. What
-several pillars run is a library of `a2vm` (the CISA SSVC tables in `a2vm.ssvc`, the matching of
-declared assets in `a2vm.declared`, which the watch also runs); what a pillar keeps for itself is
-reached through its HTTP API (`a2vm/src/a2vm/schemas/openapi/`). The design is described in `docs/hld/` (high level) and `docs/lld/` (per
+several pillars run is a library of `ngvm` (the CISA SSVC tables in `ngvm.ssvc`, the matching of
+declared assets in `ngvm.declared`, which the watch also runs); what a pillar keeps for itself is
+reached through its HTTP API (`ngvm/src/ngvm/schemas/openapi/`). The design is described in `docs/hld/` (high level) and `docs/lld/` (per
 pillar).
 
 ## Quick start
 
 ```bash
 python -m venv .venv && . .venv/bin/activate        # PowerShell: .venv\Scripts\Activate.ps1
-pip install -r requirements-dev.txt                 # a2vm + every pillar, editable, + pytest and ruff
+pip install -r requirements-dev.txt                 # ngvm + every pillar, editable, + pytest and ruff
 
-a2vm validate examples/*/client.yaml
+ngvm validate examples/*/client.yaml
 scripts/run-pipeline.sh --fixtures tests/fixtures --since 2099-10-01 --include-updated   # offline demo
 scripts/run-pipeline.sh --since 26h                 # real CVEs of the last 26 hours + KEV additions
 scripts/run-pipeline.sh --cve CVE-2024-3400
@@ -117,7 +117,7 @@ Mission/Well-being asset attributes        Publicly exposed   asset attribute ex
         -> rationale: LLM text behind a guard, template fallback
 ```
 
-The SSVC tables are the official CERT/CC data files (`a2vm/src/a2vm/data/`,
+The SSVC tables are the official CERT/CC data files (`ngvm/src/ngvm/data/`,
 MIT (SEI)-style license, see `LICENSE-SSVC`). The LLM never decides; it writes rationales for ACT
 and ATTEND decisions only (`llm.rationale_for`), the template covers TRACK. Rationales name the
 fixed packages reported by scanners.
@@ -125,7 +125,7 @@ fixed packages reported by scanners.
 ## Client profiles
 
 One YAML file per client (`client.yaml` of the client project), validated against
-`a2vm/src/a2vm/schemas/client_profile.schema.json` (schema version 2; version 1 profiles
+`ngvm/src/ngvm/schemas/client_profile.schema.json` (schema version 2; version 1 profiles
 remain valid):
 
 - `assets`: declared assets or product families, for inventory matching (optional);
@@ -139,13 +139,13 @@ targets describe client infrastructure and never go in this repository.
 ## Local LLM
 
 Any OpenAI-compatible server with JSON-schema structured output (vLLM, SGLang). Enable it in
-`config/settings.yaml` or with `A2VM_LLM_ENABLED`, `A2VM_LLM_BASE_URL`,
-`A2VM_LLM_MODEL` (the former `VERDICT_*` names still work). Each stage prints the LLM
+`config/settings.yaml` or with `NGVM_LLM_ENABLED`, `NGVM_LLM_BASE_URL`,
+`NGVM_LLM_MODEL` (the former `VERDICT_*` names still work). Each stage prints the LLM
 configuration it received at start-up, and the cause of any LLM fallback.
 
 ## Google Threat Intelligence (optional)
 
-With a GTI licence, `A2VM_GTI_ENABLED=true` and a masked `GTI_API_KEY` variable, the intel stage
+With a GTI licence, `NGVM_GTI_ENABLED=true` and a masked `GTI_API_KEY` variable, the intel stage
 adds GTI's exploitation state to each CVE (only CVE ids are sent). Confirmed exploitation counts as
 active in SSVC and makes a watch alert urgent; GTI's licensed prose stays with the analysts
 (`docs/gti.md`).
@@ -163,7 +163,7 @@ deadlines and the ACT list, in one self-contained page.
 
 ```
 vulnops/                 group: group runner (tag llm-lan), shared variables (LLM endpoint)
-├── a2vm                  this code project: lint, tests, examples; releases are tags vX.Y.Z
+├── ngvm                  this code project: lint, tests, examples; releases are tags vX.Y.Z
 └── clients/             one private project per client: client.yaml, targets.yaml, variables
     └── <client>         (scan key), schedule, artifacts — nothing shared between clients
 ```
@@ -171,13 +171,13 @@ vulnops/                 group: group runner (tag llm-lan), shared variables (LL
 Each client project includes `templates/client-pipeline.yml` at a fixed tag: `validate` on every
 push; on a schedule or by hand (optional `TRIAGE_CVES`), `collect` → `via` → `detect` →
 `assets` → `triage`, each passing `work/` to the next. Reports and the asset inventory are kept 30
-days in the client project, intermediate files 7 days. A client moves to a new A2VM version
+days in the client project, intermediate files 7 days. A client moves to a new NGVM version
 by changing the tag in its `.gitlab-ci.yml`. Set-up: `docs/deployment.md`.
 
 ## Repository layout
 
 ```
-a2vm/                                       common contract (package and command `a2vm`)
+ngvm/                                       common contract (package and command `ngvm`)
 via/ detect/ verdict/ dispatch/             one package and one command per pillar
 config/settings.yaml                       default settings (a client project may override them)
 templates/client-pipeline.yml              pipeline included by every client project

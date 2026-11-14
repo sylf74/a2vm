@@ -1,9 +1,9 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """v0.11.6: what each decision tells the dashboards - CVSS rating, product kind, fix availability."""
 
 from __future__ import annotations
 
-from a2vm.models import AffectedEntry, Asset, CvssMetric, Finding, FindingObservation, Match, VulnRecord
+from ngvm.models import AffectedEntry, Asset, CvssMetric, Finding, FindingObservation, Match, VulnRecord
 from verdict.reporting import severity
 from verdict.triage import fix_available, product_type
 

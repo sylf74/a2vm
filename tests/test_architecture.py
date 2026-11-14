@@ -1,7 +1,7 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
-"""The pillars stay independent: each imports a2vm (the common contract) and itself, never another
-pillar; a2vm imports no pillar. What several pillars run is a library of a2vm; what a pillar keeps
-for itself is reached through its HTTP API (contracts in a2vm/schemas/openapi/)."""
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
+"""The pillars stay independent: each imports ngvm (the common contract) and itself, never another
+pillar; ngvm imports no pillar. What several pillars run is a library of ngvm; what a pillar keeps
+for itself is reached through its HTTP API (contracts in ngvm/schemas/openapi/)."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGES = {
-    "a2vm": ROOT / "a2vm/src/a2vm",
+    "ngvm": ROOT / "ngvm/src/ngvm",
     "via": ROOT / "via/src/via",
     "detect": ROOT / "detect/src/detect",
     "verdict": ROOT / "verdict/src/verdict",
@@ -33,8 +33,8 @@ def imported_roots(path: Path) -> set[str]:
 
 @pytest.mark.parametrize("package", sorted(PACKAGES))
 def test_no_import_across_pillars(package):
-    allowed = {package} | ({"a2vm"} if package in PILLARS else set())
-    forbidden = (PILLARS | {"a2vm"}) - allowed
+    allowed = {package} | ({"ngvm"} if package in PILLARS else set())
+    forbidden = (PILLARS | {"ngvm"}) - allowed
     for path in PACKAGES[package].rglob("*.py"):
         crossing = imported_roots(path) & forbidden
         assert not crossing, f"{path.relative_to(ROOT)} imports {sorted(crossing)}"

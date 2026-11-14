@@ -1,10 +1,10 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """v0.23.17: a Cyberwatch master behind a reverse proxy that asks for a client certificate.
 
 Found in integration: httpx 0.28 does not send `cert=` when `verify` is a path, so the certificate
 never left and the proxy answered 403 to everything; tests through a mock transport could not see
 it. Here the client meets a real TLS server that requires a certificate of the test CA, and a test
-keeps `cert=` and paths in `verify` out of A2VM's code (`a2vm.tls`)."""
+keeps `cert=` and paths in `verify` out of NGVM's code (`ngvm.tls`)."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ import ssl
 import httpx
 import pytest
 
-from a2vm import tls
+from ngvm import tls
 
 from . import test_v02314 as _mtls
 from .conftest import ROOT
@@ -44,7 +44,7 @@ def test_the_client_certificate_reaches_a_real_tls_server(tmp_path, mtls_server,
     client = CyberwatchClient(_cfg(tmp_path, base, pki))  # ca_file AND the certificate: the case of the bug
     assert client.get("/api/v3/ping") == {"data": [{"id": "local-llm"}]}
     path, subject = seen[-1]
-    assert path == "/api/v3/ping" and dict(x[0] for x in subject)["commonName"] == "a2vm-client"
+    assert path == "/api/v3/ping" and dict(x[0] for x in subject)["commonName"] == "ngvm-client"
     client.close()
 
 
@@ -105,7 +105,7 @@ def test_a_push_too_big_says_why() -> None:
 
 
 def test_gitlab_presents_its_certificate_in_the_context(pki) -> None:
-    from a2vm.gitlab import _client_options
+    from ngvm.gitlab import _client_options
 
     env = {
         "CI_JOB_TOKEN": "x",
@@ -121,7 +121,7 @@ def test_gitlab_presents_its_certificate_in_the_context(pki) -> None:
 def test_no_cert_and_no_path_in_verify_in_the_code() -> None:
     """The mix httpx 0.28 gets wrong: a CA path in `verify` beside a client certificate in `cert`."""
     offenders = []
-    for pkg in ("a2vm", "detect", "verdict", "via", "dispatch"):
+    for pkg in ("ngvm", "detect", "verdict", "via", "dispatch"):
         for path in (ROOT / pkg / "src").rglob("*.py"):
             text = path.read_text(encoding="utf-8")
             for n, line in enumerate(text.splitlines(), 1):
@@ -130,17 +130,17 @@ def test_no_cert_and_no_path_in_verify_in_the_code() -> None:
                     offenders.append(f"{path.relative_to(ROOT)}:{n}: cert=")
                 if re.search(r"verify=[^,)]*\bor True", code) or re.search(r"""verify=["'/]""", code):
                     offenders.append(f"{path.relative_to(ROOT)}:{n}: a path in verify")
-    assert offenders == [], "use a2vm.tls.verify(ca_file, cert_file, key_file):\n" + "\n".join(offenders)
+    assert offenders == [], "use ngvm.tls.verify(ca_file, cert_file, key_file):\n" + "\n".join(offenders)
 
 
 def test_docs() -> None:
     doc = (ROOT / "docs/cyberwatch.md").read_text(encoding="utf-8")
-    assert "Acceptable client certificate CA names" in doc and "cert_file: /etc/a2vm/collector/" in doc
+    assert "Acceptable client certificate CA names" in doc and "cert_file: /etc/ngvm/collector/" in doc
     assert "**A master shared between several perimeters (customers, entities): `groups` is required.**" in doc
     assert "| Behind a reverse proxy |" in (ROOT / "docs/lld/vulnerability-detection.md").read_text(encoding="utf-8")
 
 
 def test_release_recorded() -> None:
     assert "## v0.23.17 — " in (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    chart = (ROOT / "deploy/charts/a2vm-tenant/Chart.yaml").read_text()
+    chart = (ROOT / "deploy/charts/ngvm-tenant/Chart.yaml").read_text()
     assert re.search(r"^version: 0\.(23\.(1[7-9]|[2-9]\d)|2[4-9]\.\d+)$", chart, re.M)

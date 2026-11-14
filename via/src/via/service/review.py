@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """The review page of the alerts (LLD vulnerability-intelligence §3.8 and §3.9): the analysts read
 the alerts of the watch; a validator enriches the English reference, chooses the recipients,
 checks and corrects the translation for each language of those recipients, then validates the
@@ -33,9 +33,9 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, quote, unquote, urlsplit
 
-from a2vm import applications as apps
-from a2vm.actions import ActionError, ActionStore
-from a2vm.audit import AuditLog
+from ngvm import applications as apps
+from ngvm.actions import ActionError, ActionStore
+from ngvm.audit import AuditLog
 from via.alert import journal
 from via.alert.contacts import Contact, ContactsError, load_contacts
 from via.alert.fiche import markdown_html
@@ -198,7 +198,7 @@ class Review:
                 log.warning("contacts: %s", exc)
         out = [c for c in contacts if c.active and a.get("level") in c.receive]
         if self.profile_path and self.profile_path.exists():
-            from a2vm.profile import ProfileError, load_profile
+            from ngvm.profile import ProfileError, load_profile
             from via.alert.contacts import recipients
 
             try:
@@ -285,7 +285,7 @@ class Review:
             '<!doctype html><html lang="en"><head><meta charset="utf-8">'
             '<meta name="viewport" content="width=device-width,initial-scale=1">'
             f"<title>{html.escape(title)}</title><style>{STYLE}</style></head><body>"
-            f'<header><a href="/">A2VM alerts — {html.escape(self.tenant)}</a>'
+            f'<header><a href="/">NGVM alerts — {html.escape(self.tenant)}</a>'
             f'<span><a href="/applications">Applications</a> · <a href="/actions">Actions</a> · '
             f"{html.escape(user)}</span></header>"
             f"<main>{body}</main></body></html>"
@@ -591,7 +591,7 @@ def _run_date(run: str) -> str:
 
 def make_handler(review: Review) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
-        server_version = "a2vm-via-review"
+        server_version = "ngvm-via-review"
         sys_version = ""
 
         def log_message(self, fmt: str, *args: Any) -> None:

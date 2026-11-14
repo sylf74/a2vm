@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """External scan: artifacts download, checks, `published` mapping and exposure precedence."""
 
 from __future__ import annotations
@@ -12,11 +12,11 @@ import httpx
 import pytest
 import yaml
 
-from a2vm.gitlab import ArtifactNotFound, GitLabError, download_artifacts
-from a2vm.io import Detection, read_assets, read_findings, write_assets, write_detection, write_findings
-from a2vm.models import AssetObservation, Finding, FindingObservation, Match
-from a2vm.profile import load_profile
 from detect.external import SOURCE, as_internal, pull
+from ngvm.gitlab import ArtifactNotFound, GitLabError, download_artifacts
+from ngvm.io import Detection, read_assets, read_findings, write_assets, write_detection, write_findings
+from ngvm.models import AssetObservation, Finding, FindingObservation, Match
+from ngvm.profile import load_profile
 from verdict.assets.build import build_inventory
 
 NOW = dt.datetime(2026, 10, 21, 8, 0, tzinfo=dt.UTC)
@@ -223,7 +223,7 @@ def test_project_token_finds_the_latest_job_whatever_the_pipeline(tmp_path):
             ])  # fmt: skip
         return httpx.Response(200, content=content)
 
-    env = {**ENV, "A2VM_GITLAB_TOKEN": "project-token"}
+    env = {**ENV, "NGVM_GITLAB_TOKEN": "project-token"}
     files = download_artifacts("p", "collect", "work/detect/acme-external", tmp_path, environ=env,
                                transport=httpx.MockTransport(handler))  # fmt: skip
     assert [f.name for f in files] == ["openvas.json"]
@@ -232,7 +232,7 @@ def test_project_token_finds_the_latest_job_whatever_the_pipeline(tmp_path):
 
 
 def test_project_token_without_such_job_is_not_found(tmp_path):
-    env = {**ENV, "A2VM_GITLAB_TOKEN": "t"}
+    env = {**ENV, "NGVM_GITLAB_TOKEN": "t"}
     transport = httpx.MockTransport(lambda r: httpx.Response(200, json=[{"id": 1, "name": "watch", "ref": "main"}]))
     with pytest.raises(ArtifactNotFound, match="no successful job 'triage'"):
         download_artifacts("p", "triage", "work", tmp_path, environ=env, transport=transport)

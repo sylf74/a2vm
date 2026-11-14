@@ -1,6 +1,6 @@
 # Google Threat Intelligence (optional)
 
-A2VM can ask Google Threat Intelligence (GTI, the VirusTotal API v3) what it knows about each
+NGVM can ask Google Threat Intelligence (GTI, the VirusTotal API v3) what it knows about each
 CVE: exploitation state, exploit availability, risk rating. It needs a GTI Enterprise or
 Enterprise Plus licence; without one, leave it disabled (the default) and nothing changes.
 
@@ -50,8 +50,8 @@ your GTI contract allows these facts to be passed on to clients (MSSP use).
 | Key | Value | Options |
 | --- | --- | --- |
 | `GTI_API_KEY` | the key | Masked, protected |
-| `A2VM_GTI_ENABLED` | `true` | Visible |
-| `A2VM_GTI_MAX_CALLS` | `2000` (optional) | Visible |
+| `NGVM_GTI_ENABLED` | `true` | Visible |
+| `NGVM_GTI_MAX_CALLS` | `2000` (optional) | Visible |
 
 3. The runner must reach `www.virustotal.com` (HTTPS; `HTTPS_PROXY` / `SSL_CERT_FILE` are honoured).
 

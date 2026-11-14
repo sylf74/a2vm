@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """v0.15.1: assets named as people name them, documents of the chat (Word, PowerPoint, CSV) built
 from the data and downloaded through the chat's address, retention of the chats."""
 
@@ -19,7 +19,7 @@ import yaml
 from docx import Document
 from pptx import Presentation
 
-from a2vm.service import Problem
+from ngvm.service import Problem
 from verdict.service.retention import purge
 from verdict.service.tools import serve as serve_tools
 
@@ -27,7 +27,7 @@ from .test_v0150 import CHAT, tools  # noqa: F401 - fixture
 from .test_verdict_service import READ, _push, _service, triage  # noqa: F401 - fixture
 
 ROOT = Path(__file__).resolve().parents[1]
-CHART = ROOT / "deploy" / "charts" / "a2vm-tenant"
+CHART = ROOT / "deploy" / "charts" / "ngvm-tenant"
 
 
 # -- assets ----------------------------------------------------------------------------------------
@@ -85,7 +85,7 @@ def test_word_powerpoint_and_csv_are_built_from_the_data(exporting, caplog):
     for kind in ("docx", "pptx", "csv"):
         answer = t.call(CHAT, "/exports", {"format": kind, "explain": "3"})
         link = answer["download"]
-        assert link.startswith("https://chat-lab.apps.example.org/a2vm/exports/") and link.endswith(f".{kind}")
+        assert link.startswith("https://chat-lab.apps.example.org/ngvm/exports/") and link.endswith(f".{kind}")
         assert answer["decisions"] == min(len(run.rows), 200) and answer["run"]["id"]
         status, headers, body = _fetch(t, link)
         assert (
@@ -107,8 +107,8 @@ def test_word_powerpoint_and_csv_are_built_from_the_data(exporting, caplog):
         else:
             rows = list(csv.reader(io.StringIO(body.decode("utf-8-sig")), delimiter=";"))
             assert rows[0][:3] == ["id", "Level", "CVE"] and len(rows) == answer["decisions"] + 1
-    token = link.split("/a2vm/exports/", 1)[1].split("/", 1)[0]
-    server = [r for r in caplog.records if r.name.startswith(("verdict", "a2vm"))]
+    token = link.split("/ngvm/exports/", 1)[1].split("/", 1)[0]
+    server = [r for r in caplog.records if r.name.startswith(("verdict", "ngvm"))]
     assert server and all(token not in r.getMessage() for r in server)  # the link is a credential
 
 
@@ -116,7 +116,7 @@ def test_a_document_link_is_short_lived_and_exact(exporting):
     _, t = exporting
     link = t.call(CHAT, "/exports", {"format": "csv", "level": "ACT,ATTEND"})["download"]
     assert _fetch(t, link.rsplit("/", 1)[0] + "/other-name.csv")[0] == 404
-    assert _fetch(t, link.replace("/a2vm/exports/", "/a2vm/exports/x"))[0] == 404
+    assert _fetch(t, link.replace("/ngvm/exports/", "/ngvm/exports/x"))[0] == 404
     for token, (_expires, name, ctype, body) in list(t._exports.items()):
         t._exports[token] = (time.time() - 1, name, ctype, body)
     assert _fetch(t, link)[0] == 404
@@ -194,7 +194,7 @@ def test_retention_stops_rather_than_guess_when_open_webui_changed(tmp_path):
 def test_chart_publishes_the_downloads_only_and_runs_the_retention():
     text = (CHART / "templates" / "chat.yaml").read_text()
     for needle in (
-        "- path: /a2vm/exports/",
+        "- path: /ngvm/exports/",
         "--public-url=",
         "--export-minutes=",
         'command: ["verdict", "chat-retention"]',
@@ -214,8 +214,8 @@ def test_chat_values_take_the_retention(tmp_path):
     from .test_v0150 import _chat_values
 
     out = tmp_path / "v.json"
-    base = {"A2VM_CHAT_HOST": "c", "A2VM_LLM_BASE_URL": "http://192.0.2.10:8000/v1", "A2VM_LLM_MODEL": "m"}
-    assert _chat_values({"OUT": str(out), **base, "A2VM_CHAT_RETENTION_DAYS": "90"}).returncode == 0
+    base = {"NGVM_CHAT_HOST": "c", "NGVM_LLM_BASE_URL": "http://192.0.2.10:8000/v1", "NGVM_LLM_MODEL": "m"}
+    assert _chat_values({"OUT": str(out), **base, "NGVM_CHAT_RETENTION_DAYS": "90"}).returncode == 0
     assert json.loads(out.read_text())["chat"]["retentionDays"] == 90
-    r = _chat_values({"OUT": str(out), **base, "A2VM_CHAT_RETENTION_DAYS": "-1"})
+    r = _chat_values({"OUT": str(out), **base, "NGVM_CHAT_RETENTION_DAYS": "-1"})
     assert r.returncode == 1 and "RETENTION" in r.stderr

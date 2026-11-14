@@ -23,7 +23,7 @@ Coverage limits: Windows servers and appliances (routers, firewalls, NAS, home a
 not covered by these methods. They are declared in the client profile and matched against CVE
 records by product and version; a network scanner (OpenVAS) or a Windows collector comes next.
 
-At a client, active collection requires the client's written authorization; by default A2VM
+At a client, active collection requires the client's written authorization; by default NGVM
 ingests the outputs of the client's own scanners (`detect import`).
 
 Addresses and host names below are examples (RFC 5737, `lab.example`); the runner is `192.0.2.104`.
@@ -40,7 +40,7 @@ cat ~/vulnops_scan.pub        # public key, for step 2
 
 In GitLab, **client project** (e.g. `vulnops/clients/<client>`): **Settings > CI/CD > Variables > Add variable**
 
-- Type: **File** · Key: `A2VM_SSH_KEY` · Value: the content of `~/vulnops_scan` (private key)
+- Type: **File** · Key: `NGVM_SSH_KEY` · Value: the content of `~/vulnops_scan` (private key)
 - Protect variable: **checked** — only pipelines of protected branches (`main`, the schedule) get it
 - Visibility: **Visible** — a private key spans several lines and GitLab cannot mask it; the job
   never prints it, and the key only opens an unprivileged account, from the runner's address only

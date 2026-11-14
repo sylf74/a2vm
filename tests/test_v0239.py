@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """v0.23.9: the chat knows the platform. The version of each service and of the latest run, the
 collectors with their last pushes, the agent's version and the connector that pushed."""
 
@@ -9,8 +9,8 @@ import json
 import httpx
 import pytest
 
-from a2vm import __version__
-from a2vm.service import Problem
+from ngvm import __version__
+from ngvm.service import Problem
 
 from .conftest import ROOT
 from .test_v0232 import CHAT, _tools
@@ -37,7 +37,7 @@ def _handler(asked):
         if request.url.path.endswith("/summary"):
             usage = {"questions": 120, "from_cache": 104, "seconds": 41.0}
             return httpx.Response(200, json={"run_id": "r7", "generated_at": "2026-11-11T08:53:29+00:00",
-                                             "a2vm_version": "0.23.9", "llm_model": "openai/gpt-oss-20b",
+                                             "ngvm_version": "0.23.9", "llm_model": "openai/gpt-oss-20b",
                                              "llm_usage": usage, "findings": {}})  # fmt: skip
         return httpx.Response(404, json={"detail": "no"})
 
@@ -53,7 +53,7 @@ def test_the_platform_status(tmp_path) -> None:
         "tools": __version__, "decision": "0.23.9", "watch": "0.23.9", "detection": "0.23.9",
         "dispatch": "does not run for this tenant", "shared_intelligence": "not used",
     }  # fmt: skip
-    assert out["latest_run"]["a2vm_version"] == "0.23.9" and out["latest_run"]["llm_usage"]["from_cache"] == 104
+    assert out["latest_run"]["ngvm_version"] == "0.23.9" and out["latest_run"]["llm_usage"]["from_cache"] == 104
     assert out["runs_kept"] == 7 and out["collectors"] == 2
     assert out["collectors_late_or_refused"] == [
         {"collector": "lan", "source": "cmdb", "age_hours": 50.0, "last_error": "x refused"}
@@ -138,15 +138,15 @@ def test_the_run_names_its_version(settings, sources, profile, tmp_path) -> None
     run = _run(settings, sources, profile)
     write_json(run, tmp_path / "triage.json")
     doc = json.loads((tmp_path / "triage.json").read_text())
-    assert doc["a2vm_version"] == __version__
+    assert doc["ngvm_version"] == __version__
     assert RunIndex and doc["client"]
 
 
 def test_wiring() -> None:
-    chat = (ROOT / "deploy" / "charts" / "a2vm-tenant" / "templates" / "chat.yaml").read_text()
+    chat = (ROOT / "deploy" / "charts" / "ngvm-tenant" / "templates" / "chat.yaml").read_text()
     assert "--detect-token-file=/secrets/detect-read-token" in chat and "key: detect-read-token" in chat
-    schema = json.loads((ROOT / "a2vm" / "src" / "a2vm" / "schemas" / "triage.schema.json").read_text())
-    assert "a2vm_version" in schema["properties"]
+    schema = json.loads((ROOT / "ngvm" / "src" / "ngvm" / "schemas" / "triage.schema.json").read_text())
+    assert "ngvm_version" in schema["properties"]
 
 
 def test_the_guide_of_the_questions_is_up_to_date() -> None:
@@ -157,7 +157,7 @@ def test_the_guide_of_the_questions_is_up_to_date() -> None:
     done = subprocess.run([sys.executable, str(script), "--check"], capture_output=True, text=True)
     assert done.returncode == 0, done.stdout
     guide = (ROOT / "docs" / "chat-questions.md").read_text(encoding="utf-8")
-    assert "Quelle version d'A2VM tourne sur mon tenant ?" in guide and "## Not answered yet" in guide
+    assert "Quelle version d'NGVM tourne sur mon tenant ?" in guide and "## Not answered yet" in guide
     import runpy
 
     import yaml

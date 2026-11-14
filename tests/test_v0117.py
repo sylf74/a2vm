@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """v0.11.7: the fictitious tenant is valid; the documentation sync runs only when configured."""
 
 from __future__ import annotations
@@ -7,7 +7,7 @@ from pathlib import Path
 
 import yaml
 
-from a2vm.profile import load_profile
+from ngvm.profile import load_profile
 from via.alert.contacts import load_contacts
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,7 +22,7 @@ def test_demo_tenant_profile_and_contacts_are_valid():
     assert len(profile.alerts["watchlist"]) == 10
     assert len(load_contacts(DEMO / "contacts.yaml")) == 4
     ci = yaml.safe_load((DEMO / ".gitlab-ci.yml").read_text())
-    assert ci["include"][0]["ref"] == ci["variables"]["A2VM_REF"]
+    assert ci["include"][0]["ref"] == ci["variables"]["NGVM_REF"]
 
 
 def test_docs_sync_job_needs_its_three_variables_and_deletes_only_in_its_folder():

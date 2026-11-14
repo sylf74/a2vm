@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """`via serve` (the watch service of one tenant) and `via service …` (the tenant's jobs on Kubernetes):
 
   via serve                 keeps the watch's state, the last inventory, the alerts and their journal;
@@ -10,7 +10,7 @@
   via service push-inventory …   the daily run's assets and findings, for the watch
 
 The watch and the send of the GitLab pipelines (`via watch`, `via send`) are unchanged; these commands
-wrap them for a tenant that runs on Kubernetes (A2VM_RUN_MODE=kubernetes, LLD intelligence §3.7).
+wrap them for a tenant that runs on Kubernetes (NGVM_RUN_MODE=kubernetes, LLD intelligence §3.7).
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ import threading
 import time
 from pathlib import Path
 
-from a2vm.config import env
+from ngvm.config import env
 
 from .client import ServiceError, WatchClient
 
@@ -46,13 +46,13 @@ def _client(args: argparse.Namespace) -> WatchClient:
 
 
 def cmd_serve(args: argparse.Namespace) -> int:
-    from a2vm.service import TokenSet
+    from ngvm.service import TokenSet
 
     from .server import ROLES, WatchService, serve
     from .store import WatchStore
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
-    from a2vm.db import DatabaseError, open_database
+    from ngvm.db import DatabaseError, open_database
 
     from .pgstore import MIGRATIONS, PgWatchStore
 
@@ -65,8 +65,8 @@ def cmd_serve(args: argparse.Namespace) -> int:
         print(exc, file=sys.stderr)
         return 2
     store = PgWatchStore(db, args.keep_days) if db else WatchStore(args.store, args.keep_days)
-    from a2vm.actions import open_actions
-    from a2vm.audit import open_audit
+    from ngvm.actions import open_actions
+    from ngvm.audit import open_audit
 
     try:  # the journal and the actions (v0.23.10), in the tenant's database when there is one
         audit = open_audit("via", None if db else args.store)
@@ -76,7 +76,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
         return 2
     review_httpd = None
     if args.review_port:
-        from a2vm.service import serve as plain_serve
+        from ngvm.service import serve as plain_serve
 
         from .review import Review, make_handler
 
@@ -233,9 +233,9 @@ def cmd_send(args: argparse.Namespace) -> int:
 def _send_validated(args: argparse.Namespace) -> int:
     """The sender of the review page, once (`--every 0`) or in a loop: the translations asked for,
     then the validated alerts, one mail per language (via.service.sender)."""
-    from a2vm.config import load_settings
-    from a2vm.llm import LlmClient
-    from a2vm.profile import ProfileError, load_profile
+    from ngvm.config import load_settings
+    from ngvm.llm import LlmClient
+    from ngvm.profile import ProfileError, load_profile
     from via.alert.contacts import ContactsError, load_contacts
 
     from .sender import send_validated, translate_requested
@@ -298,7 +298,7 @@ def cmd_push_inventory(args: argparse.Namespace) -> int:
     except ServiceError as exc:
         print(f"{args.tenant}: {exc} ({size})", file=sys.stderr)
         if "(413)" in str(exc):
-            print(f"{args.tenant}: raise A2VM_WATCH_MAX_MB (docs/kubernetes.md)", file=sys.stderr)
+            print(f"{args.tenant}: raise NGVM_WATCH_MAX_MB (docs/kubernetes.md)", file=sys.stderr)
         print(f"{args.tenant}: {_kept(client)}", file=sys.stderr)  # v0.23.19: what the watch has now
         return 3 if exc.retry else 1
     finally:
@@ -329,7 +329,7 @@ def _mb(n: int) -> str:
 
 
 def _common(p: argparse.ArgumentParser) -> None:
-    p.add_argument("--url", required=True, help="watch service, e.g. http://a2vm-lab-via:8080")
+    p.add_argument("--url", required=True, help="watch service, e.g. http://ngvm-lab-via:8080")
     p.add_argument("--tenant", required=True)
     p.add_argument("--token-file", required=True, help="the run token of the watch service")
 
@@ -371,7 +371,7 @@ def main(argv: list[str]) -> int:
     _common(d)
     d.add_argument("profile")
     d.add_argument(
-        "--only", nargs="*", help="alert ids (default: A2VM_SEND_ONLY, else the pending alerts of the latest watch)"
+        "--only", nargs="*", help="alert ids (default: NGVM_SEND_ONLY, else the pending alerts of the latest watch)"
     )
     d.add_argument("--edits", help="the analysts' edited sheets (edits/<alert id>.md or .docx)")
     d.add_argument("--contacts", default="contacts.yaml")

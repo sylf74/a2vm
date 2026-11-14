@@ -1,15 +1,15 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 import subprocess
 
 import pytest
 import yaml
 
-from a2vm.config import Settings
-from a2vm.io import Detection, now
-from a2vm.models import AssetObservation
-from a2vm.profile import load_profile, validate_profile_data
 from detect.collect import DNF, LISTENING, LOADED, PACKAGES, TRIVY_HOST, collect, load_targets, plan, ssh_command
 from detect.scanners import Target, load_dnf_file, load_trivy_file, parse_trivy
+from ngvm.config import Settings
+from ngvm.io import Detection, now
+from ngvm.models import AssetObservation
+from ngvm.profile import load_profile, validate_profile_data
 from verdict.assets.build import WORST_CASE, build_inventory
 from verdict.triage import Triage
 from via.intel.collect import collect as collect_records
@@ -267,8 +267,8 @@ def test_plan_checks_client_id(capsys):
 
 
 def test_former_exposure_values_are_read_with_a_warning(tmp_path):
-    from a2vm.cli import main as profiles_main
-    from a2vm.profile import load_profile
+    from ngvm.cli import main as profiles_main
+    from ngvm.profile import load_profile
 
     path = tmp_path / "client.yaml"
     path.write_text(

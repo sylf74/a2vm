@@ -1,11 +1,11 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
-"""HTTP API of the decision service (contract: a2vm/schemas/openapi/verdict.v1.yaml).
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
+"""HTTP API of the decision service (contract: ngvm/schemas/openapi/verdict.v1.yaml).
 
 Plain HTTP inside the cluster, one service per tenant namespace; every call names the tenant and
 the service refuses another one. Roles: `publish` (the daily run pushes its triage, and reads the
 SLA state it carries, v0.21.0) and `read` (analysts' tools). Acceptance of a push, in order, nothing stored on failure:
   1. publish token, Idempotency-Key; a retry is answered from the key at once      401 / 400
-  2. size limit, gzip (one complete stream), JSON, a2vm.triage/1                     413 / 400 / 422
+  2. size limit, gzip (one complete stream), JSON, ngvm.triage/1                     413 / 400 / 422
   3. client id = tenant, generated_at not in the future                             422
 """
 
@@ -22,10 +22,10 @@ from http import HTTPStatus
 from typing import Any
 from urllib.parse import parse_qsl, unquote, urlsplit
 
-from a2vm import __version__
-from a2vm.io import ExchangeError, validate_triage
-from a2vm.service import JsonHandler, Problem, TokenSet, release_memory
-from a2vm.service import serve as _serve
+from ngvm import __version__
+from ngvm.io import ExchangeError, validate_triage
+from ngvm.service import JsonHandler, Problem, TokenSet, release_memory
+from ngvm.service import serve as _serve
 
 from .index import QueryError, RunIndex, changes, page
 from .store import RunStore, parse_time
@@ -133,7 +133,7 @@ class Service:
             raise Problem(HTTPStatus.NOT_FOUND, "the SLA state needs the tenant's database (v0.18.0)")
         now = now or dt.datetime.now(dt.UTC)
         return {
-            "schema": "a2vm.sla_state/1",
+            "schema": "ngvm.sla_state/1",
             "tenant": tenant,
             "generated_at": now.isoformat(timespec="seconds"),
             "findings": self.store.sla_state(tenant),
@@ -285,7 +285,7 @@ class Service:
 
 def make_handler(service: Service) -> type[JsonHandler]:
     class Handler(JsonHandler):
-        server_version = "a2vm-verdict"
+        server_version = "ngvm-verdict"
         logger = log
 
         def _route(self) -> tuple[str, str, dict[str, str]]:

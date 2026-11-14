@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """The collector (`detect agent`): run connectors near a network and push their detections to the
 detection service of the cluster (LLD vulnerability-detection §8.1).
 
@@ -7,52 +7,52 @@ collector.yaml, on the collector's machine (secrets in files readable by the age
   collector: homelab-lan                  # as declared in the tenant's collectors.yaml
   tenant: homelab
   service: https://detect-homelab.apps.example.org
-  token_file: /etc/a2vm/collector/token
-  ca_file: /etc/a2vm/collector/ca.pem      # optional: CA of the service's certificate
+  token_file: /etc/ngvm/collector/token
+  ca_file: /etc/ngvm/collector/ca.pem      # optional: CA of the service's certificate
   timeout_seconds: 600                     # optional: wait for the service's answer to a push
-  work: /var/lib/a2vm/work
-  spool: /var/lib/a2vm/spool
+  work: /var/lib/ngvm/work
+  spool: /var/lib/ngvm/spool
   connectors:
     - name: lan
       type: targets                        # SSH (trivy, dnf-updateinfo) and OpenVAS, from a targets file
-      targets: /etc/a2vm/collector/targets.yaml
+      targets: /etc/ngvm/collector/targets.yaml
       ssh: true
       openvas: true
     - name: drop
       type: file-import                    # scanner exports dropped in a folder
       source: trivy                        # trivy, dnf-updateinfo or openvas
-      folder: /var/lib/a2vm/import/trivy
+      folder: /var/lib/ngvm/import/trivy
     - name: cmdb
       type: itop                           # the tenant's CMDB, read only (source cmdb, v0.19.0)
       url: https://itop.example.org
-      user: a2vm-cmdb
-      password_file: /etc/a2vm/collector/itop-password
-      ca_file: /etc/a2vm/collector/ca.pem
+      user: ngvm-cmdb
+      password_file: /etc/ngvm/collector/itop-password
+      ca_file: /etc/ngvm/collector/ca.pem
       organization: Lab                    # optional: the CIs of this organisation only
     - name: edr
       type: wazuh                          # Wazuh's software inventory, read only (source wazuh, v0.23.1)
       url: https://wazuh-indexer.example.org:9200
       api: indexer                         # or manager: https://wazuh.example.org:55000
-      user: a2vm-inventory
-      password_file: /etc/a2vm/collector/wazuh-password
-      ca_file: /etc/a2vm/collector/ca.pem
+      user: ngvm-inventory
+      password_file: /etc/ngvm/collector/wazuh-password
+      ca_file: /etc/ngvm/collector/ca.pem
     - name: s1
       type: sentinelone                    # SentinelOne's application inventory, read only (v0.23.3)
       url: https://console.example.org
       api: agents                          # or installed-applications (Application Risk)
-      token_file: /etc/a2vm/collector/sentinelone-token
+      token_file: /etc/ngvm/collector/sentinelone-token
       site_ids: ["1234567890"]             # optional: the sites of the tenant only
     - name: cbw
       type: cyberwatch                     # Cyberwatch's assets and open CVEs, read only (v0.23.5)
       url: https://cyberwatch.example.org
-      access_key_file: /etc/a2vm/collector/cyberwatch-access-key
-      secret_key_file: /etc/a2vm/collector/cyberwatch-secret-key
+      access_key_file: /etc/ngvm/collector/cyberwatch-access-key
+      secret_key_file: /etc/ngvm/collector/cyberwatch-secret-key
     - name: network
       type: snmp                           # appliances and network devices: exact firmware, read only (v0.23.6)
       targets: [192.0.2.1, 192.0.2.64/28]  # addresses, names or networks
-      user: a2vm-ro                        # SNMPv3 authPriv (version: 2c with community_file for old devices)
-      auth_password_file: /etc/a2vm/collector/snmp-auth
-      priv_password_file: /etc/a2vm/collector/snmp-priv
+      user: ngvm-ro                        # SNMPv3 authPriv (version: 2c with community_file for old devices)
+      auth_password_file: /etc/ngvm/collector/snmp-auth
+      priv_password_file: /etc/ngvm/collector/snmp-priv
 
 `detect agent run` runs the connectors (or one, `--connector`) and pushes each detection; a
 system timer gives each connector its schedule (docs/collectors.md). A push that fails for a reason
@@ -76,7 +76,7 @@ from typing import Any, Protocol
 
 import yaml
 
-from a2vm.io import Detection, write_detection
+from ngvm.io import Detection, write_detection
 
 from .cmdb import CmdbError, ItopConfig
 from .cmdb import fetch as fetch_cmdb
@@ -380,8 +380,8 @@ def load_config(path: str | Path) -> AgentConfig:
         tenant=str(data["tenant"]),
         service=str(data["service"]),
         token_file=Path(data["token_file"]),
-        work=Path(data.get("work", "/var/lib/a2vm/work")),
-        spool=Path(data.get("spool", "/var/lib/a2vm/spool")),
+        work=Path(data.get("work", "/var/lib/ngvm/work")),
+        spool=Path(data.get("spool", "/var/lib/ngvm/spool")),
         connectors=connectors,
         ca_file=data.get("ca_file"),
         timeout_seconds=timeout,
@@ -483,7 +483,7 @@ def run(
 
 
 # -- the poll (v0.23.10) ---------------------------------------------------------------------------
-TIMER_UNIT = re.compile(r"^a2vm-collector@(?P<name>[A-Za-z0-9._-]{1,64})\.timer$")
+TIMER_UNIT = re.compile(r"^ngvm-collector@(?P<name>[A-Za-z0-9._-]{1,64})\.timer$")
 
 
 def _usec(value: Any) -> str:
@@ -496,7 +496,7 @@ def _usec(value: Any) -> str:
 
 
 def read_timers(path: str | Path | None) -> list[dict[str, str]]:
-    """The connectors' timers from `systemctl list-timers 'a2vm-collector@*' --all -o json`, written
+    """The connectors' timers from `systemctl list-timers 'ngvm-collector@*' --all -o json`, written
     on the host by the poll unit before the agent starts; [] when the file is missing or unreadable."""
     if not path:
         return []

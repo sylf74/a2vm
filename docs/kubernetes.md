@@ -8,15 +8,15 @@ tenant's configuration and deploys it through the GitLab agent.
 
 ```
 code project ── tag vX.Y.Z ──▶ images via, detect, verdict ──▶ GitLab registry
-tenant project ── push ──▶ deploy-k8s ──(GitLab agent)──▶ namespace a2vm-<tenant>
-                                                          ├── CronJob a2vm-<tenant>-daily
+tenant project ── push ──▶ deploy-k8s ──(GitLab agent)──▶ namespace ngvm-<tenant>
+                                                          ├── CronJob ngvm-<tenant>-daily
                                                           ├── ConfigMap (client.yaml, targets.yaml, settings.yaml)
-                                                          ├── Secret a2vm-tenant (from the CI/CD variables)
-                                                          ├── volume a2vm-<tenant>-data (work/, output/, cache)
+                                                          ├── Secret ngvm-tenant (from the CI/CD variables)
+                                                          ├── volume ngvm-<tenant>-data (work/, output/, cache)
                                                           └── with collectors.yaml (v0.13.0): Deployment,
-                                                              Service, Ingress, NetworkPolicy a2vm-<tenant>-detect,
-                                                              volume a2vm-<tenant>-detections, Secret a2vm-intake
-collectors near the networks ── HTTPS push ──▶ ingress ──▶ a2vm-<tenant>-detect ◀── detect fetch (daily run)
+                                                              Service, Ingress, NetworkPolicy ngvm-<tenant>-detect,
+                                                              volume ngvm-<tenant>-detections, Secret ngvm-intake
+collectors near the networks ── HTTPS push ──▶ ingress ──▶ ngvm-<tenant>-detect ◀── detect fetch (daily run)
 ```
 
 Since v0.13.0, a tenant project with a `collectors.yaml` also gets its **detection service**: the
@@ -37,11 +37,11 @@ Host names below are examples.
    `/etc/gitlab/gitlab.rb` and run `gitlab-ctl reconfigure`. Without a registry, the `images` job
    does not run.
 2. **Images**: the tag `v0.12.1` (and every later tag) runs the `images` job of the code project:
-   `<registry>/vulnops/a2vm/via`, `…/detect`, `…/verdict`, tagged like the release, built with
+   `<registry>/vulnops/ngvm/via`, `…/detect`, `…/verdict`, tagged like the release, built with
    Buildah on the build runner below.
 3. **Pulling the images**: a group deploy token (group `vulnops` > *Settings > Repository >
-   Deploy tokens*, scope `read_registry`), stored as group variables `A2VM_REGISTRY_USER`
-   (visible) and `A2VM_REGISTRY_PASSWORD` (masked). The job turns them into a pull secret.
+   Deploy tokens*, scope `read_registry`), stored as group variables `NGVM_REGISTRY_USER`
+   (visible) and `NGVM_REGISTRY_PASSWORD` (masked). The job turns them into a pull secret.
 4. **Registry behind a private CA**: every node must trust it. On RKE2, on each node:
 
 ```bash
@@ -58,7 +58,7 @@ sudo systemctl restart rke2-server
    (`rke2-agent` on a worker node.)
 5. **Access to the cluster**: the GitLab agent's configuration (`.gitlab/agents/<agent>/config.yaml`
    in its project) lists the group of the tenants under `ci_access: groups`. If GitLab itself is
-   behind a private CA, its CA as the group variable `A2VM_K8S_CA` (File): `kubectl` in the job
+   behind a private CA, its CA as the group variable `NGVM_K8S_CA` (File): `kubectl` in the job
    reaches the cluster through GitLab.
 
 ### Build runner
@@ -84,7 +84,7 @@ sudo usermod --add-subuids 200000-265535 --add-subgids 200000-265535 gitlab-runn
 sudo loginctl enable-linger gitlab-runner
 grep gitlab-runner /etc/subuid /etc/subgid
 sudo gitlab-runner register --non-interactive --url https://gitlab.example.org \
-  --token "$(cat runner-token.txt)" --executor shell --description a2vm-build
+  --token "$(cat runner-token.txt)" --executor shell --description ngvm-build
 ```
 
 The token (`glrt-…`) shown when the runner is created is read from a file, not typed; it is a
@@ -94,17 +94,17 @@ check: *Run pipeline* on `main`, then ▶ on `images` builds the images tagged w
 ### Another registry (Harbor, v0.23.4)
 
 Without a GitLab registry, or to keep the images in the company's Harbor, the same job pushes there.
-In Harbor: a project (`a2vm`), a robot account allowed to push to it, another allowed to pull. CI/CD
+In Harbor: a project (`ngvm`), a robot account allowed to push to it, another allowed to pull. CI/CD
 variables of the code project, masked and protected:
 
 | Variable | Value |
 | --- | --- |
-| `A2VM_PUSH_REGISTRY` | `harbor.example.org` |
-| `A2VM_PUSH_IMAGE` | `harbor.example.org/a2vm` |
-| `A2VM_PUSH_USER`, `A2VM_PUSH_PASSWORD` | the push robot account |
-| `A2VM_PYTHON_IMAGE` | optional: the base image through Harbor's proxy cache, e.g. `harbor.example.org/dockerhub/library/python:3.12-slim` |
+| `NGVM_PUSH_REGISTRY` | `harbor.example.org` |
+| `NGVM_PUSH_IMAGE` | `harbor.example.org/ngvm` |
+| `NGVM_PUSH_USER`, `NGVM_PUSH_PASSWORD` | the push robot account |
+| `NGVM_PYTHON_IMAGE` | optional: the base image through Harbor's proxy cache, e.g. `harbor.example.org/dockerhub/library/python:3.12-slim` |
 
-The tenants then pull from Harbor: `A2VM_IMAGE_REGISTRY`, `A2VM_REGISTRY` and the pull robot account
+The tenants then pull from Harbor: `NGVM_IMAGE_REGISTRY`, `NGVM_REGISTRY` and the pull robot account
 (§2). A Harbor project that refuses images above a vulnerability threshold may refuse a release:
 check that setting before the first deployment.
 
@@ -114,43 +114,43 @@ CI/CD variables of the tenant project (or of a subgroup):
 
 | Key | Value | Options |
 | --- | --- | --- |
-| `A2VM_K8S_CONTEXT` | The agent context, `<agent project path>:<agent name>`, e.g. `vulnops/k8s:homelab` | Visible |
-| `A2VM_K8S_NAMESPACE` | Optional, default `a2vm-<project name>` | Visible |
-| `A2VM_K8S_SCHEDULE` | Optional, cron in Europe/Paris, default `45 5 * * *` | Visible |
-| `A2VM_K8S_SUSPEND` | Optional, `true` keeps the daily CronJob suspended from one deployment to the next (the radar tenant, `docs/radar.md`), default `false` | Visible |
-| `A2VM_IMAGE_REGISTRY` | Optional, default `<registry>/<code project path>`; another registry (Harbor, v0.23.4): `harbor.example.org/a2vm`, with `A2VM_REGISTRY`, `A2VM_REGISTRY_USER`, `A2VM_REGISTRY_PASSWORD` (a robot account allowed to pull) | Visible |
-| `A2VM_VERDICT_SERVICE` | Optional, `false` to deploy no decision service (default `true`, v0.14.0) | Visible |
-| `A2VM_WATCH_MAX_MB` | Optional, largest inventory the watch service accepts, in MB (default `50`, v0.23.18). The step `inventory` of the daily run says the size of what it sends (assets, findings) and, on a refusal (413), to raise it; the service's memory limit (`watch.resources`, 512Mi) holds about 5 times this | Visible |
-| `A2VM_VERDICT_MEMORY` | Optional, memory limit of the decision service, e.g. `3Gi` (default `2Gi`, v0.23.18). A push parses the whole run, about 5 times its `triage.json`; when the daily run's step `publish` says the service closed the connection and the service shows a restart `OOMKilled`, raise it | Visible |
-| `A2VM_RUN_MODE` | In the tenant's `.gitlab-ci.yml`: `gitlab` (default) or `kubernetes`, the daily run and the watch in the namespace only (§4) | — |
-| `A2VM_CHAT_HOST` | Optional: the analysts' chat on the decision service, at this host (v0.15.0, `chat.md`) | Visible |
-| `A2VM_DATABASE` | Optional, `true`: the tenant's PostgreSQL (CloudNativePG) for the watch, detection and decision services instead of their volumes (v0.18.0, §5) | Visible |
-| `A2VM_DISPATCH_HOST`, `A2VM_DISPATCH_<TARGET>_PASSWORD`, … | Optional: with `dispatch.yaml` in the project, the dispatch service of pillar 4, remediation tickets in the ITSM, and its page of the requests for remediation at this host (v0.20.0, `dispatch.md`) | — |
-| `A2VM_DATABASE_SIZE`, `A2VM_DATABASE_STORAGE_CLASS`, `A2VM_DATABASE_INSTANCES` | Optional: the database's volume (default `5Gi`, the cluster's default class) and its instances (default `1`, `3` for a standby) | Visible |
-| `A2VM_HTTPS_PROXY`, `A2VM_NO_PROXY` | Optional (v0.23.4): the corporate proxy for every pod that goes out (`HTTPS_PROXY`), and the hosts reached directly besides the cluster's services (the LLM, the ITSM), comma-separated | Visible |
-| `A2VM_LLM_CLIENT_CERT`, `A2VM_LLM_CLIENT_KEY`, `A2VM_LLM_CA` | Optional (v0.23.14), type File: an LLM behind mutual TLS, the client certificate, its key and the CA of the endpoint; copied into the Secret (`llm-client-cert`, `llm-client-key`, `llm-ca`), the chat goes through the LLM gateway (`docs/llm.md` §5) | Protected (the key) |
-| `A2VM_DEV_IDP_HOST`, `A2VM_DEV_IDP_USERS` | Optional (v0.23.15): a development identity provider, a Keycloak in the namespace when the company gives no OIDC client; never for production; ignored with `A2VM_OIDC_ISSUER` (`docs/dev-idp.md`) | Visible |
-| `A2VM_PROXY_CA` | Optional (v0.23.4): the certificate of the proxy's TLS inspection (File): the job adds it to the system CAs, key `ca-bundle` | Visible |
-| `A2VM_RELAY_URL`, `A2VM_RELAY_HOSTS`, `A2VM_RELAY_TOKEN` | Optional (v0.23.4): the relay of the public sources (`deploy/relay/README.md`), its hosts comma-separated, its token | Token masked |
-| `A2VM_OSV_MODE` | Optional (v0.23.12): `offline` (default: the libraries matched against a copy of OSV, from the shared service or OSV's archives, none sent out), `api` (each library sent to api.osv.dev), `off` | With a relay: `osv-vulnerabilities.storage.googleapis.com` in its hosts |
-| `A2VM_INTEL_FALLBACK` | Optional (v0.23.4), `false`: the shared service unreachable fails the run instead of reading the sources | Visible |
+| `NGVM_K8S_CONTEXT` | The agent context, `<agent project path>:<agent name>`, e.g. `vulnops/k8s:homelab` | Visible |
+| `NGVM_K8S_NAMESPACE` | Optional, default `ngvm-<project name>` | Visible |
+| `NGVM_K8S_SCHEDULE` | Optional, cron in Europe/Paris, default `45 5 * * *` | Visible |
+| `NGVM_K8S_SUSPEND` | Optional, `true` keeps the daily CronJob suspended from one deployment to the next (the radar tenant, `docs/radar.md`), default `false` | Visible |
+| `NGVM_IMAGE_REGISTRY` | Optional, default `<registry>/<code project path>`; another registry (Harbor, v0.23.4): `harbor.example.org/ngvm`, with `NGVM_REGISTRY`, `NGVM_REGISTRY_USER`, `NGVM_REGISTRY_PASSWORD` (a robot account allowed to pull) | Visible |
+| `NGVM_VERDICT_SERVICE` | Optional, `false` to deploy no decision service (default `true`, v0.14.0) | Visible |
+| `NGVM_WATCH_MAX_MB` | Optional, largest inventory the watch service accepts, in MB (default `50`, v0.23.18). The step `inventory` of the daily run says the size of what it sends (assets, findings) and, on a refusal (413), to raise it; the service's memory limit (`watch.resources`, 512Mi) holds about 5 times this | Visible |
+| `NGVM_VERDICT_MEMORY` | Optional, memory limit of the decision service, e.g. `3Gi` (default `2Gi`, v0.23.18). A push parses the whole run, about 5 times its `triage.json`; when the daily run's step `publish` says the service closed the connection and the service shows a restart `OOMKilled`, raise it | Visible |
+| `NGVM_RUN_MODE` | In the tenant's `.gitlab-ci.yml`: `gitlab` (default) or `kubernetes`, the daily run and the watch in the namespace only (§4) | — |
+| `NGVM_CHAT_HOST` | Optional: the analysts' chat on the decision service, at this host (v0.15.0, `chat.md`) | Visible |
+| `NGVM_DATABASE` | Optional, `true`: the tenant's PostgreSQL (CloudNativePG) for the watch, detection and decision services instead of their volumes (v0.18.0, §5) | Visible |
+| `NGVM_DISPATCH_HOST`, `NGVM_DISPATCH_<TARGET>_PASSWORD`, … | Optional: with `dispatch.yaml` in the project, the dispatch service of pillar 4, remediation tickets in the ITSM, and its page of the requests for remediation at this host (v0.20.0, `dispatch.md`) | — |
+| `NGVM_DATABASE_SIZE`, `NGVM_DATABASE_STORAGE_CLASS`, `NGVM_DATABASE_INSTANCES` | Optional: the database's volume (default `5Gi`, the cluster's default class) and its instances (default `1`, `3` for a standby) | Visible |
+| `NGVM_HTTPS_PROXY`, `NGVM_NO_PROXY` | Optional (v0.23.4): the corporate proxy for every pod that goes out (`HTTPS_PROXY`), and the hosts reached directly besides the cluster's services (the LLM, the ITSM), comma-separated | Visible |
+| `NGVM_LLM_CLIENT_CERT`, `NGVM_LLM_CLIENT_KEY`, `NGVM_LLM_CA` | Optional (v0.23.14), type File: an LLM behind mutual TLS, the client certificate, its key and the CA of the endpoint; copied into the Secret (`llm-client-cert`, `llm-client-key`, `llm-ca`), the chat goes through the LLM gateway (`docs/llm.md` §5) | Protected (the key) |
+| `NGVM_DEV_IDP_HOST`, `NGVM_DEV_IDP_USERS` | Optional (v0.23.15): a development identity provider, a Keycloak in the namespace when the company gives no OIDC client; never for production; ignored with `NGVM_OIDC_ISSUER` (`docs/dev-idp.md`) | Visible |
+| `NGVM_PROXY_CA` | Optional (v0.23.4): the certificate of the proxy's TLS inspection (File): the job adds it to the system CAs, key `ca-bundle` | Visible |
+| `NGVM_RELAY_URL`, `NGVM_RELAY_HOSTS`, `NGVM_RELAY_TOKEN` | Optional (v0.23.4): the relay of the public sources (`deploy/relay/README.md`), its hosts comma-separated, its token | Token masked |
+| `NGVM_OSV_MODE` | Optional (v0.23.12): `offline` (default: the libraries matched against a copy of OSV, from the shared service or OSV's archives, none sent out), `api` (each library sent to api.osv.dev), `off` | With a relay: `osv-vulnerabilities.storage.googleapis.com` in its hosts |
+| `NGVM_INTEL_FALLBACK` | Optional (v0.23.4), `false`: the shared service unreachable fails the run instead of reading the sources | Visible |
 
 The other variables are the pipeline's (`docs/deployment.md`): the job copies the secret ones
-(`A2VM_SSH_KEY`, `LLM_API_KEY`, `GTI_API_KEY`, `A2VM_GVM_USER`, `A2VM_GVM_PASSWORD`,
-`A2VM_REPORTING_DSN`, `A2VM_REPORTING_CA`, `A2VM_GITLAB_TOKEN`) into the Secret `a2vm-tenant` of the
-namespace, never into the job log, and hands the others (`A2VM_LLM_*`, `A2VM_GTI_ENABLED`,
-`A2VM_EXTERNAL_PROJECT`) to the CronJob. External detection uses the GitLab API with
-`A2VM_GITLAB_TOKEN`, since a pod has no job token.
+(`NGVM_SSH_KEY`, `LLM_API_KEY`, `GTI_API_KEY`, `NGVM_GVM_USER`, `NGVM_GVM_PASSWORD`,
+`NGVM_REPORTING_DSN`, `NGVM_REPORTING_CA`, `NGVM_GITLAB_TOKEN`) into the Secret `ngvm-tenant` of the
+namespace, never into the job log, and hands the others (`NGVM_LLM_*`, `NGVM_GTI_ENABLED`,
+`NGVM_EXTERNAL_PROJECT`) to the CronJob. External detection uses the GitLab API with
+`NGVM_GITLAB_TOKEN`, since a pod has no job token.
 
-Then move the tenant's `.gitlab-ci.yml` to `v0.16.0` (both `ref` and `A2VM_REF`) and push: the
+Then move the tenant's `.gitlab-ci.yml` to `v0.16.0` (both `ref` and `NGVM_REF`) and push: the
 pipeline runs `validate`, then `deploy-k8s`, which ends with the CronJob and its volume. Each
 later push to the default branch redeploys (new profile, new targets, new version).
 
-The Secrets (`a2vm-tenant`, `a2vm-intake`, `a2vm-verdict`, `a2vm-chat`, `a2vm-via`,
-`a2vm-dispatch`, `a2vm-intel`, `a2vm-registry`) and the alerts' template are created, then replaced
+The Secrets (`ngvm-tenant`, `ngvm-intake`, `ngvm-verdict`, `ngvm-chat`, `ngvm-via`,
+`ngvm-dispatch`, `ngvm-intel`, `ngvm-registry`) and the alerts' template are created, then replaced
 at each deployment, never `kubectl apply`d (v0.23.16): a client-side apply copies the whole object
 into the annotation `kubectl.kubernetes.io/last-applied-configuration`, limited to 256 KiB, and
-`a2vm-tenant` with the proxy's CA bundle and the certificates of an LLM behind mutual TLS went over
+`ngvm-tenant` with the proxy's CA bundle and the certificates of an LLM behind mutual TLS went over
 it (`metadata.annotations: Too long: must have at most 262144 bytes`). The first `replace` also
 drops the annotation of earlier deployments.
 
@@ -159,8 +159,8 @@ drops the annotation of earlier deployments.
 From a workstation with access to the cluster:
 
 ```bash
-NS=a2vm-homelab
-kubectl -n $NS create job --from=cronjob/a2vm-homelab-daily run-$(date +%H%M)
+NS=ngvm-homelab
+kubectl -n $NS create job --from=cronjob/ngvm-homelab-daily run-$(date +%H%M)
 kubectl -n $NS get pods -w
 kubectl -n $NS logs job/run-<HHMM> --all-containers --prefix -f
 ```
@@ -175,11 +175,11 @@ them, a short-lived pod mounts the volume while no run is going on:
 
 ```bash
 kubectl -n $NS run reader --rm -i --restart=Never --image=busybox:1.37 \
-  --overrides='{"spec":{"securityContext":{"runAsUser":10001,"fsGroup":10001},"volumes":[{"name":"d","persistentVolumeClaim":{"claimName":"a2vm-homelab-data"}}],"containers":[{"name":"reader","image":"busybox:1.37","command":["sh","-c","ls -R /data/output | head -50"],"volumeMounts":[{"name":"d","mountPath":"/data"}]}]}}'
+  --overrides='{"spec":{"securityContext":{"runAsUser":10001,"fsGroup":10001},"volumes":[{"name":"d","persistentVolumeClaim":{"claimName":"ngvm-homelab-data"}}],"containers":[{"name":"reader","image":"busybox:1.37","command":["sh","-c","ls -R /data/output | head -50"],"volumeMounts":[{"name":"d","mountPath":"/data"}]}]}}'
 ```
 
 Side by side with the pipeline, both runs publish to the reporting database (when
-`A2VM_REPORTING_DSN` is set): one more run per day, the dashboards show the latest. Compare the
+`NGVM_REPORTING_DSN` is set): one more run per day, the dashboards show the latest. Compare the
 totals per level of the two runs of the same day (`runs` table, or the `overview` dashboard).
 When they agree, switch off the tenant's daily schedule in GitLab (*Build > Pipeline schedules*),
 except for a tenant that uses the watch (see above).
@@ -187,80 +187,80 @@ except for a tenant that uses the watch (see above).
 ### Decision service (v0.14.0)
 
 `deploy-k8s` deploys `verdict serve` next to the CronJob (Deployment, Service and volume
-`a2vm-<tenant>-verdict`, `a2vm-<tenant>-runs`), unless `A2VM_VERDICT_SERVICE=false`. It makes two
-tokens once and keeps them in the Secret `a2vm-tenant` (`verdict-publish-token`,
-`verdict-read-token`), their digests in the Secret `a2vm-verdict`; none appears in the job log. The
+`ngvm-<tenant>-verdict`, `ngvm-<tenant>-runs`), unless `NGVM_VERDICT_SERVICE=false`. It makes two
+tokens once and keeps them in the Secret `ngvm-tenant` (`verdict-publish-token`,
+`verdict-read-token`), their digests in the Secret `ngvm-verdict`; none appears in the job log. The
 `publish` step of each run pushes `triage.json`; the service keeps the last 7 runs (LLD triage
 §15). Since v0.21.0 the `triage` step first reads from it the state of the tenant's findings
 (`verdict sla-state`, the publish token): when each decision entered its priority of the client's
 SLA (`docs/sla.md`); when the service cannot answer, a warning, and the delays of that run start at
-the first observation. Only the daily run and pods labelled `a2vm.io/verdict-reader=true` reach it.
+the first observation. Only the daily run and pods labelled `ngvm.io/verdict-reader=true` reach it.
 
 Memory (v0.23.18): a push parses the whole run, about 5 times its `triage.json` (a run of 28,000
 decisions stopped the service at the 1Gi of v0.23.17, most likely its memory: `decision service unreachable: Server
-disconnected without sending a response`). The limit is 2Gi, `A2VM_VERDICT_MEMORY` to change it.
+disconnected without sending a response`). The limit is 2Gi, `NGVM_VERDICT_MEMORY` to change it.
 The step `publish` now says when the service closed the connection, with the size it sent; the
 service's log has a line `push tenant=… receiving=…` before it reads the run, and gives the memory
 back after. To see whether the service was stopped, and why:
 
 ```bash
-kubectl -n a2vm-homelab get pods -l app.kubernetes.io/component=verdict -o jsonpath='{range .items[*]}{.metadata.name}{" restarts="}{.status.containerStatuses[0].restartCount}{" last="}{.status.containerStatuses[0].lastState.terminated.reason}{"\n"}{end}'
+kubectl -n ngvm-homelab get pods -l app.kubernetes.io/component=verdict -o jsonpath='{range .items[*]}{.metadata.name}{" restarts="}{.status.containerStatuses[0].restartCount}{" last="}{.status.containerStatuses[0].lastState.terminated.reason}{"\n"}{end}'
 ```
 
 To read it
 from a workstation (the token is mounted in the pod, never in its spec or a command line):
 
 ```bash
-NS=a2vm-homelab
-kubectl -n $NS logs deploy/a2vm-homelab-verdict --tail=5
+NS=ngvm-homelab
+kubectl -n $NS logs deploy/ngvm-homelab-verdict --tail=5
 kubectl -n $NS run verdict-reader --rm -i --restart=Never --image=curlimages/curl:8.11.1 \
-  --labels=a2vm.io/verdict-reader=true \
-  --overrides='{"spec":{"securityContext":{"runAsUser":10001},"volumes":[{"name":"t","secret":{"secretName":"a2vm-tenant","items":[{"key":"verdict-read-token","path":"token"}]}}],"containers":[{"name":"verdict-reader","image":"curlimages/curl:8.11.1","command":["sh","-c","curl -sf -H \"Authorization: Bearer $(cat /t/token)\" \"http://a2vm-homelab-verdict:8080/v1/tenants/homelab/decisions?level=ACT&limit=5\""],"volumeMounts":[{"name":"t","mountPath":"/t","readOnly":true}]}]}}'
+  --labels=ngvm.io/verdict-reader=true \
+  --overrides='{"spec":{"securityContext":{"runAsUser":10001},"volumes":[{"name":"t","secret":{"secretName":"ngvm-tenant","items":[{"key":"verdict-read-token","path":"token"}]}}],"containers":[{"name":"verdict-reader","image":"curlimages/curl:8.11.1","command":["sh","-c","curl -sf -H \"Authorization: Bearer $(cat /t/token)\" \"http://ngvm-homelab-verdict:8080/v1/tenants/homelab/decisions?level=ACT&limit=5\""],"volumeMounts":[{"name":"t","mountPath":"/t","readOnly":true}]}]}}'
 ```
 
 ### Analysts' chat (v0.15.0)
 
-With `A2VM_CHAT_HOST`, `deploy-k8s` also deploys Open WebUI and the tool server `verdict tools` in
-the namespace, on the tenant's LLM endpoints: `chat.md`. With `A2VM_OIDC_ISSUER` (v0.17.0) the
+With `NGVM_CHAT_HOST`, `deploy-k8s` also deploys Open WebUI and the tool server `verdict tools` in
+the namespace, on the tenant's LLM endpoints: `chat.md`. With `NGVM_OIDC_ISSUER` (v0.17.0) the
 analysts sign in with the tenant's identity provider: `sign-in.md`.
 
 ## 4. The watch on Kubernetes (v0.16.0)
 
-Set `A2VM_RUN_MODE: kubernetes` in the `variables:` of the tenant's `.gitlab-ci.yml` and push:
+Set `NGVM_RUN_MODE: kubernetes` in the `variables:` of the tenant's `.gitlab-ci.yml` and push:
 `deploy-k8s` then also deploys the watch service `via serve` and the watch CronJob, and the
 scheduled pipelines of the project no longer run the daily jobs nor the watch (they can be switched
-off). The watch's mail settings come from the same CI/CD variables as in GitLab (`A2VM_MAIL_FROM`,
-`A2VM_SMTP_*` or `A2VM_GRAPH_*`, `A2VM_ANALYST_TO`); `contacts.yaml`, `watch-sources.yaml` and
+off). The watch's mail settings come from the same CI/CD variables as in GitLab (`NGVM_MAIL_FROM`,
+`NGVM_SMTP_*` or `NGVM_GRAPH_*`, `NGVM_ANALYST_TO`); `contacts.yaml`, `watch-sources.yaml` and
 `templates/alert*.docx` from the project. The first passage records the baseline (no alert), as a
 first watch in GitLab.
 
 ```bash
-NS=a2vm-homelab
+NS=ngvm-homelab
 kubectl -n $NS get deploy,cronjob -l 'app.kubernetes.io/component in (via,watch)'
 kubectl -n $NS logs job/$(kubectl -n $NS get jobs -l app.kubernetes.io/component=watch --sort-by=.metadata.creationTimestamp -o name | tail -1 | cut -d/ -f2)
-kubectl -n $NS logs deploy/a2vm-homelab-via --tail=20
+kubectl -n $NS logs deploy/ngvm-homelab-via --tail=20
 ```
 
-Validation: the analysts' mail links to *Run pipeline* of the project with `A2VM_JOB=send` and the
+Validation: the analysts' mail links to *Run pipeline* of the project with `NGVM_JOB=send` and the
 alert's id filled in; running it is the validation. The job `send-alerts-k8s` starts a send Job in
 the namespace and shows its log. Edited sheets: commit `edits/<alert id>.md` (or `.docx`) first,
 as in GitLab. A PDF attachment needs the GitLab mode (LibreOffice is not in the via image).
 
-With the analysts' sign-in and `A2VM_ALERTS_HOST` (v0.17.0, `docs/sign-in.md`), the mail links to
+With the analysts' sign-in and `NGVM_ALERTS_HOST` (v0.17.0, `docs/sign-in.md`), the mail links to
 the review page instead: a validator corrects, validates or dismisses there, and the sender
-(`a2vm-<tenant>-sender`) mails the validated alerts; GitLab then only deploys.
+(`ngvm-<tenant>-sender`) mails the validated alerts; GitLab then only deploys.
 
 The shared intelligence service (v0.22.0, `docs/radar.md`): with the group variables
-`A2VM_INTEL_URL` and `A2VM_INTEL_TOKEN`, the daily run takes its records from it and the watch reads
-its feed; the watch team's project runs it (`A2VM_INTEL_SERVE=true`, namespace `a2vm-via`).
+`NGVM_INTEL_URL` and `NGVM_INTEL_TOKEN`, the daily run takes its records from it and the watch reads
+its feed; the watch team's project runs it (`NGVM_INTEL_SERVE=true`, namespace `ngvm-via`).
 
-Back to GitLab: `A2VM_RUN_MODE: gitlab` and push; the watch's state stays in the service's volume
-(`a2vm-<tenant>-watch`), the GitLab watch starts from its own cache.
+Back to GitLab: `NGVM_RUN_MODE: gitlab` and push; the watch's state stays in the service's volume
+(`ngvm-<tenant>-watch`), the GitLab watch starts from its own cache.
 
 ## 5. The tenant's database (v0.18.0)
 
-With `A2VM_DATABASE=true`, `deploy-k8s` gives the tenant a PostgreSQL cluster of its own in its
-namespace, made and run by the CloudNativePG operator (`Cluster a2vm-<tenant>-db`), and the watch
+With `NGVM_DATABASE=true`, `deploy-k8s` gives the tenant a PostgreSQL cluster of its own in its
+namespace, made and run by the CloudNativePG operator (`Cluster ngvm-<tenant>-db`), and the watch
 service, the detection service and the decision service keep their data there instead of their
 volumes. Each pillar creates its schema (`via`, `detect`, `verdict`) at start; every row carries the
 tenant and row-level security keeps each transaction to its tenant. With their data in the database
@@ -270,11 +270,11 @@ finding across runs (opened, closed, reopened, levels): `GET …/findings/closed
 `lifecycle` of a decision (LLD triage §15.8), and the chat's tool `list_closed_findings`.
 
 ```
-namespace a2vm-<tenant>
-  Cluster a2vm-<tenant>-db (CloudNativePG) ── database app, role app (no superuser)
-    Secret a2vm-<tenant>-db-app  key uri ──▶ file /var/run/a2vm-db/uri   (A2VM_DB_DSN_FILE)
-    Secret a2vm-<tenant>-db-ca   key ca.crt ─▶ file /var/run/a2vm-db-ca/ca.crt (A2VM_DB_CA, verify-full)
-  via serve, detect serve, verdict serve ── 5432 ──▶ a2vm-<tenant>-db-rw   (NetworkPolicy both ways)
+namespace ngvm-<tenant>
+  Cluster ngvm-<tenant>-db (CloudNativePG) ── database app, role app (no superuser)
+    Secret ngvm-<tenant>-db-app  key uri ──▶ file /var/run/ngvm-db/uri   (NGVM_DB_DSN_FILE)
+    Secret ngvm-<tenant>-db-ca   key ca.crt ─▶ file /var/run/ngvm-db-ca/ca.crt (NGVM_DB_CA, verify-full)
+  via serve, detect serve, verdict serve ── 5432 ──▶ ngvm-<tenant>-db-rw   (NetworkPolicy both ways)
 ```
 
 **Once per Kubernetes cluster**, install the operator (`deploy/cnpg/README.md`):
@@ -284,32 +284,32 @@ kubectl apply --server-side -f https://raw.githubusercontent.com/cloudnative-pg/
 kubectl rollout status deployment -n cnpg-system cnpg-controller-manager
 ```
 
-**Per tenant**: set `A2VM_DATABASE=true` on the project and push. `deploy-k8s` checks that the
+**Per tenant**: set `NGVM_DATABASE=true` on the project and push. `deploy-k8s` checks that the
 operator is there (the API group `postgresql.cnpg.io`), else it stops and says so. Then:
 
 ```bash
-NS=a2vm-lab
-kubectl -n $NS get cluster,pods -l cnpg.io/cluster=a2vm-lab-db
-kubectl -n $NS logs deploy/a2vm-lab-verdict --tail=5
+NS=ngvm-lab
+kubectl -n $NS get cluster,pods -l cnpg.io/cluster=ngvm-lab-db
+kubectl -n $NS logs deploy/ngvm-lab-verdict --tail=5
 ```
 
-The services' first line says `store postgresql a2vm-lab-db-rw.a2vm-lab/app (TLS verified)`. The data
+The services' first line says `store postgresql ngvm-lab-db-rw.ngvm-lab/app (TLS verified)`. The data
 start empty: what the volumes held is not moved (the next daily run, watch passage and pushes of
 the collectors fill the database). With collectors (`collect.mode: intake`), a daily run before
 their next push stops at `collect` ("no detection received from the collectors"): run each
-connector once on its collector (`sudo systemctl start a2vm-collector@<connector>.service`,
-`docs/collectors.md` §2), then the daily run. The watch's first passage records a new baseline. The old claims (`a2vm-<tenant>-watch`, `-detections`, `-runs`)
+connector once on its collector (`sudo systemctl start ngvm-collector@<connector>.service`,
+`docs/collectors.md` §2), then the daily run. The watch's first passage records a new baseline. The old claims (`ngvm-<tenant>-watch`, `-detections`, `-runs`)
 are kept by Helm; delete them by hand once the services run on the database. The cluster and its
 volumes are kept by an uninstall too (resource policy `keep`).
 
-Backups are the operator's (a `ScheduledBackup` to an object store, `deploy/cnpg/README.md`); A2VM
-sets none in this version. Without `A2VM_DATABASE`, nothing changes: the volumes, one replica each.
+Backups are the operator's (a `ScheduledBackup` to an object store, `deploy/cnpg/README.md`); NGVM
+sets none in this version. Without `NGVM_DATABASE`, nothing changes: the volumes, one replica each.
 
 ## 6. Limits of this step
 
-- With `A2VM_RUN_MODE=gitlab` (default) the watch and its validation stay in GitLab pipelines; with
+- With `NGVM_RUN_MODE=gitlab` (default) the watch and its validation stay in GitLab pipelines; with
   `kubernetes` the validation is started from a GitLab pipeline, or, with the analysts' sign-in
-  and `A2VM_ALERTS_HOST` (v0.17.0), from the review page (`docs/sign-in.md`).
+  and `NGVM_ALERTS_HOST` (v0.17.0), from the review page (`docs/sign-in.md`).
 - The run's report is read from the volume, the dashboards or the decision service; there are no job artifacts.
 - Without the tenant's database (§5), the decision service keeps the last runs as files, one
   replica; it is read with a token until service accounts and answers reads only (D15 step 3, read

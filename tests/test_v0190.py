@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """v0.19.0: the tenant's CMDB (iTop) as a read-only detection source, its place in the asset
 context (after a declaration, before the rules), and the scan coverage of each asset."""
 
@@ -13,12 +13,12 @@ import httpx
 import pytest
 import yaml
 
-from a2vm.io import Detection, validate_detection, write_detection
-from a2vm.models import AssetObservation, CoveragePolicy
-from a2vm.profile import ProfileError, load_profile
 from detect.agent import AgentError, CmdbConnector, load_config
 from detect.cli import main as detect_main
 from detect.cmdb import CmdbError, ItopClient, ItopConfig, export_candidates, fetch
+from ngvm.io import Detection, validate_detection, write_detection
+from ngvm.models import AssetObservation, CoveragePolicy
+from ngvm.profile import ProfileError, load_profile
 from verdict.assets.build import build_inventory
 from verdict.assets.coverage import build_coverage
 
@@ -112,7 +112,7 @@ def _cfg(tmp_path, **kw) -> ItopConfig:
     password = tmp_path / "itop-password"
     password.write_text("s3cret\n")
     return ItopConfig.from_dict(
-        {"url": "https://itop.example.org", "user": "a2vm", "password_file": str(password), **kw}
+        {"url": "https://itop.example.org", "user": "ngvm", "password_file": str(password), **kw}
     )
 
 
@@ -205,7 +205,7 @@ def test_agent_connector_itop(tmp_path):
                 "service": "https://detect.example.org",
                 "token_file": str(token),
                 "connectors": [
-                    {"name": "cmdb", "type": "itop", "url": "https://itop.example.org", "user": "a2vm",
+                    {"name": "cmdb", "type": "itop", "url": "https://itop.example.org", "user": "ngvm",
                      "password_file": str(tmp_path / "pw"), "organization": "Lab"},
                 ],
             }
@@ -341,7 +341,7 @@ def test_bad_coverage_section_is_refused(tmp_path):
 # -- seed file --------------------------------------------------------------------------------------
 def test_export_lists_the_hosts_not_in_the_cmdb(tmp_path):
     triage = {
-        "schema": "a2vm.triage/1",
+        "schema": "ngvm.triage/1",
         "assets": [
             {"id": "host:printer", "name": "printer", "kind": "host", "ips": ["192.0.2.99"], "scans": {"openvas": "x"}},
             {"id": "host:web01.lab.example", "name": "web01", "kind": "host", "scans": {"trivy": "x", "openvas": "x"}},
@@ -416,7 +416,7 @@ def test_chat_has_the_coverage_tool():
     from verdict.service.tools import OPERATIONS
 
     assert any(op[1] == "list_coverage" and op[-1] == "coverage" for op in OPERATIONS)
-    values = yaml.safe_load((ROOT / "deploy/charts/a2vm-tenant/values.yaml").read_text())
+    values = yaml.safe_load((ROOT / "deploy/charts/ngvm-tenant/values.yaml").read_text())
     assert "list_coverage" in values["chat"]["systemPrompt"]
 
 
@@ -454,10 +454,10 @@ def test_coverage_is_published_and_the_dashboard_counts_it(settings, sources, pr
     for state in states:
         run.coverage["counts"][state] = sum(1 for c in run.coverage["assets"] if c["state"] == state)
     run.coverage["expected_assets"] = sum(run.coverage["counts"][s] for s in ("covered", "never-scanned", "partial"))
-    data = {"schema": "a2vm.reporting/1", **build(run, settings.policy)}
+    data = {"schema": "ngvm.reporting/1", **build(run, settings.policy)}
     assert data["coverage"]["cmdb"] is True and any(a.get("coverage") for a in data["assets"])
     rdb = reporting_db
-    assert db.init(ADMIN, rdb["writer"]).startswith(f"schema a2vm version {db.SCHEMA_VERSION}")
+    assert db.init(ADMIN, rdb["writer"]).startswith(f"schema ngvm version {db.SCHEMA_VERSION}")
     path = tmp_path / "r.json"
     path.write_text(json.dumps(data))
     assert main(["publish", str(path), "--dsn", rdb["as_writer"]]) == 0
@@ -468,7 +468,7 @@ def test_coverage_is_published_and_the_dashboard_counts_it(settings, sources, pr
     results = {}
     with psycopg.connect(as_reader) as conn:
         row = conn.execute(
-            "SELECT cmdb, expected_assets, covered_assets, coverage_gaps FROM a2vm.latest_runs"
+            "SELECT cmdb, expected_assets, covered_assets, coverage_gaps FROM ngvm.latest_runs"
         ).fetchone()
         assert row == (True, run.coverage["expected_assets"], run.coverage["counts"]["covered"],
                        len(hosts) - run.coverage["counts"]["covered"])  # fmt: skip
@@ -483,4 +483,4 @@ def test_coverage_is_published_and_the_dashboard_counts_it(settings, sources, pr
     cols, rows = results["Coverage per class"]
     assert sum(r[cols.index("Assets")] for r in rows) == len(hosts)
     fr = json.loads(dashboard("coverage", "fr"))
-    assert fr["uid"] == "a2vm-coverage-fr" and fr["title"] == "A2VM — actifs et couverture des scans"
+    assert fr["uid"] == "ngvm-coverage-fr" and fr["title"] == "NGVM — actifs et couverture des scans"

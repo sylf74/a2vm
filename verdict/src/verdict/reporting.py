@@ -1,5 +1,5 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
-"""The reporting dataset of a run (`a2vm.reporting/1`): the contract with the client portal.
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
+"""The reporting dataset of a run (`ngvm.reporting/1`): the contract with the client portal.
 
 The portal (Grafana) reads this file and nothing else, so that renaming a job or changing an
 internal file never breaks it. Everything here is computed from the decisions of the run; the
@@ -17,9 +17,9 @@ import os
 from collections import Counter
 from typing import Any
 
-import a2vm
-from a2vm import sla
-from a2vm.models import TriageRow, TriageRun
+import ngvm
+from ngvm import sla
+from ngvm.models import TriageRow, TriageRun
 
 LEVELS = ("ACT", "ATTEND", "TRACK")
 EXPOSURES = ("open", "controlled", "small")
@@ -90,7 +90,7 @@ def _short(text: str, limit: int) -> str:
 
 
 def build(run: TriageRun, policy: dict[str, Any] | None = None, today: dt.date | None = None) -> dict[str, Any]:
-    """The dataset of `run`, as the schema `a2vm.reporting/1` describes it."""
+    """The dataset of `run`, as the schema `ngvm.reporting/1` describes it."""
     today = today or dt.date.fromisoformat(run.generated_at[:10])
     rows = sorted(run.rows, key=lambda r: (LEVELS.index(r.delivery_decision), r.cve_id, r.asset_id_full))
     sources: dict[str, dict[str, Any]] = {}
@@ -205,7 +205,7 @@ def build(run: TriageRun, policy: dict[str, Any] | None = None, today: dt.date |
         "generated_at": run.generated_at,
         "run": {
             "tenant": {"id": run.client.id, "name": run.client.name},
-            "a2vm_version": a2vm.__version__,
+            "ngvm_version": ngvm.__version__,
             "policy_hash": policy_hash(policy or {}),
             "pipeline": {
                 "id": os.environ.get("CI_PIPELINE_ID", ""),

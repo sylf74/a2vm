@@ -21,7 +21,7 @@ every 10 min   the sources of config/watch-sources.yaml, in three categories:
                assets concerned, CVE, product, type, CVSS, main impact, exploitation status, fixes,
                description, delay, links
       v
-               mail to the analysts (A2VM_ANALYST_TO), naming the recipients, with a link
+               mail to the analysts (NGVM_ANALYST_TO), naming the recipients, with a link
       v
                analyst runs the manual job "send-alerts"  ->  mail to the client's contacts
 ```
@@ -36,7 +36,7 @@ Sources (`config/watch-sources.yaml`, or `watch-sources.yaml` in a client projec
 | `rss` | RSS 2.0, Atom, RDF | CVE ids and product names taken from title and summary |
 | `csaf` | CSAF provider metadata, then `changes.csv` or ROLIE | products, fixes and severity in the sheet |
 | `cna` | nothing by itself | labels the CVE records of a vendor without a feed |
-| `intel` | the feed of the shared intelligence service (v0.22.0) | the radar's validated events and GTI's vulnerabilities on the technologies watched, matched like any publication (`docs/radar.md`); nothing without `A2VM_INTEL_URL` |
+| `intel` | the feed of the shared intelligence service (v0.22.0) | the radar's validated events and GTI's vulnerabilities on the technologies watched, matched like any publication (`docs/radar.md`); nothing without `NGVM_INTEL_URL` |
 | `gti` | a GTI search (v0.22.0, licensed) | the radar of the watch team only |
 
 A source is read for the first time only to record its current state (no flood of old news).
@@ -59,7 +59,7 @@ The watch reads the client's last daily inventory: `work/assets/<client>/assets.
 `findings.json`, which the daily `triage` job leaves in the runner cache (key `inventory`, since
 v0.11.3). Without that copy (first run, cache cleared, another runner), the watch asks GitLab for
 the artifacts of the last `triage` job; GitLab only serves the latest successful pipeline of the
-branch, which is nearly always a watch, unless `A2VM_GITLAB_TOKEN` is set. With several runners,
+branch, which is nearly always a watch, unless `NGVM_GITLAB_TOKEN` is set. With several runners,
 give them a shared cache (S3, MinIO) so that the watch finds the copy. An alert then also covers a CVE the daily
 pipeline found on a host, even when no declared asset or watchlist entry names the product, and a
 critical CVE on a host the external scan reaches is urgent.
@@ -94,7 +94,7 @@ package of the libraries (`openssl-libs` of `openssl`): move the collectors to v
 
 The analysts' mail gives the alert's number in its pipeline ("Alerte n° 2 sur 3") and its id. In
 the pipeline the mail links to, ▶ on `send-alerts` sends every alert of that pipeline. To send only
-some of them, open the job's form (the arrow next to ▶) and set the variable `A2VM_SEND_ONLY` to
+some of them, open the job's form (the arrow next to ▶) and set the variable `NGVM_SEND_ONLY` to
 their numbers or ids, e.g. `1 3`. An unknown number or id sends nothing: the job fails and says
 which; correct it and run the job again.
 
@@ -122,12 +122,12 @@ analysts receive the Word file; the client receives it (`docx`), or a PDF made f
 time (`pdf`), or both (`docs/alert-word.md`).
 
 **Checking the mail settings:** run a pipeline (Build > Pipelines > New pipeline, or ▶ on a
-schedule), then ▶ on the manual job `test-mail`. It sends one message to `A2VM_ANALYST_TO`, or to
-the addresses set as `A2VM_TEST_TO` in its form, and prints the sender and the transport.
+schedule), then ▶ on the manual job `test-mail`. It sends one message to `NGVM_ANALYST_TO`, or to
+the addresses set as `NGVM_TEST_TO` in its form, and prints the sender and the transport.
 
 **Source failures:** a source that fails once (a vendor site down for a few minutes) is a `WARN`
 line in the log; it becomes an error, and the job a warning (orange), after 3 failed runs in a row
-(`A2VM_SOURCE_FAILURES`). One successful run resets the count.
+(`NGVM_SOURCE_FAILURES`). One successful run resets the count.
 
 **CISA advisories:** read as CSAF from CISA's repository on GitHub (`cisagov/CSAF`, ICS and IT
 advisories, products and fixes included), since the RSS feed of cisa.gov answers 403 to the
@@ -144,15 +144,15 @@ CERT-FR summary or the vendor's description.
 
    | Key | Example | Options |
    | --- | --- | --- |
-   | `A2VM_SMTP_HOST` | `smtp.example.com` | Visible |
-   | `A2VM_SMTP_PORT` | `587` | Visible |
-   | `A2VM_SMTP_TLS` | `starttls` (or `ssl`, `none`) | Visible |
-   | `A2VM_SMTP_USER` | `alerts@example.com` | Visible |
-   | `A2VM_SMTP_PASSWORD` | | Masked and hidden, protected |
-   | `A2VM_MAIL_FROM` | `Veille vulnérabilités <alerts@example.com>` | Visible |
-   | `A2VM_ANALYST_TO` | `analyst1@example.com, analyst2@example.com` | Visible |
+   | `NGVM_SMTP_HOST` | `smtp.example.com` | Visible |
+   | `NGVM_SMTP_PORT` | `587` | Visible |
+   | `NGVM_SMTP_TLS` | `starttls` (or `ssl`, `none`) | Visible |
+   | `NGVM_SMTP_USER` | `alerts@example.com` | Visible |
+   | `NGVM_SMTP_PASSWORD` | | Masked and hidden, protected |
+   | `NGVM_MAIL_FROM` | `Veille vulnérabilités <alerts@example.com>` | Visible |
+   | `NGVM_ANALYST_TO` | `analyst1@example.com, analyst2@example.com` | Visible |
 
-   Without `A2VM_SMTP_HOST`, nothing is sent: messages are written to `alerts/outbox/*.eml`
+   Without `NGVM_SMTP_HOST`, nothing is sent: messages are written to `alerts/outbox/*.eml`
    (job artifacts), which is a convenient dry run.
 
    **Per client:** a variable set on a client project overrides the group's one. A client whose
@@ -160,15 +160,15 @@ CERT-FR summary or the vendor's description.
    variables in its project; the others use the group's.
 
    **Microsoft 365 (Exchange Online):** SMTP with a password (Basic auth) is being switched off by
-   Microsoft; use Microsoft Graph instead (`A2VM_MAIL_TRANSPORT=graph`):
+   Microsoft; use Microsoft Graph instead (`NGVM_MAIL_TRANSPORT=graph`):
 
    | Key | Value |
    | --- | --- |
-   | `A2VM_MAIL_TRANSPORT` | `graph` |
-   | `A2VM_GRAPH_TENANT_ID` | directory (tenant) id |
-   | `A2VM_GRAPH_CLIENT_ID` | application (client) id |
-   | `A2VM_GRAPH_CLIENT_SECRET` | client secret — masked and hidden, protected |
-   | `A2VM_GRAPH_SENDER` | mailbox that sends, e.g. `veille@example.com` |
+   | `NGVM_MAIL_TRANSPORT` | `graph` |
+   | `NGVM_GRAPH_TENANT_ID` | directory (tenant) id |
+   | `NGVM_GRAPH_CLIENT_ID` | application (client) id |
+   | `NGVM_GRAPH_CLIENT_SECRET` | client secret — masked and hidden, protected |
+   | `NGVM_GRAPH_SENDER` | mailbox that sends, e.g. `veille@example.com` |
 
    In Entra ID: App registrations > New registration; Certificates & secrets > New client secret;
    API permissions > Microsoft Graph > Application permissions > `Mail.Send`, then grant admin
@@ -201,22 +201,22 @@ CERT-FR summary or the vendor's description.
    sending. The analysts' mail names who will receive the alert (name and role) before validation.
 
 3. Client project > Build > Pipeline schedules > New schedule: `*/10 * * * *`, branch `main`,
-   variable `A2VM_JOB` = `watch`. Keep the daily triage schedule as it is.
+   variable `NGVM_JOB` = `watch`. Keep the daily triage schedule as it is.
 
 The first run records what already exists and alerts on nothing. The state lives in the GitLab
 cache (`.watch/state.json`); if the cache is cleared, the next run records a new baseline.
 
 ## On Kubernetes (v0.16.0)
 
-With `A2VM_RUN_MODE: kubernetes` in the tenant's `.gitlab-ci.yml`, the watch runs every 10 minutes
+With `NGVM_RUN_MODE: kubernetes` in the tenant's `.gitlab-ci.yml`, the watch runs every 10 minutes
 in the tenant's namespace and its journal, its alerts and its state are kept by the watch service
 `via serve`: nothing is lost when a runner cache is cleared. The analysts' mail links to a
-prefilled *Run pipeline* (`A2VM_JOB=send`, `A2VM_SEND_ONLY=<alert id>`) instead of the watch's
+prefilled *Run pipeline* (`NGVM_JOB=send`, `NGVM_SEND_ONLY=<alert id>`) instead of the watch's
 pipeline; the rest (edits, recipients, Word file) is unchanged. `docs/kubernetes.md` §4.
 
 ## Review page (v0.17.0)
 
-With the analysts' sign-in and `A2VM_ALERTS_HOST` (`docs/sign-in.md`), the analysts' mail links to
+With the analysts' sign-in and `NGVM_ALERTS_HOST` (`docs/sign-in.md`), the analysts' mail links to
 the alert on the review page: a validator enriches the English reference, chooses the recipients,
 checks the translation made for each of their languages (v0.17.1), then *Validate and send*; the
 sender mails each language its version within a minute. *Dismiss* closes an alert that does not
@@ -225,7 +225,7 @@ the alert's history, with who did it. No pipeline, no commit of `edits/`.
 
 ## Languages (v0.17.1)
 
-A2VM writes the sheet in English. A contact gets another language with `language` in
+NGVM writes the sheet in English. A contact gets another language with `language` in
 `contacts.yaml`:
 
 ```yaml
@@ -240,13 +240,13 @@ chosen, checked by code (no fact lost or added, the structure kept, the headings
 catalogue), then read and corrected by the validator; only then can the alert be validated. The
 Word file of a French contact is filled in French (`templates/alert.fr.docx`, else the client's
 `templates/alert.docx`, else the neutral French template). English and French have their labels in
-A2VM; another language gets the translated text and an English Word file. Through GitLab
+NGVM; another language gets the translated text and an English Word file. Through GitLab
 (`send-alerts`), every recipient gets the English reference. Detail: LLD intelligence §3.9.
 
 ## Teams (v0.22.0)
 
 Every alert drafted can also be posted to the analysts' Teams channel, beside their mail: the
-webhook's address as the masked variable `A2VM_TEAMS_WEBHOOK` (Kubernetes: the key `teams-webhook`
+webhook's address as the masked variable `NGVM_TEAMS_WEBHOOK` (Kubernetes: the key `teams-webhook`
 of the tenant's secret, put there by the deployment). An Adaptive Card: level, title, CVE ids,
 tenant, a button to the review page or the pipeline (`docs/radar.md` §5).
 

@@ -1,4 +1,4 @@
-# AI-Assisted Vulnerability Management — High-Level Design (HLD)
+# Next-Generation Vulnerability Management — High-Level Design (HLD)
 
 One HLD, in six chapters: the product strategy, then one chapter per pillar. Read the strategy
 first; it is enough for a complete view of the product. A pillar chapter details its own part and
@@ -8,8 +8,8 @@ never contradicts the strategy.
 | --- | --- |
 | Status | Draft for review |
 | Version | 0.2 |
-| Product | AI-Assisted Vulnerability Management |
-| Project / repository | A2VM, GitLab project `vulnops/a2vm` |
+| Product | Next-Generation Vulnerability Management |
+| Project / repository | NGVM, GitLab project `vulnops/ngvm` |
 | Maturity | In development |
 | Out of scope | Implementation detail: see the LLDs in [`../lld/`](../lld/README.md); servers, zones and flows: the DAT of each deployment (outside the repository) |
 | Licence of the software | Proprietary, all rights reserved, pending a licensing decision |

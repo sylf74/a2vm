@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """v0.18.1: an asset scanned without a finding stays known; a finding gone from a run is fixed only
 when its asset was scanned again by the source that had seen it, else unverified; remediation KPIs."""
 
@@ -7,8 +7,8 @@ from __future__ import annotations
 import gzip
 import json
 
-from a2vm.db import Database
-from a2vm.service import TokenSet, digest
+from ngvm.db import Database
+from ngvm.service import TokenSet, digest
 from verdict.report import write_json
 from verdict.service.index import RunIndex, row_id
 from verdict.service.pgstore import MIGRATIONS, PgRunStore, rescanned
@@ -102,7 +102,7 @@ def test_the_remediation_dashboard_counts_fixed_and_unverified(settings, sources
     rdb = reporting_db
     if rdb:
         run = _run(settings, sources, profile)
-        data = {"schema": "a2vm.reporting/1", **build(run, settings.policy)}
+        data = {"schema": "ngvm.reporting/1", **build(run, settings.policy)}
         assert all("scans" in a for a in data["assets"]) and all("seen_by" in d for d in data["decisions"])
         by_asset: dict[str, list] = {}
         for d in data["decisions"]:
@@ -154,7 +154,7 @@ def test_the_french_dashboards_follow_their_bar_charts_columns():
 def test_the_chat_tells_a_clean_asset_and_an_unchecked_one():
     import yaml
 
-    values = yaml.safe_load((ROOT / "deploy/charts/a2vm-tenant/values.yaml").read_text())
+    values = yaml.safe_load((ROOT / "deploy/charts/ngvm-tenant/values.yaml").read_text())
     prompt = values["chat"]["systemPrompt"]
     assert "scanned clean" in prompt and "list_unverified_findings" in prompt and "another language" in prompt
     from verdict.service.tools import OPERATIONS

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """Draw the software architecture of HLD §9 (docs/hld/architecture.svg) and the principle of the
 watch (docs/hld/watch.svg) as plain SVG, light and dark, from the coordinates below.
 
@@ -158,7 +158,7 @@ class Svg:
 f1 = Svg(
     1440,
     940,
-    "Deployment of A2VM: GitLab deploys a namespace per client and the watch team's "
+    "Deployment of NGVM: GitLab deploys a namespace per client and the watch team's "
     "namespace on Kubernetes; collectors and the cloud scanner bring detections in; tickets go to iTop.",
 )
 f1.render("a1")
@@ -167,7 +167,7 @@ f1.render("a1")
 f1.region(300, 14, 840, 96, "r-ext", "GitLab", "code, configuration, results")
 f1.box(316, 40, 255, 58, "b-ext", "External project", ["<tenant>-external: scan results"])
 f1.box(587, 40, 255, 58, "b-ext", "Tenant projects", ["client.yaml, targets, dispatch.yaml"])
-f1.box(858, 40, 266, 58, "b-ext", "Code project vulnops/a2vm", ["images, chart, pipeline template"])
+f1.box(858, 40, 266, 58, "b-ext", "Code project vulnops/ngvm", ["images, chart, pipeline template"])
 
 # Left column
 f1.box(
@@ -220,8 +220,8 @@ f1.box(
 # Cluster
 f1.region(300, 132, 840, 790, "r-k8s", "Kubernetes cluster", "deployed by deploy-k8s (Helm, GitLab agent)")
 
-# namespace a2vm-via
-f1.region(316, 170, 808, 188, "r-ns", "namespace a2vm-via", "the watch team")
+# namespace ngvm-via
+f1.region(316, 170, 808, 188, "r-ns", "namespace ngvm-via", "the watch team")
 f1.box(
     334,
     206,
@@ -264,8 +264,8 @@ f1.box(
     sub="oauth2-proxy · via service",
 )
 
-# namespace a2vm-<tenant>
-f1.region(316, 384, 808, 522, "r-ns", "namespace a2vm-<tenant>", "one per client, e.g. lab", bottom=True)
+# namespace ngvm-<tenant>
+f1.region(316, 384, 808, 522, "r-ns", "namespace ngvm-<tenant>", "one per client, e.g. lab", bottom=True)
 f1.note(398, 488, "Daily run · CronJob, steps in order", "t-strip")
 steps = [
     ("collect", "b-p2"),
@@ -370,7 +370,7 @@ f1.box(
         "Grafana dashboards",
         "RSSI: Remediate links",
     ],
-    sub="chart a2vm-portal",
+    sub="chart ngvm-portal",
 )
 f1.box(
     1170,
@@ -439,8 +439,8 @@ f2 = Svg(
     "matches the records and the feed with its own assets.",
 )
 f2.render("a2")
-f2.region(560, 14, 630, 132, "r-ns", "Watch team", "namespace a2vm-via")
-f2.region(560, 324, 630, 168, "r-ns", "Each client", "namespace a2vm-<tenant>", bottom=True)
+f2.region(560, 14, 630, 132, "r-ns", "Watch team", "namespace ngvm-via")
+f2.region(560, 324, 630, 168, "r-ns", "Each client", "namespace ngvm-<tenant>", bottom=True)
 f2.box(
     20,
     160,
@@ -505,7 +505,7 @@ f3.box(40, 40, 290, 56, "b-ext", "via", ["the watch team's project"])
 for name, x in COLS.items():
     f3.box(x, 40, 260, 56, "b-ext", name, ["profile, contacts, secrets"])
 f3.region(20, 130, 1210, 486, "r-k8s", "Kubernetes cluster", "deploy-k8s, one namespace per project")
-f3.region(36, 180, 310, 386, "r-ns", "namespace a2vm-via")
+f3.region(36, 180, 310, 386, "r-ns", "namespace ngvm-via")
 f3.box(
     52,
     215,
@@ -523,12 +523,12 @@ f3.box(
 f3.box(52, 349, 278, 84, "b-p1", "Radar", ["events, magnitude", "validated by the watch team"])
 f3.box(52, 447, 278, 48, "b-p1", "Review page, sender", ["the watch team"])
 for name, x in COLS.items():
-    f3.region(x, 180, 260, 386, "r-ns", f"namespace a2vm-{name}")
+    f3.region(x, 180, 260, 386, "r-ns", f"namespace ngvm-{name}")
     f3.box(x + 16, 215, 228, 48, "b-ext", "Daily run, watch", ["CronJobs of this client"])
     f3.box(x + 16, 273, 228, 48, "b-ext", "Services", ["detect · verdict · via · dispatch"])
     f3.box(x + 16, 331, 228, 48, "b-ext", "Pages, signed in", ["the client's OIDC groups"])
-    f3.box(x + 16, 389, 228, 48, "b-ext", "Secret a2vm-tenant", ["its tokens, passwords, keys"])
-    f3.box(x + 16, 447, 228, 48, "b-db", "PostgreSQL", [f"a2vm-{name}-db, own roles"])
+    f3.box(x + 16, 389, 228, 48, "b-ext", "Secret ngvm-tenant", ["its tokens, passwords, keys"])
+    f3.box(x + 16, 447, 228, 48, "b-db", "PostgreSQL", [f"ngvm-{name}-db, own roles"])
 # shared service -> every tenant
 f3.mid.append('<polyline points="191,215 191,168 1170,168" class="edge"/>')
 for x in COLS.values():
@@ -557,7 +557,7 @@ f3.box(
         "Grafana: an organisation",
         "per tenant",
     ],
-    sub="chart a2vm-portal",
+    sub="chart ngvm-portal",
 )
 # each client's own systems
 f3.region(350, 636, 880, 104, "r-client", "Per client, outside the cluster", bottom=True)

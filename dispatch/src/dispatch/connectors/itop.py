@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """iTop (LLD dispatch §5.2): remediation tickets as user requests, over the REST API 1.3.
 
 A local account of its own (not the read-only CMDB account of pillar 2), allowed to create and
@@ -14,7 +14,7 @@ be given to a Team (`team`), and are linked to the CMDB item of their asset when
   status   core/get: status (new, assigned, pending, escalated_tto, escalated_ttr, resolved, closed)
   declared core/get: resolution_date, the day the team says it fixed (v0.22.2), verified by a scan
   due      core/update of the field `due_field` (an extension's date field, v0.22.2): the due date
-           A2VM computed (the client's SLA, else BOD 26-04), on create and whenever it changes
+           NGVM computed (the client's SLA, else BOD 26-04), on create and whenever it changes
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from typing import Any
 
 import httpx
 
-from a2vm import tls
+from ngvm import tls
 
 from ..rules import Target
 from ..tickets import Ticket
@@ -58,7 +58,7 @@ class ItopConnector:
         self.priorities = {
             str(k): (str(v["impact"]), str(v["urgency"])) for k, v in (s.get("priorities") or {}).items()
         }
-        # The ticket's field that receives A2VM's due date (v0.22.2); "" (default): not pushed.
+        # The ticket's field that receives NGVM's due date (v0.22.2); "" (default): not pushed.
         self.due_field = str(s.get("due_field") or "")
         self._password = password
         self.http = httpx.Client(
@@ -126,7 +126,7 @@ class ItopConnector:
         data = self._call(
             {
                 "operation": "core/create",
-                "comment": "A2VM",
+                "comment": "NGVM",
                 "class": self.cls,
                 "output_fields": "id,ref,status",
                 "fields": fields,
@@ -168,7 +168,7 @@ class ItopConnector:
         self._call(
             {
                 "operation": "core/update",
-                "comment": "A2VM",
+                "comment": "NGVM",
                 "class": self.cls,
                 "key": int(self._key(external)),
                 "output_fields": "id",
@@ -177,13 +177,13 @@ class ItopConnector:
         )
 
     def set_due(self, external: External, due: str) -> bool:
-        """Write A2VM's due date into the ticket's `due_field`; False when no field is set."""
+        """Write NGVM's due date into the ticket's `due_field`; False when no field is set."""
         if not self.due_field:
             return False
         self._call(
             {
                 "operation": "core/update",
-                "comment": "A2VM",
+                "comment": "NGVM",
                 "class": self.cls,
                 "key": int(self._key(external)),
                 "output_fields": "id",
@@ -210,7 +210,7 @@ class ItopConnector:
         self._call(
             {
                 "operation": "core/apply_stimulus",
-                "comment": "A2VM",
+                "comment": "NGVM",
                 "class": self.cls,
                 "key": int(self._key(external)),
                 "stimulus": stimulus,

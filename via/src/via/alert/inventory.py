@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """The client's last asset inventory, as built by the daily pipeline, for the watch.
 
 The watch runs every 10 minutes and only knows what the profile declares; the daily pipeline
@@ -19,10 +19,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from a2vm import applications as apps
-from a2vm.gitlab import GitLabError, download_artifacts
-from a2vm.io import WATCH_FINDINGS, ExchangeError, read_assets, read_findings, validate_watch_findings
-from a2vm.models import Asset, Finding, FindingObservation, Match
+from ngvm import applications as apps
+from ngvm.gitlab import GitLabError, download_artifacts
+from ngvm.io import WATCH_FINDINGS, ExchangeError, read_assets, read_findings, validate_watch_findings
+from ngvm.models import Asset, Finding, FindingObservation, Match
 
 MAX_AGE_DAYS = 8
 
@@ -95,7 +95,7 @@ WATCH_FINDINGS_FILE = "watch-findings.json"
 
 def for_watch(assets: dict[str, Any], findings: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     """The inventory as the watch reads it: the assets without their scan dates (v0.23.18), and the
-    findings in the compact `a2vm.watch_findings/1` (v0.23.19). Per asset, each finding as
+    findings in the compact `ngvm.watch_findings/1` (v0.23.19). Per asset, each finding as
     [cve, status, affected versions, [[source, package, installed, fixed], ...]]: what the alert sheet
     shows, nothing else. 26,000 findings went from 75 MB in `vulnops.findings/2` to a few MB. The
     daily run's own files are left as they are."""
@@ -125,7 +125,7 @@ def for_watch(assets: dict[str, Any], findings: dict[str, Any]) -> tuple[dict[st
 
 
 def _expand(doc: dict[str, Any], observed_at: str) -> dict[str, list[Finding]]:
-    """`a2vm.watch_findings/1` back into the findings the watch matches, by CVE."""
+    """`ngvm.watch_findings/1` back into the findings the watch matches, by CVE."""
     out: dict[str, list[Finding]] = {}
     client = doc["client_id"]
     for asset, rows in doc["assets"].items():

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """The alert sheet sent to a client, in the team's CVE sheet layout:
 
   CVE / Affected product / Vulnerability type / CVSS / Main impact / Exploitation status /
@@ -19,12 +19,12 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
-from a2vm.config import Settings
-from a2vm.gti import gti_unconfirmed, ssvc_exploitation
-from a2vm.llm import LlmClient, LlmError
-from a2vm.llm.guard import unsupported_tokens
-from a2vm.models import AffectedEntry, VulnRecord, exposure_value
-from a2vm.ssvc import remediation_delay
+from ngvm.config import Settings
+from ngvm.gti import gti_unconfirmed, ssvc_exploitation
+from ngvm.llm import LlmClient, LlmError
+from ngvm.llm.guard import unsupported_tokens
+from ngvm.models import AffectedEntry, VulnRecord, exposure_value
+from ngvm.ssvc import remediation_delay
 
 from .i18n import reason as reason_text
 from .i18n import t, table_header
@@ -297,7 +297,7 @@ def build(
     fiche.sections.append((t(lang, "h.description"), [p.strip() for p in description.split("\n\n") if p.strip()]))
 
     # Recommended delay (CISA BOD 26-04) for the most exposed asset.
-    # The CISA tables are common (a2vm.ssvc); the triage of the next daily run may refine the inputs.
+    # The CISA tables are common (ngvm.ssvc); the triage of the next daily run may refine the inputs.
     if first and alert.findings:
         unknown = settings.policy.get("unknown_inputs", "conservative")
         delay = remediation_delay(first, worst_exposed, unknown, "fr" if lang == "fr" else "en")

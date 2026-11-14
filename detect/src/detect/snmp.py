@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """Appliances and network devices by SNMP (`snmp`, HLD D20, v0.23.6, LLD vulnerability-detection §3.9).
 
 A switch, a router, a firewall or a load balancer has no package an SSH collection could list. What
@@ -24,8 +24,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from a2vm.io import Detection, now
-from a2vm.models import AssetObservation
+from ngvm.io import Detection, now
+from ngvm.models import AssetObservation
 
 from .firmware import SYS_DESCR, SYS_NAME, SYS_OBJECT_ID, VENDOR_VERSION, from_snmp
 

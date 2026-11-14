@@ -1,12 +1,12 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 import json
 
 import httpx
 import pytest
 
-from a2vm.config import describe_gti, load_settings
-from a2vm.gti import gti_unconfirmed, ssvc_exploitation
-from a2vm.io import read_records, write_records
+from ngvm.config import describe_gti, load_settings
+from ngvm.gti import gti_unconfirmed, ssvc_exploitation
+from ngvm.io import read_records, write_records
 from verdict.triage import Triage
 from via.intel.collect import collect
 from via.intel.gti import enrich, parse_gti
@@ -151,15 +151,15 @@ def test_budget_and_missing_key(settings, sources, monkeypatch):
 
 
 def test_env_override(monkeypatch):
-    monkeypatch.setenv("A2VM_GTI_ENABLED", "true")
+    monkeypatch.setenv("NGVM_GTI_ENABLED", "true")
     monkeypatch.setenv("GTI_API_KEY", "secret-123")
     line = describe_gti(load_settings())
     assert line.startswith("GTI: enabled") and "api key set" in line and "secret-123" not in line
 
 
 def test_alert_fiche_uses_gti_facts_not_prose(gti_settings):
-    from a2vm.profile import load_profile
     from detect.inventory import InventoryScanner
+    from ngvm.profile import load_profile
     from via.alert.fiche import build
     from via.alert.watch import Item, relevant
 

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """v0.12.0 (HLD D15, step 1): pillar images, the tenant chart and the job that deploys it stay in
 step with the packages and with the pipeline they replace."""
 
@@ -9,10 +9,10 @@ from pathlib import Path
 
 import yaml
 
-import a2vm
+import ngvm
 
 ROOT = Path(__file__).resolve().parents[1]
-CHART = ROOT / "deploy" / "charts" / "a2vm-tenant"
+CHART = ROOT / "deploy" / "charts" / "ngvm-tenant"
 PILLARS = ("via", "detect", "verdict", "dispatch")
 
 
@@ -26,7 +26,7 @@ def _chart_text() -> str:
 
 def test_chart_carries_the_package_version():
     chart = yaml.safe_load((CHART / "Chart.yaml").read_text())
-    assert chart["version"] == chart["appVersion"] == a2vm.__version__
+    assert chart["version"] == chart["appVersion"] == ngvm.__version__
 
 
 def test_one_image_per_pillar_from_the_same_dockerfile():
@@ -35,7 +35,7 @@ def test_one_image_per_pillar_from_the_same_dockerfile():
     assert "USER 10001" in dockerfile  # the chart runs as this user
     job = yaml.safe_load((ROOT / ".gitlab-ci.yml").read_text())["images"]
     assert "for p in " + " ".join(PILLARS) + "; do" in "\n".join(job["script"])
-    assert all(rule["if"].startswith("($CI_REGISTRY || $A2VM_PUSH_REGISTRY) && ") for rule in job["rules"])
+    assert all(rule["if"].startswith("($CI_REGISTRY || $NGVM_PUSH_REGISTRY) && ") for rule in job["rules"])
     for pillar in PILLARS:
         assert (ROOT / pillar / "pyproject.toml").exists()
 
@@ -79,10 +79,10 @@ def test_deploy_job_runs_only_with_an_agent_context_and_never_in_watch_mode():
     assert stages.index("validate") < stages.index("deploy") < stages.index("collect")
     job = pipeline["deploy-k8s"]
     assert job["rules"][0]["when"] == "never" and "watch" in job["rules"][0]["if"]
-    assert job["rules"][1]["if"].startswith("$A2VM_K8S_CONTEXT && ")
+    assert job["rules"][1]["if"].startswith("($NGVM_K8S_CONTEXT || $A2VM_K8S_CONTEXT) && ")  # A2VM_: v0.25.0
     script = "\n".join(job["script"])
-    assert '--set image.tag="$A2VM_REF"' in script  # images and chart of the same release
-    for secret in ("A2VM_SSH_KEY", "LLM_API_KEY", "A2VM_REPORTING_DSN", "A2VM_REGISTRY_PASSWORD"):
+    assert '--set image.tag="$NGVM_REF"' in script  # images and chart of the same release
+    for secret in ("NGVM_SSH_KEY", "LLM_API_KEY", "NGVM_REPORTING_DSN", "NGVM_REGISTRY_PASSWORD"):
         assert f'echo "${secret}' not in script and f"echo ${secret}" not in script
 
 

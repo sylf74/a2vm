@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """v0.23.18: what the homelab and the integration found after v0.23.17.
 
 - The tenant pipeline: `publish` needed `triage`, excluded on Kubernetes, so GitLab refused every
@@ -71,12 +71,12 @@ JOBS = ["", "watch", "send"]
 def _env(source: str, mode: str, job: str, **extra: str) -> dict[str, str]:
     env = {
         "CI_PIPELINE_SOURCE": source,
-        "A2VM_RUN_MODE": mode,
-        "A2VM_JOB": job,
+        "NGVM_RUN_MODE": mode,
+        "NGVM_JOB": job,
         "CI_COMMIT_BRANCH": "main",
         "CI_DEFAULT_BRANCH": "main",
-        "A2VM_K8S_CONTEXT": "vulnops/k8s:lab",
-        "A2VM_REPORTING_DSN": "set",
+        "NGVM_K8S_CONTEXT": "vulnops/k8s:lab",
+        "NGVM_REPORTING_DSN": "set",
     }
     env.update(extra)
     return env
@@ -101,13 +101,13 @@ def test_run_pipeline_on_kubernetes_deploys_and_publishes_nothing() -> None:
 def test_the_daily_run_in_gitlab_mode_still_publishes() -> None:
     present = _pipeline(_env("schedule", "gitlab", ""))
     assert {"collect", "triage", "publish"} <= present
-    assert "publish" not in _pipeline(_env("schedule", "gitlab", "", A2VM_REPORTING_DSN=""))
+    assert "publish" not in _pipeline(_env("schedule", "gitlab", "", NGVM_REPORTING_DSN=""))
 
 
 def test_deploy_k8s_starts_from_the_api_on_the_default_branch_only() -> None:
     assert {"validate", "deploy-k8s"} <= _pipeline(_env("api", "kubernetes", ""))
     assert "deploy-k8s" not in _pipeline(_env("api", "kubernetes", "", CI_COMMIT_BRANCH="feature"))
-    assert "deploy-k8s" not in _pipeline(_env("api", "kubernetes", "", A2VM_K8S_CONTEXT=""))
+    assert "deploy-k8s" not in _pipeline(_env("api", "kubernetes", "", NGVM_K8S_CONTEXT=""))
     assert "deploy-k8s" not in _pipeline(_env("trigger", "kubernetes", ""))
 
 
@@ -128,7 +128,7 @@ def test_a_connection_closed_during_the_push_says_so_with_its_size(tmp_path) -> 
     assert err.value.retry
     message = str(err.value)
     assert "closed the connection during the push of 3 MB" in message
-    assert "OOMKilled" in message and "A2VM_VERDICT_MEMORY" in message
+    assert "OOMKilled" in message and "NGVM_VERDICT_MEMORY" in message
 
 
 def test_a_push_drops_the_indexes_and_gives_the_memory_back(triage, tmp_path, monkeypatch, caplog) -> None:
@@ -163,7 +163,7 @@ def test_a_push_drops_the_indexes_and_gives_the_memory_back(triage, tmp_path, mo
 def test_release_memory_runs_where_there_is_no_glibc(monkeypatch) -> None:
     import ctypes
 
-    from a2vm.service import release_memory
+    from ngvm.service import release_memory
 
     def missing(name):
         raise OSError(name)
@@ -174,22 +174,22 @@ def test_release_memory_runs_where_there_is_no_glibc(monkeypatch) -> None:
 
 
 def test_the_decision_service_has_room_for_a_large_run() -> None:
-    values = yaml.safe_load((ROOT / "deploy/charts/a2vm-tenant/values.yaml").read_text())
+    values = yaml.safe_load((ROOT / "deploy/charts/ngvm-tenant/values.yaml").read_text())
     assert values["verdict"]["resources"]["limits"]["memory"] == "2Gi"
-    template = (ROOT / "deploy/charts/a2vm-tenant/templates/verdict.yaml").read_text()
+    template = (ROOT / "deploy/charts/ngvm-tenant/templates/verdict.yaml").read_text()
     assert "MALLOC_ARENA_MAX" in template
     assert "timeoutSeconds: 5" in template and "failureThreshold: 6" in template
     pipeline = PIPELINE.read_text()
-    assert "--set-string verdict.resources.limits.memory=$A2VM_VERDICT_MEMORY" in pipeline
+    assert "--set-string verdict.resources.limits.memory=$NGVM_VERDICT_MEMORY" in pipeline
     assert "grep -qE '^[1-9][0-9]*(Mi|Gi)$'" in pipeline
-    assert "A2VM_VERDICT_MEMORY" in (ROOT / "docs/kubernetes.md").read_text()
+    assert "NGVM_VERDICT_MEMORY" in (ROOT / "docs/kubernetes.md").read_text()
 
 
 # -- the inventory of the watch -------------------------------------------------------------------
 def _big_inventory(tmp_path, n: int = 400):
     """An inventory of a run with many findings, components and fixed packages."""
-    from a2vm.io import write_assets, write_findings
-    from a2vm.models import Asset, Attribute, Finding, FindingObservation, Match, NotAffected
+    from ngvm.io import write_assets, write_findings
+    from ngvm.models import Asset, Attribute, Finding, FindingObservation, Match, NotAffected
 
     seen = "2026-11-12T08:30:00+00:00"
     asset = Asset(
@@ -222,7 +222,7 @@ def _big_inventory(tmp_path, n: int = 400):
 def test_the_watch_gets_what_it_reads_and_nothing_more(tmp_path) -> None:
     import json
 
-    from a2vm.io import validate_assets, validate_watch_findings
+    from ngvm.io import validate_assets, validate_watch_findings
     from via.alert.inventory import for_watch, load
 
     base = _big_inventory(tmp_path)
@@ -253,7 +253,7 @@ def test_the_watch_gets_what_it_reads_and_nothing_more(tmp_path) -> None:
 
 
 def test_a_refused_inventory_says_its_size_and_what_to_raise(tmp_path, capsys, backend) -> None:
-    from a2vm.service import TokenSet, digest
+    from ngvm.service import TokenSet, digest
     from via.service.server import WatchService, serve
 
     from .test_v0160 import RUN, watch_store
@@ -276,7 +276,7 @@ def test_a_refused_inventory_says_its_size_and_what_to_raise(tmp_path, capsys, b
         assert main([*args, "--assets-dir", str(base)]) == 1
         err = capsys.readouterr().err
         assert "(413)" in err and "MB of assets and" in err and "MB of findings" in err
-        assert "A2VM_WATCH_MAX_MB" in err
+        assert "NGVM_WATCH_MAX_MB" in err
         svc.max_bytes = 50 * 1024 * 1024
         assert main([*args, "--assets-dir", str(base)]) == 0
         out = capsys.readouterr().out
@@ -287,20 +287,20 @@ def test_a_refused_inventory_says_its_size_and_what_to_raise(tmp_path, capsys, b
 
 
 def test_the_watch_service_takes_a_larger_inventory_when_asked() -> None:
-    values = yaml.safe_load((ROOT / "deploy/charts/a2vm-tenant/values.yaml").read_text())
+    values = yaml.safe_load((ROOT / "deploy/charts/ngvm-tenant/values.yaml").read_text())
     assert values["watch"]["maxMb"] == 50 and values["watch"]["resources"]["limits"]["memory"] == "512Mi"
     assert (
-        "--max-mb={{ $w.maxMb | default 50 }}" in (ROOT / "deploy/charts/a2vm-tenant/templates/watch.yaml").read_text()
+        "--max-mb={{ $w.maxMb | default 50 }}" in (ROOT / "deploy/charts/ngvm-tenant/templates/watch.yaml").read_text()
     )
     pipeline = PIPELINE.read_text()
-    assert "--set watch.maxMb=$A2VM_WATCH_MAX_MB" in pipeline and "A2VM_WATCH_MAX_MB: a number of MB" in pipeline
+    assert "--set watch.maxMb=$NGVM_WATCH_MAX_MB" in pipeline and "NGVM_WATCH_MAX_MB: a number of MB" in pipeline
 
 
 # -- the chat: how long verdict ran, on how many findings ---------------------------------------
 def test_the_run_records_how_long_the_triage_took_and_on_what(triage) -> None:
     import json
 
-    from a2vm.io import validate_triage
+    from ngvm.io import validate_triage
 
     run, path = triage
     doc = json.loads(path.read_text())
@@ -329,8 +329,8 @@ def test_the_start_of_the_run_gives_its_duration_up_to_the_decisions(value, seco
 
 
 def test_the_daily_run_passes_its_start_to_the_triage() -> None:
-    daily = (ROOT / "deploy/charts/a2vm-tenant/templates/cronjob-daily.yaml").read_text()
-    assert daily.count('--run-started "$(cat /data/.a2vm-run/started 2>/dev/null)"') == 2
+    daily = (ROOT / "deploy/charts/ngvm-tenant/templates/cronjob-daily.yaml").read_text()
+    assert daily.count('--run-started "$(cat /data/.ngvm-run/started 2>/dev/null)"') == 2
     assert '--run-started "$CI_PIPELINE_CREATED_AT"' in PIPELINE.read_text()
 
 
@@ -389,5 +389,5 @@ def test_the_summary_of_a_run_carries_its_timing(triage, tmp_path) -> None:
 
 def test_release_recorded() -> None:
     assert "## v0.23.18 — " in (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    chart = (ROOT / "deploy/charts/a2vm-tenant/Chart.yaml").read_text()
+    chart = (ROOT / "deploy/charts/ngvm-tenant/Chart.yaml").read_text()
     assert re.search(r"^version: 0\.(23\.(1[8-9]|[2-9]\d)|2[4-9]\.\d+)$", chart, re.M)

@@ -20,10 +20,10 @@ connects out. Secrets stay on the instance or never reach Terraform:
 
 | Secret | Where it comes from | Where it lives |
 | --- | --- | --- |
-| GMP password of the account `vulnops` (role User) | Generated at first boot | `/opt/a2vm-scanner/secrets/gvm-password.txt`; given to the jobs by the runner (`environment` of `config.toml`), never stored in GitLab |
-| Password of the Greenbone web interface's `admin` | Generated at first boot | `/opt/a2vm-scanner/secrets/gvm-admin.txt` |
+| GMP password of the account `vulnops` (role User) | Generated at first boot | `/opt/ngvm-scanner/secrets/gvm-password.txt`; given to the jobs by the runner (`environment` of `config.toml`), never stored in GitLab |
+| Password of the Greenbone web interface's `admin` | Generated at first boot | `/opt/ngvm-scanner/secrets/gvm-admin.txt` |
 | Runner authentication token (`glrt-…`) | GitLab, when the runner is created | Sent on the standard input of `register-runner.sh` over SSH; then `/etc/gitlab-runner/config.toml` |
-| Client certificate for a reverse proxy in front of GitLab (optional) | Your own CA | Copied over SSH to `/opt/a2vm-scanner/certs/` |
+| Client certificate for a reverse proxy in front of GitLab (optional) | Your own CA | Copied over SSH to `/opt/ngvm-scanner/certs/` |
 
 Scan only addresses the client owns and has agreed to have scanned; check that the provider's
 terms allow it (`docs/openvas.md` §1).
@@ -46,7 +46,7 @@ Then, as `terraform output next_steps` says:
 1. **First boot**: `ssh root@<public_ip> 'cloud-init status --wait'` (about 10 minutes). Logs:
    `/var/log/cloud-init-output.log`.
 2. **Feeds**: the first synchronisation of the Greenbone feeds takes hours; a scan before it ends
-   finds little. `ssh root@<public_ip> /opt/a2vm-scanner/status.sh` shows the containers, the
+   finds little. `ssh root@<public_ip> /opt/ngvm-scanner/status.sh` shows the containers, the
    number of NVTs loaded, the GMP accounts and the runner.
 3. **Runner**: in the external project, **Settings > CI/CD > Runners > New project runner**, tag
    `scan-cloud` (`runner_tag`), "Run untagged jobs" off. With the
@@ -56,8 +56,8 @@ Then, as `terraform output next_steps` says:
    ```bash
    glab api --method POST user/runners -f runner_type=project_type \
      -f project_id="$(glab api 'projects/vulnops%2Fclients%2Flab-external' | jq .id)" \
-     -f tag_list=scan-cloud -f description=a2vm-scanner | jq -r .token \
-     | ssh root@<public_ip> /opt/a2vm-scanner/register-runner.sh
+     -f tag_list=scan-cloud -f description=ngvm-scanner | jq -r .token \
+     | ssh root@<public_ip> /opt/ngvm-scanner/register-runner.sh
    ```
 
    From the web interface, copy the token shown once; read it without echo on the workstation
@@ -65,7 +65,7 @@ Then, as `terraform output next_steps` says:
    prompt and press Enter:
 
    ```bash
-   read -rs 'T?Runner token: ' && echo && printf '%s\n' "$T" | ssh root@<public_ip> /opt/a2vm-scanner/register-runner.sh; unset T
+   read -rs 'T?Runner token: ' && echo && printf '%s\n' "$T" | ssh root@<public_ip> /opt/ngvm-scanner/register-runner.sh; unset T
    ```
 
    Pasted together with the lines that follow it, the prompt reads one of them instead of the
@@ -75,14 +75,14 @@ Then, as `terraform output next_steps` says:
    before registering (registering again later is fine: the previous registration is removed):
 
    ```bash
-   scp scanner.crt root@<public_ip>:/opt/a2vm-scanner/certs/client.crt
-   scp scanner.key root@<public_ip>:/opt/a2vm-scanner/certs/client.key
+   scp scanner.crt root@<public_ip>:/opt/ngvm-scanner/certs/client.crt
+   scp scanner.key root@<public_ip>:/opt/ngvm-scanner/certs/client.key
    ```
 
    `certs/ca.pem` is read too, when GitLab's certificate comes from a private CA (not needed
    with a public certificate, e.g. Let's Encrypt, on the reverse proxy).
-4. **External project**: delete its CI/CD variables `A2VM_GVM_USER` and `A2VM_GVM_PASSWORD`, so
-   that the runner's own apply; keep `A2VM_COLLECT_TAG` and `A2VM_RUNNER_TAG` equal to the tag.
+4. **External project**: delete its CI/CD variables `NGVM_GVM_USER` and `NGVM_GVM_PASSWORD`, so
+   that the runner's own apply; keep `NGVM_COLLECT_TAG` and `NGVM_RUNNER_TAG` equal to the tag.
    Its `targets.yaml` reads gvmd over the socket: `gmp: unix:///run/gvmd/gvmd.sock`.
 5. **Check**: "Run pipeline" on the external project; the `collect` job log shows the scan's
    progress, then `ok   openvas [<hosts>]: <n> findings on <m> assets`.
@@ -100,19 +100,19 @@ of Greenbone listens on the instance only: `ssh -L 9392:127.0.0.1:9392 root@<pub
 - **While the feeds load**, gvmd holds its lock: `status.sh` gives each gvmd query 20 s and
   says "gvmd busy" rather than waiting.
 
-- **Feeds**: a systemd timer (`a2vm-greenbone-feed.timer`, `feed_update_time`, 03:30 UTC by
+- **Feeds**: a systemd timer (`ngvm-greenbone-feed.timer`, `feed_update_time`, 03:30 UTC by
   default) pulls the newer feed and component images and restarts what changed. Keep it before the
   external project's schedule: a container restarted during a scan stops the scan. By hand:
-  `ssh root@<public_ip> /opt/a2vm-scanner/feed-update.sh`.
+  `ssh root@<public_ip> /opt/ngvm-scanner/feed-update.sh`.
 - **Disk**: after the feeds, the same timer runs `cleanup.sh`: the stopped containers of the CI
   jobs, the images no container has used for 3 days, the runner's cache volumes no container uses,
   the system journal above 200 MB and the package cache. Greenbone's containers, images and volumes
   are never touched. `status.sh` shows the free space and warns under 15 %; by hand:
-  `ssh root@<public_ip> /opt/a2vm-scanner/cleanup.sh`, then `docker system df` for what remains.
+  `ssh root@<public_ip> /opt/ngvm-scanner/cleanup.sh`, then `docker system df` for what remains.
   The volume is 90 GB by default (`root_volume_gb`; 60 GB filled up with the jobs' images): raise
   it with `terraform apply` (in place), then on the instance `growpart` and `resize2fs` if the
   file system did not grow.
-- **Logs**: `ssh root@<public_ip> 'cd /opt/a2vm-scanner/greenbone && docker compose -p greenbone-community-edition logs --tail 50 gvmd'`; the runner:
+- **Logs**: `ssh root@<public_ip> 'cd /opt/ngvm-scanner/greenbone && docker compose -p greenbone-community-edition logs --tail 50 gvmd'`; the runner:
   `journalctl -u gitlab-runner`.
 - **gvmd slow to answer**: raise `gmp_timeout_seconds` in the external project's `targets.yaml`
   (`docs/openvas.md` §4).
@@ -125,14 +125,14 @@ of Greenbone listens on the instance only: `ssh -L 9392:127.0.0.1:9392 root@<pub
   place.
 - **Scripts of a new release**: cloud-init runs at the first boot only, and `main.tf` ignores a
   changed template on a running instance (no replacement by mistake). Write the new scripts of
-  `/opt/a2vm-scanner` and the feed service from the template, secrets and `scanner.env` kept:
+  `/opt/ngvm-scanner` and the feed service from the template, secrets and `scanner.env` kept:
   `python3 deploy/scanner/update-scripts.py | ssh root@<public_ip> bash`.
-- `gitlab_url`, `feed_update_time`: written at first boot; edit `/opt/a2vm-scanner/scanner.env` or
+- `gitlab_url`, `feed_update_time`: written at first boot; edit `/opt/ngvm-scanner/scanner.env` or
   the timer there, or rebuild.
 - **Rebuild** (`terraform apply -replace=scaleway_instance_server.scanner`): a new instance with new
   secrets; feeds synchronised again (hours), runner registered again (step 3). Keep the address
   with `ip_address`: the reverse proxy and the scanned hosts may filter on it. The scan history in
-  gvmd is lost; A2VM's is not (the external project's jobs and the internal run keep it).
+  gvmd is lost; NGVM's is not (the external project's jobs and the internal run keep it).
 - `terraform destroy` removes the instance and its address when Terraform created it; delete the
   runner in the external project (Settings > CI/CD > Runners).
 

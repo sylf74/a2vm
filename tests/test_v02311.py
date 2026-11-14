@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """v0.23.11: the libraries (images, SBOMs, OSV), the libraries still in memory, the user forwarded.
 
 D20 goes down to the libraries: Trivy lists those of an image with its digest, an SBOM gives those
@@ -15,8 +15,8 @@ import subprocess
 import httpx
 import pytest
 
-from a2vm.applications import is_application
-from a2vm.io import read_detection, write_detection
+from ngvm.applications import is_application
+from ngvm.io import read_detection, write_detection
 
 from .conftest import ROOT
 
@@ -123,7 +123,7 @@ def test_the_agent_knows_the_sbom_connector(tmp_path) -> None:
             {
                 "collector": "lan",
                 "tenant": "lab",
-                "service": "https://a2vm.example.org",
+                "service": "https://ngvm.example.org",
                 "token_file": str(tmp_path / "token"),
                 "connectors": [{"name": "apps", "type": "sbom", "directory": str(tmp_path)}],
             }
@@ -286,12 +286,12 @@ def test_detect_osv_reads_the_work_directory_and_warns_offline(tmp_path, monkeyp
     assert read_detection(work / "lab" / "osv.json").findings[0].cve_id == "CVE-2099-0101"
     monkeypatch.setattr(osv_module, "Osv", lambda cache=None: real(cache, transport=_osv_transport(fail=True)))
     assert main(["osv", "--mode", "api", "--detect", str(work)]) == 3  # a warning: the run goes on
-    monkeypatch.setenv("A2VM_OSV_ENABLED", "false")
+    monkeypatch.setenv("NGVM_OSV_ENABLED", "false")
     assert main(["osv", "--detect", str(work)]) == 0
 
 
 def test_osv_runs_every_day() -> None:
-    daily = (ROOT / "deploy/charts/a2vm-tenant/templates/cronjob-daily.yaml").read_text()
+    daily = (ROOT / "deploy/charts/ngvm-tenant/templates/cronjob-daily.yaml").read_text()
     assert "step detect osv --detect /data/work/detect --cache /data/osv-cache" in daily
     assert "detect osv --detect work/detect || rc=$?" in (ROOT / "templates/client-pipeline.yml").read_text()
 
@@ -304,7 +304,7 @@ def test_sbom_and_osv_are_no_scans() -> None:
 
 # -- the forwarded user -----------------------------------------------------------------------------
 def test_the_tenant_chooses_to_forward_the_user() -> None:
-    chart = ROOT / "deploy/charts/a2vm-tenant"
+    chart = ROOT / "deploy/charts/ngvm-tenant"
     assert "forwardUserInfo: true" in (chart / "values.yaml").read_text()
     chat = (chart / "templates/chat.yaml").read_text()
     assert 'ENABLE_FORWARD_USER_INFO_HEADERS, value: {{ if eq (toString $chat.forwardUserInfo) "false" }}' in chat
@@ -319,14 +319,14 @@ def test_deploy_k8s_sets_it() -> None:
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     env = {
-        "A2VM_CHAT_HOST": "chat.example.org",
-        "A2VM_LLM_BASE_URL": "http://192.0.2.10:8000/v1",
-        "A2VM_LLM_MODEL": "m",
+        "NGVM_CHAT_HOST": "chat.example.org",
+        "NGVM_LLM_BASE_URL": "http://192.0.2.10:8000/v1",
+        "NGVM_LLM_MODEL": "m",
     }
     assert "forwardUserInfo" not in mod.values(env)["chat"]
-    assert mod.values({**env, "A2VM_CHAT_FORWARD_USER_INFO": "false"})["chat"]["forwardUserInfo"] is False
+    assert mod.values({**env, "NGVM_CHAT_FORWARD_USER_INFO": "false"})["chat"]["forwardUserInfo"] is False
     with pytest.raises(ValueError):
-        mod.values({**env, "A2VM_CHAT_FORWARD_USER_INFO": "maybe"})
+        mod.values({**env, "NGVM_CHAT_FORWARD_USER_INFO": "maybe"})
 
 
 def test_release_recorded() -> None:
@@ -334,6 +334,6 @@ def test_release_recorded() -> None:
     assert "| v0.23.11 " in (ROOT / "docs/hld/00-product-strategy.md").read_text(encoding="utf-8")
     assert re.search(
         r"^version: 0\.(23\.(1[1-9]|[2-9]\d)|2[4-9]\.\d+)$",
-        (ROOT / "deploy/charts/a2vm-tenant/Chart.yaml").read_text(),
+        (ROOT / "deploy/charts/ngvm-tenant/Chart.yaml").read_text(),
         re.M,
     )

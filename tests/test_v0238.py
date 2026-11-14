@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """v0.23.8: the tenant chooses its LLM. The model's family, found from its name or declared, and
 the level of reasoning sent the way that family takes it."""
 
@@ -6,9 +6,9 @@ from __future__ import annotations
 
 import pytest
 
-from a2vm.config import LlmSettings, describe_llm, load_settings
-from a2vm.llm import LlmClient
-from a2vm.llm.families import family_of, reasoning_of, request_fields
+from ngvm.config import LlmSettings, describe_llm, load_settings
+from ngvm.llm import LlmClient
+from ngvm.llm.families import family_of, reasoning_of, request_fields
 
 from .conftest import ROOT, fake_llm_transport
 
@@ -84,20 +84,20 @@ def test_the_request_carries_the_level(settings, sent) -> None:
 
 
 def test_settings_and_log_line(monkeypatch) -> None:
-    monkeypatch.setenv("A2VM_LLM_MODEL", "mistralai/Mistral-Small-4-2603")
-    monkeypatch.setenv("A2VM_LLM_REASONING", "off")
-    monkeypatch.setenv("A2VM_LLM_ENABLED", "true")
+    monkeypatch.setenv("NGVM_LLM_MODEL", "mistralai/Mistral-Small-4-2603")
+    monkeypatch.setenv("NGVM_LLM_REASONING", "off")
+    monkeypatch.setenv("NGVM_LLM_ENABLED", "true")
     s = load_settings(ROOT / "config" / "settings.yaml")
     assert (s.llm.family, s.llm.reasoning) == ("", "off")
     line = describe_llm(s)
     assert line.endswith("model=mistralai/Mistral-Small-4-2603, api key not set, family mistral, reasoning off")
-    monkeypatch.setenv("A2VM_LLM_FAMILY", "generic")
+    monkeypatch.setenv("NGVM_LLM_FAMILY", "generic")
     assert "family generic, reasoning off" in describe_llm(load_settings(ROOT / "config" / "settings.yaml"))
 
 
 def test_wiring() -> None:
     pipeline = (ROOT / "templates" / "client-pipeline.yml").read_text()
-    assert "A2VM_LLM_FAMILY A2VM_LLM_REASONING" in pipeline
+    assert "NGVM_LLM_FAMILY NGVM_LLM_REASONING" in pipeline
     guide = (ROOT / "docs" / "llm.md").read_text()
-    for name in ("gpt-oss-20b", "Mistral-Small-4", "gemma-4", "Qwen3", "A2VM_LLM_REASONING"):
+    for name in ("gpt-oss-20b", "Mistral-Small-4", "gemma-4", "Qwen3", "NGVM_LLM_REASONING"):
         assert name in guide

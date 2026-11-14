@@ -1,0 +1,7 @@
+apiVersion: v2
+name: ngvm-portal
+description: An NGVM portal on Kubernetes - the reporting database (CloudNativePG) and Grafana with the NGVM dashboards provisioned (HLD D13, v0.20.3)
+type: application
+# Same version as the packages: the release job checks it.
+version: 0.24.0
+appVersion: "0.24.0"

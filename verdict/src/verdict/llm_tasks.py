@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """verdict's two LLM tasks. Neither takes a triage decision; each one is optional.
 
 1. assess_ssvc_inputs  - Automatable / Technical Impact when neither CISA ADP data nor a CVSS
@@ -14,9 +14,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from a2vm.llm import UNTRUSTED as _UNTRUSTED
-from a2vm.llm import LlmClient
-from a2vm.models import VulnRecord
+from ngvm.llm import UNTRUSTED as _UNTRUSTED
+from ngvm.llm import LlmClient
+from ngvm.models import VulnRecord
 
 SSVC_INPUTS_SCHEMA: dict[str, Any] = {
     "type": "object",

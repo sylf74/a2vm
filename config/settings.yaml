@@ -1,9 +1,9 @@
-# A2VM runtime settings, shared by all pillars. No secrets here: the LLM API key is read from the
+# NGVM runtime settings, shared by all pillars. No secrets here: the LLM API key is read from the
 # environment variable named in llm.api_key_env.
 #
 # Environment overrides (handy in GitLab CI):
-#   A2VM_LLM_ENABLED, A2VM_LLM_BASE_URL, A2VM_LLM_MODEL,
-#   A2VM_CACHE_DIR, A2VM_CVE_RECORD_URL, A2VM_GTI_ENABLED, A2VM_GTI_MAX_CALLS
+#   NGVM_LLM_ENABLED, NGVM_LLM_BASE_URL, NGVM_LLM_MODEL,
+#   NGVM_CACHE_DIR, NGVM_CVE_RECORD_URL, NGVM_GTI_ENABLED, NGVM_GTI_MAX_CALLS
 #   (the former VERDICT_* names still work)
 # Outbound HTTP honours HTTPS_PROXY / NO_PROXY and SSL_CERT_FILE.
 

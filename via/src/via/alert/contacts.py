@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """Client contacts (contacts.yaml of the client project): who receives which alerts, and in what role.
 
   schema_version: 1
@@ -22,8 +22,8 @@ from pathlib import Path
 import jsonschema
 import yaml
 
-from a2vm.io import load_schema
-from a2vm.models import ClientProfile
+from ngvm.io import load_schema
+from ngvm.models import ClientProfile
 
 
 class ContactsError(ValueError):

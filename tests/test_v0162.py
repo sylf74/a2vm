@@ -1,5 +1,5 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
-"""v0.16.2: the watch runs with via and a2vm only (no detect, no verdict installed), as in its image."""
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
+"""v0.16.2: the watch runs with via and ngvm only (no detect, no verdict installed), as in its image."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ import subprocess
 import sys
 import textwrap
 
-from a2vm.models import CvssMetric, VulnRecord
-from a2vm.ssvc import BOD_EN, BOD_FR, remediation_delay
+from ngvm.models import CvssMetric, VulnRecord
+from ngvm.ssvc import BOD_EN, BOD_FR, remediation_delay
 
 from .conftest import FIXTURES, ROOT
 
@@ -93,6 +93,6 @@ def test_remediation_delay_from_the_common_tables():
 def test_the_images_hold_one_pillar_and_no_pillar_offers_extensions():
     dockerfile = (ROOT / "images" / "Dockerfile").read_text()
     assert "COPY ${PILLAR} /src/${PILLAR}" in dockerfile and "COPY detect" not in dockerfile
-    assert not (ROOT / "a2vm" / "src" / "a2vm" / "extensions.py").exists()
+    assert not (ROOT / "ngvm" / "src" / "ngvm" / "extensions.py").exists()
     for pillar in ("via", "detect", "verdict"):
         assert "entry-points" not in (ROOT / pillar / "pyproject.toml").read_text()

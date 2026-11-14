@@ -1,5 +1,5 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
-"""Client of the shared intelligence service (HLD D17, v0.22.0; contract a2vm/schemas/openapi/intel.v1.yaml).
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
+"""Client of the shared intelligence service (HLD D17, v0.22.0; contract ngvm/schemas/openapi/intel.v1.yaml).
 
 A tenant's jobs ask it for the records of their CVEs (collected and enriched once for every tenant),
 send it the technologies they watch (no identity: the service keeps them without who sent them), and
@@ -14,8 +14,8 @@ from typing import Any
 
 import httpx
 
-from a2vm.config import env
-from a2vm.models import VulnRecord
+from ngvm.config import env
+from ngvm.models import VulnRecord
 
 TIMEOUT = 120.0
 BATCH = 2000  # CVE ids per request
@@ -40,7 +40,7 @@ class IntelClient:
         self.url = url.rstrip("/")
         self._client = httpx.Client(
             base_url=self.url,
-            headers={"Authorization": f"Bearer {token}", "User-Agent": "a2vm-via"},
+            headers={"Authorization": f"Bearer {token}", "User-Agent": "ngvm-via"},
             timeout=httpx.Timeout(timeout, connect=15.0),
             transport=transport,
         )
@@ -54,7 +54,7 @@ class IntelClient:
             return cls(settings.intel_url, token_from(settings.intel_token_file), transport)
         token = env("INTEL_TOKEN").strip()  # GitLab mode: a masked CI/CD variable
         if not token:
-            raise IntelError("no token for the shared intelligence service (A2VM_INTEL_TOKEN_FILE or A2VM_INTEL_TOKEN)")
+            raise IntelError("no token for the shared intelligence service (NGVM_INTEL_TOKEN_FILE or NGVM_INTEL_TOKEN)")
         return cls(settings.intel_url, token, transport)
 
     def _call(self, method: str, path: str, **kw: Any) -> Any:

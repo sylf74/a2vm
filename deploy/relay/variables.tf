@@ -1,8 +1,8 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 variable "name" {
   description = "Instance name (also its host name)."
   type        = string
-  default     = "a2vm-relay"
+  default     = "ngvm-relay"
 }
 
 variable "domain" {
@@ -29,7 +29,7 @@ variable "admin_ips" {
 }
 
 variable "hosts" {
-  description = "The upstream hosts the relay reaches, one route each (https only). Keep it equal to A2VM_RELAY_HOSTS. Never an authenticated API (GTI, Microsoft Graph, an LLM)."
+  description = "The upstream hosts the relay reaches, one route each (https only). Keep it equal to NGVM_RELAY_HOSTS. Never an authenticated API (GTI, Microsoft Graph, an LLM)."
   type        = list(string)
   default = [
     "raw.githubusercontent.com", "www.cisa.gov", "api.first.org", "www.cert.ssi.gouv.fr", "cveawg.mitre.org",

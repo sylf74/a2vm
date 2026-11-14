@@ -1,5 +1,5 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
-# A2VM relay of the public sources (v0.23.4, topology R of docs/hld/proposals/intel-placement.md):
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
+# NGVM relay of the public sources (v0.23.4, topology R of docs/hld/proposals/intel-placement.md):
 # one small instance with Caddy, one route per allowed upstream host and nothing else. Not a forward
 # proxy, not a tunnel: no CONNECT, no open destination. Configured at first boot by cloud-init
 # (cloud-init.yaml.tftpl); its token is generated on the instance and never passes through
@@ -50,7 +50,7 @@ resource "scaleway_instance_server" "relay" {
   image             = var.image
   ip_id             = local.ip_id
   security_group_id = scaleway_instance_security_group.relay.id
-  tags              = ["a2vm", "relay"]
+  tags              = ["ngvm", "relay"]
 
   root_volume {
     size_in_gb = var.root_volume_gb

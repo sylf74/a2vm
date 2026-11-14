@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """The detection service's detections in the tenant's PostgreSQL (v0.18.0, LLD detection §8.2):
 the same interface as `FileStore`.
 
@@ -16,7 +16,7 @@ import hashlib
 import json
 from typing import Any
 
-from a2vm.db import Database, Migration, rls
+from ngvm.db import Database, Migration, rls
 
 from .store import RID, Receipt, parse_time
 

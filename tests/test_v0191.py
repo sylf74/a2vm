@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """v0.19.1: the cloud scanner cleans up its disk; its scripts are updated in place; D17 and D18."""
 
 from __future__ import annotations
@@ -26,15 +26,15 @@ def test_volume_is_90_gb_by_default():
 
 def test_cleanup_runs_after_the_feeds_and_spares_greenbone():
     files = _files()
-    assert '"$D/cleanup.sh"' in files["/opt/a2vm-scanner/feed-update.sh"]
-    cleanup = files["/opt/a2vm-scanner/cleanup.sh"]
+    assert '"$D/cleanup.sh"' in files["/opt/ngvm-scanner/feed-update.sh"]
+    cleanup = files["/opt/ngvm-scanner/cleanup.sh"]
     assert '--filter "label!=com.docker.compose.project=$COMPOSE_PROJECT"' in cleanup
     assert "grep '^runner-'" in cleanup
     assert "system prune" not in cleanup and "volume prune" not in cleanup
 
 
 def test_status_shows_the_free_space():
-    status = _files()["/opt/a2vm-scanner/status.sh"]
+    status = _files()["/opt/ngvm-scanner/status.sh"]
     assert "== disk" in status and "less than 15 % free" in status
 
 
@@ -46,12 +46,12 @@ def test_a_changed_template_does_not_replace_the_scanner():
 def test_update_scripts_writes_what_cloud_init_writes(tmp_path):
     text = (SCANNER / "cloud-init.yaml.tftpl").read_text()
     out = update_scripts.script(text)
-    written = re.findall(r"install -D -m (\d+) /dev/stdin (\S+) <<'A2VM_END_OF_FILE'\n(.*?)A2VM_END_OF_FILE", out, re.S)
+    written = re.findall(r"install -D -m (\d+) /dev/stdin (\S+) <<'NGVM_END_OF_FILE'\n(.*?)NGVM_END_OF_FILE", out, re.S)
     files = _files()
     paths = {path for _, path, _ in written}
-    assert "/opt/a2vm-scanner/cleanup.sh" in paths and "/opt/a2vm-scanner/status.sh" in paths
-    assert not paths & {"/opt/a2vm-scanner/scanner.env", "/opt/a2vm-scanner/bootstrap.sh"}
-    assert "/etc/systemd/system/a2vm-greenbone-feed.timer" not in paths  # holds a Terraform value
+    assert "/opt/ngvm-scanner/cleanup.sh" in paths and "/opt/ngvm-scanner/status.sh" in paths
+    assert not paths & {"/opt/ngvm-scanner/scanner.env", "/opt/ngvm-scanner/bootstrap.sh"}
+    assert "/etc/systemd/system/ngvm-greenbone-feed.timer" not in paths  # holds a Terraform value
     for _mode, path, content in written:
         assert content == files[path], path
     assert out.rstrip().endswith("systemctl daemon-reload")
@@ -66,5 +66,5 @@ def test_update_scripts_output_is_valid_bash():
 def test_decisions_d17_and_d18_are_recorded():
     hld = (ROOT / "docs" / "hld" / "00-product-strategy.md").read_text()
     assert re.search(r"^\| D17 \| Vulnerability knowledge is shared", hld, re.M)
-    assert re.search(r"^\| D18 \| Dashboards show, A2VM acts", hld, re.M)
+    assert re.search(r"^\| D18 \| Dashboards show, NGVM acts", hld, re.M)
     assert re.search(r"^\| v0.22.0( \((to confirm|current)\))? \| D17", hld, re.M)  # v0.22.0 since v0.21.0
