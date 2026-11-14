@@ -1,0 +1,39 @@
+# A lab on Scaleway (docs/platform.md §8): one server, a collector, Keycloak on the cluster.
+# SCW_ACCESS_KEY and SCW_SECRET_KEY in the environment, read from where they are stored.
+
+machines = {
+  k8s01 = { roles = ["server"], type = "DEV1-L" }
+  col01 = { roles = ["collector"], type = "DEV1-S", os = "rocky" }
+}
+
+admin_cidrs  = ["203.0.113.10/32"]
+public_cidrs = ["0.0.0.0/0"]
+
+platform = {
+  ssh = { private_key_file = "~/.ssh/id_ed25519" }
+  cluster = {
+    token_file      = "~/.ngvm/secrets/rke2-token"
+    kubeconfig_file = "~/.kube/ngvm-scaleway.yaml"
+  }
+  addons = {
+    issuer     = "acme"
+    acme_email = "ops@example.org"
+  }
+  keycloak = {
+    mode           = "kubernetes"
+    hostname       = "auth.example.org"
+    cluster_issuer = "ngvm"
+    clients        = { "ngvm-portal" = ["https://portal.example.org/login/generic_oauth"] }
+    groups         = ["NGVM-Analysts"]
+  }
+  collectors = {
+    lab-cloud = {
+      host        = "col01"
+      tenant      = "lab"
+      image       = "registry.example.org/vulnops/ngvm/detect:v0.25.0"
+      config_file = "~/.ngvm/collectors/lab-cloud/collector.yaml"
+      files       = { "token" = "~/.ngvm/secrets/lab-cloud-token", "ca.pem" = "~/.ngvm/ca/company-ca.pem" }
+      connectors  = { "cloud-ssh" = "*-*-* 06:00:00" }
+    }
+  }
+}
