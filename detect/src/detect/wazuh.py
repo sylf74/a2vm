@@ -1,11 +1,11 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """Wazuh as a source of components (`wazuh`, HLD D20, v0.23.1, LLD vulnerability-detection §3.6).
 
 The software inventory Wazuh's agents collect (syscollector) becomes one host observation per
 agent: its name and address, its operating system, and every package installed as components
 (`source: wazuh`), with the distribution of the agent and the source package of each, so that
 pillar 3 keeps them beside those listed over SSH and the watch matches them against the package
-advisories of the distributions (`a2vm.packages`). A Wazuh observation carries no finding: Wazuh's
+advisories of the distributions (`ngvm.packages`). A Wazuh observation carries no finding: Wazuh's
 own vulnerability detection is not read.
 
 Two ways to read it, both read only:
@@ -32,9 +32,9 @@ from typing import Any
 
 import httpx
 
-from a2vm import tls
-from a2vm.io import Detection, now
-from a2vm.models import AssetObservation
+from ngvm import tls
+from ngvm.io import Detection, now
+from ngvm.models import AssetObservation
 
 from .collect import MAX_COMPONENTS, component
 
@@ -123,7 +123,7 @@ class WazuhClient:
             if self.cfg.api == "indexer"
             else method == "GET" or (method == "POST" and path == "/security/user/authenticate")
         )
-        if not allowed:  # A2VM never changes anything in Wazuh
+        if not allowed:  # NGVM never changes anything in Wazuh
             raise WazuhError(f"refused: {method} {path}, Wazuh is read only")
         try:
             response = self.http.request(method, self.cfg.url + path, **kw)

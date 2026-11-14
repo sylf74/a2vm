@@ -2,8 +2,65 @@
 
 One entry per release tag, newest first. Each entry says what changed for an operator or an
 analyst and, under **Upgrade**, what a tenant must do when it moves to that tag (`ref` and
-`A2VM_REF` in its `.gitlab-ci.yml`). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
+`NGVM_REF` in its `.gitlab-ci.yml`; `A2VM_REF` before v0.25.0). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
 §11) and the LLDs. A release adds its entry here in the same merge request (CLAUDE.md, Releasing).
+
+## v0.25.0 — 2026-11-14
+
+The platform deployed with OpenTofu (HLD D22), and the product renamed **NGVM** (Next-Generation
+Vulnerability Management; A2VM until v0.24.0).
+
+- **The platform with OpenTofu** (`deploy/tofu`, `docs/platform.md`): from Ubuntu or Rocky Linux
+  machines and an SSH key, one `tofu apply` installs
+  - an RKE2 cluster: 1 or 3 servers, never two on the same physical machine, and agents; SELinux
+    kept on Rocky Linux; ingress-nginx or Traefik; the CIS profile as an option;
+  - in the cluster: Helm, a default StorageClass (local-path), cert-manager and a ClusterIssuer
+    (the platform's CA or ACME), the CloudNativePG operator, the GitLab agent, the portal;
+  - the collectors with Podman: their `collector.yaml` and files, one timer per connector with its
+    own schedule, the poll; the units of an A2VM collector removed;
+  - as an option, Keycloak on a VM (Podman, PostgreSQL, Caddy for HTTPS) or in the cluster (its
+    operator, a CloudNativePG database), with the realm, the `groups` claim, the groups and the
+    clients of the portal and the chats; the organisation's identity provider otherwise.
+  Behind a proxy, with the company's CAs and registry mirrors. The tenants stay deployed by
+  `deploy-k8s`.
+- **Machines created first**, in the same apply: `deploy/tofu/scaleway`, `azure` (a private
+  network for the cluster, SSH and the API open to the operator's addresses) and `libvirt` (a bare
+  KVM host, static addresses by cloud-init).
+- **No secret in the state**: a secret is a file on the operator's machine, copied at apply time
+  through a folder of mode 700 and removed; Keycloak's passwords are made on its machine; the
+  secrets of its clients come back as files of mode 600. The state is in GitLab (HTTP backend).
+- **OpenTofu, not Terraform** in the docs and the CI (MPL 2.0; Terraform is under the BSL); the
+  files run with Terraform 1.6 and later too. CI job `tofu`: `deploy/tofu/check.sh` (format,
+  shellcheck, every root valid, the example planned).
+- **Renamed NGVM**: the package and command `ngvm`, the charts `ngvm-tenant` and `ngvm-portal`,
+  the CI/CD and environment variables `NGVM_*`, the exchange files `ngvm.<name>/<n>`, the schemas
+  `ngvm` (reporting database) and `ngvm_meta` (tenant's database), the labels `ngvm.io/*`, the
+  namespaces `ngvm-<tenant>`, the units `ngvm-collector@` and `/etc/ngvm`, the dashboards' data
+  source, the docs. Kept: these release notes and the version history of the HLD as written, and
+  the iTop extension `a2vm-iot-device` (iTop keeps its objects under that name).
+- **Until v0.26.0**: an `A2VM_<name>` variable is read when `NGVM_<name>` is not set, with a
+  warning (in the jobs and in every process of the pillars); a file `a2vm.<name>/<n>` is read as
+  `ngvm.<name>/<n>`; a database of A2VM is renamed in place by `verdict db init` and by the
+  services' init. `VULNOPS_*` variables are no longer read. The labels and the schemas change at
+  once: every tenant of a cluster moves together.
+
+**Upgrade** (a new installation: the data of A2VM are not carried over):
+
+1. Optional, before anything else, a backup of each tenant's database and of the portal's while
+   A2VM still runs (the primary of each CloudNativePG cluster):
+   `kubectl -n a2vm-<tenant> exec a2vm-<tenant>-db-1 -c postgres -- pg_dump -Fc -d app > <tenant>.dump`,
+   and for the portal `kubectl -n a2vm-portal exec portal-portal-db-1 -c postgres -- pg_dump -Fc -d a2vm > portal.dump`.
+   A dump restored with `pg_restore --no-owner` into the new database is renamed by the next init.
+2. Rename the projects: `vulnops/a2vm` → `vulnops/ngvm` (its registry follows: images
+   `…/vulnops/ngvm/<pillar>`), the GitHub mirror, the local clones.
+3. The platform: `docs/platform.md`, or the cluster as it is (the CloudNativePG operator and the
+   GitLab agent unchanged).
+4. Each tenant: CI/CD variables renamed `NGVM_*` (`docs/deployment.md`), include
+   `project: vulnops/ngvm`, `ref` and `NGVM_REF` at `v0.25.0`, then `deploy-k8s`: the namespace
+   `ngvm-<tenant>` starts empty, the next runs fill it. The shared service's tenant (`via`) first.
+5. Collectors: `docs/platform.md` §6 (OpenTofu, Podman), or `install-collector.sh` again with the
+   new image; the old units `a2vm-collector@` stopped.
+6. Once the new tenants run: `kubectl delete namespace a2vm-<tenant> a2vm-via a2vm-portal`.
 
 ## v0.24.0 — 2026-11-14
 

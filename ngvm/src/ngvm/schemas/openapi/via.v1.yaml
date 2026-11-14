@@ -1,0 +1,401 @@
+# Contract of the pillar 1 watch service (HLD D15, LLD vulnerability-intelligence §3.7).
+# Status: v1, as built in v0.17.1 (via serve). Within v1, fields and calls are only added. Kept small
+# on purpose: the alerts of the watch and what the tenant's jobs need, so that the VIA team's service
+# can answer the same calls or replace them.
+openapi: 3.1.0
+info:
+  title: NGVM watch service
+  version: "1.0.0"
+  description: >
+    Keeps, for one tenant, the watch's state, the last daily inventory, the alerts the watch drafted
+    with their sheets and the journal of their events (drafted, mailed to the analysts, sent to the
+    client). The tenant's jobs (daily run, watch, send) hold the run token; the analysts' tools hold
+    the read token. The service sends nothing. Every call carries the tenant; reached inside the
+    cluster only. Since v0.17.0 the analysts' review page (port 8081, behind oauth2-proxy, not part of
+    this API) adds edited, validated and dismissed events and the corrected sheets; the jobs' events
+    stay drafted, analysts, sent and send-failed.
+servers:
+  - url: http://ngvm-lab-via:8080
+tags:
+  - name: jobs
+  - name: read
+  - name: operations
+paths:
+  /v1/tenants/{tenant}/inventory:
+    post:
+      tags: [jobs]
+      operationId: putInventory
+      summary: >-
+        The daily run's assets (vulnops.assets/1) and findings, for the watch: compact
+        (watch_findings, ngvm.watch_findings/1, v0.23.19) or as before (findings, vulnops.findings/2).
+        It replaces the previous inventory whole.
+      security:
+        - runToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  required: [assets, watch_findings]
+                  properties:
+                    assets: {$ref: "../assets.schema.json"}
+                    watch_findings: {$ref: "../watch_findings.schema.json"}
+                - type: object
+                  required: [assets, findings]
+                  properties:
+                    assets: {$ref: "../assets.schema.json"}
+                    findings: {$ref: "../findings.schema.json"}
+      responses:
+        "202": {description: Kept, content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/inventory/{file}:
+    get:
+      tags: [jobs]
+      operationId: getInventory
+      summary: The last inventory received, for the watch
+      security:
+        - runToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+        - {name: file, in: path, required: true, schema: {type: string, enum: [assets.json, findings.json, watch-findings.json]}}
+      responses:
+        "200": {description: The file, content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/watch/state:
+    get:
+      tags: [jobs]
+      operationId: getWatchState
+      summary: What the watch has already seen; 404 before its first passage (it then records the baseline)
+      security:
+        - runToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+      responses:
+        "200": {description: The state, opaque to the service, content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/watch/runs:
+    post:
+      tags: [jobs]
+      operationId: putWatchRun
+      summary: One passage of the watch, its new state, its journal events and, when it drafted alerts, their files
+      security:
+        - runToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+        - name: Content-Encoding
+          in: header
+          required: false
+          schema: {type: string, enum: [gzip]}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [state]
+              properties:
+                state: {type: object}
+                events: {type: array, items: {$ref: "#/components/schemas/Event"}}
+                files:
+                  type: object
+                  description: index.json and, for each alert, <id>.md, <id>.html and its Word file; base64
+                  additionalProperties: {type: string, contentEncoding: base64}
+      responses:
+        "202": {description: Kept, content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/events:
+    post:
+      tags: [jobs]
+      operationId: addEvents
+      summary: Events of the send job (sent, send-failed) to the journal
+      security:
+        - runToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [events]
+              properties:
+                events: {type: array, items: {$ref: "#/components/schemas/Event"}}
+      responses:
+        "202": {description: Added, content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/applications:
+    get:
+      tags: [read]
+      operationId: listApplications
+      summary: >-
+        The tenant's applications table (since v0.23.3, `ngvm.applications/1`): each application an
+        EDR lists on the hosts of the last inventory, its state (new, proposed, validated, rejected),
+        the CPE the LLM proposed and the one a validator decided, with the count of each state. Filled
+        when an inventory arrives; decided on the review page
+      security:
+        - readToken: []
+        - runToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+        - {name: state, in: query, schema: {type: string, enum: [new, proposed, validated, rejected]}}
+        - {name: q, in: query, schema: {type: string}, description: "part of the key or the name (since v0.23.4)"}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1}, description: "a page (since v0.23.4)"}
+        - {name: offset, in: query, schema: {type: integer, minimum: 0}}
+      responses:
+        "200":
+          description: The table
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  schema: {type: string, const: ngvm.applications/1}
+                  counts: {type: object, additionalProperties: {type: integer}}
+                  applications: {type: array, items: {type: object}}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/status:
+    get:
+      tags: [read]
+      operationId: getWatchStatus
+      summary: >-
+        The watch of the tenant (since v0.23.4, the chat's get_watch_status): its last passage, the
+        sources failing in a row, the alerts drafted in the last 24 hours
+      security:
+        - readToken: []
+        - runToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+      responses:
+        "200":
+          description: The status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  last_passage: {type: string}
+                  failing_sources: {type: array, items: {type: object}}
+                  alerts_last_24h: {type: integer}
+        "401": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/applications/proposals:
+    post:
+      tags: [jobs]
+      operationId: putApplicationProposals
+      summary: >-
+        The CPE the tenant's LLM proposes for applications still new (since v0.23.3); a row an
+        analyst decided is never changed
+      security:
+        - runToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [proposals]
+              properties:
+                proposals:
+                  type: array
+                  items:
+                    type: object
+                    required: [key, cpe]
+                    properties:
+                      key: {type: string}
+                      cpe: {type: string, description: "cpe:2.3:a:<vendor>:<product>, or empty: no product of CVE records"}
+                      justification: {type: string}
+                      by: {type: string}
+      responses:
+        "202": {description: Kept, content: {application/json: {schema: {type: object, properties: {proposed: {type: integer}}}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/alerts:
+    get:
+      tags: [read]
+      operationId: listAlerts
+      summary: >-
+        The alerts kept, newest first, with their status (pending, translating, validated, dismissed,
+        sent, failed) and, since v0.23.2, when they were drafted (`drafted_at`)
+      security:
+        - readToken: []
+        - runToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+        - {name: status, in: query, schema: {type: string, enum: [all, pending, translating, validated, dismissed, sent, failed]}}
+        - {name: cve, in: query, schema: {type: string}}
+        - {name: level, in: query, schema: {type: string}}
+        - {name: since, in: query, schema: {type: string}, description: "a day YYYY-MM-DD (UTC), or a date and time with its offset (since v0.23.2)"}
+        - {name: until, in: query, schema: {type: string}, description: "the same, the whole day for a day alone (since v0.23.2)"}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 25}}
+        - {name: offset, in: query, schema: {type: integer, minimum: 0, default: 0}}
+      responses:
+        "200": {description: One page, content: {application/json: {schema: {type: object}}}}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/alerts/{alert}:
+    get:
+      tags: [read]
+      operationId: getAlert
+      summary: >-
+        One alert, its status, its last events, its English reference (Markdown; as enriched, when edited)
+        and, since v0.17.1, the hash of the reference, the last choice of recipients and the state of each
+        translation (waiting, fresh, outdated, failed)
+      security:
+        - readToken: []
+        - runToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+        - {name: alert, in: path, required: true, schema: {type: string}}
+      responses:
+        "200": {description: The alert, content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/alerts/{alert}/edit:
+    get:
+      tags: [jobs]
+      operationId: getAlertEdit
+      summary: The sheet as a validator corrected it on the review page (since v0.17.0), for the sender
+      security:
+        - runToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+        - {name: alert, in: path, required: true, schema: {type: string}}
+      responses:
+        "200": {description: The corrected sheet, content: {text/markdown: {schema: {type: string}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "404": {description: No such alert, or its sheet was not corrected}
+  /v1/tenants/{tenant}/alerts/{alert}/translations:
+    post:
+      tags: [jobs]
+      operationId: putTranslation
+      summary: The sender's translation of the reference into one language, or why it was refused (v0.17.1)
+      security:
+        - runToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+        - {name: alert, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [language, source_hash]
+              properties:
+                language: {type: string, pattern: "^[a-z]{2}$", description: ISO 639-1, other than en}
+                source_hash: {type: string, description: Hash of the reference translated}
+                source: {type: string, description: "llm (<model>)"}
+                text: {type: string, description: The translation (Markdown); or error}
+                error: {type: string, description: Why the translation was refused; or text}
+      responses:
+        "202": {description: Kept, content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/alerts/{alert}/translations/{language}:
+    get:
+      tags: [jobs]
+      operationId: getTranslation
+      summary: A translation of the reference, as validated on the review page, for the sender (v0.17.1)
+      security:
+        - runToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+        - {name: alert, in: path, required: true, schema: {type: string}}
+        - {name: language, in: path, required: true, schema: {type: string, pattern: "^[a-z]{2}$"}}
+      responses:
+        "200": {description: The translation, content: {text/markdown: {schema: {type: string}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "404": {description: No such alert, or no translation in this language}
+  /v1/tenants/{tenant}/alerts/{alert}/files/{file}:
+    get:
+      tags: [jobs]
+      operationId: getAlertFile
+      summary: A file of an alert (its sheets, its Word file), for the send job
+      security:
+        - runToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+        - {name: alert, in: path, required: true, schema: {type: string}}
+        - {name: file, in: path, required: true, schema: {type: string}}
+      responses:
+        "200": {description: The file, content: {application/octet-stream: {schema: {type: string, contentEncoding: binary}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /healthz:
+    get:
+      tags: [operations]
+      operationId: healthz
+      security: []
+      responses:
+        "200": {description: Alive}
+  /readyz:
+    get:
+      tags: [operations]
+      operationId: readyz
+      security: []
+      responses:
+        "200": {description: Ready (store writable)}
+        "503": {description: Not ready}
+components:
+  securitySchemes:
+    runToken:
+      type: http
+      scheme: bearer
+      description: Token of the tenant's jobs (daily run, watch, send); the service keeps its digest only.
+    readToken:
+      type: http
+      scheme: bearer
+      description: Token of the analysts' tools; reads the alerts, never the state nor the files to send.
+  parameters:
+    tenant:
+      name: tenant
+      in: path
+      required: true
+      schema: {type: string, pattern: "^[a-z0-9][a-z0-9-]{0,62}$"}
+  responses:
+    Problem:
+      description: Error (RFC 9457)
+      content:
+        application/problem+json:
+          schema: {$ref: "#/components/schemas/Problem"}
+  schemas:
+    Event:
+      type: object
+      required: [event, alert]
+      properties:
+        at: {type: string}
+        event:
+          description: >-
+            drafted, analysts, sent, send-failed from the jobs; edited, validated, dismissed from the review
+            page (since v0.17.0); translation-requested, translation-edited from the page and translated,
+            translation-failed from the sender (since v0.17.1)
+          enum: [drafted, analysts, edited, translation-requested, translated, translation-failed,
+                 translation-edited, validated, dismissed, sent, send-failed]
+        alert: {type: string}
+        level: {type: string}
+        title: {type: string}
+        to: {type: array, items: {type: string}}
+        result: {type: string}
+        error: {type: string}
+        by: {type: string, description: The analyst who edited, validated or dismissed (review page)}
+        language: {type: string, description: Language of a translation or of a mail sent (since v0.17.1)}
+        languages: {type: array, items: {type: string}, description: Languages asked for (translation-requested)}
+    Problem:
+      type: object
+      properties:
+        title: {type: string}
+        status: {type: integer}
+        detail: {type: string}

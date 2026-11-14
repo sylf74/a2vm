@@ -10,7 +10,7 @@
 #                      cvelist and are labelled with the vendor's name (vendors = names in the records)
 #             intel    the feed of the shared intelligence service (v0.22.0, D17): the radar's validated
 #                      events and GTI's vulnerabilities on the technologies watched; nothing without
-#                      A2VM_INTEL_URL
+#                      NGVM_INTEL_URL
 #             gti      a GTI search (v0.22.0, licensed): for the radar only; nothing unless GTI is enabled;
 #                      `query` replaces the radar's filter (via.intel.gti.RADAR_FILTER)
 #   radar_only  read by the radar of the watch team only (alerts.mode: radar, docs/radar.md), never by
@@ -111,8 +111,8 @@ sources:
      name: "Zero Day Initiative — published advisories"}
 
   # -- Shared intelligence service and radar (v0.22.0, docs/radar.md) ----------------------------
-  - {id: a2vm-intel, category: radar, kind: intel,
-     name: "A2VM — radar and shared intelligence"}
+  - {id: ngvm-intel, category: radar, kind: intel,
+     name: "NGVM — radar and shared intelligence"}
   - {id: gti-radar, category: research, kind: gti, radar_only: true,
      name: "Google Threat Intelligence — exploited, zero-day or critical"}
   # Research and news read by the radar only; to check from the runner before enabling them.

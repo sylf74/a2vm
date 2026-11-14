@@ -1,0 +1,11 @@
+version: 2
+ethernets:
+  primary:
+    match:
+      name: "e*"
+    addresses: [${address}]
+    routes:
+      - to: default
+        via: ${gateway}
+    nameservers:
+      addresses: [${join(", ", dns)}]

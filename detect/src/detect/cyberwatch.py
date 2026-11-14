@@ -1,7 +1,7 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """Cyberwatch as a scanner (`cyberwatch`, HLD D20, v0.23.5, LLD vulnerability-detection §3.8).
 
-Cyberwatch scans the tenant's assets with its agents or without (SSH, WinRM, network). A2VM reads
+Cyberwatch scans the tenant's assets with its agents or without (SSH, WinRM, network). NGVM reads
 what it found: one host observation per asset, with its identifiers, its OS, its components (the
 packages Cyberwatch lists, else the current versions of its updates), and one finding per CVE still
 open on the asset (active, not fixed, not ignored in Cyberwatch), with the version found and the
@@ -27,9 +27,9 @@ from typing import Any
 
 import httpx
 
-from a2vm import tls
-from a2vm.io import Detection, now
-from a2vm.models import AssetObservation, Finding, FindingObservation, Match
+from ngvm import tls
+from ngvm.io import Detection, now
+from ngvm.models import AssetObservation, Finding, FindingObservation, Match
 
 from .collect import MAX_COMPONENTS, component
 
@@ -134,7 +134,7 @@ class CyberwatchClient:
         self.http.close()
 
     def get(self, path: str, params: dict[str, Any] | None = None, method: str = "GET") -> Any:
-        if method != "GET":  # A2VM never changes anything in Cyberwatch
+        if method != "GET":  # NGVM never changes anything in Cyberwatch
             raise CyberwatchError(f"refused: {method} {path}, Cyberwatch is read only")
         if self._auth is None:
             self._auth = self.cfg.keys()

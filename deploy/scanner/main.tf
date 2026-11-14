@@ -1,5 +1,5 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
-# A2VM cloud scanner: one instance with Greenbone Community Edition in containers and the GitLab
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
+# NGVM cloud scanner: one instance with Greenbone Community Edition in containers and the GitLab
 # runner of the client's external project (docs/openvas.md §5). Configured at first boot by
 # cloud-init (cloud-init.yaml.tftpl). The GMP password is generated on the instance; the runner's
 # token is sent over SSH after the first boot (README.md): no secret passes through Terraform, its
@@ -45,7 +45,7 @@ resource "scaleway_instance_server" "scanner" {
   image             = var.image
   ip_id             = local.ip_id
   security_group_id = scaleway_instance_security_group.scanner.id
-  tags              = ["a2vm", "scanner"]
+  tags              = ["ngvm", "scanner"]
 
   root_volume {
     size_in_gb = var.root_volume_gb

@@ -1,18 +1,18 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """Send mail, configured by CI/CD variables. Set on the group, they apply to every client; set on a
 client project, they override the group's for that client (e.g. one client through its own tenant).
 
-  A2VM_MAIL_TRANSPORT   smtp (default) | graph
-  A2VM_MAIL_FROM        sender address (and display name)
+  NGVM_MAIL_TRANSPORT   smtp (default) | graph
+  NGVM_MAIL_FROM        sender address (and display name)
 
-  smtp:  A2VM_SMTP_HOST, A2VM_SMTP_PORT (587), A2VM_SMTP_TLS (starttls | ssl | none),
-         A2VM_SMTP_USER, A2VM_SMTP_PASSWORD
+  smtp:  NGVM_SMTP_HOST, NGVM_SMTP_PORT (587), NGVM_SMTP_TLS (starttls | ssl | none),
+         NGVM_SMTP_USER, NGVM_SMTP_PASSWORD
   graph: Microsoft 365 through Microsoft Graph (sendMail), with an app registration that has the
          Mail.Send application permission, restricted to the sending mailbox:
-         A2VM_GRAPH_TENANT_ID, A2VM_GRAPH_CLIENT_ID, A2VM_GRAPH_CLIENT_SECRET,
-         A2VM_GRAPH_SENDER (mailbox that sends, e.g. veille@client-or-provider.example)
+         NGVM_GRAPH_TENANT_ID, NGVM_GRAPH_CLIENT_ID, NGVM_GRAPH_CLIENT_SECRET,
+         NGVM_GRAPH_SENDER (mailbox that sends, e.g. veille@client-or-provider.example)
 
-Without A2VM_SMTP_HOST (smtp) nothing is sent: the message is written as a .eml file (dry run).
+Without NGVM_SMTP_HOST (smtp) nothing is sent: the message is written as a .eml file (dry run).
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ from pathlib import Path
 
 import httpx
 
-from a2vm.config import env
+from ngvm.config import env
 
 
 class MailError(RuntimeError):
@@ -49,7 +49,7 @@ def message(
 ) -> EmailMessage:
     msg = EmailMessage()
     msg["Subject"] = subject
-    msg["From"] = sender or env("MAIL_FROM", "a2vm@localhost")
+    msg["From"] = sender or env("MAIL_FROM", "ngvm@localhost")
     msg["To"] = ", ".join(to)
     msg["Message-ID"] = make_msgid(domain=msg["From"].split("@")[-1].strip("> "))
     msg.set_content(text)
@@ -66,7 +66,7 @@ GRAPH_SEND = "https://graph.microsoft.com/v1.0/users/{sender}/sendMail"
 
 def _graph_send(msg: EmailMessage, transport: httpx.BaseTransport | None = None) -> str:
     graph = {k: env(f"GRAPH_{k}") for k in ("TENANT_ID", "CLIENT_ID", "CLIENT_SECRET", "SENDER")}
-    missing = [f"A2VM_GRAPH_{k}" for k, v in graph.items() if not v]
+    missing = [f"NGVM_GRAPH_{k}" for k, v in graph.items() if not v]
     if missing:
         raise MailError("missing " + ", ".join(missing))
     html_part = msg.get_body(("html",))
@@ -122,11 +122,11 @@ def send(msg: EmailMessage, dry_run_dir: str | Path | None = None, transport: ht
     host = env("SMTP_HOST", "")
     if not host:
         if dry_run_dir is None:
-            raise MailError("A2VM_SMTP_HOST is not set")
+            raise MailError("NGVM_SMTP_HOST is not set")
         path = Path(dry_run_dir) / (msg["Message-ID"].strip("<>").split("@")[0] + ".eml")
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(bytes(msg))
-        return f"not sent (no A2VM_SMTP_HOST): written to {path}"
+        return f"not sent (no NGVM_SMTP_HOST): written to {path}"
     port = int(env("SMTP_PORT", "587"))
     mode = env("SMTP_TLS", "starttls").lower()
     user, password = env("SMTP_USER", ""), env("SMTP_PASSWORD", "")

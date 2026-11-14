@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """detect: produce detection files (asset observations + findings), one per client and source.
 
   plan       check a targets file and list the scans it would run (no connection)
@@ -7,14 +7,14 @@
   import     import scanner output files produced elsewhere (Trivy JSON, dnf updateinfo text,
              OpenVAS XML report)
   inventory  match a records file against the assets declared in client profiles
-  external   bring the latest detection of the client's external project (A2VM_EXTERNAL_PROJECT)
+  external   bring the latest detection of the client's external project (NGVM_EXTERNAL_PROJECT)
              into this run, as source external-scan
   serve      the detection service: receives the collectors' pushes, serves the latest detections
   agent      the collector: runs its connectors near a network and pushes to the detection service
   fetch      the daily run's first step in the cluster: the latest detections from the service
   collectors check the tenant's declaration of its collectors (collectors.yaml)
   cmdb       the tenant's CMDB: read it as a detection (fetch), or list the hosts scanned but not
-             in it, as a CSV a person imports into the CMDB (export); A2VM never writes to it
+             in it, as a CSV a person imports into the CMDB (export); NGVM never writes to it
   wazuh      Wazuh's software inventory, read as a detection of source wazuh (fetch, v0.23.1)
   sentinelone  SentinelOne's application inventory, as a detection of source sentinelone (fetch, v0.23.3)
   cyberwatch   Cyberwatch's assets and open CVEs, as a detection of source cyberwatch (fetch, v0.23.5)
@@ -29,10 +29,10 @@ import argparse
 import sys
 from pathlib import Path
 
-from a2vm.config import describe_llm, load_settings
-from a2vm.io import Detection, read_records, write_detection
-from a2vm.llm import LlmClient
-from a2vm.profile import ProfileError, load_profile
+from ngvm.config import describe_llm, load_settings
+from ngvm.io import Detection, legacy_schema, read_records, write_detection
+from ngvm.llm import LlmClient
+from ngvm.profile import ProfileError, load_profile
 
 from .collect import collect, load_targets, plan
 from .external import pull as pull_external
@@ -142,7 +142,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
     except (RegistryError, OSError) as exc:
         print(exc, file=sys.stderr)
         return 2
-    from a2vm.db import DatabaseError, open_database
+    from ngvm.db import DatabaseError, open_database
 
     from .intake.pgstore import MIGRATIONS, PgStore
 
@@ -160,8 +160,8 @@ def cmd_serve(args: argparse.Namespace) -> int:
         f"({', '.join(registry.collectors) or 'none'}), read token {readers}, store {store.describe()}",
         flush=True,
     )
-    from a2vm.actions import open_actions
-    from a2vm.audit import open_audit
+    from ngvm.actions import open_actions
+    from ngvm.audit import open_audit
 
     try:
         audit = open_audit("detect", None if db else args.store)
@@ -223,18 +223,18 @@ def cmd_osv(args: argparse.Namespace) -> int:
     import os
     import tempfile
 
-    from a2vm.config import env
+    from ngvm.config import env
 
     from .osv import MODES, IndexSource, Osv, OsvError, ecosystems_of, match, match_offline
 
-    mode = (args.mode or os.environ.get("A2VM_OSV_MODE", "") or "offline").strip().lower()
-    if os.environ.get("A2VM_OSV_ENABLED", "true").strip().lower() in ("false", "0", "no", "off"):
+    mode = (args.mode or os.environ.get("NGVM_OSV_MODE", "") or "offline").strip().lower()
+    if os.environ.get("NGVM_OSV_ENABLED", "true").strip().lower() in ("false", "0", "no", "off"):
         mode = "off"
     if mode not in MODES:
         print(f"osv: mode {mode!r}: {', '.join(MODES)}", file=sys.stderr)
         return 2
     if mode == "off":
-        print("osv: off (A2VM_OSV_MODE)")
+        print("osv: off (NGVM_OSV_MODE)")
         return 0
     tenants = []
     for tenant_dir in sorted(p for p in Path(args.detect).iterdir() if p.is_dir()):
@@ -266,10 +266,10 @@ def cmd_osv(args: argparse.Namespace) -> int:
         finally:
             osv.close()
         return status
-    intel_url = os.environ.get("A2VM_INTEL_URL", "").strip()
+    intel_url = os.environ.get("NGVM_INTEL_URL", "").strip()
     token = ""
     if intel_url:
-        token_file = os.environ.get("A2VM_INTEL_TOKEN_FILE", "")
+        token_file = os.environ.get("NGVM_INTEL_TOKEN_FILE", "")
         try:
             token = Path(token_file).read_text(encoding="utf-8").strip() if token_file else env("INTEL_TOKEN").strip()
         except OSError as exc:
@@ -332,7 +332,7 @@ def cmd_collectors(args: argparse.Namespace) -> int:
             print(f"{args.profile}: client {client!r} is not the tenant {args.tenant!r}", file=sys.stderr)
             return 2
     for c in collectors.values():
-        variable = "A2VM_COLLECTOR_TOKEN_" + c.id.upper().replace("-", "_")
+        variable = "NGVM_COLLECTOR_TOKEN_" + c.id.upper().replace("-", "_")
         print(f"{args.tenant}: collector {c.id} ({', '.join(c.sources)}, max {c.max_age_hours:g} h), token {variable}")
     return 0
 
@@ -484,12 +484,12 @@ def cmd_cmdb(args: argparse.Namespace) -> int:
             return 2
         return 0
     try:
-        triage = json.loads(Path(args.triage).read_text(encoding="utf-8"))
+        triage = legacy_schema(json.loads(Path(args.triage).read_text(encoding="utf-8")))
     except (OSError, ValueError) as exc:
         print(f"{args.triage}: {exc}", file=sys.stderr)
         return 2
-    if triage.get("schema") != "a2vm.triage/1":
-        print(f"{args.triage}: not a triage document (a2vm.triage/1)", file=sys.stderr)
+    if triage.get("schema") != "ngvm.triage/1":
+        print(f"{args.triage}: not a triage document (ngvm.triage/1)", file=sys.stderr)
         return 2
     rows = export_candidates(triage, args.organization)
     out = Path(args.out)
@@ -530,7 +530,7 @@ def main(argv: list[str] | None = None) -> int:
 
     e = sub.add_parser("external", help="add the latest detection of the client's external project")
     e.add_argument("profile", help="client.yaml (its `external` section names the external client)")
-    e.add_argument("--project", required=True, help="external GitLab project, path or id (A2VM_EXTERNAL_PROJECT)")
+    e.add_argument("--project", required=True, help="external GitLab project, path or id (NGVM_EXTERNAL_PROJECT)")
     e.add_argument("--ref", default="main")
     e.add_argument("--job", default="collect", help="job of the external project that keeps work/detect/")
     e.add_argument("--out", default="work/detect")
@@ -562,16 +562,16 @@ def main(argv: list[str] | None = None) -> int:
     ag = sub.add_parser("agent", help="the collector: run connectors and push to the detection service")
     ag_sub = ag.add_subparsers(dest="agent_command", required=True)
     ar = ag_sub.add_parser("run", help="run the connectors (or one) and push their detections")
-    ar.add_argument("--config", default="/etc/a2vm/collector/collector.yaml")
+    ar.add_argument("--config", default="/etc/ngvm/collector/collector.yaml")
     ar.add_argument("--connector", help="only this connector")
     ar.set_defaults(func=cmd_agent)
     ap = ag_sub.add_parser("poll", help="report the timers, run the requests confirmed for this collector (v0.23.10)")
-    ap.add_argument("--config", default="/etc/a2vm/collector/collector.yaml")
-    ap.add_argument("--timers", default="", help="systemctl list-timers 'a2vm-collector@*' --all -o json, as a file")
+    ap.add_argument("--config", default="/etc/ngvm/collector/collector.yaml")
+    ap.add_argument("--timers", default="", help="systemctl list-timers 'ngvm-collector@*' --all -o json, as a file")
     ap.set_defaults(func=cmd_agent_poll)
 
     f = sub.add_parser("fetch", help="the latest detections of the tenant from the detection service")
-    f.add_argument("--url", required=True, help="detection service, e.g. http://a2vm-homelab-detect:8080")
+    f.add_argument("--url", required=True, help="detection service, e.g. http://ngvm-homelab-detect:8080")
     f.add_argument("--tenant", required=True)
     f.add_argument("--token-file", required=True, help="the daily run's read token")
     f.add_argument("--source", action="append", default=[], help="expected source (repeat); default: all")
@@ -629,7 +629,7 @@ def main(argv: list[str] | None = None) -> int:
     ov.add_argument("--detect", required=True, help="directory of the detections, <dir>/<tenant>/<source>.json")
     ov.add_argument("--out", default="", help="where to write osv.json (default: the same directory)")
     ov.add_argument("--cache", default="", help="directory keeping the indexes of OSV (offline) or its details (api)")
-    ov.add_argument("--mode", default="", help="offline (default), api or off; else A2VM_OSV_MODE (v0.23.12)")
+    ov.add_argument("--mode", default="", help="offline (default), api or off; else NGVM_OSV_MODE (v0.23.12)")
     ov.set_defaults(func=cmd_osv)
 
     sb = sub.add_parser("sbom", help="SBOM files (CycloneDX, SPDX) as libraries of assets (read, v0.23.11)")

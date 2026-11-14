@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """v0.15.2: the analysts' daily questions. Dates of the facts behind a decision, what changed since
 the run before and why, the fix plan of an asset, due dates, "are we concerned by this CVE"."""
 
@@ -11,8 +11,8 @@ import json
 
 import pytest
 
-from a2vm.io import validate_triage
-from a2vm.service import Problem
+from ngvm.io import validate_triage
+from ngvm.service import Problem
 from via.intel.record import parse_record
 
 from .test_v0150 import CHAT, tools  # noqa: F401 - fixture

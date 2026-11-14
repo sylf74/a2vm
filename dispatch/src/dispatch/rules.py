@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """Rules of a tenant's dispatch (`dispatch.yaml`, LLD dispatch §4): where the decisions go.
 
     schema_version: 1
@@ -16,7 +16,7 @@
       levels: [ACT, ATTEND, TRACK]
       max_tickets: 50
 
-Checked against `a2vm/schemas/dispatch.schema.json`; the credentials are never in this file.
+Checked against `ngvm/schemas/dispatch.schema.json`; the credentials are never in this file.
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ from typing import Any
 import jsonschema
 import yaml
 
-from a2vm.io import load_schema
+from ngvm.io import load_schema
 
 SCHEMA = "dispatch"
 LEVELS = ("ACT", "ATTEND", "TRACK")

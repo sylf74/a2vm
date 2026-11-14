@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """The decision service of pillar 3, read over its API (`verdict.v1`, role `read`): what pillar 4
 knows of the decisions. Pillar 4 never imports pillar 3 (D12)."""
 
@@ -29,7 +29,7 @@ class Decisions:
         self.tenant = tenant
         self.http = httpx.Client(
             base_url=base_url.rstrip("/"),
-            headers={"Authorization": f"Bearer {token}", "User-Agent": "a2vm-dispatch"},
+            headers={"Authorization": f"Bearer {token}", "User-Agent": "ngvm-dispatch"},
             timeout=httpx.Timeout(timeout, connect=10.0),
             transport=transport,
         )

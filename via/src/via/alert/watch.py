@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """Watch mode: what is new since the last check, and which of it concerns this client.
 
 New items come from the sources of the catalogue (config/watch-sources.yaml), read every few
@@ -18,7 +18,7 @@ minutes and labelled institutional, vendor or research:
 An item concerns the client when one of its CVEs matches a declared asset (same matching as the
 detection stage), or when a product it names matches a declared asset or the client's watchlist.
 Since v0.23.0 (D20) it also concerns the client when the packages listed on its hosts by the last
-daily run hold an affected version (the package advisories of the distributions, `a2vm.packages`):
+daily run hold an affected version (the package advisories of the distributions, `ngvm.packages`):
 the alert names those hosts within minutes, with no scan. Each asset named carries a level of proof:
 
   confirmed  a scan or an authenticated check of the last daily run sees the flaw
@@ -47,13 +47,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from a2vm import applications
-from a2vm.config import Settings
-from a2vm.declared import DeclaredMatcher
-from a2vm.gti import ssvc_exploitation
-from a2vm.matching import norm
-from a2vm.models import AffectedEntry, Asset, ClientProfile, DeclaredAsset, Finding, VulnRecord, exposure_value
-from a2vm.packages import INVESTIGATING, Exposure, covered, exposures, present
+from ngvm import applications
+from ngvm.config import Settings
+from ngvm.declared import DeclaredMatcher
+from ngvm.gti import ssvc_exploitation
+from ngvm.matching import norm
+from ngvm.models import AffectedEntry, Asset, ClientProfile, DeclaredAsset, Finding, VulnRecord, exposure_value
+from ngvm.packages import INVESTIGATING, Exposure, covered, exposures, present
 from via.intel.collect import collect
 from via.intel.gti import RADAR_FILTER, discovered
 from via.intel.remote import IntelClient, IntelError

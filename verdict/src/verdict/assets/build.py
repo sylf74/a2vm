@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """Consolidate the asset observations of one client into an inventory, and re-key its findings.
 
 Reconciliation (minimal first scope): two host observations are the same asset when they share an
@@ -35,8 +35,8 @@ import fnmatch
 import ipaddress
 from dataclasses import dataclass, field
 
-from a2vm.io import Detection
-from a2vm.models import (
+from ngvm.io import Detection
+from ngvm.models import (
     ATTRIBUTES,
     Asset,
     AssetObservation,

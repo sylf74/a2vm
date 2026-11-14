@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """v0.21.0 (HLD D19): priorities and SLA per client. The level stays the SSVC decision; the client's
 rules sort the decisions into priorities with their delays, counted from the day a decision enters its
 priority, in calendar or business days; the rule applied and the BOD 26-04 due date are kept."""
@@ -13,10 +13,10 @@ import httpx
 import pytest
 import yaml
 
-from a2vm import sla
-from a2vm.io import read_reporting, validate_triage
-from a2vm.profile import ProfileError, load_profile, validate_profile_data
-from a2vm.service import TokenSet, digest
+from ngvm import sla
+from ngvm.io import read_reporting, validate_triage
+from ngvm.profile import ProfileError, load_profile, validate_profile_data
+from ngvm.service import TokenSet, digest
 from verdict import priority
 from verdict.report import render_markdown, write_all
 from verdict.service.index import RunIndex
@@ -268,19 +268,19 @@ def test_verdict_run_reads_the_state_and_warns_without_it(tmp_path):
     assert _sla_state(None, profile) is None
     assert _sla_state(str(tmp_path / "missing.json"), profile) is None
     state = tmp_path / "state.json"
-    state.write_text(json.dumps({"schema": "a2vm.sla_state/1", "tenant": profile.id, "findings": [
+    state.write_text(json.dumps({"schema": "ngvm.sla_state/1", "tenant": profile.id, "findings": [
         {"id": "f1", "level": "ACT", "level_since": "2026-10-20T06:00:00+00:00", "sla": None},
         {"id": "f2", "level": "ATTEND", "level_since": None, "sla": {"priority": "P5", "due": "2027-01-01"}},
     ]}))  # fmt: skip
     read = _sla_state(str(state), profile)
     late = priority.read_state_data(
-        {"schema": "a2vm.sla_state/1", "tenant": "t", "findings": [{"id": "x", "level_since": "2026-10-20T23:30:00Z"}]},
+        {"schema": "ngvm.sla_state/1", "tenant": "t", "findings": [{"id": "x", "level_since": "2026-10-20T23:30:00Z"}]},
         "t",
         "Europe/Paris",
     )
     assert late["x"].level_since == D(2026, 10, 21)  # the client's day
     assert read["f1"].level_since == D(2026, 10, 20) and read["f1"].sla is None and read["f2"].sla["priority"] == "P5"
-    state.write_text(json.dumps({"schema": "a2vm.sla_state/1", "tenant": "another", "findings": []}))
+    state.write_text(json.dumps({"schema": "ngvm.sla_state/1", "tenant": "another", "findings": []}))
     assert _sla_state(str(state), profile) is None
 
 
@@ -311,7 +311,7 @@ def test_the_index_answers_by_priority(settings, sources, tmp_path):
 
 
 def test_the_sla_state_needs_the_database_and_the_publish_token(tmp_path):
-    from a2vm.service import Problem
+    from ngvm.service import Problem
     from verdict.service.server import Service
     from verdict.service.store import RunStore
 
@@ -335,7 +335,7 @@ def test_the_cli_writes_the_state_only_when_complete(tmp_path, monkeypatch):
     def answer(request):
         if request.url.path.endswith("/sla-state"):
             assert request.headers["authorization"] == f"Bearer {PUBLISH}"
-            body = {"schema": "a2vm.sla_state/1", "tenant": "lab", "generated_at": "x", "findings": [{"id": "a",
+            body = {"schema": "ngvm.sla_state/1", "tenant": "lab", "generated_at": "x", "findings": [{"id": "a",
                     "level": "ACT", "sla": None}]}  # fmt: skip
             return httpx.Response(200, json=body)
         return httpx.Response(404, json={"detail": "no such route"})
@@ -357,7 +357,7 @@ def test_the_cli_writes_the_state_only_when_complete(tmp_path, monkeypatch):
 
 
 def test_the_database_keeps_the_entry_into_each_priority(settings, sources, tmp_path, tenant_db):
-    from a2vm.db import Database
+    from ngvm.db import Database
     from verdict.service.index import row_id
     from verdict.service.pgstore import MIGRATIONS, PgRunStore
     from verdict.service.server import Service
@@ -376,7 +376,7 @@ def test_the_database_keeps_the_entry_into_each_priority(settings, sources, tmp_
 
     push(_doc(run, tmp_path), "d1")
     state = service.sla_state(tenant, PUBLISH)
-    assert state["schema"] == "a2vm.sla_state/1" and len(state["findings"]) == len(run.rows)
+    assert state["schema"] == "ngvm.sla_state/1" and len(state["findings"]) == len(run.rows)
     known = priority.read_state_data(state, tenant, "Europe/Paris")
     # Four days later the ATTEND open finding becomes ACT: P4 -> P1, never beyond the P4 due date.
     later = _sla_run(settings, sources, tmp_path, state=known, at="2026-11-06T06:00:00+00:00")
@@ -413,7 +413,7 @@ def test_the_sla_dashboard_reads_schema_5(settings, sources, tmp_path, reporting
 
     rdb = reporting_db
     run = _sla_run(settings, sources, tmp_path)
-    day1 = {"schema": "a2vm.reporting/1", **build(run, settings.policy)}
+    day1 = {"schema": "ngvm.reporting/1", **build(run, settings.policy)}
     day2 = json.loads(json.dumps(day1))
     day2["generated_at"] = "2026-11-07T09:00:00+00:00"
     fixed = next(d for d in day2["decisions"] if d["priority"] == "P4")
@@ -430,7 +430,7 @@ def test_the_sla_dashboard_reads_schema_5(settings, sources, tmp_path, reporting
     for a in day2["assets"]:
         if a["id"] == fixed["asset"]:
             a["scans"] = {k: "2100-01-01T00:00:00+00:00" for k in fixed["seen_by"]}
-    assert db.init(ADMIN, rdb["writer"]).startswith(f"schema a2vm version {db.SCHEMA_VERSION}")
+    assert db.init(ADMIN, rdb["writer"]).startswith(f"schema ngvm version {db.SCHEMA_VERSION}")
     for i, d in enumerate((day1, day2)):
         p = tmp_path / f"r{i}.json"
         p.write_text(json.dumps(d))
@@ -445,7 +445,7 @@ def test_the_sla_dashboard_reads_schema_5(settings, sources, tmp_path, reporting
                     cur = conn.execute(_grafana(t["rawSql"], {"tenant": [run.client.id]}))
                     results[(name, panel["title"])] = ([c.name for c in cur.description], cur.fetchall())
         row = conn.execute(
-            "SELECT priority, sla_due, sla_status, deadline FROM a2vm.decision_facts WHERE kev ORDER BY day DESC"
+            "SELECT priority, sla_due, sla_status, deadline FROM ngvm.decision_facts WHERE kev ORDER BY day DESC"
         ).fetchone()
     assert row[0] == "P0" and row[1] == D(2026, 11, 4) and row[2] == "overdue" and row[3] == D(2026, 11, 4)
     assert results[("sla", "Past their SLA due date")][1] == [(1,)]
@@ -463,14 +463,14 @@ def test_the_sla_dashboard_has_its_french_and_rssi_versions():
     from verdict.restitution.cli import dashboard
 
     fr = json.loads(dashboard("sla", "fr"))
-    assert fr["uid"] == "a2vm-sla-fr" and fr["title"] == "A2VM — priorités et SLA"
+    assert fr["uid"] == "ngvm-sla-fr" and fr["title"] == "NGVM — priorités et SLA"
     rssi = json.loads(dashboard("sla", rssi=True))
     links = [o for p in rssi["panels"] for o in p.get("fieldConfig", {}).get("overrides", []) if "links" in str(o)]
     assert len(links) == 2 and "remediate?asset=" in json.dumps(links)
-    chart = (ROOT / "deploy" / "charts" / "a2vm-portal" / "templates" / "grafana.yaml").read_text()
+    chart = (ROOT / "deploy" / "charts" / "ngvm-portal" / "templates" / "grafana.yaml").read_text()
     assert '"coverage" "sla" }}' in chart
     for f in ("sla.json", "sla.fr.json", "sla.rssi.json", "sla.rssi.fr.json"):
-        assert (ROOT / "deploy" / "charts" / "a2vm-portal" / "dashboards" / f).is_file()
+        assert (ROOT / "deploy" / "charts" / "ngvm-portal" / "dashboards" / f).is_file()
 
 
 # -- dispatch -----------------------------------------------------------------------------------------
@@ -490,13 +490,13 @@ def test_tickets_carry_the_priority_and_the_sla_due_date():
     built = tk.build(decisions, "itsm")
     t = built["host:web01 / openssl 3.0.9"]
     assert (t.priority, t.due, t.bod_due) == ("P1", "2026-11-13", "2026-11-20")
-    assert tk.title(t).startswith("[A2VM ACT P1] host:web01")
+    assert tk.title(t).startswith("[NGVM ACT P1] host:web01")
     text = tk.description(t)
     assert "<b>Priority</b>: P1" in text and "(SLA): 2026-11-13" in text and "for comparison): 2026-11-20" in text
     plain = built["host:web02 / no known fix"]
     assert (
         plain.priority == ""
-        and tk.title(plain).startswith("[A2VM ACT] ")
+        and tk.title(plain).startswith("[NGVM ACT] ")
         and "(BOD 26-04): 2026-11-20" in (tk.description(plain))
     )
     again = tk.Ticket.from_dict(json.loads(json.dumps(t.to_dict())))
@@ -511,7 +511,7 @@ def test_tickets_carry_the_priority_and_the_sla_due_date():
         return httpx.Response(200, json={"code": 0, "objects": {"x": {"code": 0, "key": "7", "fields": {}}}})
 
     target = Target("itsm", "itop", {"url": "https://itop.example.org", "user": "u", "organization": "Lab",
-                                     "caller": "A2VM", "priorities": {"P2": {"impact": 1, "urgency": 1}}})  # fmt: skip
+                                     "caller": "NGVM", "priorities": {"P2": {"impact": 1, "urgency": 1}}})  # fmt: skip
     ItopConnector(target, "pw", transport=httpx.MockTransport(itop)).create(t, "x", "y")
     assert (sent["fields"]["impact"], sent["fields"]["urgency"]) == ("1", "1")
     ItopConnector(target, "pw", transport=httpx.MockTransport(itop)).create(plain, "x", "y")
@@ -521,7 +521,7 @@ def test_tickets_carry_the_priority_and_the_sla_due_date():
 def test_the_dispatch_rules_accept_the_priorities_of_itop():
     import jsonschema
 
-    from a2vm.io import load_schema
+    from ngvm.io import load_schema
 
     data = yaml.safe_load((ROOT / "examples" / "lab" / "dispatch.yaml").read_text())
     data["targets"]["itsm"]["priorities"] = {"P0": {"impact": 1, "urgency": 1}}
@@ -536,8 +536,8 @@ def test_the_requests_of_a_dashboard_may_name_a_priority():
 
 # -- deployment ---------------------------------------------------------------------------------------
 def test_the_daily_run_reads_the_state_before_deciding():
-    daily = (ROOT / "deploy" / "charts" / "a2vm-tenant" / "templates" / "cronjob-daily.yaml").read_text()
-    step = daily.split('define "a2vm-tenant.step.triage"')[1].split("{{- end -}}")[0]
+    daily = (ROOT / "deploy" / "charts" / "ngvm-tenant" / "templates" / "cronjob-daily.yaml").read_text()
+    step = daily.split('define "ngvm-tenant.step.triage"')[1].split("{{- end -}}")[0]
     assert "verdict sla-state" in step and "--sla-state /data/work/sla-state.json" in step
     assert step.index("verdict sla-state") < step.index("verdict run")
     assert "/secrets/verdict-publish-token" in step and "WARN no SLA state" in step
@@ -565,6 +565,6 @@ def test_decision_d19_and_the_release_are_recorded():
 
     hld = (ROOT / "docs" / "hld" / "00-product-strategy.md").read_text()
     assert re.search(r"^\| D19 \| The client's priorities and SLA, within the levels", hld, re.M)
-    assert re.search(r"^\| v0.21.0( \(current\))? \| D19", hld, re.M) and "`a2vm.sla`" in hld
+    assert re.search(r"^\| v0.21.0( \(current\))? \| D19", hld, re.M) and "`ngvm.sla`" in hld
     assert "## 17. Priorities and SLA" in (ROOT / "docs" / "lld" / "triage-prioritization.md").read_text()
     assert (ROOT / "docs" / "sla.md").is_file()

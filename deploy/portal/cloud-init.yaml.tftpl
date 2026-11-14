@@ -1,5 +1,5 @@
 #cloud-config
-# A2VM client portal, first boot (Rocky Linux 10): Podman, PostgreSQL (reporting database, TLS),
+# NGVM client portal, first boot (Rocky Linux 10): Podman, PostgreSQL (reporting database, TLS),
 # Grafana behind Caddy (HTTPS, Let's Encrypt). Rendered by Terraform templatefile(): a doubled
 # dollar sign is a shell variable, a single one a Terraform value.
 package_update: true
@@ -10,7 +10,7 @@ packages:
   - openssl
 
 write_files:
-  - path: /opt/a2vm-portal/compose.yaml
+  - path: /opt/ngvm-portal/compose.yaml
     permissions: "0644"
     content: |
       services:
@@ -29,7 +29,7 @@ write_files:
             - ./pg/server.crt:/certs/server.crt:ro,Z
             - ./pg/server.key:/certs/server.key:ro,Z
             - ./pg/pg_hba.conf:/certs/pg_hba.conf:ro,Z
-            - ./pg/init.sh:/docker-entrypoint-initdb.d/10-a2vm.sh:ro,Z
+            - ./pg/init.sh:/docker-entrypoint-initdb.d/10-ngvm.sh:ro,Z
           ports:
             - "5432:5432"
         grafana:
@@ -57,7 +57,7 @@ write_files:
         grafana:
         caddy:
 
-  - path: /opt/a2vm-portal/caddy/Caddyfile
+  - path: /opt/ngvm-portal/caddy/Caddyfile
     permissions: "0644"
     content: |
       ${domain} {
@@ -73,7 +73,7 @@ write_files:
       	respond 403
       }
 
-  - path: /opt/a2vm-portal/pg/pg_hba.conf
+  - path: /opt/ngvm-portal/pg/pg_hba.conf
     permissions: "0600"
     content: |
       # TLS only, from the admin addresses and from the containers' network (Grafana).
@@ -83,26 +83,26 @@ write_files:
 %{ endfor ~}
       hostssl all  all  10.89.0.0/16    scram-sha-256
 
-  - path: /opt/a2vm-portal/pg/init.sh
+  - path: /opt/ngvm-portal/pg/init.sh
     permissions: "0755"
     content: |
       #!/bin/bash
-      # First start of PostgreSQL only: the database and the role the A2VM jobs write with.
-      # Tables, the Grafana reader and the per-tenant roles: `verdict db init` (A2VM).
+      # First start of PostgreSQL only: the database and the role the NGVM jobs write with.
+      # Tables, the Grafana reader and the per-tenant roles: `verdict db init` (NGVM).
       set -e
       psql -v ON_ERROR_STOP=1 -U postgres <<SQL
-      CREATE DATABASE a2vm;
-      CREATE ROLE a2vm_writer LOGIN PASSWORD '$${WRITER_PASSWORD}';
-      GRANT CONNECT, CREATE ON DATABASE a2vm TO a2vm_writer;
+      CREATE DATABASE ngvm;
+      CREATE ROLE ngvm_writer LOGIN PASSWORD '$${WRITER_PASSWORD}';
+      GRANT CONNECT, CREATE ON DATABASE ngvm TO ngvm_writer;
       SQL
 
-  - path: /opt/a2vm-portal/bootstrap.sh
+  - path: /opt/ngvm-portal/bootstrap.sh
     permissions: "0700"
     content: |
       #!/bin/bash
       # Secrets and certificate generated here, once: they never leave the instance.
       set -euo pipefail
-      cd /opt/a2vm-portal
+      cd /opt/ngvm-portal
       umask 077
       mkdir -p secrets
       for s in postgres writer grafana-admin; do
@@ -126,4 +126,4 @@ write_files:
       podman-compose ps
 
 runcmd:
-  - [/opt/a2vm-portal/bootstrap.sh]
+  - [/opt/ngvm-portal/bootstrap.sh]

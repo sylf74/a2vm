@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """v0.13.0 (HLD D15 step 2): the chart deploys the detection service next to the daily run, the
 deploy job makes its secrets from the tenant project, and the daily run reads what the collectors
 pushed (LLD detection §8.3-8.5)."""
@@ -16,7 +16,7 @@ import yaml
 from detect.intake.registry import digest, load_registry
 
 ROOT = Path(__file__).resolve().parents[1]
-CHART = ROOT / "deploy" / "charts" / "a2vm-tenant"
+CHART = ROOT / "deploy" / "charts" / "ngvm-tenant"
 SCRIPT = ROOT / "deploy" / "intake" / "intake_secrets.py"
 TOKEN = "0123456789abcdef0123456789abcdef"
 
@@ -45,13 +45,13 @@ def test_deploy_script_makes_digests_the_service_accepts(tmp_path, collectors, m
     secrets = _script()
     token_file = tmp_path / "dmz-token"
     token_file.write_text("f" * 64 + "\n")  # a File variable
-    monkeypatch.setenv("A2VM_COLLECTOR_TOKEN_LAB_LAN", TOKEN)
-    monkeypatch.setenv("A2VM_COLLECTOR_TOKEN_LAB_LAN_NEXT", "n" * 40)
-    monkeypatch.setenv("A2VM_COLLECTOR_TOKEN_LAB_DMZ", str(token_file))
+    monkeypatch.setenv("NGVM_COLLECTOR_TOKEN_LAB_LAN", TOKEN)
+    monkeypatch.setenv("NGVM_COLLECTOR_TOKEN_LAB_LAN_NEXT", "n" * 40)
+    monkeypatch.setenv("NGVM_COLLECTOR_TOKEN_LAB_DMZ", str(token_file))
     out = tmp_path / "out"
     assert secrets.main([str(collectors), "--out", str(out)]) == 0
     printed = capsys.readouterr().out
-    assert "collector lab-lan: token set (A2VM_COLLECTOR_TOKEN_LAB_LAN, A2VM_COLLECTOR_TOKEN_LAB_LAN_NEXT)" in printed
+    assert "collector lab-lan: token set (NGVM_COLLECTOR_TOKEN_LAB_LAN, NGVM_COLLECTOR_TOKEN_LAB_LAN_NEXT)" in printed
     assert TOKEN not in printed and "f" * 64 not in printed and "read token: new" in printed
     for name in ("digests", "detect-read-token"):
         assert stat.S_IMODE((out / name).stat().st_mode) == 0o600
@@ -68,7 +68,7 @@ def test_deploy_script_keeps_the_read_token_and_names_missing_tokens(tmp_path, c
     deployed.write_text("r" * 43)
     assert secrets.main([str(collectors), "--out", str(tmp_path / "o"), "--read-token", str(deployed)]) == 0
     printed = capsys.readouterr().out
-    assert "read token: kept" in printed and "no token: set A2VM_COLLECTOR_TOKEN_LAB_LAN (masked)" in printed
+    assert "read token: kept" in printed and "no token: set NGVM_COLLECTOR_TOKEN_LAB_LAN (masked)" in printed
     assert (tmp_path / "o" / "detect-read-token").read_text() == "r" * 43
     assert (tmp_path / "o" / "digests").read_text() == f"read {digest('r' * 43)}\n"
     # Nothing deployed yet (an empty file from the cluster): a new one.
@@ -79,14 +79,14 @@ def test_deploy_script_keeps_the_read_token_and_names_missing_tokens(tmp_path, c
 
 @pytest.mark.parametrize("token", ["short", "with a space in it, long enough to pass the length"])
 def test_deploy_script_refuses_a_weak_token_without_printing_it(tmp_path, collectors, monkeypatch, capsys, token):
-    monkeypatch.setenv("A2VM_COLLECTOR_TOKEN_LAB_DMZ", token)
+    monkeypatch.setenv("NGVM_COLLECTOR_TOKEN_LAB_DMZ", token)
     assert _script().main([str(collectors), "--out", str(tmp_path / "o")]) == 2
     err = capsys.readouterr().err
-    assert "A2VM_COLLECTOR_TOKEN_LAB_DMZ" in err and token not in err
+    assert "NGVM_COLLECTOR_TOKEN_LAB_DMZ" in err and token not in err
     assert not (tmp_path / "o" / "digests").exists()
 
 
-def test_deploy_script_runs_without_the_a2vm_packages():
+def test_deploy_script_runs_without_the_ngvm_packages():
     tree = ast.parse(SCRIPT.read_text())
     imported = {a.name.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
     imported |= {n.module.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module}
@@ -96,15 +96,15 @@ def test_deploy_script_runs_without_the_a2vm_packages():
 def test_deploy_job_hands_the_declaration_and_digests_to_the_chart():
     pipeline = _pipeline()
     script = "\n".join(pipeline["deploy-k8s"]["script"])
-    assert 'if [ -f "$A2VM_COLLECTORS" ]' in script
+    assert 'if [ -f "$NGVM_COLLECTORS" ]' in script
     assert "deploy/intake/intake_secrets.py" in script and "py3-yaml" in script
-    assert "create secret generic a2vm-intake --from-file=digests=" in script
+    assert "create secret generic ngvm-intake --from-file=digests=" in script
     for flag in (
         "--set intake.enabled=true",
-        "--set-file intake.collectors=$A2VM_COLLECTORS",
-        "--set intake.digestsSecret=a2vm-intake",
+        "--set-file intake.collectors=$NGVM_COLLECTORS",
+        "--set intake.digestsSecret=ngvm-intake",
         "--set intake.digestsChecksum=",
-        "--set collect.mode=${A2VM_COLLECT_MODE:-intake}",
+        "--set collect.mode=${NGVM_COLLECT_MODE:-intake}",
         "$INTAKE",
     ):
         assert flag in script, flag
@@ -112,8 +112,8 @@ def test_deploy_job_hands_the_declaration_and_digests_to_the_chart():
     assert 'rm -rf "$I"' in script
     assert 'echo "${READ_TOKEN' not in script and "cat $READ_TOKEN" not in script
     validate = "\n".join(pipeline["validate"]["script"])
-    assert 'detect collectors "$A2VM_COLLECTORS"' in validate and '--profile "$A2VM_PROFILE"' in validate
-    assert pipeline["variables"]["A2VM_COLLECTORS"] == "collectors.yaml"
+    assert 'detect collectors "$NGVM_COLLECTORS"' in validate and '--profile "$NGVM_PROFILE"' in validate
+    assert pipeline["variables"]["NGVM_COLLECTORS"] == "collectors.yaml"
 
 
 def test_daily_run_reads_the_service_in_intake_mode_and_collects_in_local_mode():
@@ -157,7 +157,7 @@ def test_detection_service_is_unprivileged_closed_and_publishes_the_push_only():
 
 
 def test_contract_status_and_read_by_source_and_collector():
-    spec = yaml.safe_load((ROOT / "a2vm" / "src" / "a2vm" / "schemas" / "openapi" / "detect.v1.yaml").read_text())
+    spec = yaml.safe_load((ROOT / "ngvm" / "src" / "ngvm" / "schemas" / "openapi" / "detect.v1.yaml").read_text())
     assert not spec["info"]["version"].endswith("draft")
     latest = spec["paths"]["/v1/tenants/{tenant}/detections/latest"]["get"]
     assert "collector" in latest["summary"]

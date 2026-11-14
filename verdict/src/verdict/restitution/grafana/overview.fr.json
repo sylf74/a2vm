@@ -1,8 +1,8 @@
 {
   "__inputs": [
     {
-      "name": "DS_A2VM",
-      "label": "Base de restitution A2VM",
+      "name": "DS_NGVM",
+      "label": "Base de restitution NGVM",
       "description": "Source de données PostgreSQL de la base de restitution",
       "type": "datasource",
       "pluginId": "grafana-postgresql-datasource",
@@ -47,10 +47,10 @@
       "version": ""
     }
   ],
-  "title": "A2VM — vue d'ensemble d'un client",
-  "uid": "a2vm-decisions-fr",
+  "title": "NGVM — vue d'ensemble d'un client",
+  "uid": "ngvm-decisions-fr",
   "tags": [
-    "a2vm",
+    "ngvm",
     "fr"
   ],
   "timezone": "browser",
@@ -67,12 +67,12 @@
     {
       "type": "dashboards",
       "tags": [
-        "a2vm"
+        "ngvm"
       ],
       "asDropdown": false,
       "includeVars": true,
       "keepTime": true,
-      "title": "A2VM"
+      "title": "NGVM"
     }
   ],
   "templating": {
@@ -84,10 +84,10 @@
         "type": "query",
         "datasource": {
           "type": "grafana-postgresql-datasource",
-          "uid": "${DS_A2VM}"
+          "uid": "${DS_NGVM}"
         },
-        "query": "SELECT tenant AS __value, tenant_name AS __text FROM a2vm.latest_runs ORDER BY tenant_name",
-        "definition": "SELECT tenant AS __value, tenant_name AS __text FROM a2vm.latest_runs ORDER BY tenant_name",
+        "query": "SELECT tenant AS __value, tenant_name AS __text FROM ngvm.latest_runs ORDER BY tenant_name",
+        "definition": "SELECT tenant AS __value, tenant_name AS __text FROM ngvm.latest_runs ORDER BY tenant_name",
         "refresh": 1,
         "sort": 0,
         "multi": false,
@@ -106,12 +106,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT act AS value FROM a2vm.latest_runs WHERE tenant = '${tenant}'"
+          "rawSql": "SELECT act AS value FROM ngvm.latest_runs WHERE tenant = '${tenant}'"
         }
       ],
       "options": {
@@ -141,7 +141,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 1
     },
@@ -154,12 +154,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT attend AS value FROM a2vm.latest_runs WHERE tenant = '${tenant}'"
+          "rawSql": "SELECT attend AS value FROM ngvm.latest_runs WHERE tenant = '${tenant}'"
         }
       ],
       "options": {
@@ -189,7 +189,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 2
     },
@@ -202,12 +202,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT track AS value FROM a2vm.latest_runs WHERE tenant = '${tenant}'"
+          "rawSql": "SELECT track AS value FROM ngvm.latest_runs WHERE tenant = '${tenant}'"
         }
       ],
       "options": {
@@ -237,7 +237,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 3
     },
@@ -250,12 +250,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT overdue AS value FROM a2vm.latest_runs WHERE tenant = '${tenant}'"
+          "rawSql": "SELECT overdue AS value FROM ngvm.latest_runs WHERE tenant = '${tenant}'"
         }
       ],
       "options": {
@@ -285,7 +285,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 4
     },
@@ -298,12 +298,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT due_soon AS value FROM a2vm.latest_runs WHERE tenant = '${tenant}'"
+          "rawSql": "SELECT due_soon AS value FROM ngvm.latest_runs WHERE tenant = '${tenant}'"
         }
       ],
       "options": {
@@ -333,7 +333,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 5
     },
@@ -346,12 +346,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT needs_review AS value FROM a2vm.latest_runs WHERE tenant = '${tenant}'"
+          "rawSql": "SELECT needs_review AS value FROM ngvm.latest_runs WHERE tenant = '${tenant}'"
         }
       ],
       "options": {
@@ -381,7 +381,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 6
     },
@@ -394,12 +394,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT exposure_gaps AS value FROM a2vm.latest_runs WHERE tenant = '${tenant}'"
+          "rawSql": "SELECT exposure_gaps AS value FROM ngvm.latest_runs WHERE tenant = '${tenant}'"
         }
       ],
       "options": {
@@ -429,7 +429,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 7
     },
@@ -442,12 +442,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT generated_at AS value FROM a2vm.latest_runs WHERE tenant = '${tenant}'"
+          "rawSql": "SELECT generated_at AS value FROM ngvm.latest_runs WHERE tenant = '${tenant}'"
         }
       ],
       "options": {
@@ -477,7 +477,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 8
     },
@@ -490,12 +490,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "time_series",
-          "rawSql": "SELECT generated_at AS time, act AS \"ACT\", attend AS \"ATTEND\", track AS \"TRACK\" FROM a2vm.runs WHERE tenant = '${tenant}' AND $__timeFilter(generated_at) ORDER BY 1"
+          "rawSql": "SELECT generated_at AS time, act AS \"ACT\", attend AS \"ATTEND\", track AS \"TRACK\" FROM ngvm.runs WHERE tenant = '${tenant}' AND $__timeFilter(generated_at) ORDER BY 1"
         }
       ],
       "fieldConfig": {
@@ -572,7 +572,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 9
     },
@@ -584,12 +584,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT coalesce(exposure, 'unknown') AS exposure, count(*) FILTER (WHERE level = 'ACT') AS \"ACT\", count(*) FILTER (WHERE level = 'ATTEND') AS \"ATTEND\", count(*) FILTER (WHERE level = 'TRACK') AS \"TRACK\" FROM a2vm.latest_decisions WHERE tenant = '${tenant}' GROUP BY 1 ORDER BY 1"
+          "rawSql": "SELECT coalesce(exposure, 'unknown') AS exposure, count(*) FILTER (WHERE level = 'ACT') AS \"ACT\", count(*) FILTER (WHERE level = 'ATTEND') AS \"ATTEND\", count(*) FILTER (WHERE level = 'TRACK') AS \"TRACK\" FROM ngvm.latest_decisions WHERE tenant = '${tenant}' GROUP BY 1 ORDER BY 1"
         }
       ],
       "options": {
@@ -655,7 +655,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 10
     },
@@ -668,12 +668,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT name AS \"Actif\", kind AS \"Écart\", declared AS \"Déclarée\", detail AS \"Détail\" FROM a2vm.latest_exposure_gaps WHERE tenant = '${tenant}' ORDER BY kind, name"
+          "rawSql": "SELECT name AS \"Actif\", kind AS \"Écart\", declared AS \"Déclarée\", detail AS \"Détail\" FROM ngvm.latest_exposure_gaps WHERE tenant = '${tenant}' ORDER BY kind, name"
         }
       ],
       "options": {
@@ -699,7 +699,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 11
     },
@@ -712,12 +712,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT level AS \"Niveau\", cve AS \"CVE\", asset_name AS \"Actif\", zone AS \"Zone\", exposure AS \"Exposition\", bod_timeline AS \"BOD 26-04\", due_date AS \"Échéance\", kev AS \"KEV\", round(epss::numeric, 3) AS \"EPSS\", needs_review AS \"À revoir\", title AS \"Vulnérabilité\" FROM a2vm.latest_decisions WHERE tenant = '${tenant}' AND level IN ('ACT', 'ATTEND') ORDER BY CASE level WHEN 'ACT' THEN 0 ELSE 1 END, due_date NULLS LAST, cve"
+          "rawSql": "SELECT level AS \"Niveau\", cve AS \"CVE\", asset_name AS \"Actif\", zone AS \"Zone\", exposure AS \"Exposition\", bod_timeline AS \"BOD 26-04\", due_date AS \"Échéance\", kev AS \"KEV\", round(epss::numeric, 3) AS \"EPSS\", needs_review AS \"À revoir\", title AS \"Vulnérabilité\" FROM ngvm.latest_decisions WHERE tenant = '${tenant}' AND level IN ('ACT', 'ATTEND') ORDER BY CASE level WHEN 'ACT' THEN 0 ELSE 1 END, due_date NULLS LAST, cve"
         }
       ],
       "options": {
@@ -780,7 +780,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 12
     },
@@ -793,12 +793,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT name AS \"Actif\", zone AS \"Zone\", exposure AS \"Exposition\", owner AS \"Responsable\", act AS \"ACT\", attend AS \"ATTEND\", track AS \"TRACK\" FROM a2vm.latest_assets WHERE tenant = '${tenant}' ORDER BY act DESC, attend DESC, name"
+          "rawSql": "SELECT name AS \"Actif\", zone AS \"Zone\", exposure AS \"Exposition\", owner AS \"Responsable\", act AS \"ACT\", attend AS \"ATTEND\", track AS \"TRACK\" FROM ngvm.latest_assets WHERE tenant = '${tenant}' ORDER BY act DESC, attend DESC, name"
         }
       ],
       "options": {
@@ -824,7 +824,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 13
     },
@@ -837,12 +837,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT s.name AS \"Source\", s.findings AS \"Constats\", s.last_observation AS \"Dernière observation\" FROM a2vm.sources s JOIN a2vm.latest_runs r USING (run_id) WHERE r.tenant = '${tenant}' ORDER BY 1"
+          "rawSql": "SELECT s.name AS \"Source\", s.findings AS \"Constats\", s.last_observation AS \"Dernière observation\" FROM ngvm.sources s JOIN ngvm.latest_runs r USING (run_id) WHERE r.tenant = '${tenant}' ORDER BY 1"
         }
       ],
       "options": {
@@ -868,7 +868,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 14
     }

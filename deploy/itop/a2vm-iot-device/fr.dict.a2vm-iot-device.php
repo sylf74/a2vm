@@ -1,5 +1,5 @@
 <?php
-// SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+// SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 
 Dict::Add('FR FR', 'French', 'Français', [
 	'Class:IoTDevice' => 'Objet connecté',

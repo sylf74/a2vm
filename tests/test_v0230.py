@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """v0.23.0 (D20, first step): the components of each asset with their source and age, the package
 advisories of the distributions in the records, and the watch naming the hosts whose packages hold
 an affected version, with a level of proof."""
@@ -11,8 +11,8 @@ import re
 import httpx
 import pytest
 
-from a2vm.models import Asset, Attribute, VulnRecord
-from a2vm.packages import compare, covered, deb_compare, exposures, family, present, rpm_compare
+from ngvm.models import Asset, Attribute, VulnRecord
+from ngvm.packages import compare, covered, deb_compare, exposures, family, present, rpm_compare
 
 from .conftest import FIXTURES, ROOT
 
@@ -50,7 +50,7 @@ def test_packages_name_their_distribution_and_source_package() -> None:
 
 # -- pillar 3: components per source, each with its age --------------------------------------------
 def test_components_keep_each_source_with_its_age() -> None:
-    from a2vm.models import AssetObservation
+    from ngvm.models import AssetObservation
     from verdict.assets.build import consolidate_components
 
     def obs(source, at, comps):
@@ -71,7 +71,7 @@ def test_components_keep_each_source_with_its_age() -> None:
 
 
 def test_schemas_carry_the_new_component_fields() -> None:
-    from a2vm.io import load_schema
+    from ngvm.io import load_schema
 
     item = load_schema("assets")["$defs"]["asset"]["properties"]["components"]["items"]
     assert {"source_package", "distro", "source", "seen"} <= set(item["properties"])
@@ -161,7 +161,7 @@ def test_a_cve_without_an_advisory_is_not_asked_again(settings) -> None:
 
 
 def test_records_carry_the_advisories_only_when_asked(sources, tmp_path) -> None:
-    from a2vm.io import read_records, write_records
+    from ngvm.io import read_records, write_records
     from via.intel.collect import collect
 
     plain = collect(sources, [CVE])

@@ -1,7 +1,7 @@
 # Appliances and network devices (v0.23.6)
 
 A firewall, a switch, a router or a VPN gateway has no package an SSH collection could list, no EDR
-agent and no SBOM. Yet these edge devices are the most exploited and the least scanned. A2VM reads
+agent and no SBOM. Yet these edge devices are the most exploited and the least scanned. NGVM reads
 their exact version (their firmware) where it is known: over SNMP, or from the CMDB. The watch then
 matches it against the affected versions of each new CVE record and of the vendor's CSAF advisory,
 and names the device with the level of proof **embedded** (embarqué). Design: LLD detection §3.9,
@@ -39,28 +39,28 @@ SNMPv3 with authentication and privacy (`authPriv`), a read-only view, on each d
 on a Cisco device, with the collector's address:
 
 ```text
-snmp-server view A2VM-RO system included
-snmp-server view A2VM-RO enterprises included
-snmp-server group A2VM-RO v3 priv read A2VM-RO access A2VM-COLLECTOR
-snmp-server user a2vm-ro A2VM-RO v3 auth sha256 <auth password> priv aes 128 <priv password>
-ip access-list standard A2VM-COLLECTOR
+snmp-server view NGVM-RO system included
+snmp-server view NGVM-RO enterprises included
+snmp-server group NGVM-RO v3 priv read NGVM-RO access NGVM-COLLECTOR
+snmp-server user ngvm-ro NGVM-RO v3 auth sha256 <auth password> priv aes 128 <priv password>
+ip access-list standard NGVM-COLLECTOR
  permit 192.0.2.10
 ```
 
-A2VM asks for four objects at most per device (sysDescr, sysObjectID, sysName, the vendor's version
+NGVM asks for four objects at most per device (sysDescr, sysObjectID, sysName, the vendor's version
 object): the views `system` and the vendor's subtree are enough. On the collector, each password in
 its file, readable by the agent only, without typing it on a command line:
 
 ```bash
-sudo sh -c 'umask 077; cat > /etc/a2vm/collector/snmp-auth'
+sudo sh -c 'umask 077; cat > /etc/ngvm/collector/snmp-auth'
 ```
 
 ```bash
-sudo sh -c 'umask 077; cat > /etc/a2vm/collector/snmp-priv'
+sudo sh -c 'umask 077; cat > /etc/ngvm/collector/snmp-priv'
 ```
 
 ```bash
-sudo chown 10001:10001 /etc/a2vm/collector/snmp-auth /etc/a2vm/collector/snmp-priv
+sudo chown 10001:10001 /etc/ngvm/collector/snmp-auth /etc/ngvm/collector/snmp-priv
 ```
 
 Each command waits for the password: paste it, press Enter, then Ctrl-D. An old device that knows
@@ -68,20 +68,20 @@ SNMPv2c only: `version: 2c` and a `community_file` instead.
 
 ## 3. Connector on the collector
 
-In `/etc/a2vm/collector/collector.yaml` (`docs/collectors.md` §2):
+In `/etc/ngvm/collector/collector.yaml` (`docs/collectors.md` §2):
 
 ```yaml
 connectors:
   - name: lan-network
     type: snmp
     targets: [192.0.2.1, 192.0.2.64/28, fw01.lab.example]   # addresses, names or networks
-    user: a2vm-ro
-    auth_password_file: /etc/a2vm/collector/snmp-auth
-    priv_password_file: /etc/a2vm/collector/snmp-priv
+    user: ngvm-ro
+    auth_password_file: /etc/ngvm/collector/snmp-auth
+    priv_password_file: /etc/ngvm/collector/snmp-priv
     # auth_protocol: sha256                  # sha, sha224, sha256, sha384, sha512, md5
     # priv_protocol: aes                     # aes, aes192, aes256, des, 3des, none (authNoPriv)
     # version: 2c                            # with community_file, for old devices
-    # community_file: /etc/a2vm/collector/snmp-community
+    # community_file: /etc/ngvm/collector/snmp-community
     # exclude: [192.0.2.70]                  # addresses or networks left out
     # port: 161
     # timeout_seconds: 2
@@ -90,7 +90,7 @@ connectors:
 ```
 
 At most 4096 addresses per connector. Its timer runs before the daily run
-(`sudo systemctl enable --now a2vm-collector@lan-network.timer`). In the tenant project,
+(`sudo systemctl enable --now ngvm-collector@lan-network.timer`). In the tenant project,
 `collectors.yaml` declares the source: `sources: [..., snmp]`. The journal shows
 `snmp: <n> targets, <m> devices, firmware known on <k>`, then `ok   snmp [lan-network]`. A test
 without the collector: `detect snmp fetch --config snmp.yaml --tenant lab --out work/detect`.
@@ -125,8 +125,8 @@ when the range gives it, the source (`firmware reported (snmp, <date>)`) and the
 
 | Journal | Cause | Remedy |
 | --- | --- | --- |
-| `cannot read /etc/a2vm/collector/snmp-auth` | A password file missing | §2 |
-| `snmp: <n> targets, 0 devices` | Firewall (UDP 161), ACL of the device, wrong user or passwords | `snmpget -v3 -l authPriv -u a2vm-ro -a SHA-256 -A … -x AES -X … <ip> 1.3.6.1.2.1.1.1.0` from the collector |
+| `cannot read /etc/ngvm/collector/snmp-auth` | A password file missing | §2 |
+| `snmp: <n> targets, 0 devices` | Firewall (UDP 161), ACL of the device, wrong user or passwords | `snmpget -v3 -l authPriv -u ngvm-ro -a SHA-256 -A … -x AES -X … <ip> 1.3.6.1.2.1.1.1.0` from the collector |
 | `firmware known on 0` | Devices of families not recognised, or a view without the vendor's subtree | §1; the view `enterprises` |
 | `pysnmp is missing` | An image older than v0.23.6 | `detect:v0.23.6` |
 

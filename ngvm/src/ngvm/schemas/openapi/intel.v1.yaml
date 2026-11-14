@@ -1,0 +1,263 @@
+# Contract of the shared intelligence service of pillar 1 (HLD D17, LLD vulnerability-intelligence §3.10).
+# Status: v1, as built in v0.22.0 (via intel-serve). Within v1, fields and calls are only added. The
+# knowledge base of the company's watch team may answer the same calls in its place (D17).
+openapi: 3.1.0
+info:
+  title: NGVM shared intelligence service
+  version: "1.0.0"
+  description: >
+    One service for every tenant, in the namespace of the watch team (ngvm-via). It collects and
+    enriches the public records once (CVE record, CISA KEV, FIRST EPSS, Google Threat Intelligence
+    when enabled), keeps the technologies the tenants watch without who sent them (48 hours), and
+    serves a feed: the radar's events validated by the watch team and, GTI enabled, the
+    vulnerabilities GTI knows on the technologies watched (facts only, never GTI's prose). It holds no
+    asset, no address and no client name. Roles: read (one token per tenant; the service never
+    records which tenant called), radar (the watch team's sender).
+servers:
+  - url: http://ngvm-via-intel.ngvm-via.svc:8080
+tags:
+  - name: tenants
+  - name: radar
+  - name: operations
+paths:
+  /v1/records:
+    post:
+      tags: [tenants]
+      operationId: getRecords
+      summary: The records of a set of CVE ids, collected and enriched once for every tenant
+      security:
+        - readToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cves]
+              properties:
+                cves: {type: array, maxItems: 5000, items: {type: string, pattern: "^CVE-\\d{4}-\\d{4,}$"}}
+                packages:
+                  type: boolean
+                  description: >-
+                    true: each record also carries the package advisories of the distributions
+                    (`packages`, since v0.23.0), read by CVE id from Red Hat and OSV
+      responses:
+        "200":
+          description: The records (the `records` of ngvm.records/1), the ids without one and why
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [records, errors]
+                properties:
+                  records: {type: array, items: {type: object, additionalProperties: true}}
+                  errors:
+                    type: array
+                    items: {type: object, properties: {cve: {type: string}, error: {type: string}}}
+                  notes: {type: array, items: {type: string}}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "413": {$ref: "#/components/responses/Problem"}
+  /v1/osv/{ecosystem}:
+    get:
+      operationId: getOsvIndex
+      summary: >-
+        The index of OSV for one language ecosystem (since v0.23.12, ngvm.osvdb): the records with a
+        CVE, gzipped JSON, rebuilt from OSV's archive every few hours. The tenants match their
+        libraries against it at home: no library is sent here
+      security:
+        - readToken: []
+      parameters:
+        - {name: ecosystem, in: path, required: true,
+           schema: {type: string, enum: [PyPI, npm, Maven, Go, crates.io, RubyGems, NuGet, Packagist]}}
+        - {name: If-None-Match, in: header, schema: {type: string}, description: "the ETag of the reader's copy"}
+      responses:
+        "200":
+          description: The index (gzipped JSON), with its ETag
+          content:
+            application/gzip:
+              schema: {type: string, format: binary}
+        "304": {description: The reader's copy is the same}
+        "401": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /v1/records/new:
+    get:
+      operationId: listNewRecords
+      summary: >-
+        The CVE records published or updated in a period (since v0.23.4, the chat's list_new_cves),
+        from cvelistV5's deltaLog (about 30 days back): newest first, each with `at` (when CVE.org
+        published the change), its change, and its record in short (CVSS, KEV, EPSS, products, title);
+        `total`, `counts` and `oldest` computed by the service
+      security:
+        - readToken: []
+      parameters:
+        - {name: since, in: query, schema: {type: string}, description: "a day or a date and time, UTC"}
+        - {name: until, in: query, schema: {type: string}, description: "a day (all of it) or a date and time, UTC"}
+        - {name: change, in: query, schema: {type: string, enum: [new, updated]}}
+        - {name: kev, in: query, schema: {type: boolean}}
+        - {name: min_cvss, in: query, schema: {type: number, minimum: 0, maximum: 10}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 50, default: 20}}
+        - {name: offset, in: query, schema: {type: integer, minimum: 0, default: 0}}
+      responses:
+        "200":
+          description: A page of the period
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total: {type: integer}
+                  counts: {type: object, additionalProperties: {type: integer}}
+                  oldest: {type: string}
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [cve, change, at]
+                      properties:
+                        cve: {type: string}
+                        change: {enum: [new, updated]}
+                        at: {type: string}
+                        cvss: {type: [number, "null"]}
+                        kev: {type: boolean}
+                        epss: {type: [number, "null"]}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "502": {$ref: "#/components/responses/Problem"}
+  /v1/technologies:
+    post:
+      tags: [tenants]
+      operationId: putTechnologies
+      summary: >-
+        The technologies a tenant watches (declared products and watchlist), kept without who sent them
+        and dropped 48 hours after the last tenant sent them; GTI searches them when enabled
+      security:
+        - readToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  maxItems: 5000
+                  items:
+                    type: object
+                    properties:
+                      vendor: {type: string}
+                      product: {type: string}
+                      cpe: {type: string}
+      responses:
+        "200":
+          description: The number of technologies kept in all
+          content:
+            application/json:
+              schema: {type: object, properties: {kept: {type: integer}}}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+  /v1/feed:
+    get:
+      tags: [tenants]
+      operationId: getFeed
+      summary: >-
+        What the tenants' watches read (source kind `intel`): the items after a mark, the next mark;
+        items are kept 30 days
+      security:
+        - readToken: []
+      parameters:
+        - {name: since, in: query, schema: {type: string}, description: "the `next` of the previous answer; since v0.23.2 also a day or a date and time (UTC without an offset)"}
+        - {name: until, in: query, schema: {type: string}, description: "items up to this day (all of it) or moment (since v0.23.2)"}
+        - {name: kind, in: query, schema: {type: string, enum: [radar, gti]}, description: "only the items of this kind (since v0.23.2)"}
+        - {name: level, in: query, schema: {type: string}, description: "only the items of this level (since v0.23.2)"}
+        - {name: cve, in: query, schema: {type: string}, description: "only the items about this CVE (since v0.23.2)"}
+      responses:
+        "200":
+          description: The items, oldest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next]
+                properties:
+                  items: {type: array, items: {$ref: "#/components/schemas/FeedItem"}}
+                  next: {type: string}
+        "401": {$ref: "#/components/responses/Problem"}
+  /v1/radar/events:
+    post:
+      tags: [radar]
+      operationId: publishRadarEvent
+      summary: >-
+        A radar event the watch team validated (the sender of the `via` tenant); the same id again
+        replaces it, after every reader's mark
+      security:
+        - radarToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id, title]
+              properties:
+                id: {type: string, pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]*$"}
+                level: {enum: [urgent, info]}
+                title: {type: string}
+                summary: {type: string}
+                cves: {type: array, items: {type: string}}
+                products: {type: array, items: {type: object, properties: {vendor: {type: string}, product: {type: string}}}}
+                terms: {type: array, items: {type: string}}
+                links: {type: array, items: {type: object, properties: {title: {type: string}, url: {type: string}}}}
+                score: {type: integer}
+      responses:
+        "200":
+          description: The id of the item in the feed (`radar:<id>`)
+          content:
+            application/json:
+              schema: {type: object, properties: {id: {type: string}}}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+  /healthz:
+    get:
+      tags: [operations]
+      operationId: health
+      summary: Liveness and readiness
+      responses:
+        "200": {description: Alive}
+components:
+  securitySchemes:
+    readToken: {type: http, scheme: bearer, description: "one per tenant, `read <sha256>` in the digests"}
+    radarToken: {type: http, scheme: bearer, description: "the watch team's sender, `radar <sha256>`"}
+  responses:
+    Problem:
+      description: RFC 9457 problem
+      content:
+        application/problem+json:
+          schema:
+            type: object
+            properties:
+              title: {type: string}
+              status: {type: integer}
+              detail: {type: string}
+  schemas:
+    FeedItem:
+      type: object
+      required: [id, kind, at, title, cves, products]
+      properties:
+        id: {type: string, description: "radar:<event id> or gti:<CVE id>"}
+        kind: {enum: [radar, gti]}
+        at: {type: string, description: "when it entered the feed (a mark)"}
+        level: {enum: [urgent, info]}
+        title: {type: string}
+        summary: {type: string, description: "public text only; empty for gti"}
+        cves: {type: array, items: {type: string}}
+        products: {type: array, items: {type: object, properties: {vendor: {type: string}, product: {type: string}}}}
+        terms: {type: array, items: {type: string}, description: "the radar's markers: in_the_wild, zero_day..."}
+        links: {type: array, items: {type: object, properties: {title: {type: string}, url: {type: string}}}}
+        score: {type: integer, description: "the radar's magnitude"}
+        facts:
+          type: object
+          description: "gti: exploitation_state, exploit_availability, risk_rating (facts, never prose)"

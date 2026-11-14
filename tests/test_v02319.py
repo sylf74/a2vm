@@ -1,9 +1,9 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """v0.23.19: what the homelab and the integration found after v0.23.18.
 
 - The watch's inventory: 26,000 findings were still 75 MB once slimmed, refused by the watch
   service, which had no inventory at all while the step said it kept the previous one. The findings
-  now go compact (`a2vm.watch_findings/1`), the inventory replaces the previous one whole, and the
+  now go compact (`ngvm.watch_findings/1`), the inventory replaces the previous one whole, and the
   step says what the watch keeps.
 """
 
@@ -15,7 +15,7 @@ import threading
 
 import pytest
 
-from a2vm.service import TokenSet, digest
+from ngvm.service import TokenSet, digest
 
 from .conftest import ROOT
 from .test_v0160 import RUN, watch_store
@@ -51,7 +51,7 @@ def _push(url, token, base) -> int:
 
 # -- the compact findings ------------------------------------------------------------------------
 def test_the_findings_go_compact_and_much_smaller(tmp_path) -> None:
-    from a2vm.io import validate_watch_findings
+    from ngvm.io import validate_watch_findings
     from via.alert.inventory import for_watch
 
     base = _big_inventory(tmp_path, n=2000)
@@ -59,7 +59,7 @@ def test_the_findings_go_compact_and_much_smaller(tmp_path) -> None:
     findings = json.loads((base / "findings.json").read_text())
     _, compact = for_watch(assets, findings)
     validate_watch_findings(compact)
-    assert compact["schema"] == "a2vm.watch_findings/1" and compact["client_id"] == TENANT
+    assert compact["schema"] == "ngvm.watch_findings/1" and compact["client_id"] == TENANT
     rows = compact["assets"]["host:hyp03.lan.example"]
     assert len(rows) == 2000
     assert rows[0] == ["CVE-2026-10000", "affected", ["3.0.7"], [["trivy", "openssl", "3.0.7", "3.0.8"]]]
@@ -79,7 +79,7 @@ def test_the_same_observation_twice_is_kept_once(tmp_path) -> None:
 
 
 def test_a_compact_file_of_another_client_is_refused(tmp_path) -> None:
-    from a2vm.io import ExchangeError
+    from ngvm.io import ExchangeError
     from via.alert.inventory import for_watch, load
 
     base = _big_inventory(tmp_path, n=3)
@@ -131,7 +131,7 @@ def test_an_inventory_replaces_the_previous_one_whole(watch, tmp_path) -> None:
 
 
 def test_findings_in_both_forms_are_refused(watch, tmp_path) -> None:
-    from a2vm.service import Problem
+    from ngvm.service import Problem
     from via.alert.inventory import for_watch
 
     svc, _, _ = watch
@@ -162,14 +162,14 @@ def test_a_refused_inventory_says_what_the_watch_keeps(watch, tmp_path, capsys, 
 
 
 def test_the_step_no_longer_claims_a_previous_inventory() -> None:
-    daily = (ROOT / "deploy/charts/a2vm-tenant/templates/cronjob-daily.yaml").read_text()
+    daily = (ROOT / "deploy/charts/ngvm-tenant/templates/cronjob-daily.yaml").read_text()
     assert "WARN watch service not updated (exit $rc): see above what the watch keeps" in daily
 
 
 def test_the_contract_lists_the_compact_findings() -> None:
     import yaml
 
-    api = yaml.safe_load((ROOT / "a2vm/src/a2vm/schemas/openapi/via.v1.yaml").read_text())
+    api = yaml.safe_load((ROOT / "ngvm/src/ngvm/schemas/openapi/via.v1.yaml").read_text())
     post = api["paths"]["/v1/tenants/{tenant}/inventory"]["post"]
     forms = post["requestBody"]["content"]["application/json"]["schema"]["oneOf"]
     assert [f["required"] for f in forms] == [["assets", "watch_findings"], ["assets", "findings"]]
@@ -228,11 +228,11 @@ def _cnpg_block() -> str:
 @pytest.mark.parametrize(
     "answers,code,says",
     [
-        (["ok"], 0, "A2VM_DATABASE=true: the services keep"),
+        (["ok"], 0, "NGVM_DATABASE=true: the services keep"),
         (["fail", "ok"], 0, "discovery of the API failed (try 1 of 3)"),
         (["absent"], 1, "the CloudNativePG operator is not installed"),
         (["fail", "fail", "fail"], 1, "did not answer the discovery through the agent"),
-        (["partial"], 0, "A2VM_DATABASE=true: the services keep"),
+        (["partial"], 0, "NGVM_DATABASE=true: the services keep"),
     ],
 )
 def test_the_operator_check_tells_a_failed_discovery_from_an_absent_operator(tmp_path, answers, code, says):
@@ -259,8 +259,8 @@ def test_the_operator_check_tells_a_failed_discovery_from_an_absent_operator(tmp
     (bin_dir / "sleep").write_text("#!/bin/sh\nexit 0\n")
     for f in bin_dir.iterdir():
         f.chmod(f.stat().st_mode | stat.S_IEXEC)
-    env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}", "A2VM_DATABASE": "true",
-           "A2VM_K8S_CONTEXT": "voc/a2vm/k8s:ngvm", "CI_PROJECT_NAME": "lab"}  # fmt: skip
+    env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}", "NGVM_DATABASE": "true",
+           "NGVM_K8S_CONTEXT": "voc/ngvm/k8s:ngvm", "CI_PROJECT_NAME": "lab"}  # fmt: skip
     r = subprocess.run(["sh", "-c", _cnpg_block()], env=env, capture_output=True, text=True)
     assert r.returncode == code, r.stdout + r.stderr
     assert says in r.stdout
@@ -273,7 +273,7 @@ def test_dispatch_says_its_errors_grouped(tmp_path, capsys) -> None:
 
     from .test_v0200 import FakeTool, dec, dispatcher
 
-    msg = "iTop refused: code 100: Error: caller_id: Several items found (2) with criteria: name: A2VM"
+    msg = "iTop refused: code 100: Error: caller_id: Several items found (2) with criteria: name: NGVM"
 
     class Refusing(FakeTool):
         def create(self, ticket, text, title):
@@ -295,7 +295,7 @@ def test_the_step_prints_the_grouped_errors(tmp_path, capsys, monkeypatch) -> No
 
     answer = {"run": {"id": "r1"}, "mode": "live", "sent": 0, "errors": 61,
               "error_messages": [{"count": 61, "error": "iTop refused: code 100: Several items found (2)"}],
-              "detail": "iTop: 2 Persons with name 'A2VM' in 'Homelab'"}  # fmt: skip
+              "detail": "iTop: 2 Persons with name 'NGVM' in 'Homelab'"}  # fmt: skip
 
     def post(url, **kwargs):
         return httpx.Response(200, json=answer)
@@ -306,16 +306,16 @@ def test_the_step_prints_the_grouped_errors(tmp_path, capsys, monkeypatch) -> No
     code = main(["run", "--url", "http://dispatch:8080", "--tenant", "homelab", "--token-file", str(token)])
     out = capsys.readouterr()
     assert code == 3
-    assert "errors 61; iTop: 2 Persons with name 'A2VM' in 'Homelab'" in out.out
+    assert "errors 61; iTop: 2 Persons with name 'NGVM' in 'Homelab'" in out.out
     assert "  61 x iTop refused: code 100: Several items found (2)" in out.err
 
 
 @pytest.mark.parametrize(
     "caller,found,says",
     [
-        ("A2VM", 1, ""),
-        ("A2VM", 2, "iTop: 2 Persons with name 'A2VM' in 'Lab': iTop refuses every ticket"),
-        ("a2vm@example.org", 0, "iTop: no Person with email 'a2vm@example.org' in 'Lab'"),
+        ("NGVM", 1, ""),
+        ("NGVM", 2, "iTop: 2 Persons with name 'NGVM' in 'Lab': iTop refuses every ticket"),
+        ("ngvm@example.org", 0, "iTop: no Person with email 'ngvm@example.org' in 'Lab'"),
         ("O'Brien", 1, ""),
     ],
 )
@@ -349,7 +349,7 @@ def test_the_run_says_what_the_check_found(tmp_path) -> None:
 
     class Checked(FakeTool):
         def check(self):
-            return "iTop: 2 Persons with name 'A2VM' in 'Lab': ..."
+            return "iTop: 2 Persons with name 'NGVM' in 'Lab': ..."
 
     d, _ = dispatcher(tmp_path, [dec(1, "host:web01.lab.example", "ACT", ["openssl 3.0.15"])], tool=Checked())
     assert d.process_run()["detail"].startswith("iTop: 2 Persons")
@@ -357,5 +357,5 @@ def test_the_run_says_what_the_check_found(tmp_path) -> None:
 
 def test_release_recorded() -> None:
     assert "## v0.23.19 — " in (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    chart = (ROOT / "deploy/charts/a2vm-tenant/Chart.yaml").read_text()
+    chart = (ROOT / "deploy/charts/ngvm-tenant/Chart.yaml").read_text()
     assert re.search(r"^version: 0\.(23\.(19|[2-9]\d)|2[4-9]\.\d+)$", chart, re.M)

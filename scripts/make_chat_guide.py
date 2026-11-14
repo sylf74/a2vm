@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """Build docs/chat-questions.md, the analysts' guide to the conversational search, from
 tests/chat-questions.yaml (the questions the chat must answer) and the tool server's own
 descriptions, so that the guide can never disagree with the tools.
@@ -87,7 +87,7 @@ How to ask:
 
 - Dates and times are in the tenant's time zone: « depuis hier 18 h », « entre le 1er et le 31
   octobre », « depuis lundi 9 h ».
-- Name things the way A2VM does: a CVE (`CVE-2024-3094`), an asset as the chat listed it
+- Name things the way NGVM does: a CVE (`CVE-2024-3094`), an asset as the chat listed it
   (`host:web01.lab.example`, or simply `web01`), a level (ACT, ATTEND, TRACK).
 - Long answers come in pages: « la suite », « les 20 suivantes ».
 - Ask for the reason: « pourquoi ? » after a decision gives its justification and its SSVC inputs.

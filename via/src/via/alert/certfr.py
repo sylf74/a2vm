@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """CERT-FR publications: RSS feeds for discovery, the JSON view of each publication for details.
 
 Every field is read defensively: an unexpected or missing field degrades the alert (fewer details),
@@ -41,7 +41,7 @@ class Publication:
     source: str = "CERT-FR"  # name of the source, as shown in the sheet
     fixes: list[str] = field(default_factory=list)  # corrective versions or updates, when the source gives them
     # The vendor's product status per CVE, from a CSAF advisory (v0.23.6): {cve: [affected blocks as
-    # dicts of a2vm.models.AffectedEntry]}, merged into the records the watch matches the firmware with.
+    # dicts of ngvm.models.AffectedEntry]}, merged into the records the watch matches the firmware with.
     affected: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
 
 

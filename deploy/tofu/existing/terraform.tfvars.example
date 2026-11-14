@@ -1,0 +1,84 @@
+# The platform on three machines that exist (docs/platform.md §3). Paths are on the operator's
+# machine; the files they name are read at apply time, never written to the state.
+
+hosts = {
+  k8s01 = { address = "192.0.2.11", user = "ubuntu", roles = ["server"], physical_host = "hyp01" }
+  k8s02 = { address = "192.0.2.12", user = "ubuntu", roles = ["server"], physical_host = "hyp02" }
+  k8s03 = { address = "192.0.2.13", user = "rocky", roles = ["server"], physical_host = "hyp03" }
+  col01 = { address = "192.0.2.21", user = "rocky", roles = ["collector"] }
+  auth  = { address = "192.0.2.31", user = "rocky", roles = ["keycloak"] }
+}
+
+ssh = {
+  private_key_file = "~/.ssh/id_ed25519"
+}
+
+network = {
+  # http_proxy = "http://proxy.example.org:3128"
+  # no_proxy   = ["192.0.2.0/24", ".example.org"]
+  ca_files = ["~/.ngvm/ca/company-ca.pem"]
+  # registry_mirrors  = { "docker.io" = ["https://mirror.example.org"] }
+  registry_ca_files = { "registry.example.org" = "~/.ngvm/ca/company-ca.pem" }
+}
+
+cluster = {
+  token_file      = "~/.ngvm/secrets/rke2-token"
+  tls_san         = ["k8s.example.org"]
+  kubeconfig_file = "~/.kube/ngvm.yaml"
+}
+
+addons = {
+  issuer      = "ca"
+  issuer_name = "ngvm"
+  # the CA that signs the certificates of the platform's names
+  issuer_ca_cert_file = "~/.ngvm/ca/platform-ca.pem"
+  issuer_ca_key_file  = "~/.ngvm/secrets/platform-ca.key"
+  gitlab_agent = {
+    name        = "ngvm"
+    kas_address = "wss://gitlab.example.org/-/kubernetes-agent/"
+    token_file  = "~/.ngvm/secrets/gitlab-agent-token"
+    ca_file     = "~/.ngvm/ca/company-ca.pem"
+  }
+}
+
+registry = {
+  host          = "registry.example.org"
+  user_file     = "~/.ngvm/secrets/registry-user"
+  password_file = "~/.ngvm/secrets/registry-password"
+}
+
+portal = {
+  enabled     = true
+  values_file = "~/.ngvm/portal-values.yaml"
+}
+
+keycloak = {
+  mode          = "vm"
+  hostname      = "auth.example.org"
+  tls           = "files"
+  tls_cert_file = "~/.ngvm/ca/auth.example.org.crt"
+  tls_key_file  = "~/.ngvm/secrets/auth.example.org.key"
+  clients = {
+    "ngvm-portal"   = ["https://portal.example.org/login/generic_oauth"]
+    "ngvm-chat-lab" = ["https://chat-lab.example.org/oauth/oidc/callback"]
+  }
+  groups = ["NGVM-Analysts", "NGVM-Admins"]
+}
+
+collectors = {
+  lab-lan = {
+    host        = "col01"
+    tenant      = "lab"
+    image       = "registry.example.org/vulnops/ngvm/detect:v0.25.0"
+    config_file = "~/.ngvm/collectors/lab-lan/collector.yaml"
+    files = {
+      "token"        = "~/.ngvm/secrets/lab-lan-token"
+      "ca.pem"       = "~/.ngvm/ca/company-ca.pem"
+      "targets.yaml" = "~/.ngvm/collectors/lab-lan/targets.yaml"
+      "scan_key"     = "~/.ngvm/secrets/lab-scan-key"
+    }
+    connectors = {
+      "lan-ssh" = "*-*-* 07:30:00"
+    }
+  }
+}

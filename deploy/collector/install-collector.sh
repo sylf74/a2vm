@@ -1,34 +1,34 @@
 #!/bin/bash
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
-# Install an A2VM collector on a VM near a network (docs/collectors.md §2): configuration, image,
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
+# Install an NGVM collector on a VM near a network (docs/collectors.md §2): configuration, image,
 # one systemd service and timer per connector. It can be run again: each step only does what is
 # missing. No secret is printed or passed as a command argument.
 #
 #   sudo bash install-collector.sh --tenant lab --collector lab-lan \
 #     --service https://detect-lab.apps.example.org \
-#     --image registry.example.org/vulnops/a2vm/detect:v0.18.1 \
+#     --image registry.example.org/vulnops/ngvm/detect:v0.18.1 \
 #     [--openvas-hosts "192.0.2.0/24, 198.51.100.0/24" --gvm-socket-volume <docker volume of gvmd.sock>] \
-#     [--gvm-user a2vm-scan] [--schedule "*-*-* 07:30:00"]
+#     [--gvm-user ngvm-scan] [--schedule "*-*-* 07:30:00"]
 #
 # Files read from the current folder when the step needs them (removed once installed):
 #   scan_key               private key of the read-only scan account (SSH targets)
 #   targets.yaml           the targets file of the tenant project (client = --tenant)
 #   registry-user.txt, registry-password.txt   a deploy token with read_registry, to pull the image
 # Already in place (made by hand, docs/collectors.md §2):
-#   /etc/a2vm/collector/token    the collector's token, also in A2VM_COLLECTOR_TOKEN_<ID>
-#   /etc/a2vm/collector/ca.pem   CA of the push endpoint's certificate
+#   /etc/ngvm/collector/token    the collector's token, also in NGVM_COLLECTOR_TOKEN_<ID>
+#   /etc/ngvm/collector/ca.pem   CA of the push endpoint's certificate
 #   /etc/docker/certs.d/<registry>/ca.crt   CA of the registry, when private
 #
 # With --openvas-hosts, the collector drives gvmd on this host through its socket (Greenbone
 # Community Edition with Docker Compose): it makes the GMP account --gvm-user in gvmd when
-# /etc/a2vm/collector/gvm.env is missing, and gives the network scan a connector of its own.
+# /etc/ngvm/collector/gvm.env is missing, and gives the network scan a connector of its own.
 
 set -eu
 
 usage() { sed -n '3,14p' "$0" | sed 's/^# \{0,1\}//'; }
 
 TENANT="" COLLECTOR="" SERVICE="" IMAGE="" OPENVAS_HOSTS="" SOCKET_VOLUME=""
-GVM_USER="a2vm-scan" SCHEDULE="*-*-* 07:30:00"
+GVM_USER="ngvm-scan" SCHEDULE="*-*-* 07:30:00"
 while [ $# -gt 0 ]; do
   case "$1" in
     --tenant) TENANT=$2; shift 2 ;;
@@ -56,14 +56,14 @@ if [ -n "$OPENVAS_HOSTS" ] && [ -z "$SOCKET_VOLUME" ]; then
 fi
 if [ "$(id -u)" -ne 0 ]; then echo "run it with sudo" >&2; exit 1; fi
 
-C=/etc/a2vm/collector
+C=/etc/ngvm/collector
 HERE=$(pwd)
 REGISTRY=${IMAGE%%/*}
 step() { echo "== $*"; }
 fail() { echo "$*" >&2; exit 1; }
 
 step "folders"
-install -d -m 0750 -o 10001 -g 10001 "$C" "$C/ssh" /var/lib/a2vm /var/lib/a2vm-ssh
+install -d -m 0750 -o 10001 -g 10001 "$C" "$C/ssh" /var/lib/ngvm /var/lib/ngvm-ssh
 for f in "$C/token" "$C/ca.pem"; do [ -s "$f" ] || fail "missing $f (docs/collectors.md §2)"; done
 grep -q 'BEGIN CERTIFICATE' "$C/ca.pem" || fail "$C/ca.pem is not a certificate"
 
@@ -111,7 +111,7 @@ if [ -n "$OPENVAS_HOSTS" ]; then
     out=$(docker exec -u gvmd "$GVMD" gvmd --create-user="$GVM_USER" 2>&1)
     pw=$(printf '%s\n' "$out" | sed -n "s/.*password '\(.*\)'.*/\1/p")
     [ -n "$pw" ] || fail "creation of $GVM_USER: unexpected answer of gvmd"
-    ( umask 077; printf 'A2VM_GVM_USER=%s\nA2VM_GVM_PASSWORD=%s\n' "$GVM_USER" "$pw" > "$C/gvm.env" )
+    ( umask 077; printf 'NGVM_GVM_USER=%s\nNGVM_GVM_PASSWORD=%s\n' "$GVM_USER" "$pw" > "$C/gvm.env" )
     chown root:root "$C/gvm.env"; chmod 0600 "$C/gvm.env"
     unset pw out
     echo "account $GVM_USER made, its password in $C/gvm.env (root only)"
@@ -124,7 +124,7 @@ step "collector.yaml"
 {
   printf 'collector: %s\ntenant: %s\nservice: %s\ntoken_file: %s/token\nca_file: %s/ca.pem\n' \
     "$COLLECTOR" "$TENANT" "$SERVICE" "$C" "$C"
-  printf 'work: /var/lib/a2vm/work\nspool: /var/lib/a2vm/spool\nconnectors:\n'
+  printf 'work: /var/lib/ngvm/work\nspool: /var/lib/ngvm/spool\nconnectors:\n'
   if [ "$SSH_TARGETS" -eq 1 ]; then
     printf '  - {name: lan-ssh, type: targets, targets: %s/targets.yaml, ssh: true, openvas: false}\n' "$C"
   fi
@@ -183,22 +183,22 @@ EOF
   [ -z "${4:-}" ] || printf 'ExecStartPre=%s\n' "$4"
   printf 'ExecStart=/usr/bin/docker run --rm --name %s --user 10001:10001 %s\\\n' "$2" "$GROUP_ADD"
   [ -z "$ENV_FILE" ] || printf '%s\n' "$ENV_FILE"
-  printf '  -v %s:%s:ro \\\n  -v /var/lib/a2vm:/var/lib/a2vm \\\n  -v /var/lib/a2vm-ssh:/home/a2vm/.ssh \\\n' "$C" "$C"
+  printf '  -v %s:%s:ro \\\n  -v /var/lib/ngvm:/var/lib/ngvm \\\n  -v /var/lib/ngvm-ssh:/home/ngvm/.ssh \\\n' "$C" "$C"
   [ -z "$SOCKET_MOUNT" ] || printf '%s\n' "$SOCKET_MOUNT"
-  [ -z "${4:-}" ] || printf '  -v /run/a2vm-collector:/run/a2vm-collector:ro \\\n'
+  [ -z "${4:-}" ] || printf '  -v /run/ngvm-collector:/run/ngvm-collector:ro \\\n'
   printf '  %s \\\n  %s\n' "$IMAGE" "$3"
 }
-unit "A2VM collector, connector %i" "a2vm-collector-%i" \
-  "detect agent run --config $C/collector.yaml --connector %i" > /etc/systemd/system/a2vm-collector@.service
+unit "NGVM collector, connector %i" "ngvm-collector-%i" \
+  "detect agent run --config $C/collector.yaml --connector %i" > /etc/systemd/system/ngvm-collector@.service
 # The poll (v0.23.10): every 5 minutes, the timers of the connectors reported (the next scans) and
 # the actions a validator confirmed carried out. It only connects out, like the push.
-unit "A2VM collector, poll" "a2vm-collector-poll" \
-  "detect agent poll --config $C/collector.yaml --timers /run/a2vm-collector/timers.json" \
-  "/bin/sh -c 'mkdir -p /run/a2vm-collector && systemctl list-timers \"a2vm-collector@*\" --all -o json > /run/a2vm-collector/timers.json'" \
-  > /etc/systemd/system/a2vm-collector-poll.service
-cat > /etc/systemd/system/a2vm-collector-poll.timer <<EOF
+unit "NGVM collector, poll" "ngvm-collector-poll" \
+  "detect agent poll --config $C/collector.yaml --timers /run/ngvm-collector/timers.json" \
+  "/bin/sh -c 'mkdir -p /run/ngvm-collector && systemctl list-timers \"ngvm-collector@*\" --all -o json > /run/ngvm-collector/timers.json'" \
+  > /etc/systemd/system/ngvm-collector-poll.service
+cat > /etc/systemd/system/ngvm-collector-poll.timer <<EOF
 [Unit]
-Description=A2VM collector, poll every 5 minutes
+Description=NGVM collector, poll every 5 minutes
 
 [Timer]
 OnBootSec=2min
@@ -207,9 +207,9 @@ OnUnitActiveSec=5min
 [Install]
 WantedBy=timers.target
 EOF
-cat > /etc/systemd/system/a2vm-collector@.timer <<EOF
+cat > /etc/systemd/system/ngvm-collector@.timer <<EOF
 [Unit]
-Description=A2VM collector, connector %i, daily
+Description=NGVM collector, connector %i, daily
 
 [Timer]
 OnCalendar=$SCHEDULE
@@ -220,12 +220,12 @@ Persistent=true
 WantedBy=timers.target
 EOF
 systemctl daemon-reload
-for c in $CONNECTORS; do systemctl enable --now "a2vm-collector@$c.timer"; done
-systemctl enable --now a2vm-collector-poll.timer
-systemctl list-timers 'a2vm-collector@*' --no-pager
+for c in $CONNECTORS; do systemctl enable --now "ngvm-collector@$c.timer"; done
+systemctl enable --now ngvm-collector-poll.timer
+systemctl list-timers 'ngvm-collector@*' --no-pager
 
 echo
 echo "installed. First runs:"
 for c in $CONNECTORS; do
-  echo "  sudo systemctl start --no-block a2vm-collector@$c.service; journalctl -u a2vm-collector@$c.service -f"
+  echo "  sudo systemctl start --no-block ngvm-collector@$c.service; journalctl -u ngvm-collector@$c.service -f"
 done

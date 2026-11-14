@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """v0.23.7: a lighter triage. The thinking of a reasoning model turned off, the LLM's answers kept
 from one run to the next, a review only where an uncertain input could change the decision, and
 what the LLM cost in each run."""
@@ -10,10 +10,10 @@ import json
 import httpx
 import pytest
 
-from a2vm.config import LlmSettings, Settings, describe_llm, load_settings
-from a2vm.llm import LlmClient
-from a2vm.llm.cache import LlmCache
-from a2vm.models import Assessed, Attribute, VulnRecord
+from ngvm.config import LlmSettings, Settings, describe_llm, load_settings
+from ngvm.llm import LlmClient
+from ngvm.llm.cache import LlmCache
+from ngvm.models import Assessed, Attribute, VulnRecord
 from verdict.policy import Policy
 from verdict.triage import CveInputs, Triage
 
@@ -37,8 +37,8 @@ def test_thinking(tmp_path, value, sent) -> None:
 
 
 def test_thinking_and_cache_from_the_environment(monkeypatch, tmp_path) -> None:
-    monkeypatch.setenv("A2VM_LLM_THINKING", "off")
-    monkeypatch.setenv("A2VM_LLM_CACHE_FILE", str(tmp_path / "c.json"))
+    monkeypatch.setenv("NGVM_LLM_THINKING", "off")
+    monkeypatch.setenv("NGVM_LLM_CACHE_FILE", str(tmp_path / "c.json"))
     s = load_settings(ROOT / "config" / "settings.yaml")
     assert (s.llm.thinking, s.llm.cache_file, s.llm.cache_days) == ("off", str(tmp_path / "c.json"), 30)
     s.llm.enabled = True
@@ -117,7 +117,7 @@ def test_a_cached_answer_that_no_longer_fits_is_asked_again(tmp_path) -> None:
     path = tmp_path / "c.json"
     transport = fake_llm_transport(lambda name, body: {"x": "new"})
     llm = _client(tmp_path, transport, cache_file=str(path))
-    from a2vm.llm.cache import question_key
+    from ngvm.llm.cache import question_key
 
     payload = {
         "model": llm.model, "temperature": 0,
@@ -209,8 +209,8 @@ def test_epss_rounded_in_the_rationale_facts() -> None:
 
 
 def test_wiring() -> None:
-    helpers = (ROOT / "deploy" / "charts" / "a2vm-tenant" / "templates" / "_helpers.tpl").read_text()
-    assert 'A2VM_LLM_CACHE_FILE="${A2VM_LLM_CACHE_FILE:-/data/llm-cache.json}"' in helpers
-    assert "A2VM_LLM_THINKING" in (ROOT / "templates" / "client-pipeline.yml").read_text()
-    schema = json.loads((ROOT / "a2vm" / "src" / "a2vm" / "schemas" / "triage.schema.json").read_text())
+    helpers = (ROOT / "deploy" / "charts" / "ngvm-tenant" / "templates" / "_helpers.tpl").read_text()
+    assert 'NGVM_LLM_CACHE_FILE="${NGVM_LLM_CACHE_FILE:-/data/llm-cache.json}"' in helpers
+    assert "NGVM_LLM_THINKING" in (ROOT / "templates" / "client-pipeline.yml").read_text()
+    schema = json.loads((ROOT / "ngvm" / "src" / "ngvm" / "schemas" / "triage.schema.json").read_text())
     assert "llm_usage" in schema["properties"]

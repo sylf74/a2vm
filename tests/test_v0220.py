@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """v0.22.0 (HLD D17): the shared intelligence service of every tenant, the radar of the watch team
 (major vulnerabilities whoever they concern, zero-days before their CVE included, GTI as discovery,
 optional), its validated events in the tenants' watches, and the analysts' Teams channel."""
@@ -14,10 +14,10 @@ import httpx
 import pytest
 import yaml
 
-from a2vm.config import load_settings
-from a2vm.models import AffectedEntry, CvssMetric, VulnRecord
-from a2vm.profile import load_profile, validate_profile_data
-from a2vm.service import TokenSet, digest
+from ngvm.config import load_settings
+from ngvm.models import AffectedEntry, CvssMetric, VulnRecord
+from ngvm.profile import load_profile, validate_profile_data
+from ngvm.service import TokenSet, digest
 from via.alert import radar, teams
 from via.alert.certfr import Publication
 from via.alert.cli import main as via_main
@@ -137,8 +137,8 @@ def test_the_radar_profile_is_valid():
 
 
 def test_the_radar_watch_drafts_event_sheets(tmp_path, monkeypatch):
-    monkeypatch.delenv("A2VM_ANALYST_TO", raising=False)
-    monkeypatch.delenv("A2VM_TEAMS_WEBHOOK", raising=False)
+    monkeypatch.delenv("NGVM_ANALYST_TO", raising=False)
+    monkeypatch.delenv("NGVM_TEAMS_WEBHOOK", raising=False)
     profile = _radar_profile(tmp_path)
     args = ["watch", str(profile), "--settings", str(ROOT / "config" / "settings.yaml"), "--no-llm",
             "--fixtures", str(FIXTURES), "--state", str(tmp_path / "state.json"),
@@ -173,7 +173,7 @@ def _service(tmp_path, gti=False):
 
 @pytest.fixture
 def intel(tmp_path):
-    from a2vm.service import serve
+    from ngvm.service import serve
 
     service = _service(tmp_path)
     httpd = serve(make_handler(service), "127.0.0.1", 0)
@@ -225,7 +225,7 @@ def test_the_feed_and_the_radar_events(tmp_path):
              "products": [{"vendor": "Acme", "product": "Gateway"}], "terms": ["zero_day"],
              "links": [{"title": "Lab", "url": "https://lab.example/post"}, {"title": "x", "url": "javascript:x"}],
              "score": 9, "secret": "never kept"}  # fmt: skip
-    from a2vm.service import Problem
+    from ngvm.service import Problem
 
     with pytest.raises(Problem):
         service.publish(READ, event)
@@ -275,22 +275,22 @@ def test_a_tenant_watch_reads_the_feed_and_matches_its_assets(tmp_path, intel):
     settings.sources.cache_dir = str(tmp_path / "tenant-cache")
     settings.sources.intel_url, settings.sources.intel_token_file = url, str(token)
     sources = Sources(settings.sources, fixtures_dir=FIXTURES)
-    catalogue = [Source("a2vm-intel", "A2VM — radar", "radar", "intel")]
+    catalogue = [Source("ngvm-intel", "NGVM — radar", "radar", "intel")]
     state = State.load(tmp_path / "state.json")
     state.new = False
     items, errors = discover(sources, state, catalogue=catalogue)
-    assert items == [] and errors == [] and "a2vm-intel" in state.marks  # baseline
+    assert items == [] and errors == [] and "ngvm-intel" in state.marks  # baseline
     service.publish(RADAR, {"id": "R1", "level": "urgent", "title": "Acme SecureGate OS zero-day exploited",
                             "products": [{"vendor": "Acme Networks", "product": "SecureGate OS"}]})  # fmt: skip
     service.publish(RADAR, {"id": "R2", "level": "urgent", "title": "Another product",
                             "products": [{"vendor": "Nobody", "product": "Nothing Server"}]})  # fmt: skip
     items, errors = discover(sources, state, catalogue=catalogue)
-    assert [i.key for i in items] == ["a2vm-intel:radar:R1", "a2vm-intel:radar:R2"] and items[0].urgent_source
+    assert [i.key for i in items] == ["ngvm-intel:radar:R1", "ngvm-intel:radar:R2"] and items[0].urgent_source
     profile = load_profile(ROOT / "examples" / "example-client" / "client.yaml")
-    from a2vm.declared import DeclaredMatcher
+    from ngvm.declared import DeclaredMatcher
 
     alerts = relevant(items, profile, sources, settings, DeclaredMatcher(settings, None), None, catalogue, None)
-    assert [a.item.key for a in alerts] == ["a2vm-intel:radar:R1"] and alerts[0].level == "urgent"
+    assert [a.item.key for a in alerts] == ["ngvm-intel:radar:R1"] and alerts[0].level == "urgent"
     assert alerts[0].product_matches and items[0].category == "radar"
 
 
@@ -327,13 +327,13 @@ def test_a_validated_radar_alert_is_published(tmp_path, monkeypatch):
 
     token = tmp_path / "radar-token"
     token.write_text(RADAR)
-    monkeypatch.setenv("A2VM_INTEL_URL", "http://intel.example")
-    monkeypatch.setenv("A2VM_INTEL_RADAR_TOKEN_FILE", str(token))
+    monkeypatch.setenv("NGVM_INTEL_URL", "http://intel.example")
+    monkeypatch.setenv("NGVM_INTEL_RADAR_TOKEN_FILE", str(token))
     entry = {"id": "via-RADAR-R1", "radar": {"id": "R1", "title": "t", "products": [{"product": "p"}]}}
     assert radar.publish(entry, httpx.MockTransport(answer)) == "radar: radar:R1 published to the tenants' watches"
     assert got["auth"] == f"Bearer {RADAR}" and got["body"]["id"] == "R1"
     assert radar.publish({"id": "x"}) == ""
-    monkeypatch.delenv("A2VM_INTEL_URL")
+    monkeypatch.delenv("NGVM_INTEL_URL")
     assert "not published" in radar.publish(entry)
 
 
@@ -348,13 +348,13 @@ def test_the_analysts_teams_channel(tmp_path, monkeypatch):
     class P:
         id = "homelab"
 
-    monkeypatch.delenv("A2VM_TEAMS_WEBHOOK", raising=False)
-    monkeypatch.delenv("A2VM_TEAMS_WEBHOOK_FILE", raising=False)
+    monkeypatch.delenv("NGVM_TEAMS_WEBHOOK", raising=False)
+    monkeypatch.delenv("NGVM_TEAMS_WEBHOOK_FILE", raising=False)
     alert = {"id": "a1", "level": "urgent", "title": "Zero-day", "cves": ["CVE-2026-0001"], "radar": {"score": 9}}
     assert teams.notify(P, alert, 1, 2, "https://review.example/alerts/a1") == ""
     hook = tmp_path / "hook"
     hook.write_text("https://teams.example/webhook/secret-sig\n")
-    monkeypatch.setenv("A2VM_TEAMS_WEBHOOK_FILE", str(hook))
+    monkeypatch.setenv("NGVM_TEAMS_WEBHOOK_FILE", str(hook))
     assert teams.notify(P, alert, 1, 2, "https://review.example/alerts/a1", httpx.MockTransport(answer)).startswith(
         "posted to Teams"
     )
@@ -374,28 +374,28 @@ def test_the_analysts_teams_channel(tmp_path, monkeypatch):
 
 # -- deployment and documents -------------------------------------------------------------------------
 def test_the_chart_runs_the_shared_service_for_the_watch_team_only():
-    charts = ROOT / "deploy" / "charts" / "a2vm-tenant"
+    charts = ROOT / "deploy" / "charts" / "ngvm-tenant"
     values = yaml.safe_load((charts / "values.yaml").read_text())
     assert values["intel"]["url"] == "" and values["intel"]["serve"]["enabled"] is False
     intel = (charts / "templates" / "intel.yaml").read_text()
     assert "via intel-serve" in intel and "{{- if .Values.intel.serve.enabled }}" in intel
     assert "values: [daily, watch, send" in intel and "key: gti-api-key" in intel  # v0.23.2: and tools
     helpers = (charts / "templates" / "_helpers.tpl").read_text()
-    for var in ("A2VM_INTEL_URL", "A2VM_INTEL_TOKEN_FILE", "A2VM_INTEL_RADAR_TOKEN_FILE", "A2VM_TEAMS_WEBHOOK_FILE"):
+    for var in ("NGVM_INTEL_URL", "NGVM_INTEL_TOKEN_FILE", "NGVM_INTEL_RADAR_TOKEN_FILE", "NGVM_TEAMS_WEBHOOK_FILE"):
         assert var in helpers
     pipeline = (ROOT / "templates" / "client-pipeline.yml").read_text()
     assert (
-        'put intel-token "${A2VM_INTEL_TOKEN:-}"' in pipeline
-        and 'put teams-webhook "${A2VM_TEAMS_WEBHOOK:-}"' in pipeline
+        'put intel-token "${NGVM_INTEL_TOKEN:-}"' in pipeline
+        and 'put teams-webhook "${NGVM_TEAMS_WEBHOOK:-}"' in pipeline
     )
-    assert "$DISPATCH $INTEL $OUT -f" in pipeline and "A2VM_INTEL_SERVE" in pipeline
+    assert "$DISPATCH $INTEL $OUT -f" in pipeline and "NGVM_INTEL_SERVE" in pipeline
 
 
 def test_the_catalogue_keeps_the_radar_sources_for_the_radar():
     from via.alert.feeds import load_catalogue
 
     catalogue = {s.id: s for s in load_catalogue(ROOT / "config" / "watch-sources.yaml")}
-    assert catalogue["a2vm-intel"].kind == "intel" and not catalogue["a2vm-intel"].radar_only
+    assert catalogue["ngvm-intel"].kind == "intel" and not catalogue["ngvm-intel"].radar_only
     assert catalogue["gti-radar"].kind == "gti" and catalogue["gti-radar"].radar_only
     assert all(not s.enabled for s in catalogue.values() if s.radar_only and s.kind == "rss")
 

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """Write a triage run as JSON (full detail), CSV (one row per CVE x asset) and Markdown, with the labels
 of the client's language (`client.language`, v0.17.3)."""
 
@@ -9,10 +9,10 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 
-from a2vm import __version__
-from a2vm.io import TRIAGE, write_reporting
-from a2vm.models import TriageRow, TriageRun
-from a2vm.ssvc import BOD_EN
+from ngvm import __version__
+from ngvm.io import TRIAGE, write_reporting
+from ngvm.models import TriageRow, TriageRun
+from ngvm.ssvc import BOD_EN
 
 from . import reporting
 from .dashboard import render_dashboard
@@ -74,7 +74,7 @@ def write_json(run: TriageRun, path: Path) -> None:
         "generated_at": run.generated_at,
         "cve_count": run.cve_count,
         "llm_model": run.llm_model,
-        "a2vm_version": __version__,  # the version that made the run (v0.23.9)
+        "ngvm_version": __version__,  # the version that made the run (v0.23.9)
         **({"llm_usage": run.llm_usage} if run.llm_usage else {}),
         **({"timing": run.timing} if run.timing else {}),
         "rows": [r.to_dict() for r in run.rows],

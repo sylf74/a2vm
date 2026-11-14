@@ -1,6 +1,6 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """Restitution (pillar 3): the reporting database. The database tests need a disposable PostgreSQL (16 or later):
-A2VM_TEST_DSN = an administrator connection to an empty database; they are skipped without it."""
+NGVM_TEST_DSN = an administrator connection to an empty database; they are skipped without it."""
 
 from __future__ import annotations
 
@@ -15,8 +15,8 @@ from verdict.restitution.cli import dashboard, main
 
 from .test_pipeline import _run
 
-ADMIN = os.environ.get("A2VM_TEST_DSN", "")
-needs_db = pytest.mark.skipif(not ADMIN, reason="A2VM_TEST_DSN not set (disposable PostgreSQL)")
+ADMIN = os.environ.get("NGVM_TEST_DSN", "")
+needs_db = pytest.mark.skipif(not ADMIN, reason="NGVM_TEST_DSN not set (disposable PostgreSQL)")
 
 
 def _params(conninfo: str) -> dict[str, str]:
@@ -26,31 +26,31 @@ def _params(conninfo: str) -> dict[str, str]:
 
 
 def test_connection_string_is_encrypted_and_verified_when_a_certificate_is_given(tmp_path):
-    assert _params(db.dsn("host=h dbname=a2vm user=w", environ={}))["sslmode"] == "require"
+    assert _params(db.dsn("host=h dbname=ngvm user=w", environ={}))["sslmode"] == "require"
     ca = tmp_path / "server.crt"
     ca.write_text("x")
     full = _params(
-        db.dsn(None, environ={"A2VM_REPORTING_DSN": "host=h dbname=a2vm user=w", "A2VM_REPORTING_CA": str(ca)})
+        db.dsn(None, environ={"NGVM_REPORTING_DSN": "host=h dbname=ngvm user=w", "NGVM_REPORTING_CA": str(ca)})
     )
     assert full["sslrootcert"] == str(ca) and full["sslmode"] == "verify-full"
     stored = tmp_path / "dsn"
     stored.write_text("host=h user=w sslmode=verify-ca\n")
-    assert _params(db.dsn(None, environ={"A2VM_REPORTING_DSN": str(stored)})) == {
+    assert _params(db.dsn(None, environ={"NGVM_REPORTING_DSN": str(stored)})) == {
         "host": "h",
         "user": "w",
         "sslmode": "verify-ca",
     }
-    with pytest.raises(db.DatabaseError, match="A2VM_REPORTING_DSN"):
+    with pytest.raises(db.DatabaseError, match="NGVM_REPORTING_DSN"):
         db.dsn(None, environ={})
 
 
 def test_connection_uri_and_pasted_certificate_are_accepted_and_errors_never_quote_the_string():
     pem = "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----"
     got = _params(db.dsn(None, environ={
-        "A2VM_REPORTING_DSN": "postgresql://a2vm_writer:S3cret-pw@portal.example.org/a2vm",
-        "A2VM_REPORTING_CA": pem,
+        "NGVM_REPORTING_DSN": "postgresql://ngvm_writer:S3cret-pw@portal.example.org/ngvm",
+        "NGVM_REPORTING_CA": pem,
     }))  # fmt: skip
-    assert got["host"] == "portal.example.org" and got["user"] == "a2vm_writer" and got["dbname"] == "a2vm"
+    assert got["host"] == "portal.example.org" and got["user"] == "ngvm_writer" and got["dbname"] == "ngvm"
     assert got["password"] == "S3cret-pw" and got["sslmode"] == "verify-full"
     from pathlib import Path
 
@@ -59,7 +59,7 @@ def test_connection_uri_and_pasted_certificate_are_accepted_and_errors_never_quo
         db.dsn("host=h password=S3cret-pw -----BEGIN", environ={})
     assert "S3cret" not in str(err.value) and "key=value" in str(err.value)
     with pytest.raises(db.DatabaseError, match="neither a file nor a PEM"):
-        db.dsn("host=h", environ={"A2VM_REPORTING_CA": "not a certificate"})
+        db.dsn("host=h", environ={"NGVM_REPORTING_CA": "not a certificate"})
 
 
 @pytest.mark.parametrize("name", ["overview", "assets", "cves", "remediation"])
@@ -68,13 +68,13 @@ def test_grafana_dashboards_read_the_reporting_database_only(capsys, name):
     dash = json.loads(capsys.readouterr().out)
     panels = [p for p in dash["panels"] if p["type"] not in ("row", "text")]
     sql = " ".join(t["rawSql"] for p in panels for t in p["targets"])
-    assert "a2vm." in sql and "gitlab" not in sql.lower()
-    assert {p["datasource"]["uid"] for p in panels} == {"${DS_A2VM}"}
+    assert "ngvm." in sql and "gitlab" not in sql.lower()
+    assert {p["datasource"]["uid"] for p in panels} == {"${DS_NGVM}"}
 
 
 @pytest.fixture
 def reporting_db():
-    """A disposable a2vm schema: (writer connection string, administrator connection string, new
+    """A disposable ngvm schema: (writer connection string, administrator connection string, new
     reading role name); dropped afterwards with its roles."""
     import psycopg
     from psycopg import sql
@@ -85,13 +85,13 @@ def reporting_db():
         conn.execute(sql.SQL("CREATE ROLE {} LOGIN PASSWORD 'w'").format(sql.Identifier(writer)))
         grant = sql.SQL("GRANT CONNECT, CREATE ON DATABASE {} TO {}")
         conn.execute(grant.format(sql.Identifier(dbname), sql.Identifier(writer)))
-        conn.execute("DROP SCHEMA IF EXISTS a2vm CASCADE")
+        conn.execute("DROP SCHEMA IF EXISTS ngvm CASCADE")
     as_writer = psycopg.conninfo.make_conninfo(ADMIN, user=writer, password="w", sslmode="disable")
     try:
         yield {"writer": writer, "as_writer": as_writer, "reader": reader}
     finally:
         with psycopg.connect(ADMIN, autocommit=True) as conn:
-            conn.execute("DROP SCHEMA IF EXISTS a2vm CASCADE")
+            conn.execute("DROP SCHEMA IF EXISTS ngvm CASCADE")
             for role in (reader, writer):
                 if conn.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (role,)).fetchone():
                     conn.execute(sql.SQL("DROP OWNED BY {}").format(sql.Identifier(role)))
@@ -102,7 +102,7 @@ def _dataset(settings, sources, profile, tmp_path):
     from verdict.reporting import build
 
     run = _run(settings, sources, profile, tmp=tmp_path)
-    data = {"schema": "a2vm.reporting/1", **build(run, settings.policy)}
+    data = {"schema": "ngvm.reporting/1", **build(run, settings.policy)}
     path = tmp_path / "reporting.json"
     path.write_text(json.dumps(data))
     return run, data, path
@@ -116,33 +116,33 @@ def test_publish_twice_keeps_one_run_and_readers_see_their_tenants_only(
 
     run, data, path = _dataset(settings, sources, profile, tmp_path)
     as_writer, reader = reporting_db["as_writer"], reporting_db["reader"]
-    assert db.init(ADMIN, reporting_db["writer"]).startswith(f"schema a2vm version {db.SCHEMA_VERSION}")
+    assert db.init(ADMIN, reporting_db["writer"]).startswith(f"schema ngvm version {db.SCHEMA_VERSION}")
     assert main(["publish", str(path), "--dsn", as_writer]) == 0
     assert main(["publish", str(path), "--dsn", as_writer]) == 0  # replaced, not doubled
     password = db.grant(ADMIN, reader, ["another-tenant"])
     as_reader = psycopg.conninfo.make_conninfo(ADMIN, user=reader, password=password)
     with psycopg.connect(as_writer) as conn:
-        assert conn.execute("SELECT count(*) FROM a2vm.runs").fetchone()[0] == 1
-        assert conn.execute("SELECT count(*) FROM a2vm.decisions").fetchone()[0] == len(run.rows)
+        assert conn.execute("SELECT count(*) FROM ngvm.runs").fetchone()[0] == 1
+        assert conn.execute("SELECT count(*) FROM ngvm.decisions").fetchone()[0] == len(run.rows)
         facts = conn.execute(
             "SELECT count(*), count(*) FILTER (WHERE severity IN ('Critical','High','Medium','Low','Unknown')),"
-            " count(*) FILTER (WHERE cardinality(sources) > 0) FROM a2vm.decision_facts"
+            " count(*) FILTER (WHERE cardinality(sources) > 0) FROM ngvm.decision_facts"
         ).fetchone()
         assert facts == (len(run.rows), len(run.rows), len(run.rows))
     with psycopg.connect(as_reader) as conn:  # another tenant only: nothing of this one
-        assert conn.execute("SELECT count(*) FROM a2vm.latest_decisions").fetchone()[0] == 0
-        assert conn.execute("SELECT count(*) FROM a2vm.decision_facts").fetchone()[0] == 0
+        assert conn.execute("SELECT count(*) FROM ngvm.latest_decisions").fetchone()[0] == 0
+        assert conn.execute("SELECT count(*) FROM ngvm.decision_facts").fetchone()[0] == 0
     db.grant(ADMIN, reader, [profile.id])
     with psycopg.connect(as_reader) as conn:
-        acts = conn.execute("SELECT act, attend, track FROM a2vm.latest_runs").fetchone()
+        acts = conn.execute("SELECT act, attend, track FROM ngvm.latest_runs").fetchone()
         assert sum(acts) == len(run.rows)
         day = data["generated_at"][:10]
-        snap = conn.execute("SELECT count(*) FROM a2vm.snapshot_runs(%s, %s)", ([profile.id], day)).fetchone()[0]
+        snap = conn.execute("SELECT count(*) FROM ngvm.snapshot_runs(%s, %s)", ([profile.id], day)).fetchone()[0]
         assert snap == 1
-        none = conn.execute("SELECT count(*) FROM a2vm.snapshot_runs(%s, NULL)", ([profile.id],)).fetchone()[0]
+        none = conn.execute("SELECT count(*) FROM ngvm.snapshot_runs(%s, NULL)", ([profile.id],)).fetchone()[0]
         assert none == 0
         with pytest.raises(psycopg.Error):
-            conn.execute("DELETE FROM a2vm.runs")
+            conn.execute("DELETE FROM ngvm.runs")
     rotated = db.grant(ADMIN, reader, [profile.id], rotate=True)
     assert rotated and rotated != password
     with pytest.raises(psycopg.Error):
@@ -158,7 +158,7 @@ def test_a_version_1_database_is_upgraded_in_place(settings, sources, profile, t
 
     _, data, path = _dataset(settings, sources, profile, tmp_path)
     as_writer, reader = reporting_db["as_writer"], reporting_db["reader"]
-    with psycopg.connect(ADMIN) as conn:  # the schema as v0.11.5 created it, with one old run
+    with psycopg.connect(ADMIN) as conn:  # the schema as v0.11.5 created it (A2VM), with one old run
         conn.execute(sql.SQL("SET ROLE {}").format(sql.Identifier(reporting_db["writer"])))
         conn.execute((FIXTURES / "reporting-schema-v1.sql").read_text())
         conn.execute(
@@ -170,12 +170,14 @@ def test_a_version_1_database_is_upgraded_in_place(settings, sources, profile, t
         )
     password = db.grant(ADMIN, reader, ["*"])
     assert main(["publish", str(path), "--dsn", as_writer]) == 3  # refused: schema version 1
-    assert db.init(ADMIN, reporting_db["writer"]).startswith(f"schema a2vm version {db.SCHEMA_VERSION}")
+    assert db.init(ADMIN, reporting_db["writer"]).startswith(f"schema ngvm version {db.SCHEMA_VERSION}")
     assert main(["publish", str(path), "--dsn", as_writer]) == 0
     as_reader = psycopg.conninfo.make_conninfo(ADMIN, user=reader, password=password)
     with psycopg.connect(as_reader) as conn:  # granted before the upgrade, reads the new view
-        assert conn.execute("SELECT count(*) FROM a2vm.runs").fetchone()[0] == 2
-        assert conn.execute("SELECT count(*) FROM a2vm.decision_facts").fetchone()[0] == len(data["decisions"])
+        assert conn.execute("SELECT count(*) FROM ngvm.runs").fetchone()[0] == 2
+        assert conn.execute("SELECT count(*) FROM ngvm.decision_facts").fetchone()[0] == len(data["decisions"])
+        assert conn.execute("SELECT ngvm_version FROM ngvm.runs WHERE tenant_name = 'Old'").fetchone()[0] == "0.11.5"
+        assert conn.execute("SELECT to_regnamespace('a2vm')").fetchone()[0] is None  # renamed (v0.25.0)
 
 
 def _grafana(sql: str, values: dict[str, list[str]], texts: dict[str, str] | None = None) -> str:

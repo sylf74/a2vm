@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """SentinelOne as a source of components (`sentinelone`, HLD D20, v0.23.3, LLD vulnerability-detection
 §3.7).
 
@@ -6,7 +6,7 @@ The application inventory SentinelOne's agents collect becomes one host observat
 name and addresses, its operating system, and every application installed as components
 (`source: sentinelone`), each with its publisher. The applications of SentinelOne are not packages
 of a distribution: the watch matches them against the CVE records through the tenant's applications
-table, where an analyst validates the CPE of each application name (`a2vm.applications`, D11). A
+table, where an analyst validates the CPE of each application name (`ngvm.applications`, D11). A
 SentinelOne observation carries no finding: its own vulnerability data (Application Risk) is not
 read.
 
@@ -32,9 +32,9 @@ from typing import Any
 
 import httpx
 
-from a2vm import tls
-from a2vm.io import Detection, now
-from a2vm.models import AssetObservation
+from ngvm import tls
+from ngvm.io import Detection, now
+from ngvm.models import AssetObservation
 
 from .collect import MAX_COMPONENTS, component
 
@@ -135,7 +135,7 @@ class SentinelOneClient:
         self.http.close()
 
     def get(self, path: str, params: dict[str, Any] | None = None, method: str = "GET") -> dict[str, Any]:
-        if method != "GET":  # A2VM never changes anything in SentinelOne
+        if method != "GET":  # NGVM never changes anything in SentinelOne
             raise SentinelOneError(f"refused: {method} {path}, SentinelOne is read only")
         if not self._headers:
             self._headers = {"Authorization": f"ApiToken {self.cfg.token()}", "Accept": "application/json"}

@@ -1,8 +1,8 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 variable "name" {
   description = "Instance name (also its host name)."
   type        = string
-  default     = "a2vm-portal"
+  default     = "ngvm-portal"
 }
 
 variable "domain" {

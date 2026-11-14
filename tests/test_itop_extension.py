@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """The iTop extension a2vm-iot-device (deploy/itop): a delta iTop can load, labels for every value."""
 
 from __future__ import annotations

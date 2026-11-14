@@ -1,10 +1,10 @@
 # SentinelOne's application inventory (v0.23.3)
 
-SentinelOne's agents list the applications installed on each machine. A2VM reads that inventory as
+SentinelOne's agents list the applications installed on each machine. NGVM reads that inventory as
 a source of components (`sentinelone`): one host per agent, every application with its version and
 its publisher. Application names are free text, so the watch matches them against the CVE records
 through the tenant's **applications table**: the tenant's LLM proposes the CPE of each application,
-a validator decides on the review page (§4). A2VM never changes anything in SentinelOne, and does
+a validator decides on the review page (§4). NGVM never changes anything in SentinelOne, and does
 not read SentinelOne's own vulnerability data. Design: LLD detection §3.7, LLD intelligence §3.4,
 LLD triage §14.7.
 
@@ -17,31 +17,31 @@ LLD triage §14.7.
 
 ## 2. Read-only account
 
-In the management console, Settings > Users > Service Users: a service user `a2vm-inventory`, role
+In the management console, Settings > Users > Service Users: a service user `ngvm-inventory`, role
 **Viewer**, at the scope of the tenant's account (or of its sites), with an expiry date your policy
 allows. Its API token is shown once: paste it on the collector into a file readable by the agent
 only, without typing it on a command line:
 
 ```bash
-sudo sh -c 'umask 077; cat > /etc/a2vm/collector/sentinelone-token'
+sudo sh -c 'umask 077; cat > /etc/ngvm/collector/sentinelone-token'
 ```
 
 ```bash
-sudo chown 10001:10001 /etc/a2vm/collector/sentinelone-token
+sudo chown 10001:10001 /etc/ngvm/collector/sentinelone-token
 ```
 
 The first command waits for the token: paste it, press Enter, then Ctrl-D. Check from the collector
 (one agent expected):
 
 ```bash
-sudo sh -c 'curl -sS -H "Authorization: ApiToken $(cat /etc/a2vm/collector/sentinelone-token)" "https://console.lab.example/web/api/v2.1/agents?limit=1"' | head -c 400
+sudo sh -c 'curl -sS -H "Authorization: ApiToken $(cat /etc/ngvm/collector/sentinelone-token)" "https://console.lab.example/web/api/v2.1/agents?limit=1"' | head -c 400
 ```
 
 Before the token expires, make a new one and replace the file: nothing else changes.
 
 ## 3. Connector on the collector
 
-In `/etc/a2vm/collector/collector.yaml` (`docs/collectors.md` §2):
+In `/etc/ngvm/collector/collector.yaml` (`docs/collectors.md` §2):
 
 ```yaml
 connectors:
@@ -49,15 +49,15 @@ connectors:
     type: sentinelone
     url: https://console.lab.example
     api: agents                                   # or installed-applications
-    token_file: /etc/a2vm/collector/sentinelone-token
+    token_file: /etc/ngvm/collector/sentinelone-token
     site_ids: ["1234567890"]                      # optional: the tenant's sites only
     # account_ids: ["9876543210"]
-    # ca_file: /etc/a2vm/collector/ca.pem         # a private CA (console behind a proxy)
+    # ca_file: /etc/ngvm/collector/ca.pem         # a private CA (console behind a proxy)
     # page_size: 500                              # items per request, 1 to 1000
     # timeout_seconds: 120
 ```
 
-Its timer runs before the daily run (`sudo systemctl enable --now a2vm-collector@lan-s1.timer`). In
+Its timer runs before the daily run (`sudo systemctl enable --now ngvm-collector@lan-s1.timer`). In
 the tenant project, `collectors.yaml` declares the source with the collector's others:
 `sources: [trivy, dnf-updateinfo, openvas, cmdb, wazuh, sentinelone]`. The journal shows
 `sentinelone: <n> agents, applications listed on <m> (agents)`, then `ok   sentinelone [<url>]: <n>
@@ -71,7 +71,7 @@ agents`. A test without the collector:
   row is an application whatever its version, architecture or language: `Mozilla Firefox (x64 fr)`
   and `Mozilla Firefox (x64 en-US)` by `Mozilla` are one row.
 - At each passage of the watch the tenant's LLM proposes the CPE of a few rows (40, the most
-  widespread first; `A2VM_APPLICATIONS_PER_PASSAGE`), or none for a driver, a runtime or an update.
+  widespread first; `NGVM_APPLICATIONS_PER_PASSAGE`), or none for a driver, a runtime or an update.
 - On the review page (`https://<alerts host>/applications`), a validator validates the proposal,
   types another CPE (`cpe:2.3:a:<vendor>:<product>`, as in the NVD dictionary), marks the row as
   no product, or resets it. The decision is kept with who made it; the LLM never changes it.

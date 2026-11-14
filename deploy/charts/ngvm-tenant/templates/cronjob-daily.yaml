@@ -1,0 +1,295 @@
+{{- /*
+The daily run: the same steps as the stages of templates/client-pipeline.yml, one container per
+step, each in the image of its pillar, chained as init containers (each starts when the previous
+one succeeded) on a shared working volume. Exit code 3 (partial collection, database unreachable)
+is a warning, as in the pipeline.
+*/ -}}
+
+{{- define "ngvm-tenant.step.collect" -}}
+# One run at a time on the working volume: CronJob's concurrencyPolicy does not cover a run started
+# by hand (kubectl create job --from=cronjob/...). The lock is the pod's; a lock older than the
+# run's deadline is from a run that was killed.
+now=$(date +%s)
+if ! mkdir /data/.ngvm-run 2>/dev/null; then
+  started=$(cat /data/.ngvm-run/started 2>/dev/null || echo 0)
+  if [ $((now - started)) -lt {{ .Values.daily.activeDeadlineSeconds }} ]; then
+    echo "Another run holds the working volume (pod $(cat /data/.ngvm-run/pod 2>/dev/null), started $(( (now - started) / 60 )) min ago): stopping"
+    exit 1
+  fi
+  echo "WARN lock of a run started $(( (now - started) / 60 )) min ago and never released: taken over"
+fi
+echo "$now" > /data/.ngvm-run/started
+echo "$HOSTNAME" > /data/.ngvm-run/pod
+mkdir -p /data/work
+rm -rf /data/work/detect && mkdir -p /data/work/detect
+if [ -f /secrets/gitlab-ca ]; then export CI_SERVER_TLS_CA_FILE=/secrets/gitlab-ca; fi
+# Exit codes: 0 done, 3 partial (a warning, the run goes on), anything else stops the run.
+failed=0; partial=0
+step() { rc=0; "$@" || rc=$?; if [ "$rc" -eq 3 ]; then partial=1; elif [ "$rc" -ne 0 ]; then failed="$rc"; fi; }
+{{- if eq .Values.collect.mode "intake" }}
+# collect.mode intake: the collectors near the networks have pushed their detections.
+if [ ! -s /secrets/detect-read-token ]; then echo "No detect-read-token: the detection service cannot be read"; exit 1; fi
+step detect fetch --url {{ include "ngvm-tenant.intakeUrl" . | quote }} --tenant {{ .Values.tenant | quote }} \
+  --token-file /secrets/detect-read-token --collectors /intake/collectors.yaml --out /data/work/detect
+{{- else }}
+if [ ! -f /config/targets.yaml ]; then
+  echo "No targets.yaml: no scanner collection, declared inventory only"
+else
+  NO_SSH=""
+  if [ -s /secrets/ssh-key ]; then
+    mkdir -p "$HOME/.ssh" && umask 077
+    tr -d '\r' < /secrets/ssh-key | sed -e '$a\' > "$HOME/.ssh/vulnops_scan"
+    if ssh-keygen -y -f "$HOME/.ssh/vulnops_scan" > /dev/null 2>&1; then
+      echo "scan key: $(ssh-keygen -l -f "$HOME/.ssh/vulnops_scan")"
+    else
+      echo "ssh-key is not a usable private key: SSH targets skipped"; NO_SSH="--no-ssh"; partial=1
+    fi
+  else
+    echo "No ssh-key: SSH targets skipped (OpenVAS scan only, if configured)"; NO_SSH="--no-ssh"
+  fi
+  step detect collect /config/targets.yaml $NO_SSH --raw /tmp/scans --out /data/work/detect
+  rm -rf /tmp/scans
+fi
+{{- end }}
+if [ "$failed" -ne 0 ]; then exit "$failed"; fi
+if [ -n "${NGVM_EXTERNAL_PROJECT:-}" ]; then
+  step detect external /config/client.yaml --project "$NGVM_EXTERNAL_PROJECT" --out /data/work/detect
+fi
+if [ "$failed" -ne 0 ]; then exit "$failed"; fi
+# v0.23.11: the libraries of the images and the SBOMs against OSV (NGVM_OSV_MODE: offline, api, off).
+step detect osv --detect /data/work/detect --cache /data/osv-cache
+if [ "$partial" -eq 1 ]; then echo "WARN collection incomplete: going on with what was collected"; fi
+{{- end -}}
+
+{{- define "ngvm-tenant.step.via" -}}
+{{ include "ngvm-tenant.settings" . }}
+via collect --settings "$SETTINGS" --detect /data/work/detect --out /data/work/records.json --since "$NGVM_SINCE"
+{{- end -}}
+
+{{- define "ngvm-tenant.step.detect" -}}
+{{ include "ngvm-tenant.settings" . }}
+detect inventory /config/client.yaml --settings "$SETTINGS" --records /data/work/records.json --out /data/work/detect
+{{- end -}}
+
+{{- define "ngvm-tenant.step.assets" -}}
+rm -rf /data/work/assets.new
+# v0.24.0: the graph of the run before, for the machines seen off the premises within the window.
+verdict assets build /config/client.yaml --detect /data/work/detect --out /data/work/assets.new --previous /data/work/assets
+rm -rf /data/work/assets && mv /data/work/assets.new /data/work/assets
+{{- end -}}
+
+{{- define "ngvm-tenant.step.triage" -}}
+{{ include "ngvm-tenant.settings" . }}
+rm -rf /data/output
+{{- if .Values.verdict.enabled }}
+# The client's SLA (v0.21.0): when each decision entered its priority, from the tenant's database.
+rm -f /data/work/sla-state.json
+if [ -s /secrets/verdict-publish-token ]; then
+  src=0
+  verdict sla-state --url {{ include "ngvm-tenant.verdictUrl" . | quote }} --tenant {{ .Values.tenant | quote }} \
+    --token-file /secrets/verdict-publish-token --out /data/work/sla-state.json || src=$?
+  if [ "$src" -ne 0 ]; then echo "WARN no SLA state (exit $src): the SLA delays of this run start at the first observation"; fi
+fi
+verdict run /config/client.yaml --settings "$SETTINGS" --records /data/work/records.json --assets /data/work/assets --out /data/output \
+  --sla-state /data/work/sla-state.json --run-started "$(cat /data/.ngvm-run/started 2>/dev/null)"
+{{- else }}
+verdict run /config/client.yaml --settings "$SETTINGS" --records /data/work/records.json --assets /data/work/assets --out /data/output \
+  --run-started "$(cat /data/.ngvm-run/started 2>/dev/null)"
+{{- end }}
+{{- end -}}
+
+{{- define "ngvm-tenant.release" -}}
+trap 'if [ "$(cat /data/.ngvm-run/pod 2>/dev/null)" = "$HOSTNAME" ]; then rm -rf /data/.ngvm-run; fi' EXIT
+{{- end -}}
+
+{{- define "ngvm-tenant.step.publish" -}}
+{{- if not .Values.dispatch.enabled }}
+{{ include "ngvm-tenant.release" . }}
+{{- end }}
+{{- if .Values.verdict.enabled }}
+# The decision service first: the analysts read the run there, the reporting database may be down.
+TRIAGE=$(ls /data/output/*/*/triage.json 2>/dev/null | sort | tail -1)
+if [ -z "$TRIAGE" ]; then
+  echo "WARN no triage.json: nothing pushed to the decision service"
+elif [ ! -s /secrets/verdict-publish-token ]; then
+  echo "WARN no verdict-publish-token: nothing pushed to the decision service"
+else
+  vrc=0
+  verdict push "$TRIAGE" --url {{ include "ngvm-tenant.verdictUrl" . | quote }} --tenant {{ .Values.tenant | quote }} \
+    --token-file /secrets/verdict-publish-token || vrc=$?
+  if [ "$vrc" -ne 0 ]; then echo "WARN decision service not updated (exit $vrc): the next run pushes again"; fi
+fi
+{{- end }}
+# Every reporting database (v0.20.3): reporting-dsn, and reporting-dsn-<name> for each other portal.
+export NGVM_REPORTING_TARGETS_DIR=/secrets
+if [ -z "${NGVM_REPORTING_DSN:-}" ] && ! ls /secrets/reporting-dsn-* > /dev/null 2>&1; then
+  echo "No reporting-dsn: nothing to publish"; exit 0
+fi
+if [ -s /secrets/reporting-ca ]; then export NGVM_REPORTING_CA=/secrets/reporting-ca; fi
+rc=0
+{{- if .Values.dispatch.enabled }}
+# The fixes the team declared in the ITSM (v0.22.2), counted once a scan confirms them.
+DECLARED=""
+if [ -s /secrets/dispatch-read-token ]; then
+  DECLARED="--dispatch-url {{ include "ngvm-tenant.dispatchUrl" . }} --dispatch-token-file /secrets/dispatch-read-token"
+fi
+verdict publish /data/output/*/reporting.json $DECLARED || rc=$?
+{{- else }}
+verdict publish /data/output/*/reporting.json || rc=$?
+{{- end }}
+# A reporting database that refuses run after run (v0.23.4): the daily job ends failed, so that it shows.
+if [ "$rc" -eq 3 ]; then
+  n=$(( $(cat /data/.publish-failures 2>/dev/null || echo 0) + 1 )); echo "$n" > /data/.publish-failures
+  if [ "$n" -ge {{ .Values.daily.publishFailures }} ]; then
+    echo "ERROR a reporting database refused the last $n runs (the ERROR lines above name it): the daily job ends failed"
+    {{- if not .Values.dispatch.enabled }}
+    exit 1
+    {{- end }}
+  else
+    echo "WARN reporting database unreachable or refused ($n run(s) in a row): the next run publishes again"
+  fi
+  exit 0
+fi
+rm -f /data/.publish-failures
+exit "$rc"
+{{- end -}}
+
+{{- define "ngvm-tenant.step.dispatch" -}}
+# The last step (pillar 4): the dispatch service turns the run's decisions into tickets and follows
+# them. A failure is a warning: the next run dispatches again.
+{{ include "ngvm-tenant.release" . }}
+if [ ! -s /secrets/dispatch-run-token ]; then echo "WARN no dispatch-run-token: nothing dispatched"; exit 0; fi
+rc=0
+dispatch run --url {{ include "ngvm-tenant.dispatchUrl" . | quote }} --tenant {{ .Values.tenant | quote }} \
+  --token-file /secrets/dispatch-run-token || rc=$?
+if [ "$rc" -ne 0 ]; then echo "WARN dispatch incomplete (exit $rc): the next run dispatches again"; fi
+if [ "$(cat /data/.publish-failures 2>/dev/null || echo 0)" -ge {{ .Values.daily.publishFailures }} ]; then
+  echo "ERROR a reporting database refused the last runs (see the step publish): the daily job ends failed"; exit 1
+fi
+{{- end -}}
+
+{{- define "ngvm-tenant.step.inventory" -}}
+# The watch on Kubernetes names the machines of this run: its assets and findings to the watch service.
+if [ ! -s /secrets/via-run-token ]; then echo "WARN no via-run-token: the watch keeps the previous inventory"; exit 0; fi
+rc=0
+via service push-inventory --url {{ include "ngvm-tenant.viaUrl" . | quote }} --tenant {{ .Values.tenant | quote }} \
+  --token-file /secrets/via-run-token --assets-dir /data/work/assets/{{ .Values.tenant }} || rc=$?
+if [ "$rc" -ne 0 ]; then echo "WARN watch service not updated (exit $rc): see above what the watch keeps"; fi
+{{- end -}}
+
+{{- define "ngvm-tenant.container" -}}
+{{- $root := .root -}}
+- name: {{ .name }}
+  image: {{ include "ngvm-tenant.image" (dict "root" $root "pillar" .pillar) }}
+  imagePullPolicy: {{ $root.Values.image.pullPolicy }}
+  command: ["/bin/sh", "-ec"]
+  args:
+    - |
+      echo "NGVM {{ $root.Chart.AppVersion }}, tenant {{ $root.Values.tenant }}, step {{ .name }}"
+      trap 'rc=$?; if [ "$rc" -ne 0 ] && [ "$(cat /data/.ngvm-run/pod 2>/dev/null)" = "$HOSTNAME" ]; then rm -rf /data/.ngvm-run; fi' EXIT
+      {{- include (printf "ngvm-tenant.step.%s" .name) $root | nindent 6 }}
+  env:
+    {{- include "ngvm-tenant.env" $root | nindent 4 }}
+  volumeMounts:
+    {{- include "ngvm-tenant.mounts" $root | nindent 4 }}
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: [ALL]
+  {{- with $root.Values.resources }}
+  resources:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end -}}
+
+{{- include "ngvm-tenant.checks" . }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "ngvm-tenant.name" . }}-daily
+  labels:
+    {{- include "ngvm-tenant.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.daily.schedule | quote }}
+  {{- if .Values.daily.timeZone }}
+  timeZone: {{ .Values.daily.timeZone | quote }}
+  {{- end }}
+  suspend: {{ .Values.daily.suspend }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: {{ .Values.daily.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.daily.failedJobsHistoryLimit }}
+  jobTemplate:
+    metadata:
+      labels:
+        {{- include "ngvm-tenant.labels" . | nindent 8 }}
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: {{ .Values.daily.activeDeadlineSeconds }}
+      template:
+        metadata:
+          labels:
+            {{- include "ngvm-tenant.labels" . | nindent 12 }}
+            app.kubernetes.io/component: daily
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            fsGroup: 10001
+            seccompProfile:
+              type: RuntimeDefault
+          {{- if .Values.image.pullSecret }}
+          imagePullSecrets:
+            - name: {{ .Values.image.pullSecret }}
+          {{- end }}
+          {{- with .Values.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          initContainers:
+            {{- include "ngvm-tenant.container" (dict "root" . "name" "collect" "pillar" "detect") | nindent 12 }}
+            {{- include "ngvm-tenant.container" (dict "root" . "name" "via" "pillar" "via") | nindent 12 }}
+            {{- include "ngvm-tenant.container" (dict "root" . "name" "detect" "pillar" "detect") | nindent 12 }}
+            {{- include "ngvm-tenant.container" (dict "root" . "name" "assets" "pillar" "verdict") | nindent 12 }}
+            {{- include "ngvm-tenant.container" (dict "root" . "name" "triage" "pillar" "verdict") | nindent 12 }}
+            {{- if .Values.watch.enabled }}
+            {{- include "ngvm-tenant.container" (dict "root" . "name" "inventory" "pillar" "via") | nindent 12 }}
+            {{- end }}
+            {{- if .Values.dispatch.enabled }}
+            {{- include "ngvm-tenant.container" (dict "root" . "name" "publish" "pillar" "verdict") | nindent 12 }}
+            {{- end }}
+          containers:
+            {{- if .Values.dispatch.enabled }}
+            {{- include "ngvm-tenant.container" (dict "root" . "name" "dispatch" "pillar" "dispatch") | nindent 12 }}
+            {{- else }}
+            {{- include "ngvm-tenant.container" (dict "root" . "name" "publish" "pillar" "verdict") | nindent 12 }}
+            {{- end }}
+          volumes:
+            - name: data
+              persistentVolumeClaim:
+                claimName: {{ include "ngvm-tenant.name" . }}-data
+            - name: config
+              configMap:
+                name: {{ include "ngvm-tenant.name" . }}-config
+            - name: home
+              emptyDir: {}
+            - name: tmp
+              emptyDir: {}
+            {{- if .Values.secret.name }}
+            - name: secrets
+              secret:
+                secretName: {{ .Values.secret.name }}
+                defaultMode: 0440   # readable by the run group (fsGroup)
+                optional: true
+            {{- end }}
+            {{- if .Values.intake.enabled }}
+            - name: collectors
+              configMap:
+                name: {{ include "ngvm-tenant.name" . }}-collectors
+            {{- end }}

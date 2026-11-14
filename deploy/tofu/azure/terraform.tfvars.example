@@ -1,0 +1,21 @@
+# Three servers and a collector on Azure (docs/platform.md §8). az login first, or the ARM_*
+# variables of a service principal in the environment.
+
+subscription_id = "00000000-0000-0000-0000-000000000000"
+
+machines = {
+  k8s01 = { roles = ["server"] }
+  k8s02 = { roles = ["server"] }
+  k8s03 = { roles = ["server"] }
+  col01 = { roles = ["collector"], size = "Standard_B2s" }
+}
+
+admin_cidrs = ["203.0.113.10/32"]
+
+platform = {
+  ssh = { private_key_file = "~/.ssh/id_ed25519" }
+  cluster = {
+    token_file      = "~/.ngvm/secrets/rke2-token"
+    kubeconfig_file = "~/.kube/ngvm-azure.yaml"
+  }
+}

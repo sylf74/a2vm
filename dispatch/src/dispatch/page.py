@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """The page of the requests for remediation (LLD dispatch §3.2, D18).
 
 A dashboard's link "Remediate" opens `/remediate?asset=...&level=...`. The page is served on a port
@@ -190,7 +190,7 @@ def _page(title: str, body: str) -> str:
     return (
         "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width, initial-scale=1'>"
-        f"<title>{html.escape(title)} — A2VM</title><style>"
+        f"<title>{html.escape(title)} — NGVM</title><style>"
         "body{font-family:system-ui,sans-serif;margin:1.5rem;max-width:72rem;color:#1d2433}"
         "table{border-collapse:collapse;width:100%}"
         "th,td{border-bottom:1px solid #d7dbe3;padding:.35rem;text-align:left;vertical-align:top;font-size:.92rem}"

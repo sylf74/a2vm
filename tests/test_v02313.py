@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """v0.23.13: an image lives in the exposure of its host.
 
 An image scanned on a host takes from it what nothing says of the image itself: owner, exposure,
@@ -12,9 +12,9 @@ import re
 
 import yaml
 
-from a2vm.io import Detection
-from a2vm.models import AssetObservation
-from a2vm.profile import load_profile, validate_profile_data
+from ngvm.io import Detection
+from ngvm.models import AssetObservation
+from ngvm.profile import load_profile, validate_profile_data
 
 from .conftest import ROOT
 
@@ -160,5 +160,5 @@ def test_docs() -> None:
 
 def test_release_recorded() -> None:
     assert "## v0.23.13 — " in (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    chart = (ROOT / "deploy/charts/a2vm-tenant/Chart.yaml").read_text()
+    chart = (ROOT / "deploy/charts/ngvm-tenant/Chart.yaml").read_text()
     assert re.search(r"^version: 0\.(23\.(1[3-9]|[2-9]\d)|2[4-9]\.\d+)$", chart, re.M)

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """Command `dispatch` (pillar 4):
 
 dispatch serve   the dispatch service of one tenant, and its page of the requests for remediation
@@ -26,8 +26,8 @@ def _read_secret(path: str) -> str:
 
 
 def cmd_serve(args: argparse.Namespace) -> int:
-    from a2vm.db import DatabaseError, open_database
-    from a2vm.service import TokenSet, serve
+    from ngvm.db import DatabaseError, open_database
+    from ngvm.service import TokenSet, serve
 
     from .decisions import Decisions
     from .page import RequestPage
@@ -90,7 +90,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     try:
         r = httpx.post(
             f"{args.url.rstrip('/')}/v1/tenants/{args.tenant}/runs",
-            headers={"Authorization": f"Bearer {token}", "User-Agent": "a2vm-dispatch"},
+            headers={"Authorization": f"Bearer {token}", "User-Agent": "ngvm-dispatch"},
             timeout=httpx.Timeout(args.timeout_seconds, connect=15.0),
         )
     except httpx.HTTPError as exc:

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """Clients of the detection service: the collector's push, the daily run's fetch."""
 
 from __future__ import annotations
@@ -12,9 +12,9 @@ from typing import Any
 
 import httpx
 
-from a2vm import __version__, tls
-from a2vm.io import Detection, ExchangeError, validate_detection, write_detection
-from a2vm.models import AssetObservation, Finding, NotAffected
+from ngvm import __version__, tls
+from ngvm.io import Detection, ExchangeError, validate_detection, write_detection
+from ngvm.models import AssetObservation, Finding, NotAffected
 
 from ..scanners import merge
 from .registry import SOURCE
@@ -24,7 +24,7 @@ class IntakeError(RuntimeError):
     pass
 
 
-AGENT_HEADER, CONNECTOR_HEADER = "X-A2VM-Agent", "X-A2VM-Connector"  # v0.23.9
+AGENT_HEADER, CONNECTOR_HEADER = "X-NGVM-Agent", "X-NGVM-Connector"  # v0.23.9
 TIMEOUT = 600.0  # a large detection (100 MB and more) takes the service a minute or more to validate
 
 
@@ -37,7 +37,7 @@ def _client(
 ) -> httpx.Client:
     return httpx.Client(
         base_url=base_url.rstrip("/"),
-        headers={"Authorization": f"Bearer {token}", "User-Agent": "a2vm-detect"},
+        headers={"Authorization": f"Bearer {token}", "User-Agent": "ngvm-detect"},
         verify=tls.verify(ca_file),
         timeout=httpx.Timeout(timeout, connect=15.0),
         transport=transport,

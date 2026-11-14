@@ -22,7 +22,7 @@ manifest, the clusters keep running.
 
 - The namespace `cnpg-system` must have the label `kubernetes.io/metadata.name: cnpg-system`
   (set by Kubernetes): the tenant's NetworkPolicy lets it reach the instances on 5432 and 8000.
-- A default StorageClass, or `A2VM_DATABASE_STORAGE_CLASS` on the tenant project.
+- A default StorageClass, or `NGVM_DATABASE_STORAGE_CLASS` on the tenant project.
 - The GitLab agent's access of the tenant projects must allow `postgresql.cnpg.io` `clusters` in
   their namespaces (the chart creates one).
 

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """v0.17.1: the English reference, the contacts' languages, the translation checked by an analyst,
 one mail and one Word file per language."""
 
@@ -14,8 +14,8 @@ import pytest
 import yaml
 from docx import Document
 
-from a2vm.config import LlmSettings
-from a2vm.llm import LlmClient
+from ngvm.config import LlmSettings
+from ngvm.llm import LlmClient
 from via.alert import i18n, translate
 from via.service import sender
 from via.service.client import WatchClient
@@ -80,7 +80,7 @@ def test_a_translation_keeps_the_facts_and_takes_the_catalogue_headings():
 @pytest.fixture
 def flow(service, tmp_path, monkeypatch):  # noqa: F811 - the fixture of test_v0160
     svc, url, token = service
-    for v in ("A2VM_ANALYST_TO", "A2VM_SMTP_HOST", "A2VM_MAIL_TRANSPORT"):
+    for v in ("NGVM_ANALYST_TO", "NGVM_SMTP_HOST", "NGVM_MAIL_TRANSPORT"):
         monkeypatch.delenv(v, raising=False)
     data = yaml.safe_load(Path(PROFILE).read_text())
     data.setdefault("alerts", {}).update({"attach": ["docx"], "recipients": []})
@@ -137,7 +137,7 @@ def test_translate_validate_and_send_one_mail_per_language(flow, monkeypatch):
 
     mails = []
     monkeypatch.setattr(sender, "send", lambda msg, outbox: mails.append(msg) or "written")
-    from a2vm.profile import load_profile
+    from ngvm.profile import load_profile
     from via.alert.contacts import load_contacts
 
     sent, failed = sender.send_validated(client, load_profile(profile), str(profile), load_contacts(contacts), TENANT)

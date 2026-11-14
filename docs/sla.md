@@ -80,7 +80,7 @@ lengthened in the profile applies to the decisions that enter the priority after
 shortened applies at once.
 
 The start is known from the history of the tenant's database (v0.18.0): on Kubernetes with
-`A2VM_DATABASE=true`, the daily run reads it from the decision service before the triage. Each
+`NGVM_DATABASE=true`, the daily run reads it from the decision service before the triage. Each
 decision says where its start comes from (`since_source`):
 
 | `since_source` | Start |
@@ -103,7 +103,7 @@ that did not change: the next run starts from it again.
 | Chat | "Which P1 are overdue?", "what is due this week for the client's SLA?": filters `priority`, `sla_overdue`, `sla_due_before`, sorts `priority`, `sla_due`; the summary lists the priorities; the CSV export has the priority and the SLA due date, the Word and PowerPoint explanation the rule applied |
 | Reporting database (schema 5, 6) | `decisions`: `priority`, `sla_due`, `sla_since`, `sla_rule`; `decision_facts`: `sla_status` (`overdue`, `on-track`) and `deadline`; `finding_closures`: `within_sla`, and since v0.22.2 `last_vulnerable`, `first_clean`, `declared_at`, `deadline`, `fix_status` (§4); `declared_fixes`; `runs`: `sla_overdue`, `sla_due_soon` (`docs/reporting.md`) |
 | Grafana | Dashboard `sla` (priorities and SLA): open with a priority, past their SLA due date, due within 7 days, share fixed within the SLA beside the same findings against BOD 26-04, per priority, overdue per day, overdue decisions; the dashboard `remediation` shows the priority of the findings fixed |
-| Tickets (iTop) | Title `[A2VM ACT P1] …`; text with the priority, the SLA due date and the BOD one; the ticket's due date is the earliest SLA due date of its findings; impact and urgency per priority when `dispatch.yaml` maps them (`docs/dispatch.md`) |
+| Tickets (iTop) | Title `[NGVM ACT P1] …`; text with the priority, the SLA due date and the BOD one; the ticket's due date is the earliest SLA due date of its findings; impact and urgency per priority when `dispatch.yaml` maps them (`docs/dispatch.md`) |
 
 ## 4. When a fix happened (v0.22.2)
 
@@ -121,19 +121,19 @@ that no longer did (`first_clean`):
 | `to verify` | The interval straddles the deadline, with no declared date in it |
 
 The ITSM carries the work and the declared date (iTop's `resolution_date`, read by dispatch when the
-ticket is resolved); A2VM measures and verifies: a declaration counts only when it lies between the
+ticket is resolved); NGVM measures and verifies: a declaration counts only when it lies between the
 two scans, and never closes a finding on its own (D11). The daily run's publication reads the
 declared dates from the dispatch service (`GET fixes`, with its read token) and keeps the latest per
 finding (`declared_fixes`). The dashboard `sla` shows the fixes per status and lists those missed
 or to verify, with the two scans and the declared date.
 
-The due date A2VM computed can also be written into a field of the iTop ticket (an extension's date
+The due date NGVM computed can also be written into a field of the iTop ticket (an extension's date
 field, `due_field` of the target in `dispatch.yaml`): on create, and whenever it changes
 (`docs/dispatch.md`).
 
 ## 5. Upgrading a tenant to v0.21.0
 
-1. Move `ref` and `A2VM_REF` to `v0.21.0` and push.
+1. Move `ref` and `NGVM_REF` to `v0.21.0` and push.
 2. On each reporting database, `verdict db init` once (schema 5, `docs/reporting.md`); a portal on
    Kubernetes does it at its upgrade.
 3. Import the dashboard `sla` (and `--language fr`, `--rssi`) on a portal set up by hand; a portal on

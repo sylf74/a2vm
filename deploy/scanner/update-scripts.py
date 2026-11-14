@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """The scripts of a running cloud scanner, brought to this release.
 
 cloud-init runs at the first boot only, and main.tf ignores later changes of the template. This
 prints a shell script that writes again, from cloud-init.yaml.tftpl, every file of the template
-without a Terraform value (the scripts of /opt/a2vm-scanner and the feed service); scanner.env,
+without a Terraform value (the scripts of /opt/ngvm-scanner and the feed service); scanner.env,
 the feed timer and the secrets are left as they are. Python standard library only:
 
     python3 deploy/scanner/update-scripts.py | ssh root@<scanner> bash
@@ -17,7 +17,7 @@ import sys
 from pathlib import Path
 
 TEMPLATE = Path(__file__).with_name("cloud-init.yaml.tftpl")
-END = "A2VM_END_OF_FILE"
+END = "NGVM_END_OF_FILE"
 
 
 def write_files(text: str) -> list[tuple[str, str, str]]:

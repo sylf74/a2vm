@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """The radar of the watch team (HLD D17, v0.22.0): the major vulnerabilities, whoever they concern.
 
 A tenant whose profile says `alerts.mode: radar` (the watch team's own, `via`) does not match the
@@ -36,8 +36,8 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from a2vm.gti import ssvc_exploitation
-from a2vm.models import ClientProfile, VulnRecord
+from ngvm.gti import ssvc_exploitation
+from ngvm.models import ClientProfile, VulnRecord
 
 from .certfr import Publication
 
@@ -275,7 +275,7 @@ SAME_SCHEMA: dict[str, Any] = {
 
 
 def _system(task: str) -> str:
-    from a2vm.llm import UNTRUSTED
+    from ngvm.llm import UNTRUSTED
 
     return f"{task}\n{UNTRUSTED}\nAnswer in English."
 
@@ -287,7 +287,7 @@ def _text(source: dict[str, Any]) -> str:
 def propose(events: list[dict[str, Any]], radar_state: dict[str, Any], llm: Any, cfg: RadarConfig, since: str) -> int:
     """Ask the LLM for the product of the events that name none, and whether a new event is the same
     news as an open one; kept in `proposals` of the event, with the model. Returns the calls made."""
-    from a2vm.llm import LlmError
+    from ngvm.llm import LlmError
 
     calls = 0
     model = getattr(llm, "model", "")
@@ -450,9 +450,9 @@ def alerts(
 
 
 def publish(entry: dict[str, Any], transport: Any = None) -> str:
-    """Publish the event of a validated radar alert to the shared intelligence service (A2VM_INTEL_URL,
-    the radar token in the file A2VM_INTEL_RADAR_TOKEN_FILE); a log line, "" for another alert."""
-    from a2vm.config import env
+    """Publish the event of a validated radar alert to the shared intelligence service (NGVM_INTEL_URL,
+    the radar token in the file NGVM_INTEL_RADAR_TOKEN_FILE); a log line, "" for another alert."""
+    from ngvm.config import env
     from via.intel.remote import IntelClient, IntelError, token_from
 
     event = entry.get("radar")
@@ -460,7 +460,7 @@ def publish(entry: dict[str, Any], transport: Any = None) -> str:
         return ""
     url = env("INTEL_URL")
     if not url:
-        return f"radar: {event['id']} not published (no shared service: A2VM_INTEL_URL)"
+        return f"radar: {event['id']} not published (no shared service: NGVM_INTEL_URL)"
     try:
         client = IntelClient(url, token_from(env("INTEL_RADAR_TOKEN_FILE")), transport)
         try:

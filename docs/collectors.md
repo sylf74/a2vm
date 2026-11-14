@@ -7,12 +7,12 @@ service instead of collecting itself (`collect.mode: intake`). The cluster never
 client machine; a target allows only the collector of its network. Design: LLD detection §8.
 
 ```
-client network                                      cluster, namespace a2vm-<tenant>
+client network                                      cluster, namespace ngvm-<tenant>
 ┌──────────────────────────────┐                    ┌───────────────────────────────────────┐
 │ targets ◀─SSH─ collector     │── HTTPS push ─────▶│ ingress (collectors' addresses only)  │
-│ OpenVAS ◀─GMP─ (detect agent,│   token per        │   └▶ a2vm-<tenant>-detect (detect     │
+│ OpenVAS ◀─GMP─ (detect agent,│   token per        │   └▶ ngvm-<tenant>-detect (detect     │
 │                systemd timer)│   collector        │       serve, volume of detections)    │
-└──────────────────────────────┘                    │ a2vm-<tenant>-daily ── detect fetch ──┘
+└──────────────────────────────┘                    │ ngvm-<tenant>-daily ── detect fetch ──┘
                                                     └───────────────────────────────────────┘
 ```
 
@@ -39,27 +39,27 @@ CI/CD variables of the tenant project:
 
 | Key | Value | Options |
 | --- | --- | --- |
-| `A2VM_COLLECTOR_TOKEN_<ID>` | The collector's token (id in upper case, dashes as underscores: `A2VM_COLLECTOR_TOKEN_LAB_LAN`) | Masked, protected |
-| `A2VM_COLLECTOR_TOKEN_<ID>_NEXT` | A second token during a rotation (section 4) | Masked, protected |
-| `A2VM_INTAKE_HOST` | Host name of the push endpoint, e.g. `detect-lab.apps.example.org`; without it, no ingress | Visible |
-| `A2VM_INTAKE_ALLOW` | Addresses of the collectors, CIDR, comma-separated, e.g. `192.0.2.10/32` | Visible |
-| `A2VM_INTAKE_INGRESS_CONTROLLER` | `nginx` (default), `traefik` or `other`: how the allow-list is set (below) | Visible |
-| `A2VM_INTAKE_CLUSTER_ISSUER` | Optional: cert-manager ClusterIssuer that signs the host's certificate, e.g. `internal-ca` | Visible |
-| `A2VM_INTAKE_TLS_SECRET` | Optional: Secret of the host's certificate (made by cert-manager with the issuer; default `a2vm-<tenant>-detect-tls`) | Visible |
-| `A2VM_INTAKE_INGRESS_CLASS` | Optional: ingress class | Visible |
-| `A2VM_COLLECT_MODE` | Optional, default `intake`; `local` keeps the daily run collecting itself while the collectors are tried side by side | Visible |
+| `NGVM_COLLECTOR_TOKEN_<ID>` | The collector's token (id in upper case, dashes as underscores: `NGVM_COLLECTOR_TOKEN_LAB_LAN`) | Masked, protected |
+| `NGVM_COLLECTOR_TOKEN_<ID>_NEXT` | A second token during a rotation (section 4) | Masked, protected |
+| `NGVM_INTAKE_HOST` | Host name of the push endpoint, e.g. `detect-lab.apps.example.org`; without it, no ingress | Visible |
+| `NGVM_INTAKE_ALLOW` | Addresses of the collectors, CIDR, comma-separated, e.g. `192.0.2.10/32` | Visible |
+| `NGVM_INTAKE_INGRESS_CONTROLLER` | `nginx` (default), `traefik` or `other`: how the allow-list is set (below) | Visible |
+| `NGVM_INTAKE_CLUSTER_ISSUER` | Optional: cert-manager ClusterIssuer that signs the host's certificate, e.g. `internal-ca` | Visible |
+| `NGVM_INTAKE_TLS_SECRET` | Optional: Secret of the host's certificate (made by cert-manager with the issuer; default `ngvm-<tenant>-detect-tls`) | Visible |
+| `NGVM_INTAKE_INGRESS_CLASS` | Optional: ingress class | Visible |
+| `NGVM_COLLECT_MODE` | Optional, default `intake`; `local` keeps the daily run collecting itself while the collectors are tried side by side | Visible |
 
 The token is made on the collector (section 2) and pasted from there into the variable: a token
 is 32 to 512 characters without spaces. On the next push to the default branch, `deploy-k8s`:
 
-- writes the digests of the tokens to the Secret `a2vm-intake` (the service keeps only digests);
-- keeps the read token of the daily run (key `detect-read-token` of the Secret `a2vm-tenant`), or
+- writes the digests of the tokens to the Secret `ngvm-intake` (the service keeps only digests);
+- keeps the read token of the daily run (key `detect-read-token` of the Secret `ngvm-tenant`), or
   makes one at the first deployment;
-- deploys the service (`a2vm-<tenant>-detect`), its volume, the ingress and the network policy,
+- deploys the service (`ngvm-<tenant>-detect`), its volume, the ingress and the network policy,
   and the CronJob in `intake` mode. The job log lists each collector with "token set" or "no
   token", never a value.
 
-The allow-list of `A2VM_INTAKE_ALLOW` is set by the controller:
+The allow-list of `NGVM_INTAKE_ALLOW` is set by the controller:
 
 | Controller | What the chart makes |
 | --- | --- |
@@ -67,7 +67,7 @@ The allow-list of `A2VM_INTAKE_ALLOW` is set by the controller:
 | `traefik` | A Traefik `Middleware` (`traefik.io/v1alpha1`, `ipAllowList`) attached to the Ingress by `traefik.ingress.kubernetes.io/router.middlewares` |
 | `other` | Nothing: put the controller's own allow-list in the chart value `intake.ingress.annotations` (the chart cannot check it) |
 
-With `nginx` and `traefik`, a deployment without `A2VM_INTAKE_ALLOW` is refused. The allow-list
+With `nginx` and `traefik`, a deployment without `NGVM_INTAKE_ALLOW` is refused. The allow-list
 works only if the controller sees the collectors' real addresses: no source NAT in front of it.
 Behind a `LoadBalancer` Service (MetalLB, for instance), that Service needs
 `externalTrafficPolicy: Local`; with `Cluster`, the controller sees the address of a node and
@@ -84,21 +84,25 @@ that issuer's CA: the collectors need that CA as `ca_file` (section 2).
 
 ## 2. Install a collector (VM near the network)
 
+Since v0.25.0 a collector is installed by OpenTofu, with Podman, with the rest of the platform
+(`docs/platform.md` §6): the same `collector.yaml` and files, one timer per connector. The steps
+below install one by hand: with the install script (Docker), or step by step (Podman).
+
 A VM that reaches the targets and the push endpoint: 2 vCPU, 2 GB, 20 GB, Podman, outbound HTTPS
 only (no inbound port). The scanners run on the targets (Trivy, dnf) or on the OpenVAS host; the
 collector only drives them. The examples use Rocky Linux and the image of the release.
 
 ```bash
 sudo dnf install -y podman openssl
-sudo install -d -m 0750 -o 10001 -g 10001 /etc/a2vm/collector /etc/a2vm/collector/ssh \
-  /var/lib/a2vm /var/lib/a2vm-ssh
+sudo install -d -m 0750 -o 10001 -g 10001 /etc/ngvm/collector /etc/ngvm/collector/ssh \
+  /var/lib/ngvm /var/lib/ngvm-ssh
 # The collector's token: made here, readable by the agent only, then pasted into GitLab.
-sudo sh -c 'umask 077; openssl rand -hex 32 > /etc/a2vm/collector/token'
-sudo chown 10001:10001 /etc/a2vm/collector/token
-sudo cat /etc/a2vm/collector/token   # once, to copy into A2VM_COLLECTOR_TOKEN_<ID>
+sudo sh -c 'umask 077; openssl rand -hex 32 > /etc/ngvm/collector/token'
+sudo chown 10001:10001 /etc/ngvm/collector/token
+sudo cat /etc/ngvm/collector/token   # once, to copy into NGVM_COLLECTOR_TOKEN_<ID>
 ```
 
-Then put the CA of the push endpoint's certificate in `/etc/a2vm/collector/ca.pem` (owner 10001,
+Then put the CA of the push endpoint's certificate in `/etc/ngvm/collector/ca.pem` (owner 10001,
 mode 0640) and, for a private registry, the registry's CA where the container engine reads it
 (see *Two CAs* below).
 
@@ -112,7 +116,7 @@ deploy token with `read_registry`):
 ```bash
 sudo bash install-collector.sh --tenant lab --collector lab-lan \
   --service https://detect-lab.apps.example.org \
-  --image registry.example.org/vulnops/a2vm/detect:v0.16.0 \
+  --image registry.example.org/vulnops/ngvm/detect:v0.16.0 \
   --openvas-hosts "192.0.2.0/24" --gvm-socket-volume greenbone-community-edition_gvmd_socket_vol
 ```
 
@@ -126,7 +130,7 @@ sudo bash install-collector.sh --tenant lab --collector lab-lan \
 | Image | Pulled (login with the deploy token when given); the password file removed |
 | Socket | Its rights read; `--group-add` when "other" may not use it |
 | Configuration | Read by the agent inside the image: an error shows before the first run |
-| Units | `a2vm-collector@.service` and `.timer` (`--schedule`, default 07:30), one timer enabled per connector; `a2vm-collector-poll.service` and `.timer`, every 5 minutes (v0.23.10, *The poll* below) |
+| Units | `ngvm-collector@.service` and `.timer` (`--schedule`, default 07:30), one timer enabled per connector; `ngvm-collector-poll.service` and `.timer`, every 5 minutes (v0.23.10, *The poll* below) |
 
 It starts no scan: it ends with the commands of the first runs. Without `--openvas-hosts`, the
 collector does SSH scans only, and Docker is the only engine the script uses; with Podman, follow
@@ -134,62 +138,62 @@ the steps by hand below.
 
 ### By hand
 
-The scan key of the read-only account goes to `/etc/a2vm/collector/ssh/scan_key` (owner 10001,
-mode 0600), the targets file of the network to `/etc/a2vm/collector/targets.yaml` with
-`identity_file: /etc/a2vm/collector/ssh/scan_key`. Then `/etc/a2vm/collector/collector.yaml`:
+The scan key of the read-only account goes to `/etc/ngvm/collector/ssh/scan_key` (owner 10001,
+mode 0600), the targets file of the network to `/etc/ngvm/collector/targets.yaml` with
+`identity_file: /etc/ngvm/collector/ssh/scan_key`. Then `/etc/ngvm/collector/collector.yaml`:
 
 ```yaml
 collector: lab-lan                         # as declared in collectors.yaml
 tenant: lab
 service: https://detect-lab.apps.example.org
-token_file: /etc/a2vm/collector/token
-# ca_file: /etc/a2vm/collector/ca.pem      # CA of the endpoint's certificate, if private
+token_file: /etc/ngvm/collector/token
+# ca_file: /etc/ngvm/collector/ca.pem      # CA of the endpoint's certificate, if private
 # timeout_seconds: 600                     # wait for the service's answer to a push (default 600)
-work: /var/lib/a2vm/work
-spool: /var/lib/a2vm/spool
+work: /var/lib/ngvm/work
+spool: /var/lib/ngvm/spool
 connectors:
   - name: lan                              # SSH (trivy, dnf-updateinfo) and OpenVAS
     type: targets
-    targets: /etc/a2vm/collector/targets.yaml
+    targets: /etc/ngvm/collector/targets.yaml
     ssh: true
     openvas: true                          # its `zone` goes in the openvas section of targets.yaml (v0.24.0)
   # - name: trivy-drop                     # Trivy exports dropped by another tool
   #   type: file-import
   #   source: trivy                        # trivy (.json), dnf-updateinfo (.txt), openvas (.xml)
-  #   folder: /var/lib/a2vm/import/trivy
+  #   folder: /var/lib/ngvm/import/trivy
   #   zone: lan                            # openvas: the zone the scanner observes from (v0.24.0)
   # - name: lan-cmdb                       # the tenant's CMDB, read only (v0.19.0, docs/cmdb.md)
   #   type: itop
   #   url: https://itop.lab.example
-  #   user: a2vm-cmdb
-  #   password_file: /etc/a2vm/collector/itop-password
-  #   ca_file: /etc/a2vm/collector/ca.pem
+  #   user: ngvm-cmdb
+  #   password_file: /etc/ngvm/collector/itop-password
+  #   ca_file: /etc/ngvm/collector/ca.pem
   #   organization: Lab
   # - name: lan-wazuh                      # Wazuh's software inventory, read only (v0.23.1, docs/wazuh.md)
   #   type: wazuh
   #   url: https://wazuh-indexer.lab.example:9200
   #   api: indexer                         # or manager (port 55000)
-  #   user: a2vm-inventory
-  #   password_file: /etc/a2vm/collector/wazuh-password
-  #   ca_file: /etc/a2vm/collector/wazuh-ca.pem
+  #   user: ngvm-inventory
+  #   password_file: /etc/ngvm/collector/wazuh-password
+  #   ca_file: /etc/ngvm/collector/wazuh-ca.pem
   # - name: lan-cbw                        # Cyberwatch's assets and open CVEs, read only (v0.23.5, docs/cyberwatch.md)
   #   type: cyberwatch
   #   url: https://cyberwatch.lab.example
-  #   access_key_file: /etc/a2vm/collector/cyberwatch-access-key
-  #   secret_key_file: /etc/a2vm/collector/cyberwatch-secret-key
+  #   access_key_file: /etc/ngvm/collector/cyberwatch-access-key
+  #   secret_key_file: /etc/ngvm/collector/cyberwatch-secret-key
   # - name: lan-network                    # appliances and network devices by SNMP, read only (v0.23.6, docs/appliances.md)
   #   type: snmp
   #   targets: [192.0.2.1, 192.0.2.64/28]
-  #   user: a2vm-ro
-  #   auth_password_file: /etc/a2vm/collector/snmp-auth
-  #   priv_password_file: /etc/a2vm/collector/snmp-priv
+  #   user: ngvm-ro
+  #   auth_password_file: /etc/ngvm/collector/snmp-auth
+  #   priv_password_file: /etc/ngvm/collector/snmp-priv
   # - name: lan-s1                         # SentinelOne's applications, read only (v0.23.3, docs/sentinelone.md)
   #   type: sentinelone
   #   url: https://console.lab.example
-  #   token_file: /etc/a2vm/collector/sentinelone-token
+  #   token_file: /etc/ngvm/collector/sentinelone-token
   # - name: lan-sbom                       # SBOM files, CycloneDX or SPDX JSON (v0.23.11)
   #   type: sbom
-  #   directory: /var/lib/a2vm/import/sbom
+  #   directory: /var/lib/ngvm/import/sbom
   #   assets:                              # optional: else the SBOM's subject, as an image
   #     - {file: billing.cdx.json, kind: host, name: app01.lab.example}
   #     - {file: shop.cdx.json, kind: image, name: registry.lab.example/shop:2.1, host: web01.lab.example}
@@ -208,14 +212,14 @@ from a file:
 
 ```bash
 sudo podman login registry.example.org -u "$(cat registry-user.txt)" --password-stdin < registry-password.txt
-sudo podman pull registry.example.org/vulnops/a2vm/detect:v0.16.0
+sudo podman pull registry.example.org/vulnops/ngvm/detect:v0.16.0
 ```
 
-One systemd service and timer per connector, `/etc/systemd/system/a2vm-collector@.service`:
+One systemd service and timer per connector, `/etc/systemd/system/ngvm-collector@.service`:
 
 ```ini
 [Unit]
-Description=A2VM collector, connector %i
+Description=NGVM collector, connector %i
 Wants=network-online.target
 After=network-online.target
 
@@ -224,20 +228,20 @@ Type=oneshot
 # 3: partial (a scan failed, or a push kept in the spool for the next run): a warning in the journal.
 SuccessExitStatus=3
 TimeoutStartSec=6h
-ExecStart=/usr/bin/podman run --rm --name a2vm-collector-%i --user 10001:10001 \
-  -v /etc/a2vm/collector:/etc/a2vm/collector:ro,Z \
-  -v /var/lib/a2vm:/var/lib/a2vm:Z \
-  -v /var/lib/a2vm-ssh:/home/a2vm/.ssh:Z \
-  registry.example.org/vulnops/a2vm/detect:v0.16.0 \
-  detect agent run --config /etc/a2vm/collector/collector.yaml --connector %i
+ExecStart=/usr/bin/podman run --rm --name ngvm-collector-%i --user 10001:10001 \
+  -v /etc/ngvm/collector:/etc/ngvm/collector:ro,Z \
+  -v /var/lib/ngvm:/var/lib/ngvm:Z \
+  -v /var/lib/ngvm-ssh:/home/ngvm/.ssh:Z \
+  registry.example.org/vulnops/ngvm/detect:v0.16.0 \
+  detect agent run --config /etc/ngvm/collector/collector.yaml --connector %i
 ```
 
-`/etc/systemd/system/a2vm-collector@.timer` (before the daily run of the cluster, 05:45 by
+`/etc/systemd/system/ngvm-collector@.timer` (before the daily run of the cluster, 05:45 by
 default; an OpenVAS scan can take hours, so start it early):
 
 ```ini
 [Unit]
-Description=A2VM collector, connector %i, daily
+Description=NGVM collector, connector %i, daily
 
 [Timer]
 OnCalendar=*-*-* 01:30:00
@@ -250,13 +254,13 @@ WantedBy=timers.target
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable --now a2vm-collector@lan.timer
-sudo systemctl start a2vm-collector@lan.service      # a first run now
-journalctl -u a2vm-collector@lan.service -f
+sudo systemctl enable --now ngvm-collector@lan.timer
+sudo systemctl start ngvm-collector@lan.service      # a first run now
+journalctl -u ngvm-collector@lan.service -f
 ```
 
-Another schedule for one connector: `sudo systemctl edit a2vm-collector@trivy-drop.timer`. Host
-keys of the targets are accepted on first use and kept in `/var/lib/a2vm-ssh`. A new release:
+Another schedule for one connector: `sudo systemctl edit ngvm-collector@trivy-drop.timer`. Host
+keys of the targets are accepted on first use and kept in `/var/lib/ngvm-ssh`. A new release:
 change the tag in the unit and pull the image.
 
 ### The poll: actions and next runs (v0.23.10)
@@ -268,18 +272,18 @@ push, it only connects out (`POST /v1/tenants/<tenant>/poll`, published by the i
 install script writes the units; by hand, copy the connector's service as the poll's:
 
 ```bash
-sudo sed -e 's#detect agent run --config \(.*\)/collector.yaml --connector %i#detect agent poll --config \1/collector.yaml --timers /run/a2vm-collector/timers.json#' -e 's/connector %i/poll/' -e 's/a2vm-collector-%i/a2vm-collector-poll/' -e 's#^ExecStart=\(.*\)--user 10001:10001 #ExecStartPre=/bin/sh -c '"'"'mkdir -p /run/a2vm-collector \&\& systemctl list-timers "a2vm-collector@*" --all -o json > /run/a2vm-collector/timers.json'"'"'\nExecStart=\1--user 10001:10001 -v /run/a2vm-collector:/run/a2vm-collector:ro #' /etc/systemd/system/a2vm-collector@.service | sudo tee /etc/systemd/system/a2vm-collector-poll.service
+sudo sed -e 's#detect agent run --config \(.*\)/collector.yaml --connector %i#detect agent poll --config \1/collector.yaml --timers /run/ngvm-collector/timers.json#' -e 's/connector %i/poll/' -e 's/ngvm-collector-%i/ngvm-collector-poll/' -e 's#^ExecStart=\(.*\)--user 10001:10001 #ExecStartPre=/bin/sh -c '"'"'mkdir -p /run/ngvm-collector \&\& systemctl list-timers "ngvm-collector@*" --all -o json > /run/ngvm-collector/timers.json'"'"'\nExecStart=\1--user 10001:10001 -v /run/ngvm-collector:/run/ngvm-collector:ro #' /etc/systemd/system/ngvm-collector@.service | sudo tee /etc/systemd/system/ngvm-collector-poll.service
 ```
 
 ```bash
-printf '[Unit]\nDescription=A2VM collector, poll every 5 minutes\n\n[Timer]\nOnBootSec=2min\nOnUnitActiveSec=5min\n\n[Install]\nWantedBy=timers.target\n' | sudo tee /etc/systemd/system/a2vm-collector-poll.timer
+printf '[Unit]\nDescription=NGVM collector, poll every 5 minutes\n\n[Timer]\nOnBootSec=2min\nOnUnitActiveSec=5min\n\n[Install]\nWantedBy=timers.target\n' | sudo tee /etc/systemd/system/ngvm-collector-poll.timer
 ```
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable --now a2vm-collector-poll.timer
-sudo systemctl start a2vm-collector-poll.service
-journalctl -u a2vm-collector-poll.service -n 20 --no-pager
+sudo systemctl enable --now ngvm-collector-poll.timer
+sudo systemctl start ngvm-collector-poll.service
+journalctl -u ngvm-collector-poll.service -n 20 --no-pager
 ```
 
 A poll with nothing to do prints nothing. A confirmed request shows as `request act-…: run the
@@ -289,7 +293,7 @@ connector lan-cmdb`, then the connector's own lines.
 
 | What | CA | Where on the collector |
 | --- | --- | --- |
-| The push endpoint (`service`) | CA that signs the ingress certificate (with cert-manager: the CA of its issuer) | `ca_file` of `collector.yaml`, e.g. `/etc/a2vm/collector/ca.pem` |
+| The push endpoint (`service`) | CA that signs the ingress certificate (with cert-manager: the CA of its issuer) | `ca_file` of `collector.yaml`, e.g. `/etc/ngvm/collector/ca.pem` |
 | The image registry | CA of the registry's certificate | `/etc/containers/certs.d/<registry host:port>/ca.crt` (Podman) or `/etc/docker/certs.d/<registry host:port>/ca.crt` (Docker) |
 
 They are often different (a cluster CA made by cert-manager, the company CA for GitLab). A wrong
@@ -299,13 +303,13 @@ detection is kept in the spool.
 ### OpenVAS on the collector
 
 The `openvas` section of the targets file makes the collector drive gvmd over GMP
-(`docs/openvas.md`). The GMP account is read from the environment (`A2VM_GVM_USER`,
-`A2VM_GVM_PASSWORD`, and for `tls://` `A2VM_GVM_CA`, `A2VM_GVM_CERT`, `A2VM_GVM_KEY`, file paths
+(`docs/openvas.md`). The GMP account is read from the environment (`NGVM_GVM_USER`,
+`NGVM_GVM_PASSWORD`, and for `tls://` `NGVM_GVM_CA`, `NGVM_GVM_CERT`, `NGVM_GVM_KEY`, file paths
 inside the container): keep them in a file readable by root only and hand it to the container.
 
 ```bash
-sudo install -m 0600 -o root -g root /dev/null /etc/a2vm/collector/gvm.env
-sudo vi /etc/a2vm/collector/gvm.env      # A2VM_GVM_USER=…, A2VM_GVM_PASSWORD=…, one per line
+sudo install -m 0600 -o root -g root /dev/null /etc/ngvm/collector/gvm.env
+sudo vi /etc/ngvm/collector/gvm.env      # NGVM_GVM_USER=…, NGVM_GVM_PASSWORD=…, one per line
 ```
 
 When the collector runs on the scanner host, GMP goes through the local socket of gvmd: no port
@@ -313,20 +317,20 @@ When the collector runs on the scanner host, GMP goes through the local socket o
 in a Docker volume; run the collector with Docker and mount that volume:
 
 ```yaml
-openvas:                                    # in /etc/a2vm/collector/targets.yaml
+openvas:                                    # in /etc/ngvm/collector/targets.yaml
   gmp: unix:///run/gvmd/gvmd.sock
   hosts: [192.0.2.0/24]
 ```
 
 ```ini
-ExecStart=/usr/bin/docker run --rm --name a2vm-collector-%i --user 10001:10001 \
-  --env-file /etc/a2vm/collector/gvm.env \
-  -v /etc/a2vm/collector:/etc/a2vm/collector:ro \
-  -v /var/lib/a2vm:/var/lib/a2vm \
-  -v /var/lib/a2vm-ssh:/home/a2vm/.ssh \
+ExecStart=/usr/bin/docker run --rm --name ngvm-collector-%i --user 10001:10001 \
+  --env-file /etc/ngvm/collector/gvm.env \
+  -v /etc/ngvm/collector:/etc/ngvm/collector:ro \
+  -v /var/lib/ngvm:/var/lib/ngvm \
+  -v /var/lib/ngvm-ssh:/home/ngvm/.ssh \
   -v greenbone-community-edition_gvmd_socket_vol:/run/gvmd \
-  registry.example.org/vulnops/a2vm/detect:v0.16.0 \
-  detect agent run --config /etc/a2vm/collector/collector.yaml --connector %i
+  registry.example.org/vulnops/ngvm/detect:v0.16.0 \
+  detect agent run --config /etc/ngvm/collector/collector.yaml --connector %i
 ```
 
 (`Wants=` and `After=` of the unit then name `docker.service`.) Check who may use the socket with
@@ -338,13 +342,13 @@ without waiting for it. The daily run takes the latest OpenVAS detection younger
 `max_age_hours`, the day before's if today's is not finished.
 
 ```yaml
-connectors:                                 # in /etc/a2vm/collector/collector.yaml
-  - {name: lan-ssh, type: targets, targets: /etc/a2vm/collector/targets.yaml, ssh: true, openvas: false}
-  - {name: lan-openvas, type: targets, targets: /etc/a2vm/collector/targets.yaml, ssh: false, openvas: true}
+connectors:                                 # in /etc/ngvm/collector/collector.yaml
+  - {name: lan-ssh, type: targets, targets: /etc/ngvm/collector/targets.yaml, ssh: true, openvas: false}
+  - {name: lan-openvas, type: targets, targets: /etc/ngvm/collector/targets.yaml, ssh: false, openvas: true}
 ```
 
 ```bash
-sudo systemctl enable --now a2vm-collector@lan-ssh.timer a2vm-collector@lan-openvas.timer
+sudo systemctl enable --now ngvm-collector@lan-ssh.timer ngvm-collector@lan-openvas.timer
 ```
 
 ## 3. Check
@@ -369,11 +373,11 @@ collector (last push per source, age, staleness, last refusal) is read inside th
 the read token, from a workstation with access to the namespace:
 
 ```bash
-NS=a2vm-lab
-kubectl -n $NS port-forward svc/a2vm-lab-detect 8080:8080 &
+NS=ngvm-lab
+kubectl -n $NS port-forward svc/ngvm-lab-detect 8080:8080 &
 ( umask 077; printf 'Authorization: Bearer %s\n' \
-    "$(kubectl -n $NS get secret a2vm-tenant -o jsonpath='{.data.detect-read-token}' | base64 -d)" > ~/.a2vm-read )
-curl -s -H @"$HOME/.a2vm-read" http://127.0.0.1:8080/v1/tenants/lab/collectors; rm -f ~/.a2vm-read
+    "$(kubectl -n $NS get secret ngvm-tenant -o jsonpath='{.data.detect-read-token}' | base64 -d)" > ~/.ngvm-read )
+curl -s -H @"$HOME/.ngvm-read" http://127.0.0.1:8080/v1/tenants/lab/collectors; rm -f ~/.ngvm-read
 ```
 
 The daily run's first step (`collect`) prints one line per source written, and a warning per
@@ -381,12 +385,12 @@ source missing or older than its `max_age_hours`; with no detection at all, it s
 
 ## 4. Rotate, move, remove
 
-- **Rotate a token**: make a new token on the collector, set it as `A2VM_COLLECTOR_TOKEN_<ID>_NEXT`
+- **Rotate a token**: make a new token on the collector, set it as `NGVM_COLLECTOR_TOKEN_<ID>_NEXT`
   and push (both tokens are valid), switch the collector's token file, then move the new token to
-  `A2VM_COLLECTOR_TOKEN_<ID>`, delete `_NEXT` and push again.
+  `NGVM_COLLECTOR_TOKEN_<ID>`, delete `_NEXT` and push again.
 - **Revoke**: delete the variable (or the collector from `collectors.yaml`) and push: its token
   no longer matches any digest.
-- **Move a collector**: change its address in `A2VM_INTAKE_ALLOW`, push, then install it on the new
+- **Move a collector**: change its address in `NGVM_INTAKE_ALLOW`, push, then install it on the new
   VM with the same token.
 
 ## 5. When something goes wrong
@@ -394,7 +398,7 @@ source missing or older than its `max_age_hours`; with no detection at all, it s
 | Situation | Behaviour |
 | --- | --- |
 | A large detection (100 MB and more, e.g. Trivy on big container images) | The service takes a minute or more to validate it; the agent waits `timeout_seconds` (600 by default). A retry of a detection already stored is answered at once (idempotency key) |
-| Service unreachable, 429 or 5xx | The detection is kept in `/var/lib/a2vm/spool` (newest per source) and pushed at the next run; exit 3 |
+| Service unreachable, 429 or 5xx | The detection is kept in `/var/lib/ngvm/spool` (newest per source) and pushed at the next run; exit 3 |
 | Push refused (401 token, 403 source not declared, 422 another client or too old) | Error in the journal and in the service's log, nothing stored; a spooled detection refused this way is set aside as `<source>.json.rejected` |
 | Detection older than `max_age_hours` at the daily run | Left out with a warning; the run goes on with the other sources |
 | No detection at all | The daily run stops at `collect`: no report of an estate without its scanners |
@@ -403,22 +407,22 @@ source missing or older than its `max_age_hours`; with no detection at all, it s
 ## 6. End-to-end check
 
 Once the collector pushes, the whole chain runs from the collector to the decisions of pillar 3.
-`A2VM_COLLECT_MODE=local` until step 3, then `intake`. Tenant `lab`, namespace `a2vm-lab`.
+`NGVM_COLLECT_MODE=local` until step 3, then `intake`. Tenant `lab`, namespace `ngvm-lab`.
 
 1. **Collector**: one push per source, nothing left in the spool.
 
    ```bash
-   journalctl -u a2vm-collector@lan-ssh.service -u a2vm-collector@lan-openvas.service -n 50 --no-pager | grep pushed
-   ls /var/lib/a2vm/spool
+   journalctl -u ngvm-collector@lan-ssh.service -u ngvm-collector@lan-openvas.service -n 50 --no-pager | grep pushed
+   ls /var/lib/ngvm/spool
    ```
 
    Expected: `lab [lab-lan]: pushed trivy -> …`, the same for `dnf-updateinfo` and `openvas`; an
    empty spool.
 
-2. **Allow-list**, from the collector then from a workstation that is not in `A2VM_INTAKE_ALLOW`:
+2. **Allow-list**, from the collector then from a workstation that is not in `NGVM_INTAKE_ALLOW`:
 
    ```bash
-   curl -s -o /dev/null -w "%{http_code}\n" --cacert /etc/a2vm/collector/ca.pem -X POST https://detect-lab.apps.example.org/v1/tenants/lab/detections
+   curl -s -o /dev/null -w "%{http_code}\n" --cacert /etc/ngvm/collector/ca.pem -X POST https://detect-lab.apps.example.org/v1/tenants/lab/detections
    ```
 
    Expected: `401` from the collector (no token: the service answered), `403` from the
@@ -426,13 +430,13 @@ Once the collector pushes, the whole chain runs from the collector to the decisi
 
 3. **Service**: every declared source fresh (section 3): `"stale": false` and no `last_error`.
 
-4. **Daily run in `intake` mode**: set `A2VM_COLLECT_MODE=intake`, run the tenant's pipeline (the
+4. **Daily run in `intake` mode**: set `NGVM_COLLECT_MODE=intake`, run the tenant's pipeline (the
    job `deploy-k8s` redeploys), then start a run by hand:
 
    ```bash
-   NS=a2vm-lab
+   NS=ngvm-lab
    JOB=check-$(date +%H%M)
-   kubectl -n $NS create job --from=cronjob/a2vm-lab-daily $JOB
+   kubectl -n $NS create job --from=cronjob/ngvm-lab-daily $JOB
    kubectl -n $NS wait --for=condition=complete job/$JOB --timeout=60m
    for step in collect via detect assets triage publish; do echo "== $step"; kubectl -n $NS logs job/$JOB -c $step | tail -5; done
    ```

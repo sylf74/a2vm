@@ -1,4 +1,4 @@
-# A2VM code project pipeline: quality checks only. No client data is ever processed here.
+# NGVM code project pipeline: quality checks only. No client data is ever processed here.
 #
 # Client pipelines run in the client projects (group vulnops/clients), which include
 # templates/client-pipeline.yml at a fixed version (tag). See docs/deployment.md.
@@ -6,6 +6,7 @@
 #   lint, test       every push and merge request
 #   examples         the example profiles and targets are valid, and the offline demo runs
 #   chart            the tenant chart renders (helm lint, helm template)
+#   tofu             deploy/tofu: formatted, scripts clean, every root valid, the example planned
 #   release          on a tag vX.Y.Z: checks that the packages and the chart carry that version
 #   images           on a tag (or by hand): one image per pillar into this project's registry
 #                    (Buildah, on the dedicated build runner)
@@ -38,13 +39,21 @@ chart:
   cache: []
   script:
     - apk add --no-cache -q helm
-    - helm lint deploy/charts/a2vm-portal --strict --set image.registry=registry.example.org/vulnops/a2vm --set grafana.host=portal.example.org
-    - helm template portal deploy/charts/a2vm-portal --set image.registry=registry.example.org/vulnops/a2vm --set grafana.host=portal.example.org --set 'dashboards.languages={en,fr}' --set dashboards.dispatchUrl=https://dispatch-lab.example.org --set grafana.oidc.enabled=true --set grafana.oidc.issuerUrl=https://auth.example.org/realms/lab --set grafana.oidc.clientId=a2vm-portal --set 'grafana.oidc.viewers={A2VM-Analysts}' --set 'database.writerNamespaces={a2vm-lab}' --set 'database.external.allowFrom={192.0.2.10/32}' > /dev/null
-    - helm lint deploy/charts/a2vm-tenant --strict --set tenant=lab --set image.registry=registry.example.org/vulnops/a2vm --set-file files.profile=examples/lab/client.yaml --set-file files.targets=examples/lab/targets.yaml --set secret.name=a2vm-tenant
-    - helm template a2vm deploy/charts/a2vm-tenant --set tenant=lab --set image.registry=registry.example.org/vulnops/a2vm --set-file files.profile=examples/lab/client.yaml --set secret.name=a2vm-tenant > /dev/null
-    - helm template a2vm deploy/charts/a2vm-tenant --set tenant=lab --set image.registry=registry.example.org/vulnops/a2vm --set-file files.profile=examples/lab/client.yaml --set secret.name=a2vm-tenant --set database.enabled=true --set verdict.enabled=true --set verdict.digestsSecret=a2vm-verdict --set watch.enabled=true --set watch.digestsSecret=a2vm-via > /dev/null
-    - helm template a2vm deploy/charts/a2vm-tenant --set tenant=lab --set image.registry=registry.example.org/vulnops/a2vm --set-file files.profile=examples/lab/client.yaml --set secret.name=a2vm-tenant --set verdict.enabled=true --set verdict.digestsSecret=a2vm-verdict --set dispatch.enabled=true --set dispatch.digestsSecret=a2vm-dispatch --set-file files.dispatch=examples/lab/dispatch.yaml > /dev/null
-    - helm template a2vm deploy/charts/a2vm-tenant --set tenant=lab --set image.registry=registry.example.org/vulnops/a2vm --set-file files.profile=examples/lab/client.yaml --set secret.name=a2vm-tenant --set database.enabled=true --set verdict.enabled=true --set verdict.digestsSecret=a2vm-verdict --set dispatch.enabled=true --set dispatch.digestsSecret=a2vm-dispatch --set-file files.dispatch=examples/lab/dispatch.yaml --set oidc.issuerUrl=https://auth.example.org/realms/lab --set oidc.clientId=a2vm-lab --set oidc.inCluster=true --set dispatch.page.enabled=true --set dispatch.page.host=dispatch-lab.apps.example.org --set 'dispatch.page.remediators={A2VM-Remediation}' > /dev/null
+    - helm lint deploy/charts/ngvm-portal --strict --set image.registry=registry.example.org/vulnops/ngvm --set grafana.host=portal.example.org
+    - helm template portal deploy/charts/ngvm-portal --set image.registry=registry.example.org/vulnops/ngvm --set grafana.host=portal.example.org --set 'dashboards.languages={en,fr}' --set dashboards.dispatchUrl=https://dispatch-lab.example.org --set grafana.oidc.enabled=true --set grafana.oidc.issuerUrl=https://auth.example.org/realms/lab --set grafana.oidc.clientId=ngvm-portal --set 'grafana.oidc.viewers={NGVM-Analysts}' --set 'database.writerNamespaces={ngvm-lab}' --set 'database.external.allowFrom={192.0.2.10/32}' > /dev/null
+    - helm lint deploy/charts/ngvm-tenant --strict --set tenant=lab --set image.registry=registry.example.org/vulnops/ngvm --set-file files.profile=examples/lab/client.yaml --set-file files.targets=examples/lab/targets.yaml --set secret.name=ngvm-tenant
+    - helm template ngvm deploy/charts/ngvm-tenant --set tenant=lab --set image.registry=registry.example.org/vulnops/ngvm --set-file files.profile=examples/lab/client.yaml --set secret.name=ngvm-tenant > /dev/null
+    - helm template ngvm deploy/charts/ngvm-tenant --set tenant=lab --set image.registry=registry.example.org/vulnops/ngvm --set-file files.profile=examples/lab/client.yaml --set secret.name=ngvm-tenant --set database.enabled=true --set verdict.enabled=true --set verdict.digestsSecret=ngvm-verdict --set watch.enabled=true --set watch.digestsSecret=ngvm-via > /dev/null
+    - helm template ngvm deploy/charts/ngvm-tenant --set tenant=lab --set image.registry=registry.example.org/vulnops/ngvm --set-file files.profile=examples/lab/client.yaml --set secret.name=ngvm-tenant --set verdict.enabled=true --set verdict.digestsSecret=ngvm-verdict --set dispatch.enabled=true --set dispatch.digestsSecret=ngvm-dispatch --set-file files.dispatch=examples/lab/dispatch.yaml > /dev/null
+    - helm template ngvm deploy/charts/ngvm-tenant --set tenant=lab --set image.registry=registry.example.org/vulnops/ngvm --set-file files.profile=examples/lab/client.yaml --set secret.name=ngvm-tenant --set database.enabled=true --set verdict.enabled=true --set verdict.digestsSecret=ngvm-verdict --set dispatch.enabled=true --set dispatch.digestsSecret=ngvm-dispatch --set-file files.dispatch=examples/lab/dispatch.yaml --set oidc.issuerUrl=https://auth.example.org/realms/lab --set oidc.clientId=ngvm-lab --set oidc.inCluster=true --set dispatch.page.enabled=true --set dispatch.page.host=dispatch-lab.apps.example.org --set 'dispatch.page.remediators={NGVM-Remediation}' > /dev/null
+
+tofu:
+  stage: lint
+  image: alpine:3.22
+  cache: []
+  script:
+    - apk add --no-cache -q bash opentofu shellcheck
+    - deploy/tofu/check.sh
 
 test:
   stage: test
@@ -58,7 +67,7 @@ test:
     # PostgreSQL over the loopback, which initdb trusts by default, so every password
     # is accepted and a rotation test cannot fail. Ask initdb for scram everywhere.
     POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
-    A2VM_TEST_DSN: "host=postgres dbname=postgres user=postgres password=test-only sslmode=disable"
+    NGVM_TEST_DSN: "host=postgres dbname=postgres user=postgres password=test-only sslmode=disable"
   script:
     - *install
     - pytest -q --junitxml=junit.xml
@@ -70,10 +79,10 @@ test:
 examples:
   stage: examples
   variables:
-    A2VM_LLM_ENABLED: "false"
+    NGVM_LLM_ENABLED: "false"
   script:
     - *install
-    - a2vm validate examples/*/client.yaml
+    - ngvm validate examples/*/client.yaml
     - detect plan examples/lab/targets.yaml --profile examples/lab/client.yaml
     - scripts/run-pipeline.sh --fixtures tests/fixtures --since 2099-10-01 --include-updated
   artifacts:
@@ -87,48 +96,48 @@ release:
   script:
     - |
       want="${CI_COMMIT_TAG#v}"
-      for p in a2vm via detect verdict dispatch; do
+      for p in ngvm via detect verdict dispatch; do
         got=$(sed -n 's/^version = "\(.*\)"/\1/p' $p/pyproject.toml)
         [ "$got" = "$want" ] || { echo "$p/pyproject.toml has version $got, tag says $want"; exit 1; }
       done
-      for c in a2vm-tenant a2vm-portal; do
+      for c in ngvm-tenant ngvm-portal; do
         for k in version appVersion; do
           got=$(sed -n "s/^$k: \"\{0,1\}\([^\"]*\)\"\{0,1\}$/\1/p" deploy/charts/$c/Chart.yaml)
           [ "$got" = "$want" ] || { echo "$c/Chart.yaml has $k $got, tag says $want"; exit 1; }
         done
       done
-      echo "A2VM $CI_COMMIT_TAG: client projects can include templates/client-pipeline.yml at ref $CI_COMMIT_TAG"
+      echo "NGVM $CI_COMMIT_TAG: client projects can include templates/client-pipeline.yml at ref $CI_COMMIT_TAG"
 
 # One image per pillar (images/Dockerfile) into this project's container registry, tagged like the
 # release; the tenant chart takes them from there. Built with Buildah on a dedicated build runner
 # (tag `build`): a project runner of this project only, protected (tags and protected branches),
 # shell executor on a VM without client data, Buildah rootless as the runner's user; no Docker
 # daemon, no privileged container (docs/kubernetes.md, "Build runner"). Runs when the instance has a
-# container registry (CI_REGISTRY), or (v0.23.4) when A2VM_PUSH_REGISTRY names another one (Harbor):
-# A2VM_PUSH_IMAGE is the path of the images there, A2VM_PUSH_USER and A2VM_PUSH_PASSWORD a robot
-# account allowed to push (masked, protected). A2VM_PYTHON_IMAGE: the base image through a mirror.
+# container registry (CI_REGISTRY), or (v0.23.4) when NGVM_PUSH_REGISTRY names another one (Harbor):
+# NGVM_PUSH_IMAGE is the path of the images there, NGVM_PUSH_USER and NGVM_PUSH_PASSWORD a robot
+# account allowed to push (masked, protected). NGVM_PYTHON_IMAGE: the base image through a mirror.
 images:
   stage: release
   tags: [build]
   needs:
     - {job: release, optional: true}
   rules:
-    - if: ($CI_REGISTRY || $A2VM_PUSH_REGISTRY) && $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
-    - if: ($CI_REGISTRY || $A2VM_PUSH_REGISTRY) && $CI_PIPELINE_SOURCE == "web"
+    - if: ($CI_REGISTRY || $NGVM_PUSH_REGISTRY) && $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
+    - if: ($CI_REGISTRY || $NGVM_PUSH_REGISTRY) && $CI_PIPELINE_SOURCE == "web"
       when: manual
   cache: []
   script:
     - buildah --version
     - |
-      if [ -n "${A2VM_PUSH_REGISTRY:-}" ]; then
-        REG="$A2VM_PUSH_REGISTRY"; DEST="${A2VM_PUSH_IMAGE:?A2VM_PUSH_IMAGE is needed with A2VM_PUSH_REGISTRY}"
-        printf '%s' "${A2VM_PUSH_PASSWORD:?A2VM_PUSH_PASSWORD is needed}" | buildah login -u "${A2VM_PUSH_USER:?A2VM_PUSH_USER is needed}" --password-stdin "$REG"
+      if [ -n "${NGVM_PUSH_REGISTRY:-}" ]; then
+        REG="$NGVM_PUSH_REGISTRY"; DEST="${NGVM_PUSH_IMAGE:?NGVM_PUSH_IMAGE is needed with NGVM_PUSH_REGISTRY}"
+        printf '%s' "${NGVM_PUSH_PASSWORD:?NGVM_PUSH_PASSWORD is needed}" | buildah login -u "${NGVM_PUSH_USER:?NGVM_PUSH_USER is needed}" --password-stdin "$REG"
       else
         REG="$CI_REGISTRY"; DEST="$CI_REGISTRY_IMAGE"
         echo "$CI_REGISTRY_PASSWORD" | buildah login -u "$CI_REGISTRY_USER" --password-stdin "$REG"
       fi
     - TAG="${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}"
-    - BASE=""; if [ -n "${A2VM_PYTHON_IMAGE:-}" ]; then BASE="--build-arg PYTHON_IMAGE=$A2VM_PYTHON_IMAGE"; fi
+    - BASE=""; if [ -n "${NGVM_PYTHON_IMAGE:-}" ]; then BASE="--build-arg PYTHON_IMAGE=$NGVM_PYTHON_IMAGE"; fi
     - |
       for p in via detect verdict dispatch; do
         buildah build --quiet --pull -f images/Dockerfile --build-arg PILLAR=$p $BASE -t "$DEST/$p:$TAG" .
@@ -161,6 +170,6 @@ sync-product-docs:
     - echo "Generated from ${CI_PROJECT_PATH} ${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}. Edit the source, not this copy." > "product/${PRODUCT_DOCS_PATH}/.synced-from"
     - cd product && git add -A
     - if git diff --cached --quiet; then echo "documentation already up to date"; exit 0; fi
-    - 'git -c user.name="A2VM docs sync" -c user.email="a2vm-docs-sync@noreply.invalid" commit -q -m "docs: sync from ${CI_PROJECT_PATH} ${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}"'
+    - 'git -c user.name="NGVM docs sync" -c user.email="ngvm-docs-sync@noreply.invalid" commit -q -m "docs: sync from ${CI_PROJECT_PATH} ${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}"'
     - git push -q origin HEAD
     - echo "documentation published to ${PRODUCT_DOCS_REPO}/${PRODUCT_DOCS_PATH}"

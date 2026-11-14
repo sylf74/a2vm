@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ngvm"
+version = "0.25.0"
+description = "NGVM common contract: data model, exchange files and their schemas, service contracts, settings, client profiles, LLM client, SSVC tables, declared-asset matching."
+requires-python = ">=3.11"
+license = {text = "LicenseRef-ngvm-proprietary"}
+dependencies = ["httpx>=0.27", "PyYAML>=6.0", "jsonschema>=4.20", "psycopg[binary]>=3.1", "tzdata>=2024.1"]  # psycopg: ngvm.db (v0.18.0); tzdata: the time zones of ngvm.sla (v0.21.0)
+
+[project.scripts]
+ngvm = "ngvm.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"ngvm" = ["schemas/*.json", "schemas/openapi/*.yaml", "data/*"]

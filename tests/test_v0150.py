@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """v0.15.0 (HLD §8): conversational search in the tenant's namespace (Open WebUI and the tool server
 `verdict tools` on the decision service), several LLM endpoints, and the v0.14.0 follow-ups."""
 
@@ -17,16 +17,16 @@ import httpx
 import pytest
 import yaml
 
-from a2vm.config import LlmSettings
-from a2vm.llm.client import LlmClient
-from a2vm.service import JsonHandler, Problem, TokenSet, digest
+from ngvm.config import LlmSettings
+from ngvm.llm.client import LlmClient
+from ngvm.service import JsonHandler, Problem, TokenSet, digest
 from verdict.service.server import serve as serve_verdict
 from verdict.service.tools import OPERATIONS, Tools, fit, shrink
 
 from .test_verdict_service import READ, _push, _service, triage  # noqa: F401 - fixture
 
 ROOT = Path(__file__).resolve().parents[1]
-CHART = ROOT / "deploy" / "charts" / "a2vm-tenant"
+CHART = ROOT / "deploy" / "charts" / "ngvm-tenant"
 CHAT_VALUES = ROOT / "deploy" / "chat" / "chat_values.py"
 CHAT = "chat-token-0123456789abcdef0123456789"
 
@@ -37,7 +37,7 @@ def test_successful_probes_are_not_logged(caplog):
         def __init__(self, path):
             self.path, self.command = path, "GET"
 
-    caplog.set_level(logging.INFO, logger="a2vm.service")
+    caplog.set_level(logging.INFO, logger="ngvm.service")
     H("/readyz").log_message("%s", "GET /readyz", "200", "-")
     H("/healthz").log_message("%s", "GET /healthz", "503", "-")
     H("/v1/tenants/lab/summary?run=latest").log_message("%s", "x", "200", "-")
@@ -194,7 +194,7 @@ def test_chat_is_closed_offline_and_configured_from_the_values():
     for needle in (
         "{{- if .Values.chat.enabled }}",
         'command: ["verdict", "tools"]',
-        'a2vm.io/verdict-reader: "true"',
+        'ngvm.io/verdict-reader: "true"',
         '{name: ENABLE_PERSISTENT_CONFIG, value: "false"}',
         '{name: ENABLE_SIGNUP, value: "false"}',
         '{name: OFFLINE_MODE, value: "true"}',
@@ -239,11 +239,11 @@ def test_chat_values_resolve_the_endpoints_for_the_network_policy(tmp_path):
     r = _chat_values(
         {
             "OUT": str(out),
-            "A2VM_CHAT_HOST": "chat-lab.apps.example.org",
-            "A2VM_LLM_BASE_URL": "http://192.0.2.10:8000/v1/, https://198.51.100.7/v1",
-            "A2VM_LLM_MODEL": "qwen3-14b",
-            "A2VM_INTAKE_INGRESS_CONTROLLER": "traefik",
-            "A2VM_CHAT_ALLOW": "203.0.113.0/24",
+            "NGVM_CHAT_HOST": "chat-lab.apps.example.org",
+            "NGVM_LLM_BASE_URL": "http://192.0.2.10:8000/v1/, https://198.51.100.7/v1",
+            "NGVM_LLM_MODEL": "qwen3-14b",
+            "NGVM_INTAKE_INGRESS_CONTROLLER": "traefik",
+            "NGVM_CHAT_ALLOW": "203.0.113.0/24",
         }
     )
     assert r.returncode == 0, r.stderr
@@ -254,17 +254,17 @@ def test_chat_values_resolve_the_endpoints_for_the_network_policy(tmp_path):
     r = _chat_values(
         {
             "OUT": str(out),
-            "A2VM_CHAT_HOST": "c",
-            "A2VM_LLM_BASE_URL": "http://llm.example/v1",
-            "A2VM_LLM_MODEL": "m",
-            "A2VM_CHAT_LLM_EGRESS": "192.0.2.0/28:8000",
+            "NGVM_CHAT_HOST": "c",
+            "NGVM_LLM_BASE_URL": "http://llm.example/v1",
+            "NGVM_LLM_MODEL": "m",
+            "NGVM_CHAT_LLM_EGRESS": "192.0.2.0/28:8000",
         }
     )
     assert r.returncode == 0 and json.loads(out.read_text())["chat"]["llm"]["egress"] == [
         {"cidr": "192.0.2.0/28", "port": 8000}
     ]
-    r = _chat_values({"OUT": str(out), "A2VM_CHAT_HOST": "c"})
-    assert r.returncode == 1 and "A2VM_LLM_BASE_URL" in r.stderr
+    r = _chat_values({"OUT": str(out), "NGVM_CHAT_HOST": "c"})
+    assert r.returncode == 1 and "NGVM_LLM_BASE_URL" in r.stderr
 
 
 def test_chat_values_run_with_the_standard_library_only():
@@ -278,10 +278,10 @@ def test_deploy_job_makes_the_chat_secrets_once_and_hands_the_values_to_the_char
     pipeline = yaml.safe_load((ROOT / "templates" / "client-pipeline.yml").read_text())
     script = "\n".join(pipeline["deploy-k8s"]["script"])
     block = next(s for s in pipeline["deploy-k8s"]["script"] if 'CHAT=""' in s)
-    assert 'if [ -n "${A2VM_CHAT_HOST:-}" ] && [ -n "$VERDICT" ]' in block
+    assert 'if [ -n "${NGVM_CHAT_HOST:-}" ] && [ -n "$VERDICT" ]' in block
     for k in ("chat-secret-key", "chat-admin-password", "chat-tools-token"):
         assert f"put {k} " in script
-    assert "create secret generic a2vm-chat" in block and "chat_values.py" in block
+    assert "create secret generic ngvm-chat" in block and "chat_values.py" in block
     assert "$INTAKE $VERDICT $DATABASE $CHAT" in script
     assert script.index('CHAT=""') < script.index("put chat-tools-token")
 
@@ -298,7 +298,7 @@ def test_tool_server_over_http(tools):
             assert c.get("/healthz").status_code == 200
             assert c.get("/openapi.json").status_code == 401
             auth = {"Authorization": f"Bearer {CHAT}"}
-            assert c.get("/openapi.json", headers=auth).json()["info"]["title"] == "A2VM"
+            assert c.get("/openapi.json", headers=auth).json()["info"]["title"] == "NGVM"
             r = c.get("/decisions", params={"level": "ACT,ATTEND", "limit": 3}, headers=auth)
             assert r.status_code == 200 and len(r.json()["items"]) <= 3
             bad = c.get("/decisions", params={"limit": 99}, headers=auth)
@@ -318,7 +318,7 @@ def test_every_open_webui_setting_of_the_chart_is_explained_in_the_lld():
 
 
 def test_an_endpoint_is_left_for_the_next_one_on_failures_only():
-    from a2vm.llm.client import _endpoint_down
+    from ngvm.llm.client import _endpoint_down
 
     req = httpx.Request("POST", "http://a.example/v1/chat/completions")
     for code, down in ((429, True), (500, True), (503, True), (400, False), (404, False), (422, False)):
@@ -356,7 +356,7 @@ def test_several_endpoints_go_through_a_gateway_that_is_documented_line_by_line(
         if f"`{d}" not in table
     )
     assert not undocumented, undocumented
-    assert 'include "a2vm-tenant.chatLlmUrl"' in chart and "{{- if $gateway }}" in chart
+    assert 'include "ngvm-tenant.chatLlmUrl"' in chart and "{{- if $gateway }}" in chart
     helpers = (CHART / "templates" / "_helpers.tpl").read_text()
     assert "over http only" in helpers and "must share their path" in helpers
     values = yaml.safe_load((CHART / "values.yaml").read_text())

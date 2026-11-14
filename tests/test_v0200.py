@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """v0.20.0: pillar 4, dispatch: remediation tickets (asset x fix), the rules of the tenant, the
 follow-up of the tickets, the requests of a person (D18), the iTop connector."""
 
@@ -11,7 +11,6 @@ from pathlib import Path
 import httpx
 import pytest
 
-from a2vm.service import Problem, TokenSet, digest
 from dispatch import tickets as tk
 from dispatch.connectors import CLOSED, WORKING, ConnectorError, External
 from dispatch.connectors.itop import ItopConnector
@@ -20,6 +19,7 @@ from dispatch.page import Denied, RequestPage
 from dispatch.rules import Rules, RulesError, load_rules
 from dispatch.service import Service
 from dispatch.store import FileStore
+from ngvm.service import Problem, TokenSet, digest
 
 ROOT = Path(__file__).resolve().parents[1]
 RULES = {
@@ -29,9 +29,9 @@ RULES = {
         "itsm": {
             "type": "itop",
             "url": "https://itop.example.org",
-            "user": "a2vm-itsm",
+            "user": "ngvm-itsm",
             "organization": "Lab",
-            "caller": "A2VM",
+            "caller": "NGVM",
         }
     },
     "tickets": {"target": "itsm", "automatic": "act", "exclude_zones": ["lab"]},
@@ -169,7 +169,7 @@ def test_one_ticket_per_asset_and_fix_each_decision_once():
     assert set(built[f"{a} / libssl 3.1"].findings) == {"f3"}
     t = built[f"{a} / openssl 3.0.15"]
     assert t.level == "ACT" and t.due == "2026-11-10"
-    assert tk.title(t).startswith("[A2VM ACT] web01: apply openssl 3.0.15 (2 CVEs)")
+    assert tk.title(t).startswith("[NGVM ACT] web01: apply openssl 3.0.15 (2 CVEs)")
     assert "<script" not in tk.description(tk.build([dec(9, a, "ACT", ["<script>"])], "x")[f"{a} / <script>"])
 
 
@@ -288,14 +288,14 @@ def test_page_refuses_outside_the_group_and_checks_the_form(tmp_path):
     a = "host:web01.lab.example"
     rules = Rules.from_dict({**RULES, "tickets": {"target": "itsm", "automatic": "none"}})
     d, tool = dispatcher(tmp_path, [dec(1, a, "ACT", ["openssl 3.0.15"])], rules=rules)
-    page = RequestPage("lab", b"k" * 32, {"A2VM-Remediation"}, "https://dispatch-lab.apps.example.org")
+    page = RequestPage("lab", b"k" * 32, {"NGVM-Remediation"}, "https://dispatch-lab.apps.example.org")
     with pytest.raises(Denied) as e:
         page.get(d, H(), {"asset": [a]})
     assert e.value.status == HTTPStatus.UNAUTHORIZED
     with pytest.raises(Denied) as e:
-        page.get(d, H({"X-Forwarded-Email": "x@lab.example", "X-Forwarded-Groups": "A2VM-Analysts"}), {"asset": [a]})
+        page.get(d, H({"X-Forwarded-Email": "x@lab.example", "X-Forwarded-Groups": "NGVM-Analysts"}), {"asset": [a]})
     assert e.value.status == HTTPStatus.FORBIDDEN
-    who = H({"X-Forwarded-Email": "rssi@lab.example", "X-Forwarded-Groups": "/A2VM-Remediation"})
+    who = H({"X-Forwarded-Email": "rssi@lab.example", "X-Forwarded-Groups": "/NGVM-Remediation"})
     html_page = page.get(d, who, {"asset": [a]})
     assert "openssl 3.0.15" in html_page and "Send the tickets" in html_page and tool.created == []
     filters = d.selection({"asset": a})
@@ -356,11 +356,11 @@ def test_itop_connector_maps_the_ticket():
     ext = c.create(t, tk.description(t), tk.title(t))
     assert ext.ref == "UserRequest::42" and ext.url.endswith("class=UserRequest&id=42")
     user, p = seen[0]
-    assert user == "a2vm-itsm" and p["class"] == "UserRequest"
+    assert user == "ngvm-itsm" and p["class"] == "UserRequest"
     f = p["fields"]
     assert (
         f["org_id"] == {"name": "Lab"}
-        and f["caller_id"] == {"name": "A2VM", "org_name": "Lab"}
+        and f["caller_id"] == {"name": "NGVM", "org_name": "Lab"}
         and f["team_id"] == {"name": "Linux"}
     )
     assert (f["impact"], f["urgency"]) == ("2", "1") and f["functionalcis_list"] == [{"functionalci_id": 12}]
@@ -412,14 +412,14 @@ def test_rssi_dashboards_link_to_the_page_and_reading_ones_do_not():
 
 
 def test_chart_and_pipeline_carry_the_dispatch_service():
-    chart = ROOT / "deploy" / "charts" / "a2vm-tenant"
+    chart = ROOT / "deploy" / "charts" / "ngvm-tenant"
     tpl = (chart / "templates" / "dispatch.yaml").read_text()
     assert 'command: ["dispatch", "serve"]' in tpl and "--allowed-group={{ . }}" in tpl
-    assert "never the tenant's other secrets" in tpl and "a2vm.io/verdict-reader" in tpl
+    assert "never the tenant's other secrets" in tpl and "ngvm.io/verdict-reader" in tpl
     daily = (chart / "templates" / "cronjob-daily.yaml").read_text()
     assert '"name" "dispatch" "pillar" "dispatch"' in daily and "dispatch run --url" in daily
     pipeline = (ROOT / "templates" / "client-pipeline.yml").read_text()
-    assert "dispatch check dispatch.yaml" in pipeline and "a2vm-dispatch" in pipeline
+    assert "dispatch check dispatch.yaml" in pipeline and "ngvm-dispatch" in pipeline
     assert "deploy/dispatch/dispatch_values.py" in pipeline
 
 
@@ -430,22 +430,22 @@ def test_dispatch_values_resolve_targets_and_need_the_credentials():
     dv = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(dv)
     rules = {"targets": {"itsm": {"url": "https://192.0.2.10"}}}
-    with pytest.raises(ValueError, match="A2VM_DISPATCH_ITSM_PASSWORD"):
+    with pytest.raises(ValueError, match="NGVM_DISPATCH_ITSM_PASSWORD"):
         dv.values(rules, {})
-    v, names = dv.values(rules, {"A2VM_DISPATCH_ITSM_PASSWORD": "x"})
+    v, names = dv.values(rules, {"NGVM_DISPATCH_ITSM_PASSWORD": "x"})
     assert names == ["itsm"] and v["dispatch"]["egress"] == [{"cidr": "192.0.2.10/32", "port": 443}]
     with pytest.raises(ValueError, match="REMEDIATORS"):
-        dv.values(rules, {"A2VM_DISPATCH_ITSM_PASSWORD": "x", "A2VM_DISPATCH_HOST": "d.example.org",
-                          "A2VM_OIDC_ISSUER": "https://auth.example.org/realms/lab"})  # fmt: skip
-    v, _ = dv.values(rules, {"A2VM_DISPATCH_ITSM_PASSWORD": "x", "A2VM_DISPATCH_HOST": "d.example.org",
-                             "A2VM_OIDC_ISSUER": "https://auth.example.org/realms/lab",
-                             "A2VM_OIDC_REMEDIATORS": "A2VM-Remediation"})  # fmt: skip
-    assert v["dispatch"]["page"]["remediators"] == ["A2VM-Remediation"]
+        dv.values(rules, {"NGVM_DISPATCH_ITSM_PASSWORD": "x", "NGVM_DISPATCH_HOST": "d.example.org",
+                          "NGVM_OIDC_ISSUER": "https://auth.example.org/realms/lab"})  # fmt: skip
+    v, _ = dv.values(rules, {"NGVM_DISPATCH_ITSM_PASSWORD": "x", "NGVM_DISPATCH_HOST": "d.example.org",
+                             "NGVM_OIDC_ISSUER": "https://auth.example.org/realms/lab",
+                             "NGVM_OIDC_REMEDIATORS": "NGVM-Remediation"})  # fmt: skip
+    assert v["dispatch"]["page"]["remediators"] == ["NGVM-Remediation"]
 
 
 def test_tickets_and_requests_in_the_tenants_database(tenant_db):
-    from a2vm.db import Database
     from dispatch.store import MIGRATIONS, PgStore
+    from ngvm.db import Database
 
     db = Database(tenant_db, "dispatch", MIGRATIONS)
     assert db.init() == 1

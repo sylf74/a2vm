@@ -1,5 +1,5 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
-"""HTTP API of the detection service (contract: a2vm/schemas/openapi/detect.v1.yaml).
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
+"""HTTP API of the detection service (contract: ngvm/schemas/openapi/detect.v1.yaml).
 
 Plain HTTP inside the cluster: TLS is ended by the ingress, which also restricts the push to the
 collectors' addresses. One service per tenant namespace (D15, tenant isolation); every call still
@@ -25,10 +25,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
-from a2vm import __version__
-from a2vm.actions import ActionStore
-from a2vm.audit import AuditLog
-from a2vm.io import ExchangeError, validate_detection
+from ngvm import __version__
+from ngvm.actions import ActionStore
+from ngvm.audit import AuditLog
+from ngvm.io import ExchangeError, validate_detection
 
 from .registry import SOURCE, Collector, Registry
 from .store import FileStore, Receipt, age_hours, parse_time
@@ -281,7 +281,7 @@ class Service:
 
 def make_handler(service: Service) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
-        server_version = "a2vm-detect"
+        server_version = "ngvm-detect"
         sys_version = ""
 
         def log_message(self, fmt: str, *args: Any) -> None:  # access log without query strings
@@ -376,7 +376,7 @@ def make_handler(service: Service) -> type[BaseHTTPRequestHandler]:
                 gzipped = self.headers.get("Content-Encoding", "").lower() == "gzip"
                 receipt = service.push(
                     tenant, self._token(), self.headers.get("Idempotency-Key"), body, gzipped,
-                    agent=self.headers.get("X-A2VM-Agent", ""), connector=self.headers.get("X-A2VM-Connector", ""),
+                    agent=self.headers.get("X-NGVM-Agent", ""), connector=self.headers.get("X-NGVM-Connector", ""),
                 )  # fmt: skip
                 self._send(HTTPStatus.ACCEPTED, receipt)
             except Problem as p:

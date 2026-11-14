@@ -1,0 +1,229 @@
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
+"""Exchange files between stages: JSON documents with a declared kind and schema version.
+
+Every file a stage writes is validated against its JSON Schema before it is written, and every
+file a stage reads is validated before it is used: a stage never consumes something it did not
+expect, and a schema change shows up as a clear error at the boundary.
+"""
+
+from __future__ import annotations
+
+import datetime as dt
+import json
+from dataclasses import asdict, dataclass, field
+from functools import cache
+from importlib import resources
+from pathlib import Path
+from typing import Any
+
+import jsonschema
+
+from .models import Asset, AssetObservation, Finding, NotAffected, VulnRecord
+
+RECORDS = "vulnops.records/1"
+DETECTION = "vulnops.detection/1"
+ASSETS = "vulnops.assets/1"
+FINDINGS = "vulnops.findings/2"
+REPORTING = "ngvm.reporting/1"
+TRIAGE = "ngvm.triage/1"
+WATCH_FINDINGS = "ngvm.watch_findings/1"  # the findings as the watch reads them (v0.23.19)
+
+_SCHEMA_FILES = {
+    RECORDS: "vulnerability_records",
+    DETECTION: "detection",
+    ASSETS: "assets",
+    FINDINGS: "findings",
+    REPORTING: "reporting",
+    TRIAGE: "triage",
+    WATCH_FINDINGS: "watch_findings",
+}
+
+
+class ExchangeError(ValueError):
+    pass
+
+
+LEGACY_PREFIX = "a2vm."  # the exchange files of A2VM, before v0.25.0: read until v0.26.0
+
+
+def legacy_schema(data: Any) -> Any:
+    """A document written before v0.25.0 (`a2vm.<name>/<n>`) read as its `ngvm.<name>/<n>`, the same
+    contract under the new name; any other document unchanged."""
+    if isinstance(data, dict):
+        kind = data.get("schema")
+        if isinstance(kind, str) and kind.startswith(LEGACY_PREFIX):
+            data["schema"] = "ngvm." + kind[len(LEGACY_PREFIX) :]
+            for holder in (data, data.get("run")):  # the version that made it: a triage, a reporting run
+                if isinstance(holder, dict) and "a2vm_version" in holder:
+                    holder.setdefault("ngvm_version", holder.pop("a2vm_version"))
+    return data
+
+
+@cache
+def load_schema(name: str) -> dict[str, Any]:
+    text = resources.files("ngvm").joinpath("schemas", f"{name}.schema.json").read_text(encoding="utf-8")
+    return json.loads(text)
+
+
+def _validate(kind: str, data: dict[str, Any], where: str) -> None:
+    validator = jsonschema.Draft202012Validator(load_schema(_SCHEMA_FILES[kind]))
+    errors = sorted(validator.iter_errors(data), key=lambda e: list(e.absolute_path))
+    if errors:
+        e = errors[0]
+        path = "/".join(str(p) for p in e.absolute_path) or "<root>"
+        raise ExchangeError(f"{where}: {path}: {e.message} ({len(errors)} error(s))")
+
+
+def validate_detection(data: dict[str, Any], where: str = "<detection>") -> None:
+    """Check a detection document received from outside (detection service, LLD detection §8)."""
+    if not isinstance(data, dict) or data.get("schema") != DETECTION:
+        raise ExchangeError(f"{where}: expected a {DETECTION} document")
+    _validate(DETECTION, data, where)
+
+
+def validate_assets(data: dict[str, Any], where: str = "<assets>") -> None:
+    """An asset inventory received over an API (the watch service, v0.16.0)."""
+    _validate_doc(ASSETS, data, where)
+
+
+def validate_findings(data: dict[str, Any], where: str = "<findings>") -> None:
+    _validate_doc(FINDINGS, data, where)
+
+
+def validate_watch_findings(data: dict[str, Any], where: str = "<watch findings>") -> None:
+    """The compact findings the daily run sends to the watch service (v0.23.19)."""
+    _validate_doc(WATCH_FINDINGS, data, where)
+
+
+def _validate_doc(kind: str, data: dict[str, Any], where: str) -> None:
+    legacy_schema(data)
+    if not isinstance(data, dict) or data.get("schema") != kind:
+        raise ExchangeError(f"{where}: expected a {kind} document")
+    _validate(kind, data, where)
+
+
+def validate_triage(data: dict[str, Any], where: str = "<triage>") -> None:
+    """Check a triage document received from outside (decision service, LLD triage §15)."""
+    legacy_schema(data)
+    if not isinstance(data, dict) or data.get("schema") != TRIAGE:
+        raise ExchangeError(f"{where}: expected a {TRIAGE} document")
+    _validate(TRIAGE, data, where)
+
+
+def now() -> str:
+    return dt.datetime.now(dt.UTC).isoformat(timespec="seconds")
+
+
+def _write(path: Path, kind: str, data: dict[str, Any]) -> Path:
+    data = {"schema": kind, "generated_at": now(), **data}
+    _validate(kind, data, str(path))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+    return path
+
+
+def _read(path: Path, kind: str) -> dict[str, Any]:
+    data = legacy_schema(json.loads(Path(path).read_text(encoding="utf-8")))
+    if data.get("schema") != kind:
+        raise ExchangeError(f"{path}: expected a {kind} file, got {data.get('schema')!r}")
+    _validate(kind, data, str(path))
+    return data
+
+
+# -- vulnerability records (intel -> detect, verdict) ------------------------------------------
+def write_records(path: str | Path, records: list[VulnRecord], requested: list[str], errors: list[dict]) -> Path:
+    return _write(
+        Path(path),
+        RECORDS,
+        {"requested": requested, "records": [r.to_dict() for r in records], "errors": errors},
+    )
+
+
+def read_records(path: str | Path) -> tuple[list[str], dict[str, VulnRecord], list[dict]]:
+    """(requested CVE ids in order, records by id, errors)."""
+    data = _read(Path(path), RECORDS)
+    records = {r["cve_id"]: VulnRecord.from_dict(r) for r in data["records"]}
+    return data["requested"], records, data["errors"]
+
+
+# -- detection output (detect connectors -> assets, intel) -------------------------------------
+@dataclass
+class Detection:
+    client_id: str
+    source: str
+    observations: list[AssetObservation]
+    findings: list[Finding]
+    not_affected: list[NotAffected] = field(default_factory=list)
+    skipped: dict[str, int] = field(default_factory=dict)
+
+
+def write_detection(path: str | Path, d: Detection) -> Path:
+    return _write(
+        Path(path),
+        DETECTION,
+        {
+            "client_id": d.client_id,
+            "source": d.source,
+            "observations": [asdict(o) for o in d.observations],
+            "findings": [f.to_dict() for f in d.findings],
+            "not_affected": [asdict(n) for n in d.not_affected],
+            "skipped": d.skipped,
+        },
+    )
+
+
+def read_detection(path: str | Path) -> Detection:
+    data = _read(Path(path), DETECTION)
+    return Detection(
+        client_id=data["client_id"],
+        source=data["source"],
+        observations=[AssetObservation(**o) for o in data["observations"]],
+        findings=[Finding.from_dict(f) for f in data["findings"]],
+        not_affected=[NotAffected(**n) for n in data["not_affected"]],
+        skipped=data["skipped"],
+    )
+
+
+def detection_files(directory: str | Path, client_id: str | None = None) -> list[Path]:
+    """work/detect/<client>/<source>.json, for one client or all of them."""
+    base = Path(directory)
+    pattern = f"{client_id}/*.json" if client_id else "*/*.json"
+    return sorted(base.glob(pattern))
+
+
+# -- consolidated assets and findings (assets -> verdict) ----------------------------------------
+def write_assets(path: str | Path, client_id: str, assets: list[Asset]) -> Path:
+    return _write(Path(path), ASSETS, {"client_id": client_id, "assets": [a.to_dict() for a in assets]})
+
+
+def read_assets(path: str | Path) -> tuple[str, dict[str, Asset]]:
+    data = _read(Path(path), ASSETS)
+    return data["client_id"], {a["id"]: Asset.from_dict(a) for a in data["assets"]}
+
+
+def write_findings(path: str | Path, client_id: str, findings: list[Finding], not_affected: list[NotAffected]) -> Path:
+    return _write(
+        Path(path),
+        FINDINGS,
+        {
+            "client_id": client_id,
+            "findings": [f.to_dict() for f in findings],
+            "not_affected": [asdict(n) for n in not_affected],
+        },
+    )
+
+
+def read_findings(path: str | Path) -> tuple[str, list[Finding], list[NotAffected]]:
+    data = _read(Path(path), FINDINGS)
+    findings = [Finding.from_dict(f) for f in data["findings"]]
+    not_affected = [NotAffected(**n) for n in data["not_affected"]]
+    return data["client_id"], findings, not_affected
+
+
+def write_reporting(path: str | Path, data: dict[str, Any]) -> Path:
+    """The reporting dataset of a run (`ngvm.reporting/1`), the only file the client portal reads."""
+    return _write(Path(path), REPORTING, data)
+
+
+def read_reporting(path: str | Path) -> dict[str, Any]:
+    return _read(Path(path), REPORTING)

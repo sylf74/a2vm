@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """v0.23.4: a corporate network (the relay of the public sources, the outgoing proxy, a tenant that
 never reads the sources itself, images pushed to another registry) and the chat (the CVEs published
 in a period, the watch's status, the applications table, the questions it must answer). Fixes: a
@@ -13,8 +13,8 @@ import httpx
 import pytest
 import yaml
 
-from a2vm.config import SourceSettings, describe_relay, load_settings
-from a2vm.service import Problem
+from ngvm.config import SourceSettings, describe_relay, load_settings
+from ngvm.service import Problem
 from via.intel.sources import RELAY_TOKEN_HEADER, SourceError, Sources
 
 from .conftest import ROOT
@@ -73,10 +73,10 @@ def test_credentials_never_go_through_the_relay(tmp_path) -> None:
 
 
 def test_relay_settings_from_the_environment(monkeypatch, tmp_path) -> None:
-    monkeypatch.setenv("A2VM_RELAY_URL", "https://relay.example.org")
-    monkeypatch.setenv("A2VM_RELAY_HOSTS", "www.cisa.gov, raw.githubusercontent.com;api.first.org")
-    monkeypatch.setenv("A2VM_RELAY_TOKEN", "t")
-    monkeypatch.setenv("A2VM_INTEL_FALLBACK", "false")
+    monkeypatch.setenv("NGVM_RELAY_URL", "https://relay.example.org")
+    monkeypatch.setenv("NGVM_RELAY_HOSTS", "www.cisa.gov, raw.githubusercontent.com;api.first.org")
+    monkeypatch.setenv("NGVM_RELAY_TOKEN", "t")
+    monkeypatch.setenv("NGVM_INTEL_FALLBACK", "false")
     settings = load_settings(ROOT / "config" / "settings.yaml")
     assert settings.sources.relay_hosts == ["www.cisa.gov", "raw.githubusercontent.com", "api.first.org"]
     assert settings.sources.intel_fallback is False
@@ -101,8 +101,8 @@ def test_a_tenant_that_must_never_read_the_sources(tmp_path) -> None:
 def test_check_sources_says_the_route(tmp_path, capsys, monkeypatch) -> None:
     from via.alert.cli import main
 
-    monkeypatch.setenv("A2VM_RELAY_URL", "https://relay.example.org")
-    monkeypatch.setenv("A2VM_RELAY_HOSTS", "www.cisa.gov")
+    monkeypatch.setenv("NGVM_RELAY_URL", "https://relay.example.org")
+    monkeypatch.setenv("NGVM_RELAY_HOSTS", "www.cisa.gov")
     config = ROOT / "config"
     main(["check-sources", "--settings", str(config / "settings.yaml"), "--sources",
           str(config / "watch-sources.yaml"), "--fixtures", str(ROOT / "tests" / "fixtures")])  # fmt: skip
@@ -117,25 +117,25 @@ def test_the_relay_checks_everything_before_any_upstream() -> None:
     for check in ("respond @outside 403", "respond @notoken 401", "respond @credentials", "respond @apikey",
                   "respond @write 405"):  # fmt: skip
         assert route.index(check) < first_upstream, check
-    assert "request_header -X-A2VM-Relay-Token" in route and "CONNECT" not in route
+    assert "request_header -X-NGVM-Relay-Token" in route and "CONNECT" not in route
     variables = (ROOT / "deploy" / "relay" / "variables.tf").read_text(encoding="utf-8")
     assert "www.virustotal.com" not in variables  # an authenticated API is never a host of the relay
 
 
 def test_the_chart_and_the_pipeline_carry_the_way_out() -> None:
-    helpers = (ROOT / "deploy" / "charts" / "a2vm-tenant" / "templates" / "_helpers.tpl").read_text(encoding="utf-8")
-    common = helpers[helpers.index('define "a2vm-tenant.envCommon"') :]
-    assert 'include "a2vm-tenant.outbound"' in common[: common.index("{{- end -}}")]
-    for name in ("HTTPS_PROXY", "NO_PROXY", "SSL_CERT_FILE", "A2VM_RELAY_URL", "A2VM_RELAY_TOKEN_FILE"):
+    helpers = (ROOT / "deploy" / "charts" / "ngvm-tenant" / "templates" / "_helpers.tpl").read_text(encoding="utf-8")
+    common = helpers[helpers.index('define "ngvm-tenant.envCommon"') :]
+    assert 'include "ngvm-tenant.outbound"' in common[: common.index("{{- end -}}")]
+    for name in ("HTTPS_PROXY", "NO_PROXY", "SSL_CERT_FILE", "NGVM_RELAY_URL", "NGVM_RELAY_TOKEN_FILE"):
         assert name in helpers
-    intel = (ROOT / "deploy" / "charts" / "a2vm-tenant" / "templates" / "intel.yaml").read_text(encoding="utf-8")
-    assert 'include "a2vm-tenant.outbound"' in intel and "relay-token" in intel
-    values = yaml.safe_load((ROOT / "deploy" / "charts" / "a2vm-tenant" / "values.yaml").read_text(encoding="utf-8"))
+    intel = (ROOT / "deploy" / "charts" / "ngvm-tenant" / "templates" / "intel.yaml").read_text(encoding="utf-8")
+    assert 'include "ngvm-tenant.outbound"' in intel and "relay-token" in intel
+    values = yaml.safe_load((ROOT / "deploy" / "charts" / "ngvm-tenant" / "values.yaml").read_text(encoding="utf-8"))
     assert values["proxy"] == {"https": "", "noProxy": [], "ca": False} and values["relay"] == {"url": "", "hosts": []}
     assert values["daily"]["publishFailures"] == 3
     pipeline = (ROOT / "templates" / "client-pipeline.yml").read_text(encoding="utf-8")
-    for var in ("A2VM_HTTPS_PROXY", "A2VM_NO_PROXY", "A2VM_PROXY_CA", "A2VM_RELAY_URL", "A2VM_RELAY_HOSTS",
-                "A2VM_RELAY_TOKEN"):  # fmt: skip
+    for var in ("NGVM_HTTPS_PROXY", "NGVM_NO_PROXY", "NGVM_PROXY_CA", "NGVM_RELAY_URL", "NGVM_RELAY_HOSTS",
+                "NGVM_RELAY_TOKEN"):  # fmt: skip
         assert var in pipeline, var
     assert "$OUT -f" in pipeline
 
@@ -143,9 +143,9 @@ def test_the_chart_and_the_pipeline_carry_the_way_out() -> None:
 def test_images_pushed_to_another_registry() -> None:
     ci = yaml.safe_load((ROOT / ".gitlab-ci.yml").read_text(encoding="utf-8"))
     job = ci["images"]
-    assert all("$A2VM_PUSH_REGISTRY" in r["if"] for r in job["rules"])
+    assert all("$NGVM_PUSH_REGISTRY" in r["if"] for r in job["rules"])
     script = "\n".join(job["script"])
-    for var in ("A2VM_PUSH_IMAGE", "A2VM_PUSH_USER", "A2VM_PUSH_PASSWORD", "A2VM_PYTHON_IMAGE", "$CI_REGISTRY_IMAGE"):
+    for var in ("NGVM_PUSH_IMAGE", "NGVM_PUSH_USER", "NGVM_PUSH_PASSWORD", "NGVM_PYTHON_IMAGE", "$CI_REGISTRY_IMAGE"):
         assert var in script, var
 
 
@@ -158,11 +158,11 @@ def test_dashboards_hold_no_list_that_an_empty_variable_breaks() -> None:
 
 
 def test_publish_failures_end_the_daily_job_failed() -> None:
-    daily = (ROOT / "deploy" / "charts" / "a2vm-tenant" / "templates" / "cronjob-daily.yaml").read_text(
+    daily = (ROOT / "deploy" / "charts" / "ngvm-tenant" / "templates" / "cronjob-daily.yaml").read_text(
         encoding="utf-8"
     )
     assert "/data/.publish-failures" in daily and ".Values.daily.publishFailures" in daily
-    dispatch = daily[daily.index('define "a2vm-tenant.step.dispatch"') :]
+    dispatch = daily[daily.index('define "ngvm-tenant.step.dispatch"') :]
     assert "exit 1" in dispatch[: dispatch.index("{{- end -}}")]
 
 
@@ -209,8 +209,8 @@ def test_list_new_cves_names_the_tenants_alerts(tmp_path) -> None:
 
 
 def test_the_watch_status_and_the_applications_through_the_chat(tmp_path) -> None:
-    from a2vm import applications as apps
-    from a2vm.service import TokenSet, digest
+    from ngvm import applications as apps
+    from ngvm.service import TokenSet, digest
     from via.service.server import WatchService
     from via.service.store import WatchStore
 
@@ -258,6 +258,6 @@ def test_release_recorded() -> None:
     assert "## v0.23.4 — " in (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     assert (ROOT / "deploy" / "relay" / "README.md").exists()
     assert (ROOT / "docs" / "hld" / "proposals" / "intel-placement.md").exists()
-    for f in ("a2vm", "via", "detect", "verdict", "dispatch"):
+    for f in ("ngvm", "via", "detect", "verdict", "dispatch"):
         text = (ROOT / f / "pyproject.toml").read_text()
         assert re.search(r'^version = "0\.(23\.([4-9]|[1-9]\d)|2[4-9]\.\d+)"', text, re.M)

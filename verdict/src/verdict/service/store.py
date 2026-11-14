@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """Where the decision service keeps the runs it received (LLD triage-prioritization §15).
 
 Files on the service's volume when the tenant has no database (`pgstore.PgRunStore` otherwise,

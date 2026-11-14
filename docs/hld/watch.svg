@@ -30,9 +30,9 @@
 <defs><marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="arrowhead"/></marker></defs>
 <rect class="page" x="0" y="0" width="1200" height="500"/>
 <rect x="560" y="14" width="630" height="132" rx="10" class="r-ns"/>
-<text x="574" y="34" class="t-region">Watch team<tspan dx="10" class="t-region-sub">namespace a2vm-via</tspan></text>
+<text x="574" y="34" class="t-region">Watch team<tspan dx="10" class="t-region-sub">namespace ngvm-via</tspan></text>
 <rect x="560" y="324" width="630" height="168" rx="10" class="r-ns"/>
-<text x="574" y="482" class="t-region">Each client<tspan dx="10" class="t-region-sub">namespace a2vm-&lt;tenant&gt;</tspan></text>
+<text x="574" y="482" class="t-region">Each client<tspan dx="10" class="t-region-sub">namespace ngvm-&lt;tenant&gt;</tspan></text>
 <polyline points="230,235 290,235" class="edge" marker-end="url(#a2)"/>
 <polyline points="526,190 546,190 546,89 576,89" class="halo"/>
 <polyline points="526,190 546,190 546,89 576,89" class="edge" marker-end="url(#a2)"/>

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """Software bills of materials: the libraries of an image or an application (v0.23.11, HLD D20).
 
 Two ways in, one model out: a component of type `library` with its `purl`
@@ -11,7 +11,7 @@ host again.
   collector reads the files of a directory, one asset per file.
 
 The packages of a distribution (`pkg:rpm`, `pkg:deb`, `pkg:apk`) are left to the advisories of the
-distributions (`a2vm.packages`): only the language ecosystems are kept here.
+distributions (`ngvm.packages`): only the language ecosystems are kept here.
 """
 
 from __future__ import annotations
@@ -22,8 +22,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from a2vm.io import Detection, now
-from a2vm.models import AssetObservation
+from ngvm.io import Detection, now
+from ngvm.models import AssetObservation
 
 SOURCE = "sbom"
 DISTRO_PURLS = ("rpm", "deb", "apk", "alpm")

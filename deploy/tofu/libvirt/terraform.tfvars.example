@@ -1,0 +1,28 @@
+# A lab on one bare KVM host under Rocky Linux 10 (docs/platform.md §8): one server, one agent,
+# a collector, Keycloak on a VM. The VMs on the LAN through the bridge br0.
+
+libvirt_uri = "qemu+ssh://root@kvm01.example.org/system"
+bridge      = "br0"
+gateway     = "192.0.2.1"
+dns         = ["192.0.2.1"]
+
+machines = {
+  k8s01 = { roles = ["server"], address = "192.0.2.41/24", vcpu = 4, memory_mb = 8192, disk_gb = 60 }
+  k8s02 = { roles = ["agent"], address = "192.0.2.42/24", vcpu = 4, memory_mb = 8192, disk_gb = 60 }
+  col01 = { roles = ["collector"], address = "192.0.2.43/24" }
+  auth  = { roles = ["keycloak"], address = "192.0.2.44/24" }
+}
+
+platform = {
+  ssh = { private_key_file = "~/.ssh/id_ed25519" }
+  cluster = {
+    token_file      = "~/.ngvm/secrets/rke2-token"
+    kubeconfig_file = "~/.kube/ngvm-kvm.yaml"
+  }
+  keycloak = {
+    mode     = "vm"
+    hostname = "auth.example.org"
+    tls      = "internal"
+    clients  = { "ngvm-portal" = ["https://portal.example.org/login/generic_oauth"] }
+  }
+}

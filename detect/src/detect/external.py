@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """Bring the client's external detection into its internal run.
 
 The external scan runs in a collection-only project (`<client>-external`); its `collect` job keeps
@@ -15,9 +15,9 @@ import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 
-from a2vm.gitlab import GitLabError, download_artifacts
-from a2vm.io import Detection, ExchangeError, read_detection
-from a2vm.models import ClientProfile, Finding
+from ngvm.gitlab import GitLabError, download_artifacts
+from ngvm.io import Detection, ExchangeError, read_detection
+from ngvm.models import ClientProfile, Finding
 
 SOURCE = "external-scan"
 

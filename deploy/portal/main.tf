@@ -1,5 +1,5 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
-# A2VM client portal: one instance with the reporting database (PostgreSQL) and Grafana behind
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
+# NGVM client portal: one instance with the reporting database (PostgreSQL) and Grafana behind
 # Caddy (HTTPS, Let's Encrypt). Configured at first boot by cloud-init (cloud-init.yaml.tftpl);
 # secrets are generated on the instance and never pass through Terraform, its state or GitLab.
 
@@ -59,7 +59,7 @@ resource "scaleway_instance_server" "portal" {
   image             = var.image
   ip_id             = local.ip_id
   security_group_id = scaleway_instance_security_group.portal.id
-  tags              = ["a2vm", "portal"]
+  tags              = ["ngvm", "portal"]
 
   root_volume {
     size_in_gb = var.root_volume_gb

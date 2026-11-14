@@ -1,8 +1,9 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 import datetime as dt
 import json
 
-from a2vm.io import (
+from detect.inventory import InventoryScanner
+from ngvm.io import (
     read_assets,
     read_detection,
     read_findings,
@@ -12,10 +13,9 @@ from a2vm.io import (
     write_findings,
     write_records,
 )
-from a2vm.llm import LlmClient
-from a2vm.models import Finding
-from a2vm.ssvc import cvss_heuristic
-from detect.inventory import InventoryScanner
+from ngvm.llm import LlmClient
+from ngvm.models import Finding
+from ngvm.ssvc import cvss_heuristic
 from verdict.assets.build import build_inventory
 from verdict.report import render_markdown, write_all
 from verdict.triage import Triage
@@ -187,7 +187,7 @@ def test_records_merge_kev_and_epss(sources):
 def test_exchange_files_are_validated(tmp_path):
     import pytest
 
-    from a2vm.io import ExchangeError
+    from ngvm.io import ExchangeError
 
     bad = tmp_path / "records.json"
     bad.write_text(json.dumps({"schema": "vulnops.findings/2"}))
@@ -228,7 +228,7 @@ def test_one_rationale_per_cve_most_urgent_first(settings, sources, profile):
 
 
 def test_scanner_cvss_replaces_missing_record_cvss(settings):
-    from a2vm.models import FindingObservation, Match
+    from ngvm.models import FindingObservation, Match
     from verdict.triage import scanner_metrics
 
     vector = "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H"
@@ -241,7 +241,7 @@ def test_scanner_cvss_replaces_missing_record_cvss(settings):
 
 
 def test_cvss_v2_heuristic_and_preference_for_v3():
-    from a2vm.models import FindingObservation, Match
+    from ngvm.models import FindingObservation, Match
     from verdict.triage import scanner_metrics
 
     match = Match("scanner", "", "443/tcp", 1.0, "")
@@ -259,7 +259,7 @@ def test_cvss_v2_heuristic_and_preference_for_v3():
 
 
 def test_rejected_cves_are_ignored_not_errors(settings, sources, profile):
-    from a2vm.models import REJECTED
+    from ngvm.models import REJECTED
 
     collected = collect(sources, ALL)
     detection = InventoryScanner(settings).scan(profile, collected.records)
@@ -276,13 +276,13 @@ def test_rejected_cves_are_ignored_not_errors(settings, sources, profile):
 def test_reporting_dataset_follows_the_decisions(settings, sources, profile, tmp_path):
     import datetime as dt
 
-    from a2vm.io import read_reporting
+    from ngvm.io import read_reporting
     from verdict import reporting
 
     run = _run(settings, sources, profile, tmp=tmp_path)
     write_all(run, tmp_path, settings.policy)
     data = read_reporting(tmp_path / profile.id / "reporting.json")  # stable path, schema checked
-    assert data["schema"] == "a2vm.reporting/1" and data["run"]["tenant"]["id"] == profile.id
+    assert data["schema"] == "ngvm.reporting/1" and data["run"]["tenant"]["id"] == profile.id
     assert len(data["decisions"]) == len(run.rows)
     assert sum(data["totals"]["findings"].values()) == len(run.rows)
     for level in ("ACT", "ATTEND", "TRACK"):
@@ -303,7 +303,7 @@ def test_reporting_dataset_follows_the_decisions(settings, sources, profile, tmp
 
 
 def test_exposure_gaps_open_the_report(settings, sources, profile, tmp_path):
-    from a2vm.io import read_reporting
+    from ngvm.io import read_reporting
 
     run = _run(settings, sources, profile, tmp=tmp_path)
     detail = "reached from the internet at 203.0.113.9, named by no `published` entry"

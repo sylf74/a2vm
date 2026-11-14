@@ -1,8 +1,8 @@
 {
   "__inputs": [
     {
-      "name": "DS_A2VM",
-      "label": "Base de restitution A2VM",
+      "name": "DS_NGVM",
+      "label": "Base de restitution NGVM",
       "description": "Source de données PostgreSQL de la base de restitution",
       "type": "datasource",
       "pluginId": "grafana-postgresql-datasource",
@@ -13,7 +13,7 @@
       "type": "constant",
       "label": "Adresse de la page des demandes de remédiation",
       "value": "https://dispatch.example.org",
-      "description": "https://<host of A2VM_DISPATCH_HOST>"
+      "description": "https://<host of NGVM_DISPATCH_HOST>"
     }
   ],
   "__requires": [
@@ -48,10 +48,10 @@
       "version": ""
     }
   ],
-  "title": "A2VM — actifs et couverture des scans (demandes de remédiation)",
-  "uid": "a2vm-coverage-fr-rssi",
+  "title": "NGVM — actifs et couverture des scans (demandes de remédiation)",
+  "uid": "ngvm-coverage-fr-rssi",
   "tags": [
-    "a2vm",
+    "ngvm",
     "fr",
     "rssi"
   ],
@@ -69,12 +69,12 @@
     {
       "type": "dashboards",
       "tags": [
-        "a2vm"
+        "ngvm"
       ],
       "asDropdown": false,
       "includeVars": true,
       "keepTime": true,
-      "title": "A2VM"
+      "title": "NGVM"
     },
     {
       "type": "link",
@@ -97,10 +97,10 @@
         "type": "query",
         "datasource": {
           "type": "grafana-postgresql-datasource",
-          "uid": "${DS_A2VM}"
+          "uid": "${DS_NGVM}"
         },
-        "query": "SELECT tenant AS __value, tenant_name AS __text FROM a2vm.latest_runs ORDER BY tenant_name",
-        "definition": "SELECT tenant AS __value, tenant_name AS __text FROM a2vm.latest_runs ORDER BY tenant_name",
+        "query": "SELECT tenant AS __value, tenant_name AS __text FROM ngvm.latest_runs ORDER BY tenant_name",
+        "definition": "SELECT tenant AS __value, tenant_name AS __text FROM ngvm.latest_runs ORDER BY tenant_name",
         "refresh": 1,
         "sort": 0,
         "multi": true,
@@ -149,12 +149,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT 100.0 * count(*) FILTER (WHERE state = 'covered') / nullif(count(*) FILTER (WHERE in_production), 0) AS value FROM a2vm.latest_coverage WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[])"
+          "rawSql": "SELECT 100.0 * count(*) FILTER (WHERE state = 'covered') / nullif(count(*) FILTER (WHERE in_production), 0) AS value FROM ngvm.latest_coverage WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[])"
         }
       ],
       "options": {
@@ -185,7 +185,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 1
     },
@@ -198,12 +198,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT count(*) AS value FROM a2vm.latest_coverage WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND in_production"
+          "rawSql": "SELECT count(*) AS value FROM ngvm.latest_coverage WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND in_production"
         }
       ],
       "options": {
@@ -234,7 +234,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 2
     },
@@ -247,12 +247,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT count(*) AS value FROM a2vm.latest_coverage WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND state = 'never-scanned'"
+          "rawSql": "SELECT count(*) AS value FROM ngvm.latest_coverage WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND state = 'never-scanned'"
         }
       ],
       "options": {
@@ -283,7 +283,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 3
     },
@@ -296,12 +296,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT count(*) AS value FROM a2vm.latest_coverage WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND state = 'stale'"
+          "rawSql": "SELECT count(*) AS value FROM ngvm.latest_coverage WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND state = 'stale'"
         }
       ],
       "options": {
@@ -332,7 +332,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 4
     },
@@ -345,12 +345,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT count(*) AS value FROM a2vm.latest_coverage WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND state = 'partial'"
+          "rawSql": "SELECT count(*) AS value FROM ngvm.latest_coverage WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND state = 'partial'"
         }
       ],
       "options": {
@@ -381,7 +381,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 5
     },
@@ -394,12 +394,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT count(*) AS value FROM a2vm.latest_coverage WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND state = 'not-in-cmdb'"
+          "rawSql": "SELECT count(*) AS value FROM ngvm.latest_coverage WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND state = 'not-in-cmdb'"
         }
       ],
       "options": {
@@ -430,7 +430,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 6
     },
@@ -443,12 +443,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT count(*) AS value FROM a2vm.latest_coverage WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND state = 'retired-but-alive'"
+          "rawSql": "SELECT count(*) AS value FROM ngvm.latest_coverage WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND state = 'retired-but-alive'"
         }
       ],
       "options": {
@@ -479,7 +479,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 7
     },
@@ -492,12 +492,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT count(*) AS value FROM a2vm.latest_coverage WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND state = 'not-scannable'"
+          "rawSql": "SELECT count(*) AS value FROM ngvm.latest_coverage WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND state = 'not-scannable'"
         }
       ],
       "options": {
@@ -528,7 +528,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 8
     },
@@ -541,12 +541,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT asset_name AS \"Actif\", cmdb_class AS \"Classe\", cmdb_status AS \"Statut CMDB\", criticality AS \"Criticité\", state AS \"Couverture\", array_to_string(missing, ', ') AS \"Manquants\", (scans ->> 'openvas')::timestamptz AS \"OpenVAS\", (scans ->> 'trivy')::timestamptz AS \"Trivy\", (scans ->> 'dnf-updateinfo')::timestamptz AS \"dnf\", (scans ->> 'external-scan')::timestamptz AS \"Scan externe\", (SELECT string_agg(k, ', ' ORDER BY k) FROM jsonb_object_keys(coalesce(scans, '{}'::jsonb)) k WHERE k NOT IN ('openvas', 'trivy', 'dnf-updateinfo', 'external-scan')) AS \"Autres moyens\", days_since_scan AS \"Jours depuis le scan\", owner AS \"Responsable\" FROM a2vm.latest_coverage WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND state = ANY (ARRAY[${state:sqlstring}]::text[]) ORDER BY state_rank, criticality, asset_name"
+          "rawSql": "SELECT asset_name AS \"Actif\", cmdb_class AS \"Classe\", cmdb_status AS \"Statut CMDB\", criticality AS \"Criticité\", state AS \"Couverture\", array_to_string(missing, ', ') AS \"Manquants\", (scans ->> 'openvas')::timestamptz AS \"OpenVAS\", (scans ->> 'trivy')::timestamptz AS \"Trivy\", (scans ->> 'dnf-updateinfo')::timestamptz AS \"dnf\", (scans ->> 'external-scan')::timestamptz AS \"Scan externe\", (SELECT string_agg(k, ', ' ORDER BY k) FROM jsonb_object_keys(coalesce(scans, '{}'::jsonb)) k WHERE k NOT IN ('openvas', 'trivy', 'dnf-updateinfo', 'external-scan')) AS \"Autres moyens\", days_since_scan AS \"Jours depuis le scan\", owner AS \"Responsable\" FROM ngvm.latest_coverage WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND state = ANY (ARRAY[${state:sqlstring}]::text[]) ORDER BY state_rank, criticality, asset_name"
         }
       ],
       "options": {
@@ -682,7 +682,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 9
     },
@@ -695,12 +695,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT cmdb_class AS \"Classe\", count(*) AS \"Actifs\", count(*) FILTER (WHERE state = 'not-in-cmdb') AS \"not-in-cmdb\", count(*) FILTER (WHERE state = 'retired-but-alive') AS \"retired-but-alive\", count(*) FILTER (WHERE state = 'never-scanned') AS \"never-scanned\", count(*) FILTER (WHERE state = 'stale') AS \"stale\", count(*) FILTER (WHERE state = 'partial') AS \"partial\", count(*) FILTER (WHERE state = 'not-scannable') AS \"not-scannable\", count(*) FILTER (WHERE state = 'not-expected') AS \"not-expected\", count(*) FILTER (WHERE state = 'covered') AS \"covered\" FROM a2vm.latest_coverage WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) GROUP BY cmdb_class ORDER BY count(*) DESC, cmdb_class"
+          "rawSql": "SELECT cmdb_class AS \"Classe\", count(*) AS \"Actifs\", count(*) FILTER (WHERE state = 'not-in-cmdb') AS \"not-in-cmdb\", count(*) FILTER (WHERE state = 'retired-but-alive') AS \"retired-but-alive\", count(*) FILTER (WHERE state = 'never-scanned') AS \"never-scanned\", count(*) FILTER (WHERE state = 'stale') AS \"stale\", count(*) FILTER (WHERE state = 'partial') AS \"partial\", count(*) FILTER (WHERE state = 'not-scannable') AS \"not-scannable\", count(*) FILTER (WHERE state = 'not-expected') AS \"not-expected\", count(*) FILTER (WHERE state = 'covered') AS \"covered\" FROM ngvm.latest_coverage WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) GROUP BY cmdb_class ORDER BY count(*) DESC, cmdb_class"
         }
       ],
       "options": {
@@ -726,7 +726,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 10
     },
@@ -739,12 +739,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "time_series",
-          "rawSql": "SELECT generated_at AS time, 100.0 * covered_assets / nullif(expected_assets, 0) AS \"Couverts\" FROM a2vm.runs WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND expected_assets IS NOT NULL AND $__timeFilter(generated_at) ORDER BY generated_at"
+          "rawSql": "SELECT generated_at AS time, 100.0 * covered_assets / nullif(expected_assets, 0) AS \"Couverts\" FROM ngvm.runs WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND expected_assets IS NOT NULL AND $__timeFilter(generated_at) ORDER BY generated_at"
         }
       ],
       "fieldConfig": {
@@ -821,7 +821,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 11
     }

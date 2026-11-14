@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """Where the dispatch service keeps its tickets and the requests of the persons (LLD dispatch §6):
 the tenant's PostgreSQL (schema `dispatch`, row-level security on the tenant, as `verdict`), or
 files on the service's volume without it.
@@ -16,7 +16,7 @@ import threading
 from pathlib import Path
 from typing import Any, Protocol
 
-from a2vm.db import Database, Migration, rls
+from ngvm.db import Database, Migration, rls
 
 from .tickets import OPEN_STATES, Ticket, key_digest
 

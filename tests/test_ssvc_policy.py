@@ -1,7 +1,7 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 import pytest
 
-from a2vm import ssvc
+from ngvm import ssvc
 from verdict.policy import Policy, delivery_decision
 
 

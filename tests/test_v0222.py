@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """v0.22.2: consolidation (radar precision, optional sharing of technologies, chat questions, full
 package list, respect of the SLA measured on when a fix happened, radar proposals of the LLM)."""
 
@@ -53,7 +53,7 @@ def test_old_sources_without_markers_take_the_event_markers() -> None:
 
 
 def test_bulk_cves_in_profile_schema() -> None:
-    from a2vm.io import load_schema
+    from ngvm.io import load_schema
 
     radar_props = load_schema("client_profile")["properties"]["alerts"]["properties"]["radar"]["properties"]
     assert "bulk_cves" in radar_props
@@ -65,8 +65,8 @@ def test_technologies_are_not_sent_unless_the_profile_shares_them(tmp_path) -> N
 
     import httpx
 
-    from a2vm.config import load_settings
-    from a2vm.profile import load_profile
+    from ngvm.config import load_settings
+    from ngvm.profile import load_profile
     from via.alert.cli import push_technologies
     from via.alert.watch import State
 
@@ -128,13 +128,13 @@ def test_find_component_is_a_tool_and_in_the_contract() -> None:
 
     assert any(op[1] == "find_component" and op[4] == "components" for op in OPERATIONS)
     spec = yaml.safe_load(
-        (Path(__file__).resolve().parents[1] / "a2vm/src/a2vm/schemas/openapi/verdict.v1.yaml").read_text()
+        (Path(__file__).resolve().parents[1] / "ngvm/src/ngvm/schemas/openapi/verdict.v1.yaml").read_text()
     )
     assert spec["paths"]["/v1/tenants/{tenant}/components"]["get"]["operationId"] == "findComponent"
 
 
 def test_components_reach_the_asset_and_the_triage() -> None:
-    from a2vm.models import AssetObservation
+    from ngvm.models import AssetObservation
     from verdict.assets.build import build_inventory  # noqa: F401 - imported for its module's use below
     from verdict.triage import run_asset
 
@@ -151,8 +151,8 @@ def test_components_reach_the_asset_and_the_triage() -> None:
                                components=[{"name": "bash", "version": "5.2"}])  # fmt: skip
     from pathlib import Path
 
-    from a2vm.io import Detection
-    from a2vm.profile import load_profile
+    from ngvm.io import Detection
+    from ngvm.profile import load_profile
 
     root = Path(__file__).resolve().parents[1]
     profile = load_profile(root / "examples" / "example-client" / "client.yaml")
@@ -169,8 +169,8 @@ def test_closed_findings_by_period_and_assets_with_counts(tenant_db, settings, s
     import gzip
     import json
 
-    from a2vm.db import Database
-    from a2vm.service import TokenSet, digest
+    from ngvm.db import Database
+    from ngvm.service import TokenSet, digest
     from verdict.report import write_json
     from verdict.service.index import row_id
     from verdict.service.pgstore import MIGRATIONS, PgRunStore
@@ -212,7 +212,7 @@ def test_closed_findings_by_period_and_assets_with_counts(tenant_db, settings, s
     assert one["total"] == 1 and one["items"][0]["id"] == row_id(second)
     import pytest
 
-    from a2vm.service import Problem
+    from ngvm.service import Problem
 
     with pytest.raises(Problem, match="no such asset"):
         service.read(tenant, read, "findings/closed", {"asset": "nowhere-host"})
@@ -223,10 +223,10 @@ def test_tickets_sent_over_a_period_with_their_itsm_number(tmp_path) -> None:
 
     import pytest
 
-    from a2vm.service import Problem, TokenSet, digest
     from dispatch.rules import Rules
     from dispatch.service import Service
     from dispatch.store import FileStore
+    from ngvm.service import Problem, TokenSet, digest
 
     from .test_v0200 import RULES, FakeDecisions, FakeTool, dec
 
@@ -258,7 +258,7 @@ def test_the_chat_lists_the_tickets_through_dispatch() -> None:
 
     import httpx
 
-    from a2vm.service import TokenSet, digest
+    from ngvm.service import TokenSet, digest
     from verdict.service.tools import Tools
 
     seen = []
@@ -285,11 +285,11 @@ def test_the_chat_lists_the_tickets_through_dispatch() -> None:
 def test_the_tools_pod_reads_dispatch_when_it_runs() -> None:
     from pathlib import Path
 
-    chat = (Path(__file__).resolve().parents[1] / "deploy/charts/a2vm-tenant/templates/chat.yaml").read_text()
-    assert '--dispatch-url={{ include "a2vm-tenant.dispatchUrl" . }}' in chat
+    chat = (Path(__file__).resolve().parents[1] / "deploy/charts/ngvm-tenant/templates/chat.yaml").read_text()
+    assert '--dispatch-url={{ include "ngvm-tenant.dispatchUrl" . }}' in chat
     assert "--dispatch-token-file=/secrets/dispatch-read-token" in chat
     assert chat.count("{{- if .Values.dispatch.enabled }}") >= 4  # label, args, secret item, egress
-    values = (Path(__file__).resolve().parents[1] / "deploy/charts/a2vm-tenant/values.yaml").read_text()
+    values = (Path(__file__).resolve().parents[1] / "deploy/charts/ngvm-tenant/values.yaml").read_text()
     assert "list_tickets" in values and "find_component" in values and "never count a list yourself" in values
 
 
@@ -311,7 +311,7 @@ def test_fix_status_from_the_interval_and_the_declared_date(settings, sources, t
 
     rdb = reporting_db
     run = _sla_run(settings, sources, tmp_path)
-    day1 = {"schema": "a2vm.reporting/1", **build(run, settings.policy)}
+    day1 = {"schema": "ngvm.reporting/1", **build(run, settings.policy)}
     fixed = next(d for d in day1["decisions"] if d["priority"] == "P4")
     other = next(d for d in day1["decisions"] if d["priority"] and d is not fixed and d["asset"] != fixed["asset"])
     seen = {"inventory": "2026-11-02T06:00:00+00:00"}
@@ -328,7 +328,7 @@ def test_fix_status_from_the_interval_and_the_declared_date(settings, sources, t
             a["scans"] = {"inventory": "2100-01-01T00:00:00+00:00"}  # first clean scan long after the deadline
         if a["id"] == other["asset"]:
             a["scans"] = {"inventory": "2026-11-03T06:00:00+00:00"}  # the next day: on time
-    assert db.init(ADMIN, rdb["writer"]).startswith("schema a2vm version 6")
+    assert db.init(ADMIN, rdb["writer"]).startswith("schema ngvm version 6")
     for i, d in enumerate((day1, day2)):
         p = tmp_path / f"r{i}.json"
         p.write_text(json.dumps(d))
@@ -337,7 +337,7 @@ def test_fix_status_from_the_interval_and_the_declared_date(settings, sources, t
     def status(finding):
         with psycopg.connect(rdb["as_writer"]) as conn:
             return conn.execute(
-                "SELECT fix_status, last_vulnerable::date, first_clean::date FROM a2vm.finding_closures "
+                "SELECT fix_status, last_vulnerable::date, first_clean::date FROM ngvm.finding_closures "
                 "WHERE finding_id = %s",
                 (finding,),
             ).fetchone()
@@ -358,14 +358,14 @@ def test_fix_status_from_the_interval_and_the_declared_date(settings, sources, t
 
 # -- dispatch: the declared date of a fix, the due date in the ticket (v0.22.2) ------------------------
 def test_dispatch_keeps_the_declared_date_and_writes_the_due_date(tmp_path) -> None:
-    from a2vm.service import TokenSet, digest
     from dispatch.rules import Rules
     from dispatch.service import Service
+    from ngvm.service import TokenSet, digest
 
     from .test_v0200 import RULES, FakeDecisions, FakeTool, dec, dispatcher
 
     class Tool(FakeTool):
-        due_field = "a2vm_due_date"
+        due_field = "ngvm_due_date"
 
         def __init__(self):
             super().__init__()
@@ -423,10 +423,10 @@ def test_itop_due_field_and_resolution_date() -> None:
             return httpx.Response(200, json={"code": 0, "objects": {"UserRequest::42": {"code": 0, "fields": fields}}})
         return httpx.Response(200, json={"code": 0, "objects": {"x": {"code": 0, "key": "42", "fields": {"id": "42"}}}})
 
-    rules = {**RULES, "targets": {"itsm": {**RULES["targets"]["itsm"], "due_field": "a2vm_due_date"}}}
+    rules = {**RULES, "targets": {"itsm": {**RULES["targets"]["itsm"], "due_field": "ngvm_due_date"}}}
     c = ItopConnector(Rules.from_dict(rules).targets["itsm"], "secret", transport=httpx.MockTransport(handler))
     ext = External(ref="UserRequest::42")
-    assert c.set_due(ext, "2026-11-12") and seen[-1]["fields"] == {"a2vm_due_date": "2026-11-12"}
+    assert c.set_due(ext, "2026-11-12") and seen[-1]["fields"] == {"ngvm_due_date": "2026-11-12"}
     assert c.declared_fix(ext) == "2026-11-11T16:30:00"
     plain = ItopConnector(Rules.from_dict(RULES).targets["itsm"], "secret", transport=httpx.MockTransport(handler))
     assert plain.set_due(ext, "2026-11-12") is False

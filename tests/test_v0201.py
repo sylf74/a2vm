@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """v0.20.1: the dispatch service reaches the tenant's database; the size of the chat tools' answers
 is set per tenant."""
 
@@ -11,7 +11,7 @@ import pytest
 
 from .conftest import ROOT
 
-CHART = ROOT / "deploy" / "charts" / "a2vm-tenant"
+CHART = ROOT / "deploy" / "charts" / "ngvm-tenant"
 
 
 def test_every_service_with_a_database_is_let_in_by_its_network_policy():
@@ -20,7 +20,7 @@ def test_every_service_with_a_database_is_let_in_by_its_network_policy():
     users = {
         f.stem
         for f in (CHART / "templates").glob("*.yaml")
-        if 'include "a2vm-tenant.dbEnv"' in f.read_text() and f.stem in ("via", "verdict", "intake", "dispatch")
+        if 'include "ngvm-tenant.dbEnv"' in f.read_text() and f.stem in ("via", "verdict", "intake", "dispatch")
     }
     assert {"via", "verdict", "detect", "dispatch"} <= allowed
     assert "dispatch" in users
@@ -35,12 +35,12 @@ def _chat_values():
 
 def test_the_tools_answer_size_is_set_per_tenant():
     cv = _chat_values()
-    env = {"A2VM_CHAT_HOST": "chat.example.org", "A2VM_LLM_BASE_URL": "http://192.0.2.5:8000/v1",
-           "A2VM_LLM_MODEL": "m"}  # fmt: skip
+    env = {"NGVM_CHAT_HOST": "chat.example.org", "NGVM_LLM_BASE_URL": "http://192.0.2.5:8000/v1",
+           "NGVM_LLM_MODEL": "m"}  # fmt: skip
     assert "maxChars" not in cv.values(env)["chat"]
-    assert cv.values({**env, "A2VM_CHAT_MAX_CHARS": "4000"})["chat"]["maxChars"] == 4000
-    with pytest.raises(ValueError, match="A2VM_CHAT_MAX_CHARS"):
-        cv.values({**env, "A2VM_CHAT_MAX_CHARS": "50"})
+    assert cv.values({**env, "NGVM_CHAT_MAX_CHARS": "4000"})["chat"]["maxChars"] == 4000
+    with pytest.raises(ValueError, match="NGVM_CHAT_MAX_CHARS"):
+        cv.values({**env, "NGVM_CHAT_MAX_CHARS": "50"})
 
 
 def test_the_page_has_time_and_reads_large_pages():

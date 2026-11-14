@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """v0.23.12: a copy of OSV, the tenants' libraries matched where they are.
 
 The shared intelligence service rebuilds, every few hours, an index of each language ecosystem from
@@ -17,10 +17,10 @@ import zipfile
 import httpx
 import pytest
 
-from a2vm import osvdb
-from a2vm.config import load_settings
-from a2vm.io import read_detection
-from a2vm.service import TokenSet, digest
+from ngvm import osvdb
+from ngvm.config import load_settings
+from ngvm.io import read_detection
+from ngvm.service import TokenSet, digest
 
 from .conftest import ROOT
 
@@ -178,9 +178,9 @@ def test_the_shared_service_serves_the_indexes(tmp_path) -> None:
 
 
 def test_detect_osv_offline_from_the_shared_service(tmp_path, monkeypatch) -> None:
-    from a2vm.io import write_detection
     from detect.cli import main
     from detect.sbom import SbomConfig, read
+    from ngvm.io import write_detection
 
     service, httpd, url = _intel(tmp_path)
     try:
@@ -194,17 +194,17 @@ def test_detect_osv_offline_from_the_shared_service(tmp_path, monkeypatch) -> No
         write_detection(work / "lab" / "sbom.json", read(SbomConfig(str(sbom)), "lab", log=lambda _: None))
         (work / "lab" / "osv.json").write_text("{}")  # yesterday's, replaced
         (tmp_path / "intel-token").write_text(READ)
-        monkeypatch.setenv("A2VM_INTEL_URL", url)
-        monkeypatch.setenv("A2VM_INTEL_TOKEN_FILE", str(tmp_path / "intel-token"))
-        monkeypatch.delenv("A2VM_OSV_MODE", raising=False)
+        monkeypatch.setenv("NGVM_INTEL_URL", url)
+        monkeypatch.setenv("NGVM_INTEL_TOKEN_FILE", str(tmp_path / "intel-token"))
+        monkeypatch.delenv("NGVM_OSV_MODE", raising=False)
         assert main(["osv", "--detect", str(work), "--cache", str(tmp_path / "osv-cache")]) == 0
         assert read_detection(work / "lab" / "osv.json").findings[0].cve_id == "CVE-2099-0101"
     finally:
         httpd.shutdown()
         httpd.server_close()
-    monkeypatch.setenv("A2VM_OSV_MODE", "off")
+    monkeypatch.setenv("NGVM_OSV_MODE", "off")
     assert main(["osv", "--detect", str(work)]) == 0
-    monkeypatch.setenv("A2VM_OSV_MODE", "everything")
+    monkeypatch.setenv("NGVM_OSV_MODE", "everything")
     assert main(["osv", "--detect", str(work)]) == 2
 
 
@@ -225,15 +225,15 @@ def test_the_pages_of_an_answer_are_followed(tmp_path) -> None:
 
 
 def test_wiring() -> None:
-    chart = ROOT / "deploy/charts/a2vm-tenant"
+    chart = ROOT / "deploy/charts/ngvm-tenant"
     assert "--osv-every-hours {{ $s.osvEveryHours | default 6 }}" in (chart / "templates/intel.yaml").read_text()
     assert "osvEveryHours: 6" in (chart / "values.yaml").read_text()
     assert "osv-vulnerabilities.storage.googleapis.com" in (ROOT / "deploy/relay/variables.tf").read_text()
     lld = (ROOT / "docs/lld/vulnerability-detection.md").read_text()
-    assert "A2VM_OSV_MODE" in lld and "No library leaves the tenant" in lld
+    assert "NGVM_OSV_MODE" in lld and "No library leaves the tenant" in lld
 
 
 def test_release_recorded() -> None:
     assert "## v0.23.12 — " in (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    chart = (ROOT / "deploy/charts/a2vm-tenant/Chart.yaml").read_text()
+    chart = (ROOT / "deploy/charts/ngvm-tenant/Chart.yaml").read_text()
     assert re.search(r"^version: 0\.(23\.(1[2-9]|[2-9]\d)|2[4-9]\.\d+)$", chart, re.M)

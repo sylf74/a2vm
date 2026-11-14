@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """The daily run's calls to the decision service: the push of its triage, and the SLA state it reads
 before deciding (v0.21.0)."""
 
@@ -11,7 +11,8 @@ from typing import Any
 
 import httpx
 
-from a2vm import tls
+from ngvm import tls
+from ngvm.io import legacy_schema
 
 TIMEOUT = 600.0
 
@@ -40,7 +41,7 @@ def push(
     try:
         with httpx.Client(
             base_url=base_url.rstrip("/"),
-            headers={"Authorization": f"Bearer {token}", "User-Agent": "a2vm-verdict"},
+            headers={"Authorization": f"Bearer {token}", "User-Agent": "ngvm-verdict"},
             verify=tls.verify(ca_file),
             timeout=httpx.Timeout(timeout, connect=15.0),
             transport=transport,
@@ -55,7 +56,7 @@ def push(
         # was most often stopped (memory limit, liveness probe), not unreachable.
         raise PushError(
             f"decision service closed the connection during the push of {size} ({exc}): look at its "
-            "restarts and their reason (OOMKilled: A2VM_VERDICT_MEMORY, docs/kubernetes.md)",
+            "restarts and their reason (OOMKilled: NGVM_VERDICT_MEMORY, docs/kubernetes.md)",
             retry=True,
         ) from exc
     except httpx.HTTPError as exc:
@@ -77,11 +78,11 @@ def sla_state(
     transport: httpx.BaseTransport | None = None,
     timeout: float = TIMEOUT,
 ) -> dict[str, Any]:
-    """The state of the tenant's findings for the client's SLA (`a2vm.sla_state/1`)."""
+    """The state of the tenant's findings for the client's SLA (`ngvm.sla_state/1`)."""
     try:
         with httpx.Client(
             base_url=base_url.rstrip("/"),
-            headers={"Authorization": f"Bearer {token}", "User-Agent": "a2vm-verdict"},
+            headers={"Authorization": f"Bearer {token}", "User-Agent": "ngvm-verdict"},
             verify=tls.verify(ca_file),
             timeout=httpx.Timeout(timeout, connect=15.0),
             transport=transport,
@@ -90,8 +91,8 @@ def sla_state(
     except httpx.HTTPError as exc:
         raise PushError(f"decision service unreachable: {exc}", retry=True) from exc
     if r.status_code == 200:
-        data = r.json()
-        if data.get("schema") != "a2vm.sla_state/1" or data.get("tenant") != tenant:
+        data = legacy_schema(r.json())
+        if data.get("schema") != "ngvm.sla_state/1" or data.get("tenant") != tenant:
             raise PushError("the decision service answered something else than the SLA state", retry=False)
         return data
     try:

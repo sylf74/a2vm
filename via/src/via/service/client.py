@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """The tenant's jobs talking to the watch service: the daily run (inventory), the watch, the send job."""
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ class WatchClient:
         self.tenant = tenant
         self._c = httpx.Client(
             base_url=f"{base_url.rstrip('/')}/v1/tenants/{tenant}",
-            headers={"Authorization": f"Bearer {token}", "User-Agent": "a2vm-via"},
+            headers={"Authorization": f"Bearer {token}", "User-Agent": "ngvm-via"},
             timeout=httpx.Timeout(TIMEOUT, connect=10.0),
             transport=transport,
         )
@@ -102,8 +102,8 @@ class WatchClient:
 
     # -- the daily run -------------------------------------------------------------------------
     def put_inventory(self, assets: dict, findings: dict) -> dict[str, Any]:
-        """`findings`: a2vm.watch_findings/1 (v0.23.19) or vulnops.findings/2."""
-        key = "watch_findings" if findings.get("schema") == "a2vm.watch_findings/1" else "findings"
+        """`findings`: ngvm.watch_findings/1 (v0.23.19) or vulnops.findings/2."""
+        key = "watch_findings" if findings.get("schema") == "ngvm.watch_findings/1" else "findings"
         return self._call("POST", "/inventory", {"assets": assets, key: findings}).json()
 
     def status(self) -> dict[str, Any]:

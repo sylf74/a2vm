@@ -1,9 +1,9 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """via (alert): watch mode of a client project.
 
   watch   new CERT-FR publications, KEV additions and critical CVEs since the last run, matched to
           the client; each match becomes an alert sheet (Markdown + HTML) mailed to the analysts
-          (A2VM_ANALYST_TO) for validation
+          (NGVM_ANALYST_TO) for validation
   send    mail the validated alerts of a watch run to the client: contacts.yaml (by level), plus
           alerts.recipients of client.yaml
   contacts check a contacts.yaml and list who receives what
@@ -26,11 +26,11 @@ from collections import Counter
 from pathlib import Path
 from urllib.parse import quote
 
-from a2vm import applications as apps
-from a2vm.config import describe_llm, describe_relay, env, load_settings
-from a2vm.declared import DeclaredMatcher
-from a2vm.llm import LlmClient
-from a2vm.profile import ProfileError, load_profile
+from ngvm import applications as apps
+from ngvm.config import describe_llm, describe_relay, env, load_settings
+from ngvm.declared import DeclaredMatcher
+from ngvm.llm import LlmClient
+from ngvm.profile import ProfileError, load_profile
 from via.intel.sources import Sources
 
 from . import journal, radar, teams, word
@@ -116,8 +116,8 @@ def _word_template(profile, profile_path: str, lang: str = "en") -> Path | None:
 
 def _send_link(alert_id: str) -> str:
     """On Kubernetes (no pipeline of the watch): a link to the alert on the review page
-    (A2VM_REVIEW_URL, v0.17.0), else to a new pipeline of the tenant project, its variables filled in,
-    that sends this alert (A2VM_SEND_PIPELINE_URL); both set by the chart."""
+    (NGVM_REVIEW_URL, v0.17.0), else to a new pipeline of the tenant project, its variables filled in,
+    that sends this alert (NGVM_SEND_PIPELINE_URL); both set by the chart."""
     review = env("REVIEW_URL").rstrip("/")
     if review:
         url = f"{review}/alerts/{quote(alert_id, safe='')}"
@@ -129,7 +129,7 @@ def _send_link(alert_id: str) -> str:
     if not base:
         return ""
     ref = env("SEND_REF", "main")
-    url = f"{base}?ref={quote(ref)}&var[A2VM_JOB]=send&var[A2VM_SEND_ONLY]={quote(alert_id)}"
+    url = f"{base}?ref={quote(ref)}&var[NGVM_JOB]=send&var[NGVM_SEND_ONLY]={quote(alert_id)}"
     return (
         f'To send it: <a href="{url}">start the sending of this alert</a> (prefilled form, button '
         "\u201cRun pipeline\u201d). Nothing is sent without it."
@@ -155,7 +155,7 @@ def _applications(how: str | None) -> dict[str, apps.Row]:
 
 def propose_applications(inventory: Inventory, llm: LlmClient | None, out: str | None) -> str:
     """The LLM's CPE for the applications of the inventory still new in the table, into a proposal
-    file for the watch service (Kubernetes mode), a few per passage (A2VM_APPLICATIONS_PER_PASSAGE,
+    file for the watch service (Kubernetes mode), a few per passage (NGVM_APPLICATIONS_PER_PASSAGE,
     default 40). Without an LLM, or in the GitLab mode (no service to keep them), only a count."""
     found = apps.candidates(list(inventory.assets.values()))
     table = inventory.applications
@@ -297,7 +297,7 @@ def cmd_watch(args: argparse.Namespace) -> int:
         )
         how = (
             f'To send it: <a href="{pipeline}">open the pipeline</a>, job \u201csend-alerts\u201d, button \u25b6. '
-            f"To send this one only: variable <code>A2VM_SEND_ONLY</code> = <code>{number}</code> "
+            f"To send this one only: variable <code>NGVM_SEND_ONLY</code> = <code>{number}</code> "
             "in the job's form (without it, every alert of the pipeline is sent)."
             if pipeline
             else _send_link(a["id"])
@@ -510,11 +510,11 @@ def cmd_test_mail(args: argparse.Namespace) -> int:
     """Send one test message with the mail settings of this project, to check them."""
     to = list(args.to or []) or _recipients(env("ANALYST_TO"))
     if not to:
-        print("no recipient: --to, or the CI/CD variable A2VM_ANALYST_TO", file=sys.stderr)
+        print("no recipient: --to, or the CI/CD variable NGVM_ANALYST_TO", file=sys.stderr)
         return 2
     where = os.environ.get("CI_PROJECT_PATH", "local run")
     body = (
-        f"A2VM test message ({where}).\n\nIf you read it, the watch's alerts will come the same way: "
+        f"NGVM test message ({where}).\n\nIf you read it, the watch's alerts will come the same way: "
         "sender, relay and recipients are right."
     )
     msg = message(f"[CERT Alert] Sending test — {where}", f"<p>{body}</p>".replace("\n\n", "</p><p>"), body, to)
@@ -560,7 +560,7 @@ def cmd_check_sources(args: argparse.Namespace) -> int:
 
                     client = IntelClient.from_settings(settings.sources)
                     if client is None:
-                        detail = "no shared service (A2VM_INTEL_URL): not read"
+                        detail = "no shared service (NGVM_INTEL_URL): not read"
                     else:
                         try:
                             detail = f"{len(client.feed().get('items') or [])} items in the shared feed"
@@ -636,20 +636,20 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument(
         "--only",
         nargs="*",
-        help="alerts to send, by number in this pipeline (1, 2…) or id (default: A2VM_SEND_ONLY, else all)",
+        help="alerts to send, by number in this pipeline (1, 2…) or id (default: NGVM_SEND_ONLY, else all)",
     )
     s.add_argument("--journal", help="alerts journal to append to (e.g. .watch/alerts-log.jsonl)")
     s.add_argument("--edits", help="directory of the analysts' edited sheets (edits/<alert id>.md or .docx)")
     s.add_argument("--contacts", default="contacts.yaml", help="client contacts (optional file)")
     s.set_defaults(func=cmd_send)
 
-    t = sub.add_parser("check-template", help="check a Word template of the alert sheet (tags A2VM fills)")
+    t = sub.add_parser("check-template", help="check a Word template of the alert sheet (tags NGVM fills)")
     t.add_argument("template", nargs="?", default="templates/alert.docx")
     t.set_defaults(func=cmd_check_template)
 
     m = sub.add_parser("test-mail", help="send one test message with this project's mail settings")
-    m.add_argument("--to", nargs="*", help="recipients (default: A2VM_ANALYST_TO)")
-    m.add_argument("--out", help="without A2VM_SMTP_HOST, write the message there instead")
+    m.add_argument("--to", nargs="*", help="recipients (default: NGVM_ANALYST_TO)")
+    m.add_argument("--out", help="without NGVM_SMTP_HOST, write the message there instead")
     m.set_defaults(func=cmd_test_mail)
     k = sub.add_parser("check-sources", help="read every watch source once and report (enabled or not)")
     k.add_argument("--sources", default="config/watch-sources.yaml")

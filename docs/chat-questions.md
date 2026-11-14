@@ -16,7 +16,7 @@ How to ask:
 
 - Dates and times are in the tenant's time zone: « depuis hier 18 h », « entre le 1er et le 31
   octobre », « depuis lundi 9 h ».
-- Name things the way A2VM does: a CVE (`CVE-2024-3094`), an asset as the chat listed it
+- Name things the way NGVM does: a CVE (`CVE-2024-3094`), an asset as the chat listed it
   (`host:web01.lab.example`, or simply `web01`), a level (ACT, ATTEND, TRACK).
 - Long answers come in pages: « la suite », « les 20 suivantes ».
 - Ask for the reason: « pourquoi ? » after a decision gives its justification and its SSVC inputs.
@@ -149,7 +149,7 @@ How to ask:
 
 **`get_platform_status`**: the version of each service and of the latest run, its LLM and cost, the next daily run, collectors late.
 
-- Quelle version d'A2VM tourne sur mon tenant ?
+- Quelle version d'NGVM tourne sur mon tenant ?
 - Le run de ce matin est-il terminé, avec quel LLM, et combien a-t-il coûté ?
 - Combien de temps verdict a-t-il tourné, et sur combien de findings ?
 - Tout est-il à jour ?

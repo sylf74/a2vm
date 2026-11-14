@@ -1,7 +1,7 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """Labels of the alert sheet and of its Word file, per language (v0.17.1).
 
-A2VM writes in English; the sheet is the English reference an analyst validates and enriches.
+NGVM writes in English; the sheet is the English reference an analyst validates and enriches.
 For a contact in another language the sender sends a translation the analyst validated too
 (`translate.py`). Labels written by code (headings, fixed phrases, table headers, Word values) come
 from this catalogue, never from a model: in a language of the catalogue the headings of a

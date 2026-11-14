@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """One-page HTML dashboard of a triage run: self-contained (no script, no external resource), so it
 can be opened from the job artifacts, attached to a mail or published with GitLab Pages.
 
@@ -12,7 +12,7 @@ from __future__ import annotations
 import html
 from collections import Counter, defaultdict
 
-from a2vm.models import TriageRun
+from ngvm.models import TriageRun
 
 from .i18n import has, lang_of, t
 from .priority import counts as sla_counts
@@ -173,7 +173,7 @@ def render_dashboard(run: TriageRun, language: str | None = None) -> str:
     at = run.generated_at[:16].replace("T", " ")
     sub = t(lang, "dash.sub", at=at, cves=run.cve_count, n=len(rows))
     return f"""<!doctype html><html lang="{lang}"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>A2VM — {_e(run.client.name)}</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>NGVM — {_e(run.client.name)}</title>
 <style>{CSS}</style></head><body><main>
 <h1>{_e(t(lang, "dash.title", client=run.client.name))}</h1>
 <p class="sub">{_e(sub)}</p>

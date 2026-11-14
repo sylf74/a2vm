@@ -7,7 +7,7 @@ instance and never pass through Terraform, its state, GitLab or a chat.
 
 ```
 admin_ips ──22, 5432──▶ instance ◀──443── anyone (Caddy: 403 outside admin_ips)
-                        ├─ PostgreSQL (TLS only; writer role for the A2VM jobs)
+                        ├─ PostgreSQL (TLS only; writer role for the NGVM jobs)
                         ├─ Grafana (reads PostgreSQL)
                         └─ Caddy (HTTPS, certificate from Let's Encrypt)
 ```
@@ -33,10 +33,10 @@ Then, as `terraform output next_steps` says:
 1. Create the DNS record `<domain> A <public_ip>` at your DNS provider (not managed here). To keep
    an address already in the DNS, set `ip_address`: Terraform attaches it and never deletes it.
 2. Wait for the first boot: `ssh root@<public_ip> 'cloud-init status --wait'` (about 5 minutes).
-   Logs: `/var/log/cloud-init-output.log`; containers: `podman ps` in `/opt/a2vm-portal`.
+   Logs: `/var/log/cloud-init-output.log`; containers: `podman ps` in `/opt/ngvm-portal`.
 3. Read the writer password and the PostgreSQL certificate once, for the runner's CI/CD variables
-   (masked, protected): `/opt/a2vm-portal/secrets/writer.txt`, `/opt/a2vm-portal/pg/server.crt`.
-4. Grafana: `https://<domain>`, user `admin`, password in `/opt/a2vm-portal/secrets/grafana-admin.txt`.
+   (masked, protected): `/opt/ngvm-portal/secrets/writer.txt`, `/opt/ngvm-portal/pg/server.crt`.
+4. Grafana: `https://<domain>`, user `admin`, password in `/opt/ngvm-portal/secrets/grafana-admin.txt`.
 
 The SSH keys of the Scaleway project are installed on the instance by Scaleway.
 

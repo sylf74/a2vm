@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """v0.13.0 (HLD D15 step 2, LLD detection §8): the detection service, the collector agent that
 pushes to it and the fetch of the daily run."""
 
@@ -14,7 +14,6 @@ from pathlib import Path
 import httpx
 import pytest
 
-from a2vm.io import read_detection, write_detection
 from detect.agent import AgentError, FileImportConnector, RunReport, TargetsConnector, load_config, run
 from detect.cli import main
 from detect.intake.client import IntakeError, fetch, push
@@ -22,6 +21,7 @@ from detect.intake.registry import RegistryError, digest, load_collectors, load_
 from detect.intake.server import Problem, Service, serve
 from detect.intake.store import FileStore
 from detect.scanners import load_trivy_file
+from ngvm.io import read_detection, write_detection
 
 from .conftest import FIXTURES
 
@@ -67,8 +67,8 @@ def _store(tmp_path, dsn, keep):
     """The detection service's store: files, or the tenant's PostgreSQL (v0.18.0)."""
     if dsn is None:
         return FileStore(tmp_path / "store", keep=keep)
-    from a2vm.db import Database
     from detect.intake.pgstore import MIGRATIONS, PgStore
+    from ngvm.db import Database
 
     db = Database(dsn, "detect", MIGRATIONS)
     db.init()
@@ -389,7 +389,7 @@ def test_cli_fetch_reads_sources_and_ages_from_the_declaration(tmp_path, server,
 def test_cli_checks_the_declaration(tmp_path, declaration, capsys):
     assert main(["collectors", str(declaration[0]), "--tenant", "lab"]) == 0
     out = capsys.readouterr().out
-    assert "collector lab-lan (trivy, dnf-updateinfo, max 30 h), token A2VM_COLLECTOR_TOKEN_LAB_LAN" in out
+    assert "collector lab-lan (trivy, dnf-updateinfo, max 30 h), token NGVM_COLLECTOR_TOKEN_LAB_LAN" in out
     empty = tmp_path / "empty.yaml"
     empty.write_text("collectors: []\n")
     assert main(["collectors", str(empty), "--tenant", "lab"]) == 2

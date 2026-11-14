@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """Design of the detection service (LLD detection §8): the OpenAPI contract is well formed, its
 references resolve, and it states the rules of the design (tenant everywhere, token per
 collector, idempotent push of vulnops.detection/1)."""
@@ -9,7 +9,7 @@ from pathlib import Path
 
 import yaml
 
-SCHEMAS = Path(__file__).resolve().parents[1] / "a2vm" / "src" / "a2vm" / "schemas"
+SCHEMAS = Path(__file__).resolve().parents[1] / "ngvm" / "src" / "ngvm" / "schemas"
 SPEC = SCHEMAS / "openapi" / "detect.v1.yaml"
 
 

@@ -1,9 +1,9 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 import json
 
-from a2vm.matching import match_assets
-from a2vm.models import AffectedEntry, DeclaredAsset
-from a2vm.versions import evaluate, version_key
+from ngvm.matching import match_assets
+from ngvm.models import AffectedEntry, DeclaredAsset
+from ngvm.versions import evaluate, version_key
 from via.intel.record import parse_record
 
 from .conftest import FIXTURES

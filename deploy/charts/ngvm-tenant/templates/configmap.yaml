@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ngvm-tenant.name" . }}-config
+  labels:
+    {{- include "ngvm-tenant.labels" . | nindent 4 }}
+data:
+  client.yaml: |
+    {{- required "files.profile is required (--set-file files.profile=client.yaml)" .Values.files.profile | nindent 4 }}
+  {{- if .Values.files.targets }}
+  targets.yaml: |
+    {{- .Values.files.targets | nindent 4 }}
+  {{- end }}
+  {{- if .Values.files.settings }}
+  settings.yaml: |
+    {{- .Values.files.settings | nindent 4 }}
+  {{- end }}
+  {{- if .Values.files.contacts }}
+  contacts.yaml: |
+    {{- .Values.files.contacts | nindent 4 }}
+  {{- end }}
+  {{- if .Values.files.dispatch }}
+  dispatch.yaml: |
+    {{- .Values.files.dispatch | nindent 4 }}
+  {{- end }}
+  {{- if .Values.files.watchSources }}
+  watch-sources.yaml: |
+    {{- .Values.files.watchSources | nindent 4 }}
+  {{- end }}

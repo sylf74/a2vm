@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """Scan coverage of a client (v0.19.0, LLD triage §14.6): what the CMDB says exists, what was
 scanned, by which means and when. Written to `coverage.json` next to assets.json and carried by the
 run into `triage.json` (`coverage`), the decision service and the reporting database.
@@ -26,9 +26,10 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from a2vm.models import Asset, CoveragePolicy
+from ngvm.io import legacy_schema
+from ngvm.models import Asset, CoveragePolicy
 
-SCHEMA = "a2vm.coverage/1"
+SCHEMA = "ngvm.coverage/1"
 STATES = (
     "not-in-cmdb",
     "retired-but-alive",
@@ -140,7 +141,7 @@ def read_coverage(path: str | Path, client_id: str) -> dict[str, Any]:
     path = Path(path)
     if not path.exists():
         return {}
-    data = json.loads(path.read_text(encoding="utf-8"))
+    data = legacy_schema(json.loads(path.read_text(encoding="utf-8")))
     if data.get("schema") != SCHEMA or data.get("client_id") != client_id:
         raise ValueError(f"{path}: not the coverage of {client_id!r}")
     return {k: v for k, v in data.items() if k not in ("schema", "client_id")}

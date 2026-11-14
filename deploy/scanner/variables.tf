@@ -1,8 +1,8 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 variable "name" {
   description = "Instance name (also its host name)."
   type        = string
-  default     = "a2vm-scanner"
+  default     = "ngvm-scanner"
 }
 
 variable "admin_ips" {
@@ -24,7 +24,7 @@ variable "gitlab_url" {
 }
 
 variable "runner_tag" {
-  description = "Tag of the runner: the external project's A2VM_COLLECT_TAG and A2VM_RUNNER_TAG."
+  description = "Tag of the runner: the external project's NGVM_COLLECT_TAG and NGVM_RUNNER_TAG."
   type        = string
   default     = "scan-cloud"
 }

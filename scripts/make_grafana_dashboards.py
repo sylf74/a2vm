@@ -1,5 +1,5 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
-"""Build the A2VM Grafana dashboards (verdict/src/verdict/restitution/grafana/*.json).
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
+"""Build the NGVM Grafana dashboards (verdict/src/verdict/restitution/grafana/*.json).
 
 - overview.json: one client, its latest run and the trend (v0.11.5);
 - assets.json: "which assets to fix first?" - findings (asset x CVE) of a snapshot;
@@ -12,9 +12,9 @@
 
 Each has a French version (`<name>.fr.json`, own uid `<uid>-fr`), translated by code below (v0.17.3).
 They read the reporting database only (PostgreSQL data source, chosen at import). A snapshot is,
-for each client chosen, its latest run on or before a day (a2vm.snapshot_runs); the counters
+for each client chosen, its latest run on or before a day (ngvm.snapshot_runs); the counters
 compare it with an earlier snapshot. Filters are dashboard variables; every label they filter on
-comes from the view a2vm.decision_facts, so the dashboards recompute no rule. Run again after
+comes from the view ngvm.decision_facts, so the dashboards recompute no rule. Run again after
 changing this script; the result is committed.
 """
 
@@ -26,8 +26,8 @@ from pathlib import Path
 
 OUT = Path(__file__).resolve().parents[1] / "verdict" / "src" / "verdict" / "restitution" / "grafana"
 # A copy for the portal chart, which provisions them (Helm reads files of its own folder only).
-PORTAL = Path(__file__).resolve().parents[1] / "deploy" / "charts" / "a2vm-portal" / "dashboards"
-DS = {"type": "grafana-postgresql-datasource", "uid": "${DS_A2VM}"}
+PORTAL = Path(__file__).resolve().parents[1] / "deploy" / "charts" / "ngvm-portal" / "dashboards"
+DS = {"type": "grafana-postgresql-datasource", "uid": "${DS_NGVM}"}
 LEVELS = ("ACT", "ATTEND", "TRACK")
 SEVERITIES = ("Critical", "High", "Medium", "Low", "Unknown")
 LEVEL_COLORS = (("ACT", "red"), ("ATTEND", "orange"), ("TRACK", "blue"))
@@ -211,8 +211,8 @@ def findings_cte(both: bool = True, level_filter: bool = True) -> str:
     return (
         f"WITH snap (ord, snap_day) AS (VALUES {snaps}),\n"
         "f AS (SELECT s.ord, s.snap_day, x.* FROM snap s\n"
-        f"  CROSS JOIN LATERAL a2vm.snapshot_runs({TENANTS}, s.snap_day) r\n"
-        "  JOIN a2vm.decision_facts x ON x.run_id = r.run_id\n"
+        f"  CROSS JOIN LATERAL ngvm.snapshot_runs({TENANTS}, s.snap_day) r\n"
+        "  JOIN ngvm.decision_facts x ON x.run_id = r.run_id\n"
         f"  WHERE {FILTERS}{level})\n"
     )
 
@@ -254,7 +254,7 @@ def matrix_sql(cte: str, rows: str, key: str, kev_only: bool) -> str:
 def day_runs() -> str:
     """For each client chosen and each day, its latest run that day (within the time range)."""
     return (
-        "(SELECT DISTINCT ON (tenant, generated_at::date) run_id FROM a2vm.runs\n"
+        "(SELECT DISTINCT ON (tenant, generated_at::date) run_id FROM ngvm.runs\n"
         f"  WHERE tenant = ANY ({TENANTS}) AND $__timeFilter(generated_at)\n"
         "  ORDER BY tenant, generated_at::date, generated_at DESC) r"
     )
@@ -294,13 +294,13 @@ def custom_var(name: str, label: str, values: tuple[str, ...], desc: str = "") -
 
 SNAPSHOT_DAYS = (
     "SELECT to_char(d, 'DD Mon YYYY') || ' · W' || to_char(d, 'IW') AS __text, d::text AS __value FROM "
-    "(SELECT DISTINCT generated_at::date AS d FROM a2vm.runs WHERE tenant = ANY (" + TENANTS + ")) s "
+    "(SELECT DISTINCT generated_at::date AS d FROM ngvm.runs WHERE tenant = ANY (" + TENANTS + ")) s "
 )
 SNAPSHOT_VARS = [
     query_var(
         "tenant",
         "Client",
-        "SELECT tenant AS __value, tenant_name AS __text FROM a2vm.latest_runs ORDER BY tenant_name",
+        "SELECT tenant AS __value, tenant_name AS __text FROM ngvm.latest_runs ORDER BY tenant_name",
     ),
     query_var(
         "snapshot",
@@ -324,7 +324,7 @@ FILTER_VARS = [
     query_var(
         "scanner",
         "Scanner",
-        "SELECT DISTINCT unnest(sources) FROM a2vm.decision_facts WHERE tenant = ANY (" + TENANTS + ") ORDER BY 1",
+        "SELECT DISTINCT unnest(sources) FROM ngvm.decision_facts WHERE tenant = ANY (" + TENANTS + ") ORDER BY 1",
         desc="Detection sources that observed the finding",
     ),
     custom_var("kev", "Known exploited (KEV)", ("Yes", "No")),
@@ -334,7 +334,7 @@ FILTER_VARS = [
     query_var(
         "ptype",
         "Product type",
-        "SELECT DISTINCT product_type FROM a2vm.decision_facts WHERE tenant = ANY (" + TENANTS + ") ORDER BY 1",
+        "SELECT DISTINCT product_type FROM ngvm.decision_facts WHERE tenant = ANY (" + TENANTS + ") ORDER BY 1",
         desc="CPE part of the vulnerable product: application, os, hardware",
     ),
 ]
@@ -344,8 +344,8 @@ def dashboard(title: str, uid: str, panels: list[dict], variables: list[dict], k
     return {
         "__inputs": [
             {
-                "name": "DS_A2VM",
-                "label": "A2VM reporting database",
+                "name": "DS_NGVM",
+                "label": "NGVM reporting database",
                 "description": "PostgreSQL data source of the reporting database",
                 "type": "datasource",
                 "pluginId": "grafana-postgresql-datasource",
@@ -359,7 +359,7 @@ def dashboard(title: str, uid: str, panels: list[dict], variables: list[dict], k
         ],
         "title": title,
         "uid": uid,
-        "tags": ["a2vm"],
+        "tags": ["ngvm"],
         "timezone": "browser",
         "schemaVersion": 39,
         "version": 1,
@@ -370,11 +370,11 @@ def dashboard(title: str, uid: str, panels: list[dict], variables: list[dict], k
         "links": [
             {
                 "type": "dashboards",
-                "tags": ["a2vm"],
+                "tags": ["ngvm"],
                 "asDropdown": False,
                 "includeVars": True,
                 "keepTime": True,
-                "title": "A2VM",
+                "title": "NGVM",
             }
         ],
         "templating": {"list": variables},
@@ -495,7 +495,7 @@ def assets_dashboard() -> dict:
         trend(
             "Exposures per decision, day after day",
             f"SELECT x.day::timestamptz AS time, {levels}\nFROM {day_runs()}\n"
-            "JOIN a2vm.decision_facts x ON x.run_id = r.run_id\n"
+            "JOIN ngvm.decision_facts x ON x.run_id = r.run_id\n"
             f"WHERE {FILTERS} AND x.level = ANY (ARRAY[${{decision:sqlstring}}]::text[])\nGROUP BY x.day ORDER BY 1",
             "Each day: the findings of each client's latest run that day (dashboard time range).",
         ),
@@ -525,8 +525,8 @@ def assets_dashboard() -> dict:
         12, 24, 12, 8,
     )  # fmt: skip
     return dashboard(
-        "A2VM — which assets to fix first",
-        "a2vm-assets",
+        "NGVM — which assets to fix first",
+        "ngvm-assets",
         b.panels,
         SNAPSHOT_VARS + FILTER_VARS,
         ["text", "stat", "table", "timeseries", "barchart"],
@@ -630,7 +630,7 @@ def cves_dashboard() -> dict:
             "SELECT day::timestamptz AS time, " + levels + "\n"
             "FROM (SELECT x.day, x.cve, (ARRAY['ACT', 'ATTEND', 'TRACK'])[min(x.level_rank)] AS cve_level\n"
             f"  FROM {day_runs()}\n"
-            "  JOIN a2vm.decision_facts x ON x.run_id = r.run_id\n"
+            "  JOIN ngvm.decision_facts x ON x.run_id = r.run_id\n"
             f"  WHERE {FILTERS} GROUP BY x.day, x.cve) x\n"
             "WHERE x.cve_level = ANY (ARRAY[${decision:sqlstring}]::text[])\nGROUP BY day ORDER BY 1",
             "Each day: the CVEs of each client's latest run that day (dashboard time range).",
@@ -661,8 +661,8 @@ def cves_dashboard() -> dict:
         12, 24, 12, 8,
     )  # fmt: skip
     return dashboard(
-        "A2VM — which CVEs to fix first",
-        "a2vm-cves",
+        "NGVM — which CVEs to fix first",
+        "ngvm-cves",
         b.panels,
         SNAPSHOT_VARS + FILTER_VARS,
         ["text", "stat", "table", "timeseries", "barchart"],
@@ -680,7 +680,7 @@ def overview_dashboard() -> dict:
                 "type": "stat",
                 "title": title,
                 "description": desc,
-                "targets": [target(f"SELECT {column} AS value FROM a2vm.latest_runs WHERE tenant = {t}")],
+                "targets": [target(f"SELECT {column} AS value FROM ngvm.latest_runs WHERE tenant = {t}")],
                 "options": {
                     "colorMode": "background",
                     "graphMode": "none",
@@ -706,7 +706,7 @@ def overview_dashboard() -> dict:
         trend(
             "Findings per level, run after run",
             'SELECT generated_at AS time, act AS "ACT", attend AS "ATTEND", track AS "TRACK" '
-            f"FROM a2vm.runs WHERE tenant = {t} AND $__timeFilter(generated_at) ORDER BY 1",
+            f"FROM ngvm.runs WHERE tenant = {t} AND $__timeFilter(generated_at) ORDER BY 1",
             "",
         ),
         0, 4, 14, 8,
@@ -721,7 +721,7 @@ def overview_dashboard() -> dict:
                     "count(*) FILTER (WHERE level = 'ACT') AS \"ACT\", "
                     "count(*) FILTER (WHERE level = 'ATTEND') AS \"ATTEND\", "
                     "count(*) FILTER (WHERE level = 'TRACK') AS \"TRACK\" "
-                    f"FROM a2vm.latest_decisions WHERE tenant = {t} GROUP BY 1 ORDER BY 1"
+                    f"FROM ngvm.latest_decisions WHERE tenant = {t} GROUP BY 1 ORDER BY 1"
                 )
             ],
             "options": {"stacking": "normal", "orientation": "horizontal", "xField": "exposure"},
@@ -733,7 +733,7 @@ def overview_dashboard() -> dict:
         table(
             "Exposure gaps",
             'SELECT name AS "Asset", kind AS "Gap", declared AS "Declared", detail AS "Detail" '
-            f"FROM a2vm.latest_exposure_gaps WHERE tenant = {t} ORDER BY kind, name",
+            f"FROM ngvm.latest_exposure_gaps WHERE tenant = {t} ORDER BY kind, name",
             "Hosts the external scan reaches that the client profile does not describe",
         ),
         0, 12, 24, 5,
@@ -744,7 +744,7 @@ def overview_dashboard() -> dict:
             'SELECT level AS "Level", cve AS "CVE", asset_name AS "Asset", zone AS "Zone", exposure AS "Exposure", '
             'bod_timeline AS "BOD 26-04", due_date AS "Due", kev AS "KEV", round(epss::numeric, 3) AS "EPSS", '
             'needs_review AS "Review", title AS "Vulnerability" '
-            f"FROM a2vm.latest_decisions WHERE tenant = {t} AND level IN ('ACT', 'ATTEND') "
+            f"FROM ngvm.latest_decisions WHERE tenant = {t} AND level IN ('ACT', 'ATTEND') "
             "ORDER BY CASE level WHEN 'ACT' THEN 0 ELSE 1 END, due_date NULLS LAST, cve",
             "",
             [level_text("Level")],
@@ -755,7 +755,7 @@ def overview_dashboard() -> dict:
         table(
             "Assets",
             'SELECT name AS "Asset", zone AS "Zone", exposure AS "Exposure", owner AS "Owner", act AS "ACT", '
-            f'attend AS "ATTEND", track AS "TRACK" FROM a2vm.latest_assets WHERE tenant = {t} '
+            f'attend AS "ATTEND", track AS "TRACK" FROM ngvm.latest_assets WHERE tenant = {t} '
             "ORDER BY act DESC, attend DESC, name",
             "",
         ),
@@ -765,20 +765,20 @@ def overview_dashboard() -> dict:
         table(
             "Detection sources (latest run)",
             'SELECT s.name AS "Source", s.findings AS "Findings", s.last_observation AS "Last observation" '
-            f"FROM a2vm.sources s JOIN a2vm.latest_runs r USING (run_id) WHERE r.tenant = {t} ORDER BY 1",
+            f"FROM ngvm.sources s JOIN ngvm.latest_runs r USING (run_id) WHERE r.tenant = {t} ORDER BY 1",
             "",
         ),
         14, 27, 10, 8,
     )  # fmt: skip
     board = dashboard(
-        "A2VM — overview of a client",
-        "a2vm-decisions",
+        "NGVM — overview of a client",
+        "ngvm-decisions",
         b.panels,
         [
             query_var(
                 "tenant",
                 "Client",
-                "SELECT tenant AS __value, tenant_name AS __text FROM a2vm.latest_runs ORDER BY tenant_name",
+                "SELECT tenant AS __value, tenant_name AS __text FROM ngvm.latest_runs ORDER BY tenant_name",
                 multi=False,
                 all_=False,
             )
@@ -790,7 +790,7 @@ def overview_dashboard() -> dict:
 
 
 # -- remediation (v0.18.1) ------------------------------------------------------------------------
-CLOSURES = "a2vm.finding_closures"
+CLOSURES = "ngvm.finding_closures"
 IN_RANGE = f"tenant = ANY ({TENANTS}) AND $__timeFilter(closed_at)"
 
 
@@ -801,7 +801,7 @@ def in_range(alias: str) -> str:
 
 def remediation_dashboard() -> dict:
     """What was fixed and how fast: findings gone from a run while their asset was scanned again by
-    the source that had seen them (a2vm.finding_closures), and the assets whose scans are missing."""
+    the source that had seen them (ngvm.finding_closures), and the assets whose scans are missing."""
     b = Board()
 
     def stat(title: str, sql: str, x: int, color: str, unit: str = "none", desc: str = "") -> None:
@@ -854,7 +854,7 @@ def remediation_dashboard() -> dict:
     )  # fmt: skip
     stat(
         "Assets not scanned for 7 days",
-        f"SELECT count(*) AS value FROM a2vm.latest_asset_scans WHERE tenant = ANY ({TENANTS}) "
+        f"SELECT count(*) AS value FROM ngvm.latest_asset_scans WHERE tenant = ANY ({TENANTS}) "
         "AND (last_scan IS NULL OR last_scan < generated_at - interval '7 days')",
         16, "dark-orange",
         desc="Assets of the latest run whose last scan is older than 7 days, or unknown.",
@@ -862,7 +862,7 @@ def remediation_dashboard() -> dict:
     stat(
         "Reopened findings",
         f"SELECT count(*) AS value FROM {CLOSURES} c WHERE {in_range('c')} "
-        "AND c.outcome = 'fixed' AND EXISTS (SELECT 1 FROM a2vm.decisions d JOIN a2vm.runs r USING (run_id) "
+        "AND c.outcome = 'fixed' AND EXISTS (SELECT 1 FROM ngvm.decisions d JOIN ngvm.runs r USING (run_id) "
         "WHERE d.tenant = c.tenant AND d.finding_id = c.finding_id AND r.generated_at > c.closed_at)",
         20, "red",
         desc="Findings fixed in the time range and seen again in a later run.",
@@ -913,7 +913,7 @@ def remediation_dashboard() -> dict:
             "SELECT asset_name AS \"Asset\", last_scan AS \"Last scan\", "
             "(SELECT string_agg(k, ', ' ORDER BY k) FROM jsonb_object_keys(coalesce(scans, '{}'::jsonb)) k) "
             "AS \"Sources\", act AS \"ACT\", attend AS \"ATTEND\", track AS \"TRACK\" "
-            f"FROM a2vm.latest_asset_scans WHERE tenant = ANY ({TENANTS}) ORDER BY last_scan NULLS FIRST, asset_name",
+            f"FROM ngvm.latest_asset_scans WHERE tenant = ANY ({TENANTS}) ORDER BY last_scan NULLS FIRST, asset_name",
             "Every asset of the latest run, the least recently scanned first; an asset scanned clean shows "
             "no finding.",
         ),
@@ -931,8 +931,8 @@ def remediation_dashboard() -> dict:
         0, 22, 24, 8,
     )  # fmt: skip
     board = dashboard(
-        "A2VM — remediation",
-        "a2vm-remediation",
+        "NGVM — remediation",
+        "ngvm-remediation",
         b.panels,
         [SNAPSHOT_VARS[0]],
         ["stat", "table", "timeseries"],
@@ -943,7 +943,7 @@ def remediation_dashboard() -> dict:
 
 # -- priorities and SLA of the client (v0.21.0, HLD D19) ------------------------------------------
 LATEST_FACTS = (
-    "a2vm.decision_facts f WHERE f.run_id IN (SELECT run_id FROM a2vm.latest_runs WHERE tenant = ANY (" + TENANTS + "))"
+    "ngvm.decision_facts f WHERE f.run_id IN (SELECT run_id FROM ngvm.latest_runs WHERE tenant = ANY (" + TENANTS + "))"
 )
 
 
@@ -1008,7 +1008,7 @@ def sla_dashboard() -> dict:
     stat(
         "ACT and ATTEND in no priority",
         f"SELECT count(*) AS value FROM {LATEST_FACTS} AND f.priority IS NULL AND f.level IN ('ACT', 'ATTEND') "
-        "AND EXISTS (SELECT 1 FROM a2vm.runs x WHERE x.run_id = f.run_id AND x.sla_overdue IS NOT NULL)",
+        "AND EXISTS (SELECT 1 FROM ngvm.runs x WHERE x.run_id = f.run_id AND x.sla_overdue IS NOT NULL)",
         20, "dark-orange",
         desc="Decisions to remediate that no rule of the client's SLA sorts: their BOD 26-04 due date applies.",
     )  # fmt: skip
@@ -1039,7 +1039,7 @@ def sla_dashboard() -> dict:
             "targets": [
                 target(
                     "SELECT x.generated_at::date::timestamptz AS time, sum(x.sla_overdue) AS \"Overdue\", "
-                    "sum(x.sla_due_soon) AS \"Due within 7 days\" FROM " + day_runs() + " JOIN a2vm.runs x "
+                    "sum(x.sla_due_soon) AS \"Due within 7 days\" FROM " + day_runs() + " JOIN ngvm.runs x "
                     "USING (run_id) WHERE x.sla_overdue IS NOT NULL GROUP BY 1 ORDER BY 1",
                     "time_series",
                 )
@@ -1108,8 +1108,8 @@ def sla_dashboard() -> dict:
         8, 30, 16, 8,
     )  # fmt: skip
     board = dashboard(
-        "A2VM — priorities and SLA",
-        "a2vm-sla",
+        "NGVM — priorities and SLA",
+        "ngvm-sla",
         b.panels,
         [SNAPSHOT_VARS[0]],
         ["stat", "table", "timeseries"],
@@ -1119,7 +1119,7 @@ def sla_dashboard() -> dict:
 
 
 # -- assets and scan coverage (v0.19.0) -----------------------------------------------------------
-COVERAGE = "a2vm.latest_coverage"
+COVERAGE = "ngvm.latest_coverage"
 IN_TENANT = f"tenant = ANY ({TENANTS})"
 # Means of detection shown as columns, with the last date each saw the asset; any other source is
 # listed in "Other means" (an EDR, a new scanner) until it gets its own column.
@@ -1154,7 +1154,7 @@ def state_text(name: str) -> dict:
 
 
 def coverage_dashboard() -> dict:
-    """What exists (the CMDB), what was scanned, by which means and when (a2vm.latest_coverage)."""
+    """What exists (the CMDB), what was scanned, by which means and when (ngvm.latest_coverage)."""
     b = Board()
 
     def stat(title: str, sql: str, x: int, color: str, desc: str, unit: str = "none") -> None:
@@ -1241,15 +1241,15 @@ def coverage_dashboard() -> dict:
         trend(
             "Covered share, run after run",
             "SELECT generated_at AS time, 100.0 * covered_assets / nullif(expected_assets, 0) AS \"Covered\" "
-            f"FROM a2vm.runs WHERE {IN_TENANT} AND expected_assets IS NOT NULL AND $__timeFilter(generated_at) "
+            f"FROM ngvm.runs WHERE {IN_TENANT} AND expected_assets IS NOT NULL AND $__timeFilter(generated_at) "
             "ORDER BY generated_at",
             "Share of the assets in production that are covered, at each run (dashboard time range).",
         ),
         14, 16, 10, 8,
     )  # fmt: skip
     board = dashboard(
-        "A2VM — assets and scan coverage",
-        "a2vm-coverage",
+        "NGVM — assets and scan coverage",
+        "ngvm-coverage",
         b.panels,
         [
             SNAPSHOT_VARS[0],
@@ -1273,7 +1273,7 @@ def coverage_dashboard() -> dict:
 FR_TEXT = {
     "": "",
     # priorities and SLA (v0.21.0)
-    "A2VM — priorities and SLA": "A2VM — priorités et SLA",
+    "NGVM — priorities and SLA": "NGVM — priorités et SLA",
     "ACT and ATTEND in no priority": "ACT et ATTEND sans priorité",
     "By priority": "Par priorité",
     "Decisions of the latest run in a priority of the client's SLA.": "Décisions du dernier run dans une priorité du "
@@ -1322,11 +1322,11 @@ FR_TEXT = {
     " du tableau de bord).",
     "The same findings against their BOD 26-04 due date, for comparison.": "Les mêmes constats rapportés à leur "
     "échéance BOD 26-04, pour comparaison.",
-    "A2VM": "A2VM",
-    "A2VM — overview of a client": "A2VM — vue d'ensemble d'un client",
-    "A2VM — which CVEs to fix first": "A2VM — quelles CVE corriger d'abord",
-    "A2VM — which assets to fix first": "A2VM — quels actifs corriger d'abord",
-    "A2VM reporting database": "Base de restitution A2VM",
+    "NGVM": "NGVM",
+    "NGVM — overview of a client": "NGVM — vue d'ensemble d'un client",
+    "NGVM — which CVEs to fix first": "NGVM — quelles CVE corriger d'abord",
+    "NGVM — which assets to fix first": "NGVM — quels actifs corriger d'abord",
+    "NGVM reporting database": "Base de restitution NGVM",
     "ACT": "ACT",
     "ATTEND": "ATTEND",
     "TRACK": "TRACK",
@@ -1437,7 +1437,7 @@ FR_TEXT = {
     "The same findings, limited to CVEs listed in CISA KEV.": "Les mêmes constats, limités aux CVE du catalogue "
     "CISA KEV.",
     "To review": "À revoir",
-    "A2VM — remediation": "A2VM — remédiation",
+    "NGVM — remediation": "NGVM — remédiation",
     "Fixed findings": "Constats corrigés",
     "Findings gone from a run while their asset was scanned again by the source that had seen them "
     "(dashboard time range).": "Constats disparus d'un run alors que leur actif a été scanné à nouveau par la "
@@ -1475,7 +1475,7 @@ FR_TEXT = {
     "Findings gone while their asset was not scanned again: check the scans of these assets.": "Constats "
     "disparus sans nouveau scan de leur actif : vérifier les scans de ces actifs.",
     "… of which known exploited (KEV)": "… dont exploitées (KEV)",
-    "A2VM — assets and scan coverage": "A2VM — actifs et couverture des scans",
+    "NGVM — assets and scan coverage": "NGVM — actifs et couverture des scans",
     "Covered": "Couverts",
     "Share of the assets in production in the CMDB that every expected means of detection saw within the "
     "tenant's stale_days (latest run).": "Part des actifs en production dans la CMDB que chaque moyen de "
@@ -1655,7 +1655,7 @@ def french(board: dict) -> dict:
 
 # -- RSSI versions (D18, v0.20.0) -----------------------------------------------------------------
 # The same dashboard with links "Remediate" to the page of the requests of pillar 4: a dashboard
-# shows, A2VM acts. The address of the page is a constant asked at import (dispatch_url). Imported in
+# shows, NGVM acts. The address of the page is a constant asked at import (dispatch_url). Imported in
 # a folder for the persons who may ask for remediation; the reading version stays as it is.
 RSSI = {
     "remediation": ("Assets by last scan",),
@@ -1693,7 +1693,7 @@ def rssi(board: dict, name: str, language: str) -> dict:
             "type": "constant",
             "label": t["label"],
             "value": "https://dispatch.example.org",
-            "description": "https://<host of A2VM_DISPATCH_HOST>",
+            "description": "https://<host of NGVM_DISPATCH_HOST>",
         }  # fmt: skip
     )
     out["templating"]["list"].append(

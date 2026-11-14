@@ -1,6 +1,6 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """The dispatch service of a tenant (`dispatch serve`, LLD dispatch §6; contract
-a2vm/schemas/openapi/dispatch.v1.yaml).
+ngvm/schemas/openapi/dispatch.v1.yaml).
 
 Plain HTTP inside the cluster, one service per tenant namespace. Roles: `run` (the daily run asks
 it to process the newest run of the decision service) and `read` (tools: tickets and requests).
@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, parse_qsl, unquote, urlsplit
 
-from a2vm.service import JsonHandler, Problem, TokenSet
+from ngvm.service import JsonHandler, Problem, TokenSet
 
 from .connectors import make
 from .decisions import Decisions

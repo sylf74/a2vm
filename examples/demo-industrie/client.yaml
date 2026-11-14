@@ -1,4 +1,4 @@
-# Fictitious client for the first A2VM run in a new GitLab: real products, invented company,
+# Fictitious client for the first NGVM run in a new GitLab: real products, invented company,
 # names and addresses. No scanner yet: every asset is declared and matched against the CVE
 # records by vendor, product and version (detect inventory). Replace it with a real tenant later.
 

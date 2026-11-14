@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """Google Threat Intelligence (GTI, VirusTotal API v3) enrichment of vulnerability records.
 
 One lookup per CVE: GET {gti_url}/collections/vulnerability--cve-yyyy-nnnn, header x-apikey. Only
@@ -11,7 +11,7 @@ analysts only: it is licensed content, so it is neither sent to the LLM nor copi
 deliverables.
 
 Access needs a GTI Enterprise or Enterprise Plus licence. Disabled unless sources.gti_enabled
-(or A2VM_GTI_ENABLED=true) and the API key variable (GTI_API_KEY by default) is set.
+(or NGVM_GTI_ENABLED=true) and the API key variable (GTI_API_KEY by default) is set.
 """
 
 from __future__ import annotations
@@ -21,8 +21,8 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
-from a2vm.gti import gti_unconfirmed, ssvc_exploitation  # noqa: F401  (re-exported)
-from a2vm.models import VulnRecord
+from ngvm.gti import gti_unconfirmed, ssvc_exploitation  # noqa: F401  (re-exported)
+from ngvm.models import VulnRecord
 
 from .sources import SourceAuthError, SourceError, Sources
 

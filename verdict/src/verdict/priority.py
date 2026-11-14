@@ -1,8 +1,8 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """The client's priorities and SLA on the decisions of a run (HLD D19, v0.21.0; LLD §17).
 
 After the SSVC decision and the policy have set each level, the rules of the profile's `sla` section
-sort the decisions into the client's priorities (`a2vm.sla`): the first rule that matches gives the
+sort the decisions into the client's priorities (`ngvm.sla`): the first rule that matches gives the
 priority and its delay. The start of the delay comes from the state of the tenant's database before
 this run (`verdict sla-state`, a file given with `verdict run --sla-state`): the day the decision
 entered its priority. Without that state (GitLab pipeline mode, decision service not reached), the
@@ -17,10 +17,11 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from a2vm import sla
-from a2vm.models import TriageRow, TriageRun
+from ngvm import sla
+from ngvm.io import legacy_schema
+from ngvm.models import TriageRow, TriageRun
 
-STATE = "a2vm.sla_state/1"
+STATE = "ngvm.sla_state/1"
 
 
 class StateError(ValueError):
@@ -50,7 +51,8 @@ def _local_day(value: Any, timezone: str) -> dt.date | None:
 
 
 def read_state_data(data: dict[str, Any], tenant: str, timezone: str = "UTC") -> dict[str, sla.Previous]:
-    """The same from the answer of the decision service (`a2vm.sla_state/1`)."""
+    """The same from the answer of the decision service (`ngvm.sla_state/1`)."""
+    legacy_schema(data)
     if data.get("schema") != STATE or data.get("tenant") != tenant:
         raise StateError(f"not a state {STATE} of the tenant {tenant!r}")
     out: dict[str, sla.Previous] = {}

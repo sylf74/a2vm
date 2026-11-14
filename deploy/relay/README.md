@@ -11,10 +11,10 @@ https://relay.example.org/raw.githubusercontent.com/<path>  -> https://raw.githu
 ```
 
 - **Not a forward proxy, not a tunnel**: no CONNECT, no destination outside `hosts`, GET and HEAD only.
-- **Its own token**: header `X-A2VM-Relay-Token`, generated on the instance, removed before the
+- **Its own token**: header `X-NGVM-Relay-Token`, generated on the instance, removed before the
   request goes upstream and from Caddy's log. Requests from outside `allowed_ips` get 403.
 - **No credentials through it**: a request carrying `Authorization` or `X-Apikey` is refused (400).
-  GTI, Microsoft Graph, Teams, the LLM go direct or through the corporate proxy. A2VM never sends
+  GTI, Microsoft Graph, Teams, the LLM go direct or through the corporate proxy. NGVM never sends
   them to the relay anyway.
 - **Declared to the SOC** with the list of hosts (`terraform output next_steps`).
 
@@ -44,10 +44,10 @@ CI/CD variables of the group of the tenants (or of a tenant):
 
 | Variable | Value |
 | --- | --- |
-| `A2VM_RELAY_URL` | `https://relay.example.org` |
-| `A2VM_RELAY_HOSTS` | the hosts of `hosts`, comma-separated (the output gives them) |
-| `A2VM_RELAY_TOKEN` | the token, masked |
-| `A2VM_HTTPS_PROXY` | when the relay itself is reached through the corporate proxy |
+| `NGVM_RELAY_URL` | `https://relay.example.org` |
+| `NGVM_RELAY_HOSTS` | the hosts of `hosts`, comma-separated (the output gives them) |
+| `NGVM_RELAY_TOKEN` | the token, masked |
+| `NGVM_HTTPS_PROXY` | when the relay itself is reached through the corporate proxy |
 
 Kubernetes: `deploy-k8s` puts them into the tenant's Secret and values; GitLab mode: the jobs read
 them from the environment. Then `via check-sources` shows the route of each source
@@ -55,6 +55,6 @@ them from the environment. Then `via check-sources` shows the route of each sour
 
 ## Another host
 
-Add it to `hosts` (and to `A2VM_RELAY_HOSTS`), then `terraform apply`: the instance is rebuilt with
+Add it to `hosts` (and to `NGVM_RELAY_HOSTS`), then `terraform apply`: the instance is rebuilt with
 the new Caddyfile and keeps its address when `ip_address` is set. Or edit
-`/opt/a2vm-relay/Caddyfile` on the instance and `podman-compose restart` (lost at the next rebuild).
+`/opt/ngvm-relay/Caddyfile` on the instance and `podman-compose restart` (lost at the next rebuild).

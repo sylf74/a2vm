@@ -6,15 +6,15 @@ validates it for sending or dismisses it. Their rights come from the directory's
 
 | Group | Chat | Review page |
 | --- | --- | --- |
-| Readers (`A2VM_OIDC_READERS`) | Yes | Read the alerts and their sheets |
-| Validators (`A2VM_OIDC_VALIDATORS`) | Yes | Also enrich the English reference, choose the recipients, check and correct the translations, validate (the sender mails each language its version within a minute) and dismiss |
-| Admins (`A2VM_OIDC_ADMINS`, optional) | Admin of Open WebUI | — |
-| Remediators (`A2VM_OIDC_REMEDIATORS`, v0.20.0) | — | — ; the page of the requests for remediation of pillar 4 (`docs/dispatch.md`), from the links of the RSSI dashboards |
+| Readers (`NGVM_OIDC_READERS`) | Yes | Read the alerts and their sheets |
+| Validators (`NGVM_OIDC_VALIDATORS`) | Yes | Also enrich the English reference, choose the recipients, check and correct the translations, validate (the sender mails each language its version within a minute) and dismiss |
+| Admins (`NGVM_OIDC_ADMINS`, optional) | Admin of Open WebUI | — |
+| Remediators (`NGVM_OIDC_REMEDIATORS`, v0.20.0) | — | — ; the page of the requests for remediation of pillar 4 (`docs/dispatch.md`), from the links of the RSSI dashboards |
 | Anyone else | Refused | Refused |
 
 ```mermaid
 flowchart LR
-  analyst["Analyst<br/>browser"] -- "HTTPS" --> proxy["oauth2-proxy<br/>a2vm-&lt;tenant&gt;-review"]
+  analyst["Analyst<br/>browser"] -- "HTTPS" --> proxy["oauth2-proxy<br/>ngvm-&lt;tenant&gt;-review"]
   proxy -- "sign-in (OIDC)" --> idp["Identity provider<br/>e.g. Keycloak"]
   proxy -- "who, groups" --> page["Review page<br/>via serve :8081"]
   page -- "validated" --> journal["Journal of the alerts"]
@@ -23,10 +23,10 @@ flowchart LR
 ```
 
 Keycloak is described here; any provider with OIDC discovery and a groups claim works the same way.
-Nothing in A2VM depends on Keycloak.
+Nothing in NGVM depends on Keycloak.
 
 A platform for development whose company gives no client: a development provider in the
-namespace, made by `deploy-k8s` (`A2VM_DEV_IDP_HOST`, v0.23.15, `docs/dev-idp.md`).
+namespace, made by `deploy-k8s` (`NGVM_DEV_IDP_HOST`, v0.23.15, `docs/dev-idp.md`).
 
 ## 1. Keycloak: the client of the tenant
 
@@ -34,18 +34,18 @@ In the realm linked to the directory (Active Directory through *User federation*
 
 1. *User federation* > the LDAP provider: **Trust Email** on (the directory's e-mails are taken as
    verified: oauth2-proxy refuses an unverified e-mail), and a **group-ldap-mapper** that brings
-   the A2VM groups (the readers' and the validators'), *Mode* `READ_ONLY`.
-2. *Clients* > *Create client*: type OpenID Connect, client ID `a2vm-<tenant>`; *Client
+   the NGVM groups (the readers' and the validators'), *Mode* `READ_ONLY`.
+2. *Clients* > *Create client*: type OpenID Connect, client ID `ngvm-<tenant>`; *Client
    authentication* on; *Standard flow* on; *Direct access grants* off.
 3. *Valid redirect URIs*: `https://<chat host>/oauth/oidc/callback` and
    `https://<review host>/oauth2/callback`; *Web origins*: the two `https://<host>`;
    *Valid post logout redirect URIs*: `https://<chat host>/*`.
 4. *Advanced* > *Proof Key for Code Exchange Code Challenge Method*: `S256`.
-5. *Client scopes* > `a2vm-<tenant>-dedicated` > *Add mapper* > *By configuration* > **Group
+5. *Client scopes* > `ngvm-<tenant>-dedicated` > *Add mapper* > *By configuration* > **Group
    Membership**: name and *Token Claim Name* `groups`, **Full group path off**, *Add to ID token*,
    *Add to access token* and *Add to userinfo* on.
 6. *Credentials*: copy the client secret straight into the GitLab variable
-   `A2VM_OIDC_CLIENT_SECRET` (§2); it is never written elsewhere.
+   `NGVM_OIDC_CLIENT_SECRET` (§2); it is never written elsewhere.
 
 Check with a member of each group: *Clients* > the client > *Client scopes* > *Evaluate*, user,
 *Generated ID token*: `email`, `email_verified: true` and `groups: ["<group>"]` are there.
@@ -54,23 +54,23 @@ Check with a member of each group: *Clients* > the client > *Client scopes* > *E
 
 | Key | Value | Options |
 | --- | --- | --- |
-| `A2VM_OIDC_ISSUER` | Issuer URL, e.g. `https://auth.example.org/realms/a2vm` (Keycloak: the realm's URL) | Visible |
-| `A2VM_OIDC_CLIENT_ID` | `a2vm-<tenant>` | Visible |
-| `A2VM_OIDC_CLIENT_SECRET` | The client secret | Masked, protected |
-| `A2VM_OIDC_READERS` | Groups that use the chat and read the alerts, comma-separated | Visible |
-| `A2VM_OIDC_VALIDATORS` | Groups that also correct, validate and send | Visible |
-| `A2VM_OIDC_ADMINS` | Optional: groups that administer the chat; empty: the local admin of `docs/chat.md` §3 stays the only one, with the login form | Visible |
-| `A2VM_OIDC_CA` | Optional: the CA of the provider's certificate, when it is not public | File |
-| `A2VM_OIDC_EGRESS` | Optional: `cidr:port,...` of the provider, when the job cannot resolve its host | Visible |
-| `A2VM_OIDC_IN_CLUSTER` | Optional: `true` when the provider runs in the cluster behind its ingress controller | Visible |
-| `A2VM_ALERTS_HOST` | Host of the review page (with `A2VM_RUN_MODE: kubernetes`) | Visible |
-| `A2VM_OIDC_REMEDIATORS` | Groups that may ask for remediation from a dashboard (v0.20.0, with `A2VM_DISPATCH_HOST`, `docs/dispatch.md`); their redirect URI `https://<dispatch host>/oauth2/callback` goes with the others of step 3 | Visible |
-| `A2VM_ALERTS_ALLOW` | Optional: the analysts' networks (CIDR) | Visible |
+| `NGVM_OIDC_ISSUER` | Issuer URL, e.g. `https://auth.example.org/realms/ngvm` (Keycloak: the realm's URL) | Visible |
+| `NGVM_OIDC_CLIENT_ID` | `ngvm-<tenant>` | Visible |
+| `NGVM_OIDC_CLIENT_SECRET` | The client secret | Masked, protected |
+| `NGVM_OIDC_READERS` | Groups that use the chat and read the alerts, comma-separated | Visible |
+| `NGVM_OIDC_VALIDATORS` | Groups that also correct, validate and send | Visible |
+| `NGVM_OIDC_ADMINS` | Optional: groups that administer the chat; empty: the local admin of `docs/chat.md` §3 stays the only one, with the login form | Visible |
+| `NGVM_OIDC_CA` | Optional: the CA of the provider's certificate, when it is not public | File |
+| `NGVM_OIDC_EGRESS` | Optional: `cidr:port,...` of the provider, when the job cannot resolve its host | Visible |
+| `NGVM_OIDC_IN_CLUSTER` | Optional: `true` when the provider runs in the cluster behind its ingress controller | Visible |
+| `NGVM_ALERTS_HOST` | Host of the review page (with `NGVM_RUN_MODE: kubernetes`) | Visible |
+| `NGVM_OIDC_REMEDIATORS` | Groups that may ask for remediation from a dashboard (v0.20.0, with `NGVM_DISPATCH_HOST`, `docs/dispatch.md`); their redirect URI `https://<dispatch host>/oauth2/callback` goes with the others of step 3 | Visible |
+| `NGVM_ALERTS_ALLOW` | Optional: the analysts' networks (CIDR) | Visible |
 
-The ingress controller, class and certificate issuer are the chat's (`A2VM_CHAT_*`, else
-`A2VM_INTAKE_*`); `A2VM_ALERTS_TLS_SECRET` names a certificate of its own. `deploy-k8s` makes
+The ingress controller, class and certificate issuer are the chat's (`NGVM_CHAT_*`, else
+`NGVM_INTAKE_*`); `NGVM_ALERTS_TLS_SECRET` names a certificate of its own. `deploy-k8s` makes
 the key of oauth2-proxy's cookie and the key of the page's forms once and keeps them in the Secret
-`a2vm-tenant` (`oidc-cookie-secret`, `review-key`), with `oidc-client-secret` and `oidc-ca`.
+`ngvm-tenant` (`oidc-cookie-secret`, `review-key`), with `oidc-client-secret` and `oidc-ca`.
 
 ## 3. Deploy and check
 
@@ -78,9 +78,9 @@ Push the project (or *Run pipeline*): `deploy-k8s` prints the issuer, the groups
 provider is (`sign-in: …`), and the review page's address. Then:
 
 ```bash
-NS=a2vm-lab
+NS=ngvm-lab
 kubectl -n $NS get deploy,ingress -l 'app.kubernetes.io/component in (review,send,chat)'
-kubectl -n $NS logs deploy/a2vm-lab-review --tail=20
+kubectl -n $NS logs deploy/ngvm-lab-review --tail=20
 ```
 
 - **Chat**: the sign-in page shows the provider's button; a reader or a validator gets in, anyone
@@ -92,7 +92,7 @@ kubectl -n $NS logs deploy/a2vm-lab-review --tail=20
   After a validation the sender's log shows the sending within a minute:
 
   ```bash
-  kubectl -n $NS logs deploy/a2vm-lab-sender --tail=20
+  kubectl -n $NS logs deploy/ngvm-lab-sender --tail=20
   ```
 
 - **Analysts' mail**: the link of each alert opens it on the review page.
@@ -110,5 +110,5 @@ kubectl -n $NS logs deploy/a2vm-lab-review --tail=20
 | Sending | Only the sender mails, only validated alerts, once; the page and `via serve` hold no mail secret |
 | Accounts | Open WebUI never joins a provider account to an existing local account by its e-mail |
 
-Without `A2VM_ALERTS_HOST`, the analysts' mail keeps the link to the prefilled GitLab pipeline
-(`docs/kubernetes.md` §4); without `A2VM_OIDC_ISSUER`, the chat keeps its local accounts.
+Without `NGVM_ALERTS_HOST`, the analysts' mail keeps the link to the prefilled GitLab pipeline
+(`docs/kubernetes.md` §4); without `NGVM_OIDC_ISSUER`, the chat keeps its local accounts.

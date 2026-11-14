@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """Retention of the analysts' chats (HLD §8, LLD triage-prioritization §16.7), `verdict chat-retention`.
 
 Runs next to Open WebUI, in its pod, on its database (SQLite on the chat's volume): every hour,

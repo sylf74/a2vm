@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """Where the detection service keeps what it accepted (LLD detection §8.2).
 
 v0.13.0 keeps the detections on a volume, one folder per tenant and source; since v0.18.0 the

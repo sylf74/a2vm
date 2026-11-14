@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """Restitution commands of verdict (pillar 3): the reporting database and its dashboards.
 
   verdict publish reporting.json …          load a run's reporting dataset into the reporting database (jobs)
@@ -9,8 +9,8 @@
                                             --language fr for its French version; --rssi (remediation,
                                             coverage, sla) for the version with the links "Remediate" (D18)
 
-The jobs read the connection from A2VM_REPORTING_DSN and the server's certificate from
-A2VM_REPORTING_CA. Exit codes: 0 done, 2 bad input, 3 database unreachable or refused (warning).
+The jobs read the connection from NGVM_REPORTING_DSN and the server's certificate from
+NGVM_REPORTING_CA. Exit codes: 0 done, 2 bad input, 3 database unreachable or refused (warning).
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ def cmd_publish(args: argparse.Namespace) -> int:
         print(exc, file=sys.stderr)
         return 2
     if not where:
-        print("no reporting database: --dsn or the CI/CD variable A2VM_REPORTING_DSN", file=sys.stderr)
+        print("no reporting database: --dsn or the CI/CD variable NGVM_REPORTING_DSN", file=sys.stderr)
         return 2
     rc = 0
     for path in paths:
@@ -123,7 +123,7 @@ def _declared_fixes(args: argparse.Namespace, tenant: str) -> list[dict] | None:
         token = Path(args.dispatch_token_file).read_text(encoding="utf-8").strip()
         r = httpx.get(
             f"{args.dispatch_url.rstrip('/')}/v1/tenants/{tenant}/fixes",
-            headers={"Authorization": f"Bearer {token}", "User-Agent": "a2vm-publish"},
+            headers={"Authorization": f"Bearer {token}", "User-Agent": "ngvm-publish"},
             timeout=30.0,
         )
         r.raise_for_status()
@@ -141,7 +141,7 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser("publish", help="load reporting datasets into the reporting database")
     p.add_argument("datasets", nargs="+", help="reporting.json files (output/<tenant>/reporting.json)")
-    p.add_argument("--dsn", help="connection string (default: A2VM_REPORTING_DSN)")
+    p.add_argument("--dsn", help="connection string (default: NGVM_REPORTING_DSN)")
     p.add_argument("--dispatch-url", default="", help="dispatch service, for the fixes declared in the ITSM (v0.22.2)")
     p.add_argument("--dispatch-token-file", default="", help="read token of the dispatch service")
     p.set_defaults(func=cmd_publish)
@@ -150,7 +150,7 @@ def main(argv: list[str] | None = None) -> int:
     dsub = d.add_subparsers(dest="action", required=True)
     i = dsub.add_parser("init", help="create or update the schema")
     i.add_argument("--dsn", help="administrator connection string")
-    i.add_argument("--writer", default="a2vm_writer", help="role that owns the tables and the jobs write with")
+    i.add_argument("--writer", default="ngvm_writer", help="role that owns the tables and the jobs write with")
     i.set_defaults(func=cmd_db_init)
     g = dsub.add_parser("grant", help="reading role for a dashboarding tool, limited to tenants")
     g.add_argument("role")

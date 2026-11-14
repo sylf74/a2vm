@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """Who may push and read: the collectors a tenant declares, and the digests of their tokens.
 
 The tenant project declares its collectors in collectors.yaml (LLD detection §8.3):

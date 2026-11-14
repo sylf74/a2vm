@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """Documents of the conversational search (LLD triage-prioritization §16.6): Word, PowerPoint and
 CSV built from the decision service's data, never written by the model.
 
@@ -176,7 +176,7 @@ def _pptx(meta: dict[str, Any], items: list[dict[str, Any]], details: list[dict[
     prs = Presentation()
     prs.slide_width, prs.slide_height = PCm(33.867), PCm(19.05)  # 16:9
     title = prs.slides.add_slide(prs.slide_layouts[0])
-    title.shapes.title.text = f"A2VM — {meta['tenant']}"
+    title.shapes.title.text = f"NGVM — {meta['tenant']}"
     title.placeholders[1].text = "\n".join(_header_lines(meta, lang))
     for p in title.placeholders[1].text_frame.paragraphs:
         for r in p.runs:

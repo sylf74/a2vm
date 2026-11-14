@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """What pillar 4 does with a run and with a request (LLD dispatch §3).
 
 After each run (`process_run`):
@@ -13,7 +13,7 @@ same way, shown, then sent on confirmation, recorded with who asked.
 
 In dry-run nothing reaches a tool: the tickets stay `proposed`. In live mode, each run sends again
 the tickets left `proposed`: those of the rules when their decisions still match them, and those a
-person asked for (v0.23.3), with the findings still open, dropped when none is left. A2VM never
+person asked for (v0.23.3), with the findings still open, dropped when none is left. NGVM never
 takes the tool's word for a fix: only the decision service's closed findings (a scan confirmed)
 close a finding.
 """
@@ -231,7 +231,7 @@ class Dispatcher:
                 old.comment = new.comment or old.comment
             self._send(old, at, summary)
         elif added:
-            text = "A2VM: new findings for this fix: " + ", ".join(f"{f.cve} ({f.level})" for f in added)
+            text = "NGVM: new findings for this fix: " + ", ".join(f"{f.cve} ({f.level})" for f in added)
             self._write(old, text, at, summary, "findings added")
             summary["updated"] += 1
         self.store.put(old)
@@ -273,7 +273,7 @@ class Dispatcher:
             else:
                 f.state = "unverified"  # absent, its asset not scanned again: not a fix
         if fixed_now:
-            text = "A2VM: fixed, confirmed by a scan: " + ", ".join(f"{f.cve} ({f.fixed_at})" for f in fixed_now)
+            text = "NGVM: fixed, confirmed by a scan: " + ", ".join(f"{f.cve} ({f.fixed_at})" for f in fixed_now)
             self._write(t, text, at, summary, "findings fixed")
         if not t.open_findings:
             t.state = "fixed"
@@ -285,7 +285,7 @@ class Dispatcher:
                     if view == CLOSED:  # the team had resolved it: its date, now confirmed by the scan
                         self._declared(t, at)
                     if view != CLOSED:
-                        text = "A2VM: every vulnerability of this ticket is fixed, a scan confirmed."
+                        text = "NGVM: every vulnerability of this ticket is fixed, a scan confirmed."
                         self.connector(t.target).resolve(External(**t.external), text)
                 except ConnectorError as exc:
                     t.error = str(exc)
@@ -311,7 +311,7 @@ class Dispatcher:
             still = ", ".join(f.cve for f in t.open_findings)
             t.state = "claimed-fixed"
             summary["claimed_fixed"] += 1
-            text = f"A2VM: closed here, but the last scan still sees {still}."
+            text = f"NGVM: closed here, but the last scan still sees {still}."
             t.event(at, "claimed fixed", text=text)
             if self.rules.reopen_when_still_seen:
                 try:
@@ -342,7 +342,7 @@ class Dispatcher:
             t.event(at, "declared fixed", declared=when)
 
     def _push_due(self, t: tk.Ticket, at: str, summary: dict[str, int]) -> None:
-        """A2VM's due date into the ticket's field, when the target has one and it changed (v0.22.2)."""
+        """NGVM's due date into the ticket's field, when the target has one and it changed (v0.22.2)."""
         write = getattr(self.connector(t.target), "set_due", None)
         if write is None or not t.due or t.due == t.due_pushed:
             return

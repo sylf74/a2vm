@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """Package advisories of a CVE (D20, v0.23.0): which source packages of which distribution are
 affected, and from which version they are fixed, read by CVE id only (no client data leaves):
 
@@ -10,7 +10,7 @@ affected, and from which version they are fixed, read by CVE id only (no client 
 
 Each advisory becomes one entry of `VulnRecord.packages`: {distro (rhel:9, debian:12,
 ubuntu:22.04), name (the source package), introduced, fixed, last_affected, state (fixed, affected,
-investigating, not_affected), advisory, url, source}. Matched against the hosts' packages by `a2vm.packages`.
+investigating, not_affected), advisory, url, source}. Matched against the hosts' packages by `ngvm.packages`.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from a2vm.packages import AFFECTED, FIXED, INVESTIGATING, NOT_AFFECTED, rpm_compare
+from ngvm.packages import AFFECTED, FIXED, INVESTIGATING, NOT_AFFECTED, rpm_compare
 
 SOURCES = ("redhat", "debian", "ubuntu")
 _RHEL_CPE = re.compile(r"^cpe:/[ao]:redhat:enterprise_linux:(\d+)(?::|$)")

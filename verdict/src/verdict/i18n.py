@@ -1,6 +1,6 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """Labels of pillar 3's deliverables per language (v0.17.3, HLD D16): the daily report, the HTML
-dashboard, the chat's documents. A2VM writes in English; a client whose profile says
+dashboard, the chat's documents. NGVM writes in English; a client whose profile says
 `client.language: fr` gets its deliverables with French labels. Labels are written by code from
 this catalogue, never by a model; free texts (rationales, review reasons) stay in English, as the
 analysts validated them. The Grafana dashboards have their own French version (verdict grafana).
@@ -127,8 +127,8 @@ LABELS: dict[str, dict[str, str]] = {
         "x.rationale_source": "Source of the rationale",
         "x.total": "{n} decision(s): {counts}",
         "x.limited": "Document limited to the first {n} decisions, the most urgent.",
-        "x.method": "Decisions taken by A2VM's SSVC policy; rationales marked by their source.",
-        "x.title": "A2VM — {tenant} — decisions",
+        "x.method": "Decisions taken by NGVM's SSVC policy; rationales marked by their source.",
+        "x.title": "NGVM — {tenant} — decisions",
         "x.run": "Run {run} of {at} (UTC)",
         "x.filters": "Filters: {filters}",
         "x.explain": "Explanation of the most urgent decisions",
@@ -277,8 +277,8 @@ LABELS: dict[str, dict[str, str]] = {
         "x.rationale_source": "Source de la justification",
         "x.total": "{n} décision(s) : {counts}",
         "x.limited": "Document limité aux {n} premières décisions, les plus urgentes.",
-        "x.method": "Décisions prises par la politique SSVC d'A2VM ; justifications marquées selon leur source.",
-        "x.title": "A2VM — {tenant} — décisions",
+        "x.method": "Décisions prises par la politique SSVC d'NGVM ; justifications marquées selon leur source.",
+        "x.title": "NGVM — {tenant} — décisions",
         "x.run": "Run {run} du {at} (UTC)",
         "x.filters": "Filtres : {filters}",
         "x.explain": "Explication des décisions les plus urgentes",

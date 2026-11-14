@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """Journal of the alerts: one JSON line per event, kept between runs.
 
 GitLab keeps no history of the alerts: each watch is a job of its own whose artifacts expire. The

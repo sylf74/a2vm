@@ -1,8 +1,8 @@
 {
   "__inputs": [
     {
-      "name": "DS_A2VM",
-      "label": "A2VM reporting database",
+      "name": "DS_NGVM",
+      "label": "NGVM reporting database",
       "description": "PostgreSQL data source of the reporting database",
       "type": "datasource",
       "pluginId": "grafana-postgresql-datasource",
@@ -41,10 +41,10 @@
       "version": ""
     }
   ],
-  "title": "A2VM — remediation",
-  "uid": "a2vm-remediation",
+  "title": "NGVM — remediation",
+  "uid": "ngvm-remediation",
   "tags": [
-    "a2vm"
+    "ngvm"
   ],
   "timezone": "browser",
   "schemaVersion": 39,
@@ -60,12 +60,12 @@
     {
       "type": "dashboards",
       "tags": [
-        "a2vm"
+        "ngvm"
       ],
       "asDropdown": false,
       "includeVars": true,
       "keepTime": true,
-      "title": "A2VM"
+      "title": "NGVM"
     }
   ],
   "templating": {
@@ -77,10 +77,10 @@
         "type": "query",
         "datasource": {
           "type": "grafana-postgresql-datasource",
-          "uid": "${DS_A2VM}"
+          "uid": "${DS_NGVM}"
         },
-        "query": "SELECT tenant AS __value, tenant_name AS __text FROM a2vm.latest_runs ORDER BY tenant_name",
-        "definition": "SELECT tenant AS __value, tenant_name AS __text FROM a2vm.latest_runs ORDER BY tenant_name",
+        "query": "SELECT tenant AS __value, tenant_name AS __text FROM ngvm.latest_runs ORDER BY tenant_name",
+        "definition": "SELECT tenant AS __value, tenant_name AS __text FROM ngvm.latest_runs ORDER BY tenant_name",
         "refresh": 1,
         "sort": 0,
         "multi": true,
@@ -99,12 +99,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT count(*) AS value FROM a2vm.finding_closures WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND $__timeFilter(closed_at) AND outcome = 'fixed'"
+          "rawSql": "SELECT count(*) AS value FROM ngvm.finding_closures WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND $__timeFilter(closed_at) AND outcome = 'fixed'"
         }
       ],
       "options": {
@@ -135,7 +135,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 1
     },
@@ -148,12 +148,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT avg(days_open) AS value FROM a2vm.finding_closures WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND $__timeFilter(closed_at) AND outcome = 'fixed' AND level = 'ACT'"
+          "rawSql": "SELECT avg(days_open) AS value FROM ngvm.finding_closures WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND $__timeFilter(closed_at) AND outcome = 'fixed' AND level = 'ACT'"
         }
       ],
       "options": {
@@ -184,7 +184,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 2
     },
@@ -197,12 +197,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT 100.0 * avg(CASE WHEN within_due THEN 1 ELSE 0 END) AS value FROM a2vm.finding_closures WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND $__timeFilter(closed_at) AND outcome = 'fixed' AND level IN ('ACT', 'ATTEND') AND within_due IS NOT NULL"
+          "rawSql": "SELECT 100.0 * avg(CASE WHEN within_due THEN 1 ELSE 0 END) AS value FROM ngvm.finding_closures WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND $__timeFilter(closed_at) AND outcome = 'fixed' AND level IN ('ACT', 'ATTEND') AND within_due IS NOT NULL"
         }
       ],
       "options": {
@@ -233,7 +233,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 3
     },
@@ -246,12 +246,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT count(*) AS value FROM a2vm.finding_closures WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND $__timeFilter(closed_at) AND outcome = 'unverified'"
+          "rawSql": "SELECT count(*) AS value FROM ngvm.finding_closures WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND $__timeFilter(closed_at) AND outcome = 'unverified'"
         }
       ],
       "options": {
@@ -282,7 +282,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 4
     },
@@ -295,12 +295,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT count(*) AS value FROM a2vm.latest_asset_scans WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND (last_scan IS NULL OR last_scan < generated_at - interval '7 days')"
+          "rawSql": "SELECT count(*) AS value FROM ngvm.latest_asset_scans WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND (last_scan IS NULL OR last_scan < generated_at - interval '7 days')"
         }
       ],
       "options": {
@@ -331,7 +331,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 5
     },
@@ -344,12 +344,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT count(*) AS value FROM a2vm.finding_closures c WHERE c.tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND $__timeFilter(c.closed_at) AND c.outcome = 'fixed' AND EXISTS (SELECT 1 FROM a2vm.decisions d JOIN a2vm.runs r USING (run_id) WHERE d.tenant = c.tenant AND d.finding_id = c.finding_id AND r.generated_at > c.closed_at)"
+          "rawSql": "SELECT count(*) AS value FROM ngvm.finding_closures c WHERE c.tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND $__timeFilter(c.closed_at) AND c.outcome = 'fixed' AND EXISTS (SELECT 1 FROM ngvm.decisions d JOIN ngvm.runs r USING (run_id) WHERE d.tenant = c.tenant AND d.finding_id = c.finding_id AND r.generated_at > c.closed_at)"
         }
       ],
       "options": {
@@ -380,7 +380,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 6
     },
@@ -393,12 +393,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "time_series",
-          "rawSql": "SELECT day::timestamptz AS time, count(*) FILTER (WHERE level = 'ACT') AS \"ACT\", count(*) FILTER (WHERE level = 'ATTEND') AS \"ATTEND\", count(*) FILTER (WHERE level = 'TRACK') AS \"TRACK\" FROM a2vm.finding_closures WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND $__timeFilter(closed_at) AND outcome = 'fixed' GROUP BY day ORDER BY day"
+          "rawSql": "SELECT day::timestamptz AS time, count(*) FILTER (WHERE level = 'ACT') AS \"ACT\", count(*) FILTER (WHERE level = 'ATTEND') AS \"ATTEND\", count(*) FILTER (WHERE level = 'TRACK') AS \"TRACK\" FROM ngvm.finding_closures WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND $__timeFilter(closed_at) AND outcome = 'fixed' GROUP BY day ORDER BY day"
         }
       ],
       "fieldConfig": {
@@ -475,7 +475,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 7
     },
@@ -488,12 +488,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT l.level AS \"Level\", count(c.finding_id) AS \"Fixed\", round(avg(c.days_open), 1) AS \"Mean days\", percentile_cont(0.5) WITHIN GROUP (ORDER BY c.days_open) AS \"Median days\", round(100.0 * avg(CASE WHEN c.within_due THEN 1 WHEN c.within_due IS NOT NULL THEN 0 END), 1) AS \"Within due date (%)\"\nFROM (VALUES ('ACT', 1), ('ATTEND', 2), ('TRACK', 3)) l (level, o)\nLEFT JOIN a2vm.finding_closures c ON c.level = l.level AND c.outcome = 'fixed' AND c.tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND $__timeFilter(c.closed_at)\nGROUP BY l.level, l.o ORDER BY l.o"
+          "rawSql": "SELECT l.level AS \"Level\", count(c.finding_id) AS \"Fixed\", round(avg(c.days_open), 1) AS \"Mean days\", percentile_cont(0.5) WITHIN GROUP (ORDER BY c.days_open) AS \"Median days\", round(100.0 * avg(CASE WHEN c.within_due THEN 1 WHEN c.within_due IS NOT NULL THEN 0 END), 1) AS \"Within due date (%)\"\nFROM (VALUES ('ACT', 1), ('ATTEND', 2), ('TRACK', 3)) l (level, o)\nLEFT JOIN ngvm.finding_closures c ON c.level = l.level AND c.outcome = 'fixed' AND c.tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND $__timeFilter(c.closed_at)\nGROUP BY l.level, l.o ORDER BY l.o"
         }
       ],
       "options": {
@@ -556,7 +556,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 8
     },
@@ -569,12 +569,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT asset_name AS \"Asset\", cve AS \"CVE\", level AS \"Level\", first_seen AS \"First seen\", day AS \"Fixed on\", days_open AS \"Days open\", within_due AS \"On time\", priority AS \"Priority\", sla_due AS \"SLA due\", within_sla AS \"Within SLA\" FROM a2vm.finding_closures WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND $__timeFilter(closed_at) AND outcome = 'fixed' ORDER BY closed_at DESC, level_rank, cve LIMIT 500"
+          "rawSql": "SELECT asset_name AS \"Asset\", cve AS \"CVE\", level AS \"Level\", first_seen AS \"First seen\", day AS \"Fixed on\", days_open AS \"Days open\", within_due AS \"On time\", priority AS \"Priority\", sla_due AS \"SLA due\", within_sla AS \"Within SLA\" FROM ngvm.finding_closures WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND $__timeFilter(closed_at) AND outcome = 'fixed' ORDER BY closed_at DESC, level_rank, cve LIMIT 500"
         }
       ],
       "options": {
@@ -637,7 +637,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 9
     },
@@ -650,12 +650,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT asset_name AS \"Asset\", last_scan AS \"Last scan\", (SELECT string_agg(k, ', ' ORDER BY k) FROM jsonb_object_keys(coalesce(scans, '{}'::jsonb)) k) AS \"Sources\", act AS \"ACT\", attend AS \"ATTEND\", track AS \"TRACK\" FROM a2vm.latest_asset_scans WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) ORDER BY last_scan NULLS FIRST, asset_name"
+          "rawSql": "SELECT asset_name AS \"Asset\", last_scan AS \"Last scan\", (SELECT string_agg(k, ', ' ORDER BY k) FROM jsonb_object_keys(coalesce(scans, '{}'::jsonb)) k) AS \"Sources\", act AS \"ACT\", attend AS \"ATTEND\", track AS \"TRACK\" FROM ngvm.latest_asset_scans WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) ORDER BY last_scan NULLS FIRST, asset_name"
         }
       ],
       "options": {
@@ -681,7 +681,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 10
     },
@@ -694,12 +694,12 @@
           "refId": "A",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "${DS_A2VM}"
+            "uid": "${DS_NGVM}"
           },
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT asset_name AS \"Asset\", cve AS \"CVE\", level AS \"Level\", day AS \"Gone on\" FROM a2vm.finding_closures WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND $__timeFilter(closed_at) AND outcome = 'unverified' ORDER BY closed_at DESC, level_rank LIMIT 500"
+          "rawSql": "SELECT asset_name AS \"Asset\", cve AS \"CVE\", level AS \"Level\", day AS \"Gone on\" FROM ngvm.finding_closures WHERE tenant = ANY (ARRAY[${tenant:sqlstring}]::text[]) AND $__timeFilter(closed_at) AND outcome = 'unverified' ORDER BY closed_at DESC, level_rank LIMIT 500"
         }
       ],
       "options": {
@@ -762,7 +762,7 @@
       },
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "${DS_A2VM}"
+        "uid": "${DS_NGVM}"
       },
       "id": 11
     }

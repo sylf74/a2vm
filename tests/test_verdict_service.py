@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """v0.14.0 (HLD D15 step 3, read side; LLD triage-prioritization §15): the decision service of a
 tenant, fed by the daily run's push, read through a short and paged API."""
 
@@ -13,8 +13,8 @@ from pathlib import Path
 import httpx
 import pytest
 
-from a2vm.io import ExchangeError, validate_triage
-from a2vm.service import Problem, TokenSet, digest
+from ngvm.io import ExchangeError, validate_triage
+from ngvm.service import Problem, TokenSet, digest
 from verdict.cli import main
 from verdict.report import write_json
 from verdict.service.server import Service, serve
@@ -39,7 +39,7 @@ _DSN: list[str | None] = [None]
 
 @pytest.fixture(autouse=True)
 def _store_backend(backend):
-    """Every test runs on the files and, with A2VM_TEST_DSN, on PostgreSQL (v0.18.0)."""
+    """Every test runs on the files and, with NGVM_TEST_DSN, on PostgreSQL (v0.18.0)."""
     _DSN[0] = backend
     yield
     _DSN[0] = None
@@ -48,7 +48,7 @@ def _store_backend(backend):
 def _store(tmp_path: Path, keep: int):
     if _DSN[0] is None:
         return RunStore(tmp_path / "store", keep)
-    from a2vm.db import Database
+    from ngvm.db import Database
     from verdict.service.pgstore import MIGRATIONS, PgRunStore
 
     db = Database(_DSN[0], "verdict", MIGRATIONS)
@@ -71,7 +71,7 @@ def _push(service: Service, path: Path, key: str = "k1", **changes) -> dict:
 def test_the_triage_of_a_run_is_a_versioned_exchange_file(triage):
     run, path = triage
     doc = json.loads(path.read_text())
-    assert doc["schema"] == "a2vm.triage/1" and len(doc["rows"]) == len(run.rows) > 0
+    assert doc["schema"] == "ngvm.triage/1" and len(doc["rows"]) == len(run.rows) > 0
     validate_triage(doc)
     doc["rows"][0]["delivery_decision"] = "MAYBE"
     with pytest.raises(ExchangeError, match="delivery_decision"):
@@ -101,7 +101,7 @@ def test_a_push_is_stored_once_and_answered_from_its_key(triage, tmp_path, monke
         ({"tenant": "other"}, 404, "tenant"),
         ({"key": None}, 400, "Idempotency-Key"),
         ({"body": b"not gzip"}, 400, "gzip"),
-        ({"doc": {"schema": "a2vm.reporting/1"}}, 422, "a2vm.triage/1"),
+        ({"doc": {"schema": "ngvm.reporting/1"}}, 422, "ngvm.triage/1"),
         ({"doc": {"client": {"id": "someone-else"}}}, 422, "client id"),
         ({"doc": {"generated_at": "2099-01-01T00:00:00+00:00"}}, 422, "future"),
     ],

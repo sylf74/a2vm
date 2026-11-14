@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """What the watch service keeps, in the tenant's PostgreSQL (v0.18.0, LLD vulnerability-intelligence
 §3.7): the same interface as the files of `WatchStore`.
 
@@ -23,8 +23,8 @@ import secrets
 from collections.abc import Callable
 from typing import Any
 
-from a2vm import applications as apps
-from a2vm.db import Database, Migration, rls
+from ngvm import applications as apps
+from ngvm.db import Database, Migration, rls
 from via.alert import journal
 
 from .store import ALERT_ID, FILE_NAME, INVENTORY_FILES, LANG, RUN_ID, T, WatchStore, _now

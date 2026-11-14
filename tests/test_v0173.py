@@ -1,5 +1,5 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
-"""v0.17.3: A2VM writes in English; a tenant whose profile says `client.language: fr` gets the
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
+"""v0.17.3: NGVM writes in English; a tenant whose profile says `client.language: fr` gets the
 labels of its deliverables in French, from a catalogue, never from a model (HLD D16)."""
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from verdict.service import exports
 
 from .conftest import ROOT
 
-SOURCES = ("a2vm", "via", "detect", "verdict")
+SOURCES = ("ngvm", "via", "detect", "verdict")
 
 
 def test_the_catalogue_is_complete():
@@ -28,7 +28,7 @@ def test_the_catalogue_is_complete():
 
 
 def test_decision_texts_are_english():
-    """The texts A2VM writes into a decision (rationale, reasons, assumptions) are English."""
+    """The texts NGVM writes into a decision (rationale, reasons, assumptions) are English."""
     french = re.compile(r"relevé à|supposée?\b|pire cas|correspondance produit|Hypothèses|Correctif disponible|"
                         r"Politique :|Décision SSVC CISA|délai BOD|non confirmée|déduite?s?\b|estimés par")  # fmt: skip
     for path in [
@@ -36,8 +36,8 @@ def test_decision_texts_are_english():
         ROOT / "verdict/src/verdict/policy.py",
         ROOT / "verdict/src/verdict/triage.py",
         ROOT / "verdict/src/verdict/llm_tasks.py",
-        ROOT / "a2vm/src/a2vm/declared.py",
-        ROOT / "a2vm/src/a2vm/gti.py",
+        ROOT / "ngvm/src/ngvm/declared.py",
+        ROOT / "ngvm/src/ngvm/gti.py",
         ROOT / "detect/src/detect/openvas.py",
     ]:
         assert not french.search(path.read_text(encoding="utf-8")), path
@@ -118,7 +118,7 @@ def test_the_french_dashboards_are_current_and_only_relabel():
 
 
 def test_the_profile_schema_takes_a_language(tmp_path):
-    from a2vm.profile import load_profile
+    from ngvm.profile import load_profile
 
     from .test_alert import PROFILE
 

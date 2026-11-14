@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """The exact version of an appliance or a network device, as a component (HLD D20, v0.23.6).
 
 An appliance has no package manager an SSH collection could read, no agent and no SBOM. What it
@@ -6,7 +6,7 @@ says of itself is its system: SNMP's sysDescr and its vendor's own objects, or t
 model and OS version. This module turns that into one component of type `firmware`: the vendor, the
 product, the version, and the CPE of its operating system when the family is known
 (`cpe:2.3:o:fortinet:fortios`). The watch matches it against the affected ranges of the CVE records
-and of the vendors' CSAF advisories, with the level of proof `embedded` (`a2vm.applications`). A
+and of the vendors' CSAF advisories, with the level of proof `embedded` (`ngvm.applications`). A
 family not known here keeps its vendor and product, and goes through the tenant's applications table.
 """
 

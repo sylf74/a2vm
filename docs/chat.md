@@ -8,7 +8,7 @@ approved LLM endpoints (one VM or several). The questions the analysts can ask, 
 
 ```mermaid
 flowchart LR
-  analyst["Analyst<br/>browser"] -- "HTTPS<br/>ingress" --> chat["Open WebUI<br/>a2vm-&lt;tenant&gt;-chat"]
+  analyst["Analyst<br/>browser"] -- "HTTPS<br/>ingress" --> chat["Open WebUI<br/>ngvm-&lt;tenant&gt;-chat"]
   chat -- "tool calls<br/>chat token" --> tools["Tool server<br/>verdict tools"]
   tools -- "read token" --> verdict["Decision service<br/>verdict serve"]
   chat -- "chat completions" --> gw["LLM gateway<br/>several endpoints only"]
@@ -37,33 +37,33 @@ pages (about 2,000 tokens at most) for the model's context.
 
 | Key | Value | Options |
 | --- | --- | --- |
-| `A2VM_CHAT_HOST` | Host of the chat; set, `deploy-k8s` deploys it | Visible |
-| `A2VM_CHAT_ALLOW` | Optional: the analysts' networks, CIDR, comma-separated; empty: every source | Visible |
-| `A2VM_CHAT_ADMIN_EMAIL` | Optional: login of the first admin (default `admin@example.org`) | Visible |
-| `A2VM_CHAT_RETENTION_DAYS` | Optional: chats unchanged for longer are deleted (default 30; 0 keeps them) | Visible |
-| `A2VM_CHAT_MAX_CHARS` | Optional: longest answer of a tool, in characters of JSON (default 8000, about 2,000 tokens). With a model of a 16k context, 4000: a long conversation fills the context with the tools' answers (v0.20.1) | Visible |
-| `A2VM_CHAT_LLM_EGRESS` | Optional: `cidr:port,...` of the LLM endpoints, when the job cannot resolve their names | Visible |
-| `A2VM_CHAT_INGRESS_CONTROLLER`, `A2VM_CHAT_INGRESS_CLASS`, `A2VM_CHAT_TLS_SECRET`, `A2VM_CHAT_CLUSTER_ISSUER` | Optional; default to the `A2VM_INTAKE_*` ones | Visible |
+| `NGVM_CHAT_HOST` | Host of the chat; set, `deploy-k8s` deploys it | Visible |
+| `NGVM_CHAT_ALLOW` | Optional: the analysts' networks, CIDR, comma-separated; empty: every source | Visible |
+| `NGVM_CHAT_ADMIN_EMAIL` | Optional: login of the first admin (default `admin@example.org`) | Visible |
+| `NGVM_CHAT_RETENTION_DAYS` | Optional: chats unchanged for longer are deleted (default 30; 0 keeps them) | Visible |
+| `NGVM_CHAT_MAX_CHARS` | Optional: longest answer of a tool, in characters of JSON (default 8000, about 2,000 tokens). With a model of a 16k context, 4000: a long conversation fills the context with the tools' answers (v0.20.1) | Visible |
+| `NGVM_CHAT_LLM_EGRESS` | Optional: `cidr:port,...` of the LLM endpoints, when the job cannot resolve their names | Visible |
+| `NGVM_CHAT_INGRESS_CONTROLLER`, `NGVM_CHAT_INGRESS_CLASS`, `NGVM_CHAT_TLS_SECRET`, `NGVM_CHAT_CLUSTER_ISSUER` | Optional; default to the `NGVM_INTAKE_*` ones | Visible |
 
-The model and its endpoints are the tenant's: `A2VM_LLM_MODEL` and `A2VM_LLM_BASE_URL` (usually on
+The model and its endpoints are the tenant's: `NGVM_LLM_MODEL` and `NGVM_LLM_BASE_URL` (usually on
 the group, `docs/deployment.md` §3). The job resolves the endpoints' names to their addresses for
 the NetworkPolicy and prints them. Nothing secret is typed: the job makes the session key of Open
 WebUI, its first admin's password and the token between Open WebUI and the tool server once, and
-keeps them in the Secret `a2vm-tenant` (`chat-secret-key`, `chat-admin-password`,
+keeps them in the Secret `ngvm-tenant` (`chat-secret-key`, `chat-admin-password`,
 `chat-tools-token`).
 
 ## 3. First sign-in, analysts' accounts
 
-With the tenant's identity provider (`A2VM_OIDC_ISSUER`, v0.17.0), the analysts sign in with their
+With the tenant's identity provider (`NGVM_OIDC_ISSUER`, v0.17.0), the analysts sign in with their
 directory account and their groups decide who gets in: `docs/sign-in.md`. The local admin below
-stays for the first set-up, unless `A2VM_OIDC_ADMINS` names the admins' group.
+stays for the first set-up, unless `NGVM_OIDC_ADMINS` names the admins' group.
 
 After the deployment (`kubectl -n <namespace> get pods -l 'app.kubernetes.io/component in (chat,tools)'`:
 both `Running`), read the first admin's password from its Secret and sign in at `https://<host>`:
 
 ```bash
-NS=a2vm-lab
-kubectl -n $NS get secret a2vm-tenant -o jsonpath='{.data.chat-admin-password}' | base64 -d | pbcopy
+NS=ngvm-lab
+kubectl -n $NS get secret ngvm-tenant -o jsonpath='{.data.chat-admin-password}' | base64 -d | pbcopy
 ```
 
 (`pbcopy` on macOS; elsewhere `xclip -selection clipboard`, or read it on screen.) Sign-up is
@@ -72,30 +72,30 @@ the admin's password in *Settings > Account*; the Secret's value only serves the
 
 ## 4. Check
 
-In a new chat, the model is preselected and the tool **A2VM** is on (the wrench icon under the
+In a new chat, the model is preselected and the tool **NGVM** is on (the wrench icon under the
 input box). Ask for instance "Quels sont les ACT KEV du dernier run ?": the answer ends with the
 run it rests on (its id and date, in the language of the answer), and the tool server's log shows the calls:
 
 ```bash
-kubectl -n $NS logs deploy/a2vm-lab-tools --tail=20
-kubectl -n $NS logs deploy/a2vm-lab-chat --tail=50
+kubectl -n $NS logs deploy/ngvm-lab-tools --tail=20
+kubectl -n $NS logs deploy/ngvm-lab-chat --tail=50
 ```
 
-If the answer comes without tool calls, check the vLLM options (§1) and that **A2VM** is on in
+If the answer comes without tool calls, check the vLLM options (§1) and that **NGVM** is on in
 the chat.
 
 ## 5. Several LLM endpoints
 
-`A2VM_LLM_BASE_URL` takes several endpoints serving the same model, comma-separated
+`NGVM_LLM_BASE_URL` takes several endpoints serving the same model, comma-separated
 (`http://192.0.2.10:8000/v1,http://192.0.2.11:8000/v1`):
 
-- **the chat** goes through an LLM gateway in the namespace (nginx, `a2vm-<tenant>-llm`): its calls
+- **the chat** goes through an LLM gateway in the namespace (nginx, `ngvm-<tenant>-llm`): its calls
   spread over the endpoints; an endpoint that refuses, times out or answers 429 or 5xx is left out
   for 30 seconds and the request goes to the next one, so the analyst sees nothing. Open WebUI
   alone would use the first endpoint only. Which endpoint answered is in the gateway's log:
 
   ```bash
-  kubectl -n $NS logs deploy/a2vm-lab-llm --tail=20
+  kubectl -n $NS logs deploy/ngvm-lab-llm --tail=20
   ```
 
 - **the daily run** calls the first endpoint and moves to the next one when it is down, then stays
@@ -112,7 +112,7 @@ triage-prioritization §7.1 and §16.5.
 | --- | --- |
 | Configuration | From the chart's values only (`ENABLE_PERSISTENT_CONFIG=false`): what an admin changes in the admin panel does not survive a restart |
 | Models | The tenant's model on its endpoints only; no Ollama, no direct connection from a browser |
-| Tools | The A2VM tool server only: no web search, no code execution, no image generation, no user tools or tool servers, no file upload |
+| Tools | The NGVM tool server only: no web search, no code execution, no image generation, no user tools or tool servers, no file upload |
 | Network | Open WebUI offline (no model download, no update check, no telemetry); NetworkPolicy to the tool server, the LLM endpoint (or the gateway) and the DNS |
 | Browser | Content-Security-Policy: no image, script or request to another host, so an answer cannot send data out through a URL; links and images in vendor text are removed by the tool server |
 | Decisions | Read only: nothing in the chat changes a decision, a review flag or an exposure |
@@ -127,11 +127,11 @@ own address, for whoever holds it: hand over the file, not the link. Detail: LLD
 triage-prioritization §16.6.
 
 Chats unchanged for 30 days are deleted, every hour, by a second container of the chat's pod
-(`A2VM_CHAT_RETENTION_DAYS` on the tenant project: another number of days, 0 to keep them). Its
+(`NGVM_CHAT_RETENTION_DAYS` on the tenant project: another number of days, 0 to keep them). Its
 log says how many it deleted:
 
 ```bash
-kubectl -n $NS logs deploy/a2vm-lab-chat -c retention --tail=5
+kubectl -n $NS logs deploy/ngvm-lab-chat -c retention --tail=5
 ```
 
 ## 8. Questions an analyst asks (v0.15.2)
@@ -150,7 +150,7 @@ kubectl -n $NS logs deploy/a2vm-lab-chat -c retention --tail=5
 | "Quelles CVE ont été publiées depuis hier, avec leur heure de découverte ?", "nouvelles CVE critiques depuis lundi", "ajoutées au KEV cette semaine" (v0.23.4) | `list_new_cves`: the CVEs published or updated in the period (about 30 days back), newest first, each with when CVE.org published it, CVSS, KEV, EPSS, products, and the alert the watch drafted for the tenant about it, if any. Needs `intel.url` |
 | "La veille tourne-t-elle ?", "quelles sources sont en erreur ?" (v0.23.4) | `get_watch_status`: the watch's last passage, the sources failing in a row, the alerts of the last 24 hours (watch on Kubernetes) |
 | "Quelles applications n'ont pas encore de CPE validé ?" (v0.23.4) | `list_applications`: the applications table (`docs/sentinelone.md` §4) by state, with the hosts of each |
-| "Quelle version d'A2VM tourne ?", "le run de ce matin est-il fini, avec quel LLM ?" (v0.23.9) | `get_platform_status`: the version of each service and of the latest run, its LLM and what it cost, the collectors late or refused |
+| "Quelle version d'NGVM tourne ?", "le run de ce matin est-il fini, avec quel LLM ?" (v0.23.9) | `get_platform_status`: the version of each service and of the latest run, its LLM and what it cost, the collectors late or refused |
 | "Combien de temps verdict a-t-il tourné, et sur combien de findings ?" (v0.23.18) | `get_platform_status`: the decision step's duration and the run's up to the decisions, the findings read and decided (`timing_note`) |
 | "Quels collecteurs ?", "quand OpenVAS a-t-il remonté ?", "quelle version sur le collecteur ?" (v0.23.9) | `list_collectors`: each collector and source, its last push, the age of its data, late or refused, the connector and the agent's version (needs `intake.enabled`); since v0.23.10 the next and last run of each connector |
 | "Lance une synchro CMDB" (v0.23.10) | `request_connector_run`: a request a validator confirms on the review page (« Actions »), run by the collector at its next poll; `list_actions` tells when it is done (needs the tenant's database, LLD triage §16.10) |
@@ -166,7 +166,7 @@ v0.14.0 or later. The dates appear for the runs made with v0.15.2 or later.
 
 ## 9. Limits
 
-- Without `A2VM_OIDC_ISSUER`, local accounts made by the admin; with it, the provider's accounts
+- Without `NGVM_OIDC_ISSUER`, local accounts made by the admin; with it, the provider's accounts
   (`docs/sign-in.md`).
 - Documents in a neutral layout; the tenant's own Word and PowerPoint templates later.
 - One replica on a volume (SQLite); PostgreSQL with the decision service (v0.18.0).

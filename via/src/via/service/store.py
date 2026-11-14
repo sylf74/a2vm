@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-a2vm-proprietary
+# SPDX-License-Identifier: LicenseRef-ngvm-proprietary
 """What the watch service keeps for its tenant (LLD vulnerability-intelligence §3.7), on its volume:
 
   <root>/<tenant>/state.json                 what the watch has already seen (opaque to the service)
@@ -10,7 +10,7 @@
                                              metadata (source, reference hash, who edited it)
   <root>/<tenant>/alerts-log.jsonl           the journal of the alerts (drafted, analysts, edited,
                                              validated, dismissed, sent, send-failed)
-  <root>/<tenant>/applications.json          the applications table (v0.23.3, `a2vm.applications`):
+  <root>/<tenant>/applications.json          the applications table (v0.23.3, `ngvm.applications`):
                                              each application of the inventory and the CPE it is
 
 One writer (the service), each file written to a temporary name then renamed. Runs older than
@@ -32,13 +32,13 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, TypeVar
 
-from a2vm import applications as apps
+from ngvm import applications as apps
 from via.alert import journal
 
 RUN_ID = re.compile(r"^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{8}$")
 FILE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,150}$")
 ALERT_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,150}$")
-WATCH_FINDINGS_FILE = "watch-findings.json"  # a2vm.watch_findings/1 (v0.23.19)
+WATCH_FINDINGS_FILE = "watch-findings.json"  # ngvm.watch_findings/1 (v0.23.19)
 INVENTORY_FILES = ("assets.json", "findings.json", WATCH_FINDINGS_FILE)
 STATUSES = ("pending", "translating", "validated", "dismissed", "sent", "failed")
 # The events that set the status of an alert; the last one wins (none: pending). A change of the
