@@ -233,6 +233,11 @@ class Service:
                 if found is None:
                     raise Problem(HTTPStatus.NOT_FOUND, "no such asset in this run")
                 return found
+            if rest.startswith("assets/") and rest.endswith("/exposure") and len(rest) > len("assets//exposure"):
+                found = idx.exposure_path(unquote(rest[len("assets/") : -len("/exposure")]))
+                if found is None:
+                    raise Problem(HTTPStatus.NOT_FOUND, "no such asset in this run")
+                return found
             if rest == "summary":
                 return idx.summary()
             if rest == "decisions":

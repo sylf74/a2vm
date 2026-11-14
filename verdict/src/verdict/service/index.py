@@ -547,6 +547,31 @@ class RunIndex:
             "decisions": _paged([compact(r) for r in ordered], limit, offset),
         }
 
+    def exposure_path(self, asset: str) -> dict[str, Any] | None:
+        """Why an asset has its exposure (v0.24.0): the value, where it comes from, and the path it rests
+        on, step by step from the internet or a zone, with the source and date of each step; the
+        services seen on it. An assumed exposure has no path: nothing proves it."""
+        found = self._find_asset(asset)
+        if found is None:
+            return None
+        known = self.inventory.get(found, {})
+        card = self._card(found)
+        path = list(known.get("exposure_path") or [])
+        source = known.get("exposure_source", "")
+        return {
+            "run": self.run,
+            "asset": found,
+            "name": card["name"],
+            "exposure": card["exposure"],
+            "exposure_source": source,
+            "origin": (known.get("origins") or {}).get("exposure", ""),
+            "zone": card["zone"],
+            "path": path,
+            "path_text": " -> ".join(step.get("label") or step.get("node", "") for step in path),
+            "assumed": source == "assumed",
+            "services": list(known.get("services") or [])[:50],
+        }
+
     def fix_plan(self, asset: str, query: dict[str, str]) -> dict[str, Any] | None:
         """The decisions of one asset grouped by the fix that clears them, the fix that clears most
         ACT first: what to apply, in which order."""

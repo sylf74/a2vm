@@ -248,6 +248,19 @@ OPERATIONS: list[tuple[str, str, str, list[dict[str, Any]], str]] = [
         "assets/{asset}/fixes",
     ),
     (
+        "/assets/{asset}/exposure",
+        "get_exposure_path",
+        "Why one asset is exposed as it is: its exposure (open, controlled, small), where it comes from, and the "
+        "path it rests on, step by step from the internet or from a zone (published endpoint, zone, port reached "
+        "by a scanner, machine seen off the premises), each step with its source and date. Use it for 'how is "
+        "srv01 reachable from the internet'. An assumed exposure has no path: say it is an assumption.",
+        [
+            _p("asset", "The asset: its id from list_assets (host:web01.example.org), its host name or short name"),
+            _RUN,
+        ],
+        "assets/{asset}/exposure",
+    ),
+    (
         "/findings/closed",
         "list_closed_findings",
         "Findings fixed between two days: decided in a run and absent from a newer one in which their asset "

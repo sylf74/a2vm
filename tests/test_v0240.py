@@ -157,7 +157,9 @@ def test_what_the_external_scan_reached_it_reached_from_the_internet(tmp_path) -
         services=_reached(443, zone=""),
     )  # fmt: skip
     result = as_internal(p, [Detection("acme-external", "openvas", [seen], [])], now=NOW)
-    assert result.detection.observations[0].services == [{"port": "443/tcp", "view": "network", "from_zone": "internet"}]
+    assert result.detection.observations[0].services == [
+        {"port": "443/tcp", "view": "network", "from_zone": "internet"}
+    ]
 
 
 # -- the zone of an asset ------------------------------------------------------------------------------
@@ -316,7 +318,11 @@ def test_the_external_scan_path_goes_through_the_published_endpoint(tmp_path) ->
         now=NOW,
     )
     a = _assets(inv)
-    assert [s["node"] for s in a["rproxy01"].exposure_path] == ["internet", "endpoint:www.example.org:443", "host:rproxy01"]
+    assert [s["node"] for s in a["rproxy01"].exposure_path] == [
+        "internet",
+        "endpoint:www.example.org:443",
+        "host:rproxy01",
+    ]
     assert [s["node"] for s in a["app01"].exposure_path] == [
         "internet", "endpoint:www.example.org:443", "host:rproxy01", "host:app01",
     ]  # fmt: skip
@@ -412,3 +418,43 @@ def test_json_schemas_know_the_new_fields() -> None:
     reporting = json.loads((schemas / "reporting.schema.json").read_text())
     kinds = set(reporting["properties"]["exposure_gaps"]["items"]["properties"]["kind"]["enum"])
     assert {"undeclared-flow", "declared-small-but-reachable", "no-external-scan"} <= kinds
+
+
+# -- the path in the triage, the decision service and the chat ---------------------------------------------
+def test_the_triage_lists_the_path_and_the_service_answers_why(tmp_path) -> None:
+    from verdict.service.index import RunIndex
+    from verdict.triage import run_asset
+
+    p = _profile(tmp_path, external={"client": "acme-external"})
+    inv = build_inventory(
+        p,
+        [
+            _det("openvas", _host("db01", "openvas", ["192.0.2.70"], _reached(5432))),
+            _det("trivy", _host("unk01", "trivy", ["192.0.2.81"])),
+            _external(_host("203.0.113.9", "external-scan", ["203.0.113.9"])),
+        ],
+        now=NOW,
+    )
+    listed = {a.name: run_asset(a) for a in inv.assets}
+    assert listed["db01"]["exposure_path"][0]["node"] == "zone:lan" and listed["db01"]["services"]
+    assert "exposure_path" not in listed["unk01"]  # assumed: nothing to show
+    idx = RunIndex({"id": "r1", "generated_at": TODAY}, {"rows": [], "assets": list(listed.values())})
+    why = idx.exposure_path("db01")
+    assert why["exposure"] == "controlled" and why["exposure_source"] == "graph" and not why["assumed"]
+    assert why["path_text"] == "lan -> db01 5432/tcp -> db01"
+    assert why["origin"].startswith("graph (reached from zone lan")
+    assumed = idx.exposure_path("unk01")
+    assert assumed["assumed"] and assumed["path"] == []
+    assert idx.exposure_path("nothing-like-this") is None
+
+
+def test_the_chat_has_a_tool_for_the_path() -> None:
+    from verdict.service.tools import openapi
+
+    spec = openapi("acme")
+    op = spec["paths"]["/assets/{asset}/exposure"]["get"]
+    assert op["operationId"] == "get_exposure_path" and "path" in op["description"]
+    contract = yaml.safe_load((ROOT / "a2vm" / "src" / "a2vm" / "schemas" / "openapi" / "verdict.v1.yaml").read_text())
+    assert contract["paths"]["/v1/tenants/{tenant}/assets/{asset}/exposure"]["get"]["operationId"] == "getExposurePath"
+    guide = (ROOT / "docs" / "chat-questions.md").read_text(encoding="utf-8")
+    assert "get_exposure_path" in guide and "joignable depuis Internet" in guide

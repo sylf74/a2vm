@@ -307,6 +307,24 @@ paths:
         "200": {description: The plan, content: {application/json: {schema: {type: object}}}}
         "401": {$ref: "#/components/responses/Problem"}
         "404": {$ref: "#/components/responses/Problem"}
+  /v1/tenants/{tenant}/assets/{asset}/exposure:
+    get:
+      tags: [read]
+      operationId: getExposurePath
+      summary: >-
+        Why one asset has its exposure (since v0.24.0): the value, its source, and the path it rests on from
+        the asset graph, step by step from the internet or a zone, each step with its source and date; empty
+        when the exposure is assumed
+      security:
+        - readToken: []
+      parameters:
+        - $ref: "#/components/parameters/tenant"
+        - $ref: "#/components/parameters/run"
+        - {name: asset, in: path, required: true, schema: {type: string}}
+      responses:
+        "200": {description: The exposure and its path, content: {application/json: {schema: {type: object}}}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
   /v1/tenants/{tenant}/changes:
     get:
       tags: [read]

@@ -355,6 +355,14 @@
           "components_seen": {
             "type": "string",
             "description": "When the components were observed (since v0.22.2)"
+          },
+          "services": {
+            "type": "array",
+            "description": "The network services seen on the asset: port, view (network: reached by a scanner from from_zone; local: listening on bind), source, seen (since v0.24.0)"
+          },
+          "exposure_path": {
+            "type": "array",
+            "description": "The path the exposure rests on, from the asset graph, step by step from the internet or a zone: node, kind, label, via, source, seen (since v0.24.0); absent when the exposure is assumed"
           }
         }
       }
