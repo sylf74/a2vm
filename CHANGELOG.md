@@ -5,6 +5,56 @@ analyst and, under **Upgrade**, what a tenant must do when it moves to that tag 
 `A2VM_REF` in its `.gitlab-ci.yml`). Design and reasons: the HLD roadmap (`docs/hld/00-product-strategy.md`
 §11) and the LLDs. A release adds its entry here in the same merge request (CLAUDE.md, Releasing).
 
+## v0.24.0 — 2026-11-14
+
+The exposure computed from a path, not assumed (HLD D21). A run of the homelab assumed 27
+exposures of 45 assets; the exposure drives the BOD timeline and the client's SLA.
+
+- **Zones and flows** in `client.yaml`: `zones` (id, `networks`, `open` for a widely accessible
+  network such as a guest Wi-Fi or a VPN pool), `flows` (`from` internet, a zone or `*`, `to`,
+  `ports`) and `off_premises_days` (7). An intention: what the scanners observe comes first.
+  An address in the networks of a zone places a host in it (zone source `networks`).
+- **Services observed**: OpenVAS keeps the ports it found open, seen from the `zone` of its section
+  (`--zone` of `detect import`, `zone` of a `file-import` connector), and observes a host with open
+  ports and no finding. The SSH collection lists the sockets listening (`ss -ltnu`, read-only,
+  without root). The external scan's ports are seen from the internet.
+- **The asset graph** (`asset_graph.json`, `a2vm.asset_graph/1`): the internet, the zones, the
+  assets, their services and the published endpoints, each edge declared or observed, with its
+  source and date. Each exposure is computed from it, with its path (`exposure_path`):
+  - `open`: the external scan reached it (as before), a machine seen off the premises (none of its
+    addresses in a declared network) within `off_premises_days`, a zone declared `open`, or a flow
+    from the internet to its zone on a port it serves;
+  - `small`: only on proof, a host listening on its loopback only that no scanner reached;
+  - `controlled`: reached from a zone, listening on the network or reached by a declared flow, and
+    not seen by a recent external scan;
+  - the default otherwise; **the worst case, `open`, when the tenant has an external scan but none
+    recent came in the run**.
+  A declared exposure stands over what the graph derives from declarations; off the premises and
+  the external scan raise it whatever was declared.
+- **Gaps**: `declared-small-but-reachable`, `undeclared-flow` (a flow observed that no declared flow
+  allows, when the profile declares flows) and `no-external-scan` (once per run).
+- **Proposed flows**: `flows_proposed.yaml` and `verdict assets flows work/assets/<client>` give the
+  flows observed between zones as a `flows:` section to review.
+- **The path in the chat**: the triage lists each asset's services and path, the decision service
+  answers `assets/{asset}/exposure`, the chat's tool `get_exposure_path` answers « Comment srv01
+  est-il joignable depuis Internet ? ».
+- **Scale**: 70,000 assets in 50 zones in about 7 s and 600 MB for the assets stage. No graph
+  database: the graph is a file of the run.
+
+**Upgrade**:
+
+1. Move `ref` and `A2VM_REF` of the tenants to `v0.24.0`, then deploy (`deploy-k8s`), the shared
+   service's tenant (`via`) included. The daily job and the pipeline pass `--previous` themselves.
+2. Exposures may change without any change of the profile: hosts reached by OpenVAS or listening
+   over SSH become `controlled` (source `graph`) when a recent external scan is in the run; a
+   tenant with an `external` section whose scan is stale now assumes `open`. Compare the counts of
+   the first run (`exposure from …` line of the step `assets`) with the run before.
+3. Optional, per tenant: declare `zones` with their `networks`, then `flows`; set `zone` in the
+   `openvas` section of the collector's targets file (read at its next run). Start from
+   `flows_proposed.yaml` of a first run.
+4. Collectors: update the image (the SSH collection lists the listening sockets, OpenVAS keeps the
+   ports); an older collector still works, without services.
+
 ## v0.23.19 — 2026-11-13
 
 What the homelab and the integration found after v0.23.18.

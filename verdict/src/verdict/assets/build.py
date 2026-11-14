@@ -30,6 +30,7 @@ new form. The optional zone label comes from a declaration or a rule only, and n
 
 from __future__ import annotations
 
+import datetime as dt
 import fnmatch
 import ipaddress
 from dataclasses import dataclass, field
@@ -46,6 +47,17 @@ from a2vm.models import (
     NotAffected,
     PublishedEndpoint,
     exposure_value,
+)
+
+from .graph import (
+    AssetFacts,
+    AssetGraph,
+    Zones,
+    build_graph,
+    consolidate_services,
+    inherit_paths,
+    off_premises_sighting,
+    zone_from_networks,
 )
 
 EXTERNAL = "external-scan"
@@ -71,6 +83,7 @@ class Inventory:
     findings: list[Finding] = field(default_factory=list)
     not_affected: list[NotAffected] = field(default_factory=list)
     exposure_gaps: list[dict[str, str]] = field(default_factory=list)  # see exposure_gap()
+    graph: AssetGraph | None = None  # how the assets are reached (v0.24.0)
 
 
 class _UnionFind:
@@ -222,6 +235,7 @@ def _attributes(
     kind: str,
     reached: str | None = None,
     published_zone: str | None = None,
+    zones: Zones | None = None,
 ) -> dict[str, Attribute]:
     out: dict[str, Attribute] = {}
     defaults = {**WORST_CASE, **profile.defaults}
@@ -254,6 +268,8 @@ def _attributes(
     zone = _zone(profile, group, ids, kind)
     if zone is None and published_zone:
         zone = Attribute(published_zone, "published")
+    if zone is None and kind == "host":  # v0.24.0: an address in the networks of a zone
+        zone = zone_from_networks(zones or Zones(profile), ids)
     if zone:
         out["zone"] = zone
     return out
@@ -323,7 +339,14 @@ def consolidate_components(group: list[AssetObservation]) -> tuple[list[dict[str
     return [out[k] for k in sorted(out, key=lambda k: (k[1], k[2], k[3], k[0]))], seen
 
 
-def build_inventory(profile: ClientProfile, detections: list[Detection]) -> Inventory:
+def build_inventory(
+    profile: ClientProfile,
+    detections: list[Detection],
+    previous: AssetGraph | None = None,
+    now: dt.datetime | None = None,
+) -> Inventory:
+    """The inventory of the client from the detections of the run. `previous`: the graph of the run
+    before, whose sightings off the premises still count within `off_premises_days` (v0.24.0)."""
     observations: list[AssetObservation] = []
     for d in detections:
         if d.client_id != profile.id:
@@ -347,6 +370,7 @@ def build_inventory(profile: ClientProfile, detections: list[Detection]) -> Inve
     group_names = {root: set().union(*(_names(observations[i]) for i in members)) for root, members in groups.items()}
     reached: dict[int, str] = {}
     published_zone: dict[int, str] = {}
+    via: dict[int, tuple[str, int | None, bool]] = {}  # root -> (endpoint, root in front, published) (v0.24.0)
     for root, members in groups.items():
         for i in members:
             o = observations[i]
@@ -355,6 +379,7 @@ def build_inventory(profile: ClientProfile, detections: list[Detection]) -> Inve
             entry = _endpoint_of(o, profile.published)
             where = entry.endpoint if entry else ", ".join(o.identifiers.get("ips", [])) or o.ref
             reached.setdefault(root, f"seen from the internet at {where}")
+            via.setdefault(root, (where, None, entry is not None))
             if entry is None:
                 continue
             if entry.zone:
@@ -363,12 +388,16 @@ def build_inventory(profile: ClientProfile, detections: list[Detection]) -> Inve
             for other, names in group_names.items():
                 if other != root and names & behind:
                     reached.setdefault(other, f"behind {entry.endpoint}, seen from the internet")
+                    via.setdefault(other, (entry.endpoint, root, True))
                     if entry.zone:
                         published_zone.setdefault(other, entry.zone)
 
     inv = Inventory(profile.id)
     asset_of: dict[tuple[str, str], Asset] = {}  # (source, observation ref) -> asset
     images: list[tuple[Asset, list[AssetObservation]]] = []
+    zones = Zones(profile)
+    facts: list[AssetFacts] = []
+    asset_of_root: dict[int, Asset] = {}
     for root, members in groups.items():
         group = [observations[i] for i in members]
         # The internal observations name the asset; an external one only adds reachability.
@@ -401,7 +430,7 @@ def build_inventory(profile: ClientProfile, detections: list[Detection]) -> Inve
             name=name,
             description=description,
             identifiers=ids,
-            attributes=_attributes(profile, group, ids, kind, reached.get(root), published_zone.get(root)),
+            attributes=_attributes(profile, group, ids, kind, reached.get(root), published_zone.get(root), zones),
             sources=sorted({o.source for o in group}),
             first_seen=seen[0],
             last_seen=seen[-1],
@@ -412,6 +441,9 @@ def build_inventory(profile: ClientProfile, detections: list[Detection]) -> Inve
             },
         )
         asset.components, asset.components_seen = consolidate_components(group)
+        asset.services = consolidate_services(group)
+        asset_of_root[root] = asset
+        facts.append(AssetFacts(asset, group, off_premises=off_premises_sighting(zones, group)))
         before = asset.attributes.pop("_before", None)
         gap = exposure_gap(asset, before, internal, external, profile)
         if gap:
@@ -421,9 +453,18 @@ def build_inventory(profile: ClientProfile, detections: list[Detection]) -> Inve
             images.append((asset, group))
         for o in group:
             asset_of[(o.source, o.ref)] = asset
+    for f, root in zip(facts, asset_of_root, strict=True):
+        if root in via:
+            endpoint, front, published = via[root]
+            f.endpoint, f.published = endpoint, published
+            f.front = asset_of_root[front].id if front is not None else ""
+    inv.graph, gaps = build_graph(profile, facts, max((o.observed_at for o in observations), default=""), previous, now)
+    known = {(g["kind"], g["asset"]) for g in inv.exposure_gaps}
+    inv.exposure_gaps += [g for g in gaps if (g["kind"], g["asset"]) not in known]
     hosts = _host_lookup(inv.assets)
     for image, group in images:
         inherit_from_host(image, group, hosts)
+    inherit_paths(inv.assets)
     inv.assets.sort(key=lambda a: a.id)
 
     merged: dict[tuple[str, str], Finding] = {}

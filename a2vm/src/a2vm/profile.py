@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import ipaddress
 from pathlib import Path
 from typing import Any
 
@@ -20,8 +21,11 @@ from .models import (
     CoveragePolicy,
     DeclaredAsset,
     ExternalScan,
+    Flow,
     PublishedEndpoint,
+    Zone,
     exposure_value,
+    port_label,
 )
 
 
@@ -60,6 +64,32 @@ def validate_profile_data(data: Any, source: str = "<profile>") -> list[str]:
             sla_policy.parse(data.get("sla"), f"{source}: sla")
         except sla_policy.SlaError as exc:
             errors.append(str(exc))
+        errors += _zone_errors(data, source)
+    return errors
+
+
+def _zone_errors(data: dict[str, Any], source: str) -> list[str]:
+    """Zones with a unique id and valid networks; flows between known zones (v0.24.0)."""
+    errors: list[str] = []
+    ids: set[str] = set()
+    for zone in data.get("zones") or []:
+        if zone["id"] in ids:
+            errors.append(f"{source}: zones: duplicate zone {zone['id']!r}")
+        ids.add(zone["id"])
+        for net in zone.get("networks") or []:
+            try:
+                ipaddress.ip_network(net, strict=False)
+            except ValueError:
+                errors.append(f"{source}: zones: {zone['id']}: {net!r} is not a network (CIDR)")
+    for i, flow in enumerate(data.get("flows") or []):
+        for end in ("from", "to"):
+            name = flow[end]
+            if name == "*" or name in ids or (end == "from" and name == "internet"):
+                continue
+            errors.append(f"{source}: flows/{i}: {end} {name!r} is not a zone of `zones`")
+        for port in flow.get("ports") or []:
+            if not 1 <= int(str(port).split("/")[0]) <= 65535:
+                errors.append(f"{source}: flows/{i}: port {port!r} out of range")
     return errors
 
 
@@ -95,6 +125,12 @@ def load_profile(path: str | Path) -> ClientProfile:
         language=client.get("language", "en"),
         coverage=_coverage(data.get("coverage") or {}),
         sla=sla,
+        zones=[Zone(**z) for z in data.get("zones") or []],
+        flows=[
+            Flow(f["from"], f["to"], [port_label(p) for p in f.get("ports") or []], f.get("description", ""))
+            for f in data.get("flows") or []
+        ],
+        off_premises_days=int(data.get("off_premises_days", 7)),
     )
 
 

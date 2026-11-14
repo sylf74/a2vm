@@ -23,3 +23,4 @@ targets:
 # openvas:
 #   gmp: tls://scanner.lab.example:9390
 #   hosts: [192.0.2.0/24]
+#   zone: lan          # v0.24.0: the zone of client.yaml the scanner observes from

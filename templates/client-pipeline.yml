@@ -13,7 +13,7 @@
 #
 #     include:
 #       - project: vulnops/a2vm
-#         ref: v0.23.19
+#         ref: v0.24.0
 #         file: templates/client-pipeline.yml
 #     variables:
 #       A2VM_REF: v0.19.0        # same version as the include
@@ -580,8 +580,14 @@ assets:
   extends: .data
   stage: assets
   needs: [detect]
+  # v0.24.0: the inventory of the run before, left in the runner cache by the triage job: its asset
+  # graph keeps the machines seen off the premises within the window.
+  cache:
+    - {key: pip, paths: [.pip-cache/]}
+    - {key: sources, paths: [.cache/]}
+    - {key: inventory, paths: [work/assets/], policy: pull}
   script:
-    - verdict assets build "$A2VM_PROFILE" --detect work/detect --out work/assets
+    - verdict assets build "$A2VM_PROFILE" --detect work/detect --out work/assets --previous work/assets
 
 triage:
   extends: .data

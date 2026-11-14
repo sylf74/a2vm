@@ -136,6 +136,7 @@ class FileImportConnector:
     source: str
     folder: Path
     min_qod: int = 70
+    zone: str = ""  # v0.24.0: the zone the scanner of an OpenVAS export observes from
 
     def run(self, tenant: str, work: Path, log: Callable[[str], None] = print) -> tuple[list[Detection], list[str]]:
         suffix = SOURCES_BY_SUFFIX[self.source]
@@ -146,7 +147,7 @@ class FileImportConnector:
         for f in files:
             try:
                 if self.source == "openvas":
-                    detections.append(load_openvas_file(f, tenant, self.min_qod))
+                    detections.append(load_openvas_file(f, tenant, self.min_qod, self.zone))
                 elif self.source == "trivy":
                     detections.append(load_trivy_file(f, tenant))
                 else:
@@ -354,7 +355,11 @@ def load_config(path: str | Path) -> AgentConfig:
         elif kind == "file-import":
             if c.get("source") not in SOURCES_BY_SUFFIX or not c.get("folder"):
                 raise AgentError(f"{where}: `source` ({', '.join(SOURCES_BY_SUFFIX)}) and `folder` are required")
-            connectors.append(FileImportConnector(name, c["source"], Path(c["folder"]), int(c.get("min_qod", 70))))
+            connectors.append(
+                FileImportConnector(
+                    name, c["source"], Path(c["folder"]), int(c.get("min_qod", 70)), str(c.get("zone") or "")
+                )
+            )
         else:
             raise AgentError(
                 f"{where}: unknown type {kind!r}"

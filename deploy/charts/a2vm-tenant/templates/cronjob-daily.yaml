@@ -73,7 +73,8 @@ detect inventory /config/client.yaml --settings "$SETTINGS" --records /data/work
 
 {{- define "a2vm-tenant.step.assets" -}}
 rm -rf /data/work/assets.new
-verdict assets build /config/client.yaml --detect /data/work/detect --out /data/work/assets.new
+# v0.24.0: the graph of the run before, for the machines seen off the premises within the window.
+verdict assets build /config/client.yaml --detect /data/work/detect --out /data/work/assets.new --previous /data/work/assets
 rm -rf /data/work/assets && mv /data/work/assets.new /data/work/assets
 {{- end -}}
 

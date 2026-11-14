@@ -69,6 +69,7 @@ class OpenvasConfig:
     reuse_hours: float = 6  # a finished scan younger than this is collected instead of a new scan (0: never)
     gmp_timeout_seconds: float = 300  # wait for one answer of gvmd
     gmp_reconnects: int = 3  # new connections when gvmd does not answer in time, for the whole scan
+    zone: str = ""  # v0.24.0: the zone the scanner observes from (a zone of the client's `zones`)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any], where: str = "openvas") -> OpenvasConfig:
@@ -141,8 +142,37 @@ def _host_details(root: Any) -> dict[str, dict[str, str]]:
     return out
 
 
-def parse_gmp_report(xml: str | bytes, client_id: str, min_qod: int = 70, observed_at: str | None = None) -> Detection:
-    """A GMP report (get_reports response, or a report exported as XML) -> one detection."""
+PORT_RE = re.compile(r"^(\d{1,5})/(tcp|udp)$")
+
+
+def _open_ports(root: Any) -> dict[str, set[str]]:
+    """ip -> the ports the scan found open (v0.24.0): those of the results, of any severity, and of the
+    report's <ports> block. `general/tcp` and the like are not ports."""
+    out: dict[str, set[str]] = {}
+
+    def add(ip: str, text: str) -> None:
+        m = PORT_RE.match(text.strip().lower())
+        if ip and m and 0 < int(m.group(1)) < 65536:
+            out.setdefault(ip, set()).add(f"{int(m.group(1))}/{m.group(2)}")
+
+    for result in root.iter("result"):
+        host_el = result.find("host")
+        if host_el is not None and result.find("nvt") is not None:
+            add((host_el.text or "").strip(), _text(result, "port"))
+    for block in root.iter("ports"):
+        for port in block.findall("port"):
+            add(_text(port, "host"), port.text or "")
+    return out
+
+
+def parse_gmp_report(
+    xml: str | bytes, client_id: str, min_qod: int = 70, observed_at: str | None = None, zone: str = ""
+) -> Detection:
+    """A GMP report (get_reports response, or a report exported as XML) -> one detection.
+
+    Since v0.24.0 each host observation carries the ports the scan found open (`services`, view
+    network, from `zone`: where the scanner stands), and a host with open ports but no finding is
+    observed too: the scan reached it."""
     try:
         root = SafeET.fromstring(xml)
     except (DefusedXmlException, SafeET.ParseError) as exc:
@@ -206,15 +236,33 @@ def parse_gmp_report(xml: str | bytes, client_id: str, min_qod: int = 70, observ
         finding = builders[ip].findings[cve]
         finding.status = "under_investigation"
         finding.review_reasons.append(GENERIC_REASON.format(n=n))
-    detections = [b.detection(details.get(ip, {}).get("os") or None) for ip, b in builders.items()]
+    ports = _open_ports(root)
+    for ip in sorted(set(ports) - set(builders)):
+        hostname = details.get(ip, {}).get("hostname", "")
+        target = Target(name=hostname.split(".")[0] if hostname else ip, kind="host",
+                        fqdn=hostname.lower() if "." in hostname else None, ips=[ip])  # fmt: skip
+        builders[ip] = _Builder(client_id, SOURCE, target, observed)
+    detections = []
+    for ip, b in builders.items():
+        d = b.detection(details.get(ip, {}).get("os") or None)
+        found = sorted(ports.get(ip, set()), key=_port_key)
+        services = [{"port": p, "view": "network", "from_zone": zone} for p in found]
+        for o in d.observations:
+            o.services = services
+        detections.append(d)
     out = merge(detections) if detections else Detection(client_id, SOURCE, [], [])
     for reason, n in skipped.items():
         out.skipped[reason] = out.skipped.get(reason, 0) + n
     return out
 
 
-def load_openvas_file(path: str | Path, client_id: str, min_qod: int = 70) -> Detection:
-    return parse_gmp_report(Path(path).read_bytes(), client_id, min_qod)
+def _port_key(port: str) -> tuple[int, str]:
+    number, _, proto = port.partition("/")
+    return int(number), proto
+
+
+def load_openvas_file(path: str | Path, client_id: str, min_qod: int = 70, zone: str = "") -> Detection:
+    return parse_gmp_report(Path(path).read_bytes(), client_id, min_qod, zone=zone)
 
 
 # -- scanning over GMP -----------------------------------------------------------------------------

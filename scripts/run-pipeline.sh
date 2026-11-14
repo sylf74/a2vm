@@ -22,5 +22,5 @@ if [ -n "$TARGETS" ]; then
 fi
 via collect --settings "$SETTINGS" --detect "$WORK/detect" --out "$WORK/records.json" "$@"
 detect inventory $PROFILES --settings "$SETTINGS" --records "$WORK/records.json" --out "$WORK/detect"
-verdict assets build $PROFILES --detect "$WORK/detect" --out "$WORK/assets"
+verdict assets build $PROFILES --detect "$WORK/detect" --out "$WORK/assets" --previous "$WORK/assets"
 verdict run $PROFILES --settings "$SETTINGS" --records "$WORK/records.json" --assets "$WORK/assets" --out "$OUT"

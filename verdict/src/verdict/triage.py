@@ -114,6 +114,10 @@ def run_asset(asset: Asset) -> dict[str, Any]:
         **(
             {"components": list(asset.components), "components_seen": asset.components_seen} if asset.components else {}
         ),
+        # v0.24.0: the services seen on it (at most 50: the triage is pushed whole) and the path its
+        # exposure rests on, from the asset graph
+        **({"services": list(asset.services[:50])} if asset.services else {}),
+        **({"exposure_path": list(asset.exposure_path)} if asset.exposure_path else {}),
     }
 
 

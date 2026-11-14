@@ -122,12 +122,12 @@
     },
     "exposure_gaps": {
       "type": "array",
-      "description": "Exposures the client profile does not describe (since v0.11.4)",
+      "description": "Exposures the client profile does not describe (since v0.11.4); from the asset graph since v0.24.0: declared-small-but-reachable, undeclared-flow, no-external-scan (asset empty: the whole run)",
       "items": {
         "type": "object",
         "required": ["kind", "asset"],
         "properties": {
-          "kind": {"enum": ["unlisted", "declared-not-open"]},
+          "kind": {"enum": ["unlisted", "declared-not-open", "declared-small-but-reachable", "undeclared-flow", "no-external-scan"]},
           "asset": {"type": "string"},
           "name": {"type": "string"},
           "declared": {"type": "string"},

@@ -57,7 +57,11 @@ def as_internal(profile: ClientProfile, detections: list[Detection], now: dt.dat
                 f"{d.source}: external scan of {max(dates)[:10]}, {age:.0f} days old (max {ext.max_age_days}): ignored"
             )
             continue
-        result.detection.observations += [replace(o, source=SOURCE) for o in d.observations]
+        # What the external scan reached, it reached from the internet (v0.24.0).
+        result.detection.observations += [
+            replace(o, source=SOURCE, services=[{**x, "from_zone": "internet"} for x in o.services or []] or None)
+            for o in d.observations
+        ]
         for f in d.findings:
             result.detection.findings.append(
                 Finding(

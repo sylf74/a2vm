@@ -92,7 +92,16 @@ openvas:
   # reuse_hours: 6                      a scan finished less than this ago is collected, not redone
   # gmp_timeout_seconds: 300            wait for one answer of gvmd (v0.18.2)
   # gmp_reconnects: 3                   new connections when gvmd does not answer in time (v0.18.2)
+  # zone: lan                           the zone of client.yaml the scanner observes from (v0.24.0)
 ```
+
+`zone` (v0.24.0) names the zone, among the `zones` of `client.yaml`, where the scanner stands. Each
+open port the scan finds is then a port reached from that zone: the asset graph of pillar 3 turns it
+into a flow between zones (`lan -> dmz 5432/tcp`), proof that the host is reachable (exposure
+`controlled` when the external scan does not reach it), and an exposure gap `undeclared-flow` when
+no flow of the profile allows it. Without `zone`, the ports still prove the host reachable, but give
+no flow. A scanner allowed everywhere by the firewalls observes more than an ordinary host of its
+zone can reach: place it where the flows it sees mean something, or read its flows as an upper bound.
 
 A full scan of a few hosts on every TCP port takes hours. The GitLab job timeout (1 h by default)
 must be longer than `timeout_minutes`: set it in the client project, **Settings > CI/CD > General
@@ -222,6 +231,9 @@ assets the external scan reached reads "ouverte (Internet), scan externe".
 
 - One asset per scanned host (IP, host name, OS when the scanner found them); it merges with the
   same host seen by Trivy or dnf (same FQDN, host name or address).
+- Every open port found (v0.24.0), from the results of any severity and the report's port list,
+  as the host's services, seen from the scanner's `zone`; a host with open ports and no finding is
+  an asset too.
 - One finding per host and CVE; the port and the NVT are kept on each observation, with the
   installed and fixed versions when the NVT reports them, and its CVSS vector (v4 or v3, else the
   v2 vector of older NVTs).
@@ -243,3 +255,5 @@ Export the report from the web interface (Reports, download, format XML), then:
 ```bash
 detect import --client lab --source openvas report.xml --out work/detect
 ```
+
+Add `--zone lan` when the scanner stands in a zone of `client.yaml` (v0.24.0).

@@ -304,6 +304,42 @@
         }
       }
     },
+    "zones": {
+      "description": "Network zones of the client (since v0.24.0): an asset sits in a zone by its declaration, a rule, a `published` entry, or an address in the zone's networks. A declared zone is an intention: what the scanners observe comes first.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id"],
+        "properties": {
+          "id": {"$ref": "#/$defs/zone", "not": {"enum": ["internet", "off-premises"]}},
+          "networks": {"type": "array", "items": {"type": "string", "minLength": 1}, "description": "CIDR ranges of the zone (192.0.2.0/25)."},
+          "open": {"type": "boolean", "default": false, "description": "A widely accessible network the client cannot reasonably control (guest Wi-Fi, VPN pool, partners): its assets are exposure open."},
+          "description": {"type": "string"}
+        }
+      }
+    },
+    "flows": {
+      "description": "Flows the client allows between zones (since v0.24.0): `from` internet, a zone id or *; `to` a zone id or *; without `ports`, every port. A flow observed that none allows is an exposure gap (undeclared-flow); flows within a zone need no declaration.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["from", "to"],
+        "properties": {
+          "from": {"type": "string", "pattern": "^([a-z0-9][a-z0-9-]*|\\*)$"},
+          "to": {"type": "string", "pattern": "^([a-z0-9][a-z0-9-]*|\\*)$"},
+          "ports": {"type": "array", "items": {"$ref": "#/$defs/port"}},
+          "description": {"type": "string"}
+        }
+      }
+    },
+    "off_premises_days": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 7,
+      "description": "A machine seen outside every network of `zones` within these days sits in the zone off-premises, exposure open (since v0.24.0)."
+    },
     "coverage": {
       "description": "Scan coverage (v0.19.0): when the last scan of an asset is stale, and which means of detection each CMDB class expects.",
       "type": "object",
@@ -590,7 +626,14 @@
     "zone": {
       "type": "string",
       "pattern": "^[a-z0-9][a-z0-9-]*$",
-      "description": "Free label grouping assets in reports (dmz, lan, ot, admin...); no effect on decisions."
+      "description": "Zone of an asset (dmz, lan, ot, admin...). Since v0.24.0 a zone of the `zones` section places the asset in the graph of its exposure; any other label stays a label for reports."
+    },
+    "port": {
+      "oneOf": [
+        {"type": "integer", "minimum": 1, "maximum": 65535},
+        {"type": "string", "pattern": "^[0-9]{1,5}(/(tcp|udp))?$"}
+      ],
+      "description": "A port: 443 (TCP), '443/tcp' or '53/udp'."
     },
     "mission_prevalence": {
       "enum": [

@@ -18,11 +18,14 @@ traversal) at the lowest CPU and I/O priority; dnf lists the security advisories
 package database lists every package installed (`rpm -qa` or `dpkg-query`, v0.22.2), with the
 distribution and the source package of each (v0.23.0), kept with the host's observation so that one
 can ask which hosts carry a component, vulnerable or not, and match them against new advisories.
+Since v0.24.0 the sockets the host listens on (`ss -ltnu`, numeric, without the processes) are kept
+too, as its services: a host that listens on nothing but its loopback is not reachable by the network.
 Nothing is installed, changed or exploited on the targets.
 """
 
 from __future__ import annotations
 
+import ipaddress
 import os
 import re
 import shlex
@@ -70,6 +73,9 @@ LOADED = f"{LOW_PRIORITY} sh -c " + shlex.quote(
     'while read -r f; do printf \'%s\\t%s\\t%s\\n\' "$p" "$(cat /proc/$p/comm 2>/dev/null)" "$f"; done; '
     "done; true"
 )
+# v0.24.0: the sockets listening on the host, TCP and UDP, numeric; read-only and without root (the
+# processes are not asked for). A host that listens on nothing but its loopback is not reachable.
+LISTENING = f"{LOW_PRIORITY} ss -ltnu"
 MAX_COMPONENTS = 20000
 DEFAULT_SSH_OPTIONS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=15", "-o", "StrictHostKeyChecking=accept-new"]
 
@@ -275,7 +281,7 @@ def collect(
             path = raw_dir / tf.client / "openvas" / "report.xml"
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(xml)
-            detection = parse_gmp_report(xml, tf.client, tf.openvas.min_qod)
+            detection = parse_gmp_report(xml, tf.client, tf.openvas.min_qod, zone=tf.openvas.zone)
             by_source["openvas"] = [detection]
             done(where, detection, started)
         except (GmpError, OSError, ValueError) as exc:
@@ -308,6 +314,7 @@ def collect(
             continue
         if target.kind == "host":
             _add_components(tf, t, target, detection, runner, log)
+            _add_listening(tf, t, target, detection, runner, log)
         by_source.setdefault(method, []).append(detection)
         done(label, detection, started)
     return [merge(ds) for ds in by_source.values()], errors
@@ -360,3 +367,46 @@ def _add_loaded(tf: TargetsFile, t: HostTarget, target: Target, detection: Detec
     for o in detection.observations:
         if o.ref == target.ref:
             o.components = list(o.components or []) + loaded
+
+
+def _bind(address: str) -> str:
+    """Where a socket listens: any (every address), loopback, or the address itself."""
+    host = address.split("%", 1)[0].strip("[]")
+    if host in ("*", "0.0.0.0", "::", ""):
+        return "any"
+    try:
+        return "loopback" if ipaddress.ip_address(host).is_loopback else host
+    except ValueError:
+        return host
+
+
+def parse_listening(text: str) -> list[dict[str, str]]:
+    """The output of LISTENING as services, view local: {port, view, bind}, one per port and bind."""
+    out: dict[tuple[str, str], dict[str, str]] = {}
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) < 5 or parts[0] not in ("tcp", "udp"):
+            continue
+        address, _, port = parts[4].rpartition(":")
+        if not port.isdigit() or not 0 < int(port) < 65536:
+            continue
+        label = f"{int(port)}/{parts[0]}"
+        bind = _bind(address)
+        out[(label, bind)] = {"port": label, "view": "local", "bind": bind}
+    return [out[k] for k in sorted(out, key=lambda k: (int(k[0].split("/")[0]), k[0], k[1]))]
+
+
+def _add_listening(tf: TargetsFile, t: HostTarget, target: Target, detection: Detection, runner, log) -> None:  # noqa: ANN001
+    """The services the host listens on (v0.24.0); a failure leaves them unknown, nothing else."""
+    try:
+        proc = runner(ssh_command(tf, t, LISTENING), capture_output=True, text=True, timeout=tf.timeout_seconds)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        log(f"WARN {t.host} [listening]: {exc}")
+        return
+    if proc.returncode != 0:
+        log(f"WARN {t.host} [listening]: exit {proc.returncode}: {_tail(proc.stderr, 200)}")
+        return
+    services = parse_listening(proc.stdout)
+    for o in detection.observations:
+        if o.ref == target.ref:
+            o.services = services

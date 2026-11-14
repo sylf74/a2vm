@@ -60,6 +60,7 @@ def test_contract_names_the_routes_the_service_answers():
         "/v1/tenants/{tenant}/assets",
         "/v1/tenants/{tenant}/assets/{asset}",
         "/v1/tenants/{tenant}/assets/{asset}/fixes",
+        "/v1/tenants/{tenant}/assets/{asset}/exposure",  # v0.24.0
         "/v1/tenants/{tenant}/changes",
         "/v1/tenants/{tenant}/findings/closed",  # v0.18.0
         "/v1/tenants/{tenant}/findings/unverified",  # v0.18.1
