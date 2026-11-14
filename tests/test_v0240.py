@@ -501,3 +501,9 @@ def test_sixty_thousand_assets_in_fifty_zones_within_the_budget() -> None:
     assert len(inv.assets) == 70001 and len(inv.graph.edges) < 5 * len(inv.assets)
     assert len(inv.graph.off_premises) == 10000
     assert elapsed < 120, f"assets stage of 70,000 assets in {elapsed:.0f} s"
+
+
+def test_release_recorded() -> None:
+    assert "## v0.24.0 — " in (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    chart = (ROOT / "deploy/charts/a2vm-tenant/Chart.yaml").read_text()
+    assert re.search(r"^version: 0\.(24\.\d+|2[5-9]\.\d+|[3-9]\d\.\d+)$", chart, re.M)
